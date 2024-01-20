@@ -1,0 +1,26 @@
+.video [style*="--aspect-ratio"] > :first-child {
+  width: 100%;
+}
+
+.video [style*="--aspect-ratio"] > img {
+  height: auto;
+}
+
+@supports (--custom: property) {
+  .video [style*="--aspect-ratio"] {
+    position: relative;
+  }
+
+  .video [style*="--aspect-ratio"]::before {
+    content: "";
+    display: block;
+    padding-bottom: calc(100% / (var(--aspect-ratio)));
+  }
+
+  .video [style*="--aspect-ratio"] > :first-child {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+  }
+}
