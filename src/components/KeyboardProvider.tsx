@@ -50,12 +50,13 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
             return items[currentIndex + 1]!;
           });
           break;
-        case "e":
-          // set as watched
-          break;
-        case "h":
-        // set as hidden
-        case "s":
+        // case "e":
+        //   // set as watched
+        //   break;
+        // case "h":
+        //   // set as hidden
+        //   break;
+        case "\\":
           setIsCategoriesOpen((prev) => !prev);
           break;
       }
