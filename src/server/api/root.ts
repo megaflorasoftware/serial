@@ -1,4 +1,5 @@
 import { feedRouter } from "~/server/api/routers/feed";
+import { contentCategoriesRouter } from "~/server/api/routers/content-categories";
 import { createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -8,6 +9,7 @@ import { createTRPCRouter } from "~/server/api/trpc";
  */
 export const appRouter = createTRPCRouter({
   feed: feedRouter,
+  contentCategories: contentCategoriesRouter,
 });
 
 // export type definition of API

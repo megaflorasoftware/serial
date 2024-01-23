@@ -1,0 +1,27 @@
+{
+  "version": "5",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1705996001882,
+      "tag": "0000_flawless_sabretooth",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1705997816037,
+      "tag": "0001_ancient_veda",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1706000800641,
+      "tag": "0002_cuddly_omega_red",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+ALTER TABLE serial_content_categories ADD `user_id` text DEFAULT '' NOT NULL;

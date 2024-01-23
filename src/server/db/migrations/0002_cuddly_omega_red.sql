@@ -1,0 +1,1 @@
+ALTER TABLE `serial_feed` DROP COLUMN `categories`;

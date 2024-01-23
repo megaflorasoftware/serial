@@ -8,7 +8,6 @@ import { cn } from "~/lib/utils";
 import { ThemeProvider } from "~/components/ThemeProvider";
 import { type Viewport } from "next";
 import { Toaster } from "sonner";
-import { KeyboardProvider } from "~/components/KeyboardProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,8 +22,9 @@ export const metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "white" },
-    { media: "(prefers-color-scheme: dark)", color: "black" },
+    { color: "hsl(20 14.3% 4.1%)" },
+    // { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    // { media: "(prefers-color-scheme: dark)", color: "hsl(20 14.3% 4.1%)" },
   ],
 };
 
@@ -46,7 +46,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <TRPCReactProvider>
-              <KeyboardProvider>{children}</KeyboardProvider>
+              {children}
               <Toaster />
             </TRPCReactProvider>
           </ThemeProvider>

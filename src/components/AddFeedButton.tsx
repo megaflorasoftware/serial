@@ -7,11 +7,26 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { api } from "~/trpc/react";
 import { useState } from "react";
+import { Combobox } from "./ui/combobox";
 
 export function AddFeedButton() {
   const [feedUrl, setFeedUrl] = useState("");
 
+  const {
+    data: categories,
+    refetch: refetchCategories,
+    isLoading: isLoadingCategories,
+  } = api.contentCategories.getAllForUser.useQuery();
+  const { refetch: refetchFeeds } = api.feed.getAllFeedData.useQuery();
+  const [category, setCategory] = useState<string | null>(null);
+
   const addFeed = api.feed.create.useMutation();
+  const addCategory = api.contentCategories.create.useMutation();
+
+  const categoryOptions = categories?.map((category) => ({
+    value: category.id.toString(),
+    label: category.name,
+  }));
 
   return (
     <Popover>
@@ -33,9 +48,42 @@ export function AddFeedButton() {
               }}
             />
           </div>
+          {addCategory.isLoading || isLoadingCategories ? (
+            <Button disabled variant="outline">
+              Loading...
+            </Button>
+          ) : (
+            <Combobox
+              label="Category"
+              options={categoryOptions ?? []}
+              onSelect={setCategory}
+              onAddOption={async (newOption) => {
+                await addCategory.mutateAsync({ name: newOption });
+                const categoriesResponse = await refetchCategories();
+                const newCategory = categoriesResponse.data?.find(
+                  (category) => category.name === newOption,
+                );
+                if (newCategory) {
+                  setCategory(newCategory?.id.toString());
+                }
+              }}
+              value={category}
+              placeholder="Select a category"
+              width="full"
+            />
+          )}
           <Button
-            onClick={() => {
-              addFeed.mutate({ url: feedUrl });
+            onClick={async () => {
+              if (category === null) {
+                await addFeed.mutateAsync({ url: feedUrl });
+              } else {
+                await addFeed.mutateAsync({
+                  url: feedUrl,
+                  categoryId: parseInt(category, 10),
+                });
+              }
+
+              await refetchFeeds();
             }}
           >
             {addFeed.isLoading ? "Adding..." : "Add Feed"}

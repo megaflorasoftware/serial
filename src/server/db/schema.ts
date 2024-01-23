@@ -3,10 +3,11 @@
 
 import { sql } from "drizzle-orm";
 import {
-  index,
   integer,
   text,
   sqliteTableCreator,
+  index,
+  primaryKey,
 } from "drizzle-orm/sqlite-core";
 
 /**
@@ -21,9 +22,10 @@ export const feeds = sqliteTable(
   "feed",
   {
     id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
-    userId: text("user_id").notNull(),
-    name: text("name", { length: 256 }),
-    url: text("url", { length: 512 }).notNull(),
+    userId: text("user_id").notNull().default(""),
+    name: text("name", { length: 256 }).notNull().default(""),
+    url: text("url", { length: 512 }).notNull().default(""),
+    platform: text("platform", { length: 256 }).notNull().default("youtube"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
@@ -32,6 +34,61 @@ export const feeds = sqliteTable(
       .notNull(),
   },
   (example) => ({
-    nameIndex: index("name_idx").on(example.name),
+    nameIndex: index("feed_name_idx").on(example.name),
+  }),
+);
+
+export const feedItems = sqliteTable(
+  "feed_item",
+  {
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+    feedId: integer("feed_id").references(() => feeds.id),
+    contentId: text("content_id", { length: 512 }).notNull(),
+    title: text("title", { length: 512 }).notNull(),
+    url: text("url", { length: 512 }).notNull(),
+    isWatched: integer("is_watched", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    isHidden: integer("is_hidden", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  },
+  (example) => ({
+    feedIdIndex: index("feed_item_feed_id_idx").on(example.feedId),
+  }),
+);
+
+export const contentCategories = sqliteTable(
+  "content_categories",
+  {
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+    userId: text("user_id").notNull().default(""),
+    name: text("name", { length: 256 }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  },
+  (example) => ({
+    nameIndex: index("content_categories_name_idx").on(example.name),
+  }),
+);
+
+export const feedCategories = sqliteTable(
+  "feed_categories",
+  {
+    feedId: integer("feed_id").references(() => feeds.id),
+    categoryId: integer("category_id").references(() => contentCategories.id),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.feedId, table.categoryId] }),
   }),
 );

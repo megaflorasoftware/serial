@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { type RSSContent, type RSSFeed } from "~/server/rss/types";
+import { api } from "~/trpc/react";
 
 type FeedContext = {
   feeds: RSSFeed[];
@@ -20,16 +21,17 @@ type FeedContext = {
 const FeedContext = createContext<FeedContext | null>(null);
 
 type FeedProviderProps = {
-  feeds: RSSFeed[];
   children: React.ReactNode;
 };
 
-export function FeedProvider({ children, feeds }: FeedProviderProps) {
+export function FeedProvider({ children }: FeedProviderProps) {
+  const { data: feeds } = api.feed.getAllFeedData.useQuery();
   const [selectedItem, setSelectedItem] = useState<RSSContent | null>(null);
+  const [category, setCategory] = useState<number | null>(null);
 
   const items = useMemo(() => {
     return feeds
-      .flatMap((feed) => {
+      ?.flatMap((feed) => {
         return feed.items;
       })
       .sort((a, b) => {
@@ -39,7 +41,12 @@ export function FeedProvider({ children, feeds }: FeedProviderProps) {
 
   return (
     <FeedContext.Provider
-      value={{ feeds, items, selectedItem, setSelectedItem }}
+      value={{
+        feeds: feeds ?? [],
+        items: items ?? [],
+        selectedItem,
+        setSelectedItem,
+      }}
     >
       {children}
     </FeedContext.Provider>

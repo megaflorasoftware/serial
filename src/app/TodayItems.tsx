@@ -27,24 +27,27 @@ export default function TodayItems() {
   const { items, setSelectedItem } = useFeed();
 
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full flex-col md:pt-4">
       {items.map((item) => {
         return (
           <article
-            className="relative flex h-24 w-full flex-1 items-center justify-stretch gap-2 border-b transition-colors"
+            className="relative flex h-20 w-full flex-1 items-center justify-stretch gap-2"
             key={item.id}
           >
-            <div className="absolute inset-y-0 right-0 flex h-full w-14 flex-col items-center justify-center pr-4">
-              <Button className="w-full" size="icon" variant="ghost">
-                <EyeOpenIcon />
-              </Button>
-              <Button className="w-full" size="icon" variant="ghost">
+            <div className="absolute inset-y-0 right-0 flex flex h-full w-fit flex-wrap items-center justify-center pr-4">
+              <Button size="icon" variant="ghost">
                 <ArchiveIcon />
+              </Button>
+              {/* <Button size="icon" variant="ghost">
+                <ClockIcon />
+              </Button> */}
+              <Button size="icon" variant="ghost">
+                <EyeOpenIcon />
               </Button>
             </div>
             <button
               onClick={() => setSelectedItem(item)}
-              className="flex h-24 w-full flex-1 items-center gap-4 pl-6 text-left hover:bg-accent"
+              className="flex h-20 w-full flex-1 items-center gap-4 pl-6 text-left transition-colors hover:bg-accent md:rounded"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
