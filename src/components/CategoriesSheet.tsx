@@ -9,10 +9,8 @@ import {
   Sheet,
 } from "./ui/sheet";
 import { Button } from "./ui/button";
-import { useFeed } from "./FeedProvider";
 
 export function CategoriesSheet() {
-  const { setCategory } = useFeed();
   const { isCategoriesOpen } = useKeyboard();
   const { data: categories } = api.contentCategories.getAllForUser.useQuery();
 
@@ -30,7 +28,7 @@ export function CategoriesSheet() {
                   <span className="w-full">Today</span>
                 </Button>
               </li>
-              {categories.map((category) => (
+              {categories?.map((category) => (
                 <li key={category.id}>
                   <Button className="w-full text-left" variant="link">
                     <span className="w-full">{category.name}</span>

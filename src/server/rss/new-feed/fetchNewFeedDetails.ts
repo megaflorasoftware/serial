@@ -1,5 +1,5 @@
 import { fetchYouTubeFeedDetails } from "../parsers/youtube";
-import { type NewFeedDetails } from "./types";
+import { type NewFeedDetails } from "../types";
 
 export async function fetchNewFeedDetails(
   url: string,

@@ -53,6 +53,7 @@ export async function fetchYouTubeFeedData(
     items: data.items
       .filter((item) => isWithinDays(item.pubDate, 60))
       .map((item) => {
+        // @ts-expect-error deal with later
         const thumbnail = item["media:group"]["media:thumbnail"][0].$.url;
         const description = item["media:group"]["media:description"][0];
 

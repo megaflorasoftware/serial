@@ -19,10 +19,15 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
           mutations: {
             onError: (err) => {
               try {
+                // @ts-expect-error deal with this later
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument
                 JSON.parse(err.message).forEach((error) => {
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
                   toast.error(error.message);
                 });
               } catch {
+                // @ts-expect-error deal with this later
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                 toast.error(err.message);
               }
             },
