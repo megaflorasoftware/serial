@@ -1,7 +1,9 @@
 "use client";
 
 import { MoonIcon, SunIcon, LaptopIcon } from "@radix-ui/react-icons";
+import { WandIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -12,9 +14,19 @@ import {
 
 export function ColorModeToggle() {
   const { theme, setTheme } = useTheme();
+  const [isArcBrowser, setIsArcBrowser] = useState(false);
+
+  function checkForArcBrowser() {
+    const variable = getComputedStyle(document.body).getPropertyValue(
+      "--arc-palette-background",
+    );
+    if (variable !== "") {
+      setIsArcBrowser(true);
+    }
+  }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={checkForArcBrowser}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon">
           {theme === "system" && (
@@ -22,6 +34,7 @@ export function ColorModeToggle() {
           )}
           {theme === "light" && <SunIcon className="h-[1.2rem] w-[1.2rem]" />}
           {theme === "dark" && <MoonIcon className="h-[1.2rem] w-[1.2rem]" />}
+          {theme === "arc" && <WandIcon className="h-[1.2rem] w-[1.2rem]" />}
           <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
@@ -32,6 +45,11 @@ export function ColorModeToggle() {
         <DropdownMenuItem onClick={() => setTheme("dark")}>
           Dark
         </DropdownMenuItem>
+        {isArcBrowser && (
+          <DropdownMenuItem onClick={() => setTheme("arc")}>
+            Arc
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={() => setTheme("system")}>
           System
         </DropdownMenuItem>
