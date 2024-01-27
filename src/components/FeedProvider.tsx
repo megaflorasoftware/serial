@@ -39,6 +39,8 @@ export function FeedProvider({ children }: FeedProviderProps) {
       });
   }, [feeds]);
 
+  console.log(items);
+
   return (
     <FeedContext.Provider
       value={{

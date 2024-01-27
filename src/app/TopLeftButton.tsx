@@ -23,7 +23,7 @@ export function TopLeftButton() {
   }
 
   return (
-    <div className="h-8 w-8">
+    <div className="flex-shrink-0 h-8 w-8">
       <UserButton />
     </div>
   );

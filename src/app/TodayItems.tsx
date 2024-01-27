@@ -31,23 +31,20 @@ export default function TodayItems() {
       {items.map((item) => {
         return (
           <article
-            className="relative flex h-20 w-full flex-1 items-center justify-stretch gap-2"
+            className="relative flex w-full flex-1 items-center justify-stretch gap-2 md:h-20"
             key={item.id}
           >
-            <div className="absolute inset-y-0 right-0 flex flex h-full w-fit flex-wrap items-center justify-center pr-4">
+            {/* <div className="absolute inset-y-0 right-0 flex h-full w-fit flex-wrap items-center justify-center pr-4">
               <Button size="icon" variant="ghost">
                 <ArchiveIcon />
               </Button>
-              {/* <Button size="icon" variant="ghost">
-                <ClockIcon />
-              </Button> */}
               <Button size="icon" variant="ghost">
                 <EyeOpenIcon />
               </Button>
-            </div>
+            </div> */}
             <button
               onClick={() => setSelectedItem(item)}
-              className="flex h-20 w-full flex-1 items-center gap-4 pl-6 text-left transition-colors hover:bg-accent md:rounded"
+              className="flex h-20 w-full flex-1 items-center gap-4 pl-6 pr-4 text-left transition-colors hover:bg-accent md:rounded md:pr-0"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -56,10 +53,8 @@ export default function TodayItems() {
                 className="h-12 w-16 rounded object-contain"
               />
               <div className="flex h-full flex-1 flex-col justify-center">
-                <h3 className="max-w-xs truncate text-sm font-semibold">
-                  {item.title}
-                </h3>
-                <p className="max-w-xs truncate text-sm opacity-50">
+                <h3 className="w-full text-sm font-semibold">{item.title}</h3>
+                <p className="w-full text-sm opacity-50">
                   {item.author} • {timeAgo(item.publishedDate)}
                 </p>
               </div>
