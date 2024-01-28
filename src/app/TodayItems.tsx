@@ -44,7 +44,7 @@ export default function TodayItems() {
             </div> */}
             <button
               onClick={() => setSelectedItem(item)}
-              className="flex h-20 w-full flex-1 items-center gap-4 pl-6 pr-4 text-left transition-colors hover:bg-accent md:rounded md:pr-0"
+              className="flex h-20 w-full flex-1 items-center gap-4 pl-6 pr-4 text-left transition-colors sm:hover:bg-accent md:rounded md:pr-0"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

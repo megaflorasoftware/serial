@@ -31,7 +31,7 @@ export default function MainPanel() {
           >
             <div
               className={clsx("w-full", {
-                "lg:p-6": view === "windowed",
+                "sm:py-6": view === "windowed",
               })}
             >
               <div
