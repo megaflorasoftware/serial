@@ -34,6 +34,13 @@ export function FeedProvider({ children }: FeedProviderProps) {
       ?.flatMap((feed) => {
         return feed.items;
       })
+      .filter((item) => {
+        const date = new Date(item.publishedDate);
+        const now = new Date();
+        const daysAgo = 7;
+        const sevenDaysAgo = new Date(now.setDate(now.getDate() - daysAgo));
+        return date > sevenDaysAgo;
+      })
       .sort((a, b) => {
         return a.publishedDate > b.publishedDate ? -1 : 1;
       });

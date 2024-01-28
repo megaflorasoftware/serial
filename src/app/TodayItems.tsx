@@ -31,10 +31,10 @@ export default function TodayItems() {
       {items.map((item) => {
         return (
           <article
-            className="relative flex w-full flex-1 items-center justify-stretch gap-2 md:h-20"
+            className="group relative flex w-full flex-1 items-center justify-stretch gap-2 md:h-20"
             key={item.id}
           >
-            {/* <div className="absolute inset-y-0 right-0 flex h-full w-fit flex-wrap items-center justify-center pr-4">
+            {/* <div className="absolute inset-y-0 right-0 hidden h-full w-24 flex-wrap items-center justify-center pr-4 group-hover:flex">
               <Button size="icon" variant="ghost">
                 <ArchiveIcon />
               </Button>
