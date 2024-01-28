@@ -26,8 +26,8 @@
     /* Path Aliases */
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
-    }
+      "~/*": ["./src/*"],
+    },
   },
   "include": [
     ".eslintrc.cjs",
@@ -36,7 +36,15 @@
     "**/*.tsx",
     "**/*.cjs",
     "**/*.js",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "**/public/sw.js",
+    "**/public/workbox-*.js",
+    "**/public/worker-*.js",
+    "**/public/sw.js.map",
+    "**/public/workbox-*.js.map",
+    "**/public/worker-*.js.map",
+  ],
 }

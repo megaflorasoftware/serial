@@ -3,8 +3,8 @@
   "short_name": "Serial",
   "theme_color": "#fafaf9",
   "background_color": "#0c0a09",
-  "display": "browser",
-  "orientation": "any",
+  "display": "standalone",
+  "orientation": "portrait",
   "scope": "/",
   "start_url": "/",
   "icons": [
@@ -17,6 +17,12 @@
       "src": "/icon-256.png",
       "type": "image/png",
       "sizes": "256x256"
+    },
+    {
+      "type": "image/png",
+      "sizes": "512x512",
+      "src": "/android-chrome-512x512.png",
+      "purpose": "any maskable"
     }
   ]
 }
