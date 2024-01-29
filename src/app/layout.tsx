@@ -8,6 +8,8 @@ import { cn } from "~/lib/utils";
 import { ThemeProvider } from "~/components/ThemeProvider";
 import { type Metadata, type Viewport } from "next";
 import { Toaster } from "sonner";
+import { FeedProvider } from "~/components/FeedProvider";
+import { KeyboardProvider } from "~/components/KeyboardProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -108,7 +110,9 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <TRPCReactProvider>
-              {children}
+              <FeedProvider>
+                <KeyboardProvider>{children}</KeyboardProvider>
+              </FeedProvider>
               <Toaster />
             </TRPCReactProvider>
           </ThemeProvider>

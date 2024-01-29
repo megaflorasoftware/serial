@@ -44,31 +44,35 @@ export async function fetchYouTubeFeedDetails(
 
 export async function fetchYouTubeFeedData(
   feed: typeof feeds.$inferSelect,
-): Promise<RSSFeed> {
-  const data = (await parser.parseURL(feed.url)) as unknown as RSSYoutubeData;
+): Promise<RSSFeed | null> {
+  try {
+    const data = (await parser.parseURL(feed.url)) as unknown as RSSYoutubeData;
 
-  return {
-    title: data.title,
-    url: data.link,
-    items: data.items
-      .filter((item) => isWithinDays(item.pubDate, 60))
-      .map((item) => {
-        // @ts-expect-error deal with later
-        const thumbnail = item["media:group"]["media:thumbnail"][0].$.url;
-        const description = item["media:group"]["media:description"][0];
+    return {
+      title: data.title,
+      url: data.link,
+      items: data.items
+        .filter((item) => isWithinDays(item.pubDate, 60))
+        .map((item) => {
+          // @ts-expect-error deal with later
+          const thumbnail = item["media:group"]["media:thumbnail"][0].$.url;
+          const description = item["media:group"]["media:description"][0];
 
-        return {
-          id: item.id.replace("yt:video:", ""),
-          // type: "video",
-          // platform: "youtube",
-          // category: feed.category,
-          title: item.title,
-          publishedDate: item.isoDate,
-          url: item.link,
-          author: item.author,
-          thumbnail: thumbnail,
-          content: description,
-        } satisfies RSSContent;
-      }),
-  };
+          return {
+            id: item.id.replace("yt:video:", ""),
+            // type: "video",
+            // platform: "youtube",
+            // category: feed.category,
+            title: item.title,
+            publishedDate: item.isoDate,
+            url: item.link,
+            author: item.author,
+            thumbnail: thumbnail,
+            content: description,
+          } satisfies RSSContent;
+        }),
+    };
+  } catch (e) {
+    return null;
+  }
 }

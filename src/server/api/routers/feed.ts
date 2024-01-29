@@ -34,6 +34,10 @@ export const feedRouter = createTRPCRouter({
       where: sql`user_id = ${ctx.auth!.userId}`,
     });
 
+    if (!feeds) {
+      return [];
+    }
+
     return await fetchFeedData(feeds);
   }),
 });

@@ -1,5 +1,3 @@
-"use client";
-
 import { AddFeedButton } from "~/components/AddFeedButton";
 import { ColorModeToggle } from "~/components/ColorModeToggle";
 import { CustomVideoButton } from "~/components/CustomVideoButton";

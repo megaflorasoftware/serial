@@ -22,7 +22,6 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
 
   useEffect(() => {
     const processKey = (event: KeyboardEvent) => {
-      console.log(event.key);
       switch (event.key) {
         case "`":
           setView((prev) => {
@@ -68,8 +67,6 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
       window.removeEventListener("keydown", processKey);
     };
   }, [items, setSelectedItem]);
-
-  console.log(view);
 
   return (
     <FeedContext.Provider
