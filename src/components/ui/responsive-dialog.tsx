@@ -31,9 +31,9 @@ export function ResponsiveDialog({
   description,
 }: ResponsiveDialogProps) {
   const [open, setOpen] = React.useState(false);
-  const isDesktop = useMediaQuery("(min-width: 640px)");
+  // const isDesktop = useMediaQuery("(min-width: 640px)");
 
-  if (isDesktop) {
+  if (true) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>{trigger}</DialogTrigger>
