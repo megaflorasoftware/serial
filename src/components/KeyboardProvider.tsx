@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useFeed } from "./FeedProvider";
-import { useParams, useRouter, usePathname } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useDialogStore } from "~/app/(feed)/dialogStore";
 
 function doesAnyInputElementHaveFocus() {
@@ -30,7 +30,6 @@ type KeyboardProviderProps = {
 export function KeyboardProvider({ children }: KeyboardProviderProps) {
   const params = useParams();
   const router = useRouter();
-  const pathname = usePathname();
 
   const { items, setSelectedItem } = useFeed();
   const [view, setView] = useState<FeedContext["view"]>("windowed");
@@ -44,7 +43,9 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
   useEffect(() => {
     const processKey = (event: KeyboardEvent) => {
       const videoID = params.videoID;
-      const currentIndex = items.findIndex((item) => item.contentId === videoID);
+      const currentIndex = items.findIndex(
+        (item) => item.contentId === videoID,
+      );
 
       switch (event.key) {
         case "`":
@@ -118,7 +119,15 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
     return () => {
       window.removeEventListener("keydown", processKey);
     };
-  }, [items, params.videoID, router, setSelectedItem]);
+  }, [
+    closeDialog,
+    dialog,
+    items,
+    launchDialog,
+    params.videoID,
+    router,
+    setSelectedItem,
+  ]);
 
   return (
     <FeedContext.Provider
