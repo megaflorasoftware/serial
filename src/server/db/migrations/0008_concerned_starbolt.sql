@@ -1,0 +1,1 @@
+ALTER TABLE `serial_feed_item` RENAME COLUMN `is_hidden` TO `is_watch_later`;

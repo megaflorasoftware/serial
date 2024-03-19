@@ -50,7 +50,7 @@ export const feedItems = sqliteTable(
     isWatched: integer("is_watched", { mode: "boolean" })
       .notNull()
       .default(false),
-    isHidden: integer("is_hidden", { mode: "boolean" })
+    isWatchLater: integer("is_watch_later", { mode: "boolean" })
       .notNull()
       .default(false),
     postedAt: integer("posted_at", { mode: "timestamp" }).notNull(),

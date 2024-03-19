@@ -9,8 +9,8 @@ export function DateFilterChips() {
   return (
     <ToggleGroup
       type="single"
-      value={dateFilter.toString()}
-      onValueChange={(value) => setDateFilter(parseInt(value))}
+      value={dateFilter}
+      onValueChange={(value) => setDateFilter(value)}
       size="sm"
     >
       <ToggleGroupItem value="1">Today</ToggleGroupItem>

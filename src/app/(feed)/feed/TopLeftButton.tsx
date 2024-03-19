@@ -1,37 +1,19 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
-import { ArrowLeftIcon } from "@radix-ui/react-icons";
-import { HomeIcon } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useFeed } from "~/components/FeedProvider";
+import { ArrowLeftIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "~/components/ui/button";
+import { useRouterBackHack } from "~/lib/hooks/use-router-back-hack";
 
 export function TopLeftButton() {
   const pathname = usePathname();
-  const { selectedItem, setSelectedItem } = useFeed();
+  const goBack = useRouterBackHack();
 
   if (pathname !== "/feed") {
     return (
-      <Link href="/feed/">
-        <Button size="icon" variant="outline">
-          <HomeIcon size={16} />
-        </Button>
-      </Link>
-    );
-  }
-
-  if (!!selectedItem) {
-    return (
-      <Button
-        size="icon"
-        variant="outline"
-        onClick={() => {
-          setSelectedItem(null);
-        }}
-      >
-        <ArrowLeftIcon />
+      <Button size="icon" variant="outline" onClick={goBack}>
+        <ArrowLeftIcon size={16} />
       </Button>
     );
   }

@@ -129,19 +129,19 @@ export const feedRouter = createTRPCRouter({
           ),
         );
     }),
-  setFeedItemHidden: protectedProcedure
+  setFeedItemWatchLater: protectedProcedure
     .input(
       z.object({
         feedId: z.number(),
         contentId: z.string(),
-        isHidden: z.boolean(),
+        isWatchLater: z.boolean(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await ctx.db
         .update(feedItems)
         .set({
-          isHidden: input.isHidden,
+          isWatchLater: input.isWatchLater,
         })
         .where(
           and(

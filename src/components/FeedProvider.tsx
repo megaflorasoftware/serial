@@ -13,8 +13,10 @@ import {
 import { type RSSContent, type RSSFeed } from "~/server/rss/types";
 import { type feeds, type feedItems } from "~/server/db/schema";
 import { api } from "~/trpc/react";
+import { useSearchParamState } from "~/lib/hooks/use-search-param-state";
+import { z } from "zod";
 
-export type VisibilityFilter = "all" | "unread" | "archived";
+export type VisibilityFilter = "all" | "unread" | "later";
 
 type Item = typeof feedItems.$inferSelect;
 
@@ -24,8 +26,8 @@ type FeedContext = {
   items: Item[];
   selectedItem: RSSContent | null;
   setSelectedItem: Dispatch<SetStateAction<RSSContent | null>>;
-  dateFilter: number;
-  setDateFilter: Dispatch<SetStateAction<number>>;
+  dateFilter: string;
+  setDateFilter: Dispatch<SetStateAction<string>>;
   visibilityFilter: VisibilityFilter;
   setVisibilityFilter: Dispatch<SetStateAction<VisibilityFilter>>;
   updateItemOptimistically: (
@@ -47,9 +49,16 @@ export function FeedProvider({ children }: FeedProviderProps) {
   const [selectedItem, setSelectedItem] = useState<RSSContent | null>(null);
   const [category, setCategory] = useState<number | null>(null);
 
-  const [dateFilter, setDateFilter] = useState<number>(1);
-  const [visibilityFilter, setVisibilityFilter] =
-    useState<VisibilityFilter>("unread");
+  const [dateFilter, setDateFilter] = useSearchParamState(
+    "days",
+    "1",
+    z.string(),
+  );
+  const [visibilityFilter, setVisibilityFilter] = useSearchParamState(
+    "visibility",
+    "unread",
+    z.enum(["all", "unread", "later"]),
+  );
 
   const [unsortedItems, setUnsortedItems] = useState<Item[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -60,21 +69,22 @@ export function FeedProvider({ children }: FeedProviderProps) {
         .filter((item) => {
           const date = new Date(item.postedAt);
           const now = new Date();
+          const parsedDateFilter = parseInt(dateFilter, 10);
           const sevenDaysAgo = new Date(
-            now.setDate(now.getDate() - dateFilter),
+            now.setDate(
+              now.getDate() -
+                (Number.isNaN(parsedDateFilter) ? 1 : parsedDateFilter),
+            ),
           );
           if (date <= sevenDaysAgo) return false;
 
           if (
             visibilityFilter === "unread" &&
-            (item.isWatched || item.isHidden)
+            (item.isWatched || item.isWatchLater)
           ) {
             return false;
           }
-          if (visibilityFilter === "archived" && !item.isHidden) {
-            return false;
-          }
-          if (visibilityFilter === "all" && item.isHidden) {
+          if (visibilityFilter === "later" && !item.isWatchLater) {
             return false;
           }
 

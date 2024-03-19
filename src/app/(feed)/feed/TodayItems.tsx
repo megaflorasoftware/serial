@@ -1,15 +1,13 @@
 "use client";
 
-import { EyeOpenIcon, ArchiveIcon } from "@radix-ui/react-icons";
 import dayjs from "dayjs";
-import { SproutIcon } from "lucide-react";
+import { ClockIcon, SproutIcon, EyeIcon } from "lucide-react";
 import Link from "next/link";
 import { useFeed } from "~/components/FeedProvider";
 import { Button } from "~/components/ui/button";
 import { useDialogStore } from "../dialogStore";
 import { api } from "~/trpc/react";
 import clsx from "clsx";
-import { useExternalState } from "~/lib/hooks/use-external-state";
 
 function timeAgo(date: string | Date) {
   const diff = dayjs().diff(date);
@@ -72,10 +70,10 @@ function ItemDisplay({
 }) {
   const { updateItemOptimistically } = useFeed();
 
-  const { mutateAsync: setIsItemHidden, isLoading: isLoadingHiddenState } =
-    api.feed.setFeedItemHidden.useMutation();
+  const { mutateAsync: setIsItemWatchLater } =
+    api.feed.setFeedItemWatchLater.useMutation();
 
-  const { mutateAsync: setIsItemWatched, isLoading: isLoadingWatchedState } =
+  const { mutateAsync: setIsItemWatched } =
     api.feed.setFeedItemWatched.useMutation();
 
   return (
@@ -115,17 +113,17 @@ function ItemDisplay({
             updateItemOptimistically({
               contentId: item.contentId,
               feedId: item.feedId,
-              isHidden: !item.isHidden,
+              isWatchLater: !item.isWatchLater,
             });
 
-            await setIsItemHidden({
+            await setIsItemWatchLater({
               feedId: item.feedId,
               contentId: item.contentId,
-              isHidden: !item.isHidden,
+              isWatchLater: !item.isWatchLater,
             });
           }}
         >
-          <ArchiveIcon />
+          <ClockIcon size={16} />
         </Button>
         <Button
           size="icon"
@@ -146,7 +144,7 @@ function ItemDisplay({
             });
           }}
         >
-          <EyeOpenIcon />
+          <EyeIcon size={16} />
         </Button>
       </div>
     </article>
@@ -154,7 +152,7 @@ function ItemDisplay({
 }
 
 export default function TodayItems() {
-  const { items, feeds, refetch } = useFeed();
+  const { items, feeds } = useFeed();
 
   if (feeds.length === 0) {
     return <TodayItemsFeedEmptyState />;

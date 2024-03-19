@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useFeed } from "./FeedProvider";
 import { useParams, useRouter } from "next/navigation";
 import { useDialogStore } from "~/app/(feed)/dialogStore";
+import { useRouterBackHack } from "~/lib/hooks/use-router-back-hack";
 
 function doesAnyInputElementHaveFocus() {
   const elements = document.querySelectorAll("input, textarea, select, button");
@@ -30,6 +31,7 @@ type KeyboardProviderProps = {
 export function KeyboardProvider({ children }: KeyboardProviderProps) {
   const params = useParams();
   const router = useRouter();
+  const goBack = useRouterBackHack();
 
   const { items, setSelectedItem } = useFeed();
   const [view, setView] = useState<FeedContext["view"]>("windowed");
@@ -53,10 +55,17 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
             return prev === "windowed" ? "fullscreen" : "windowed";
           });
           break;
-        case "Escape":
-          break;
+        // case "Escape":
+        //   break;
         case "[":
           if (!items.length) return;
+
+          if (event.metaKey) {
+            goBack();
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            return;
+          }
 
           if (!videoID) {
             const previousVideo = items[items.length - 1]!;
@@ -73,7 +82,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
           void router.push(`/feed/watch/${previousVideo.contentId}`);
           break;
         case "]":
-          if (!items.length) return;
+          if (!items.length || event.metaKey) return;
 
           if (!videoID) {
             const previousVideo = items[0]!;
@@ -81,7 +90,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
             break;
           }
 
-          if (currentIndex >= items.length - 1 || currentIndex <= 0) {
+          if (currentIndex >= items.length - 1 || currentIndex < 0) {
             void router.push("/feed");
             break;
           }
@@ -108,9 +117,9 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
         // case "h":
         //   // set as hidden
         //   break;
-        case "\\":
-          setIsCategoriesOpen((prev) => !prev);
-          break;
+        // case "\\":
+        //   setIsCategoriesOpen((prev) => !prev);
+        //   break;
       }
     };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { VisibilityFilter, useFeed } from "~/components/FeedProvider";
+import { type VisibilityFilter, useFeed } from "~/components/FeedProvider";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 
 export function ItemVisibilityChips() {
@@ -15,7 +15,7 @@ export function ItemVisibilityChips() {
     >
       <ToggleGroupItem value="all">All</ToggleGroupItem>
       <ToggleGroupItem value="unread">Unread</ToggleGroupItem>
-      <ToggleGroupItem value="archived">Archived</ToggleGroupItem>
+      <ToggleGroupItem value="later">Later</ToggleGroupItem>
     </ToggleGroup>
   );
 }
