@@ -1,0 +1,65 @@
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { userConfig } from "~/server/db/schema";
+
+export type UserConfigValues = {
+  lightHSL: number[] | undefined;
+  darkHSL: number[] | undefined;
+};
+
+function parseHSL(hsl: string | undefined): number[] | undefined {
+  if (!hsl) return undefined;
+  return hsl
+    .split(" ")
+    .map((value) => value.replace("%", ""))
+    .map(Number);
+}
+
+export const userConfigRouter = createTRPCRouter({
+  setThemeHSL: protectedProcedure
+    .input(
+      z.object({
+        theme: z.enum(["light", "dark"]),
+        hsl: z.tuple([z.number(), z.number(), z.number()]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      let key: keyof typeof userConfig = "lightHSL";
+      if (input.theme === "dark") {
+        key = "darkHSL";
+      }
+
+      const formattedHSL = `${input.hsl[0]} ${input.hsl[1]}% ${input.hsl[2]}%`;
+
+      await ctx.db
+        .insert(userConfig)
+        .values({
+          userId: ctx.auth!.userId!,
+          [key]: formattedHSL,
+        })
+        .onConflictDoUpdate({
+          target: userConfig.userId,
+          set: {
+            [key]: formattedHSL,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          },
+        });
+    }),
+
+  getConfig: protectedProcedure.query(
+    async ({ ctx }): Promise<UserConfigValues> => {
+      const userConfig = await ctx.db.query.userConfig.findFirst({
+        where: sql`user_id = ${ctx.auth!.userId}`,
+      });
+
+      console.log(userConfig);
+
+      return {
+        lightHSL: parseHSL(userConfig?.lightHSL),
+        darkHSL: parseHSL(userConfig?.darkHSL),
+      };
+    },
+  ),
+});

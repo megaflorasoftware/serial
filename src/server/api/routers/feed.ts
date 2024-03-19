@@ -1,12 +1,16 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+} from "~/server/api/trpc";
 import { feedCategories, feeds } from "~/server/db/schema";
 import { fetchFeedData, fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 
 export const feedRouter = createTRPCRouter({
-  create: publicProcedure
+  create: protectedProcedure
     .input(
       z.object({ url: z.string().min(5), categoryId: z.number().optional() }),
     )
@@ -29,7 +33,7 @@ export const feedRouter = createTRPCRouter({
       }
     }),
 
-  getAllFeedData: publicProcedure.query(async ({ ctx }) => {
+  getAllFeedData: protectedProcedure.query(async ({ ctx }) => {
     const feeds = await ctx.db.query.feeds.findMany({
       where: sql`user_id = ${ctx.auth!.userId}`,
     });

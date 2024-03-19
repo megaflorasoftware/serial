@@ -1,15 +1,17 @@
 import "~/styles/globals.css";
 
-import { ClerkProvider } from "@clerk/nextjs";
 import { Inter } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 
-import { type Metadata, type Viewport } from "next";
-import { ThemeProvider } from "~/components/ThemeProvider";
-import { cn } from "~/lib/utils";
 import { TRPCReactProvider } from "~/trpc/react";
-import { Toaster } from "~/components/ui/sonner";
-import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
-import { Suspense } from "react";
+import { cn } from "~/lib/utils";
+import { ThemeProvider } from "~/components/ThemeProvider";
+import { type Metadata, type Viewport } from "next";
+import { Toaster } from "sonner";
+import { FeedProvider } from "~/components/FeedProvider";
+import { KeyboardProvider } from "~/components/KeyboardProvider";
+import { Header } from "../Header";
+import { ScrollArea } from "~/components/ui/scroll-area";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -98,26 +100,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body
-          className={cn(`min-h-screen font-sans antialiased ${inter.variable}`)}
-        >
-          <TRPCReactProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <ApplyColorTheme>
-                <Suspense>{children}</Suspense>
-              </ApplyColorTheme>
-              <Toaster />
-            </ThemeProvider>
-          </TRPCReactProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <FeedProvider>
+      <KeyboardProvider>
+        <main className="flex h-screen flex-col">
+          <Header />
+          <ScrollArea className="h-full w-full">{children}</ScrollArea>
+        </main>
+      </KeyboardProvider>
+    </FeedProvider>
   );
 }

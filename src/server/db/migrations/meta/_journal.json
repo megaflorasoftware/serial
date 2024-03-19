@@ -22,6 +22,13 @@
       "when": 1706000800641,
       "tag": "0002_cuddly_omega_red",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1710806684783,
+      "tag": "0003_left_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

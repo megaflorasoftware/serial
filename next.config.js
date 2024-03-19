@@ -4,9 +4,10 @@
  */
 await import("./src/env.js");
 
-import withPWA from "next-pwa";
+import createWithPWA from "next-pwa";
+import createWithMDX from "@next/mdx";
 
-const wrapConfig = withPWA({
+const withPWA = createWithPWA({
   cacheOnFrontEndNav: true,
   reloadOnOnline: true,
   dest: "public",
@@ -19,7 +20,21 @@ const wrapConfig = withPWA({
   // },
 });
 
-// /** @type {import("next").NextConfig} */
-const config = {};
+const withMDX = createWithMDX();
 
-export default wrapConfig(config);
+/** @type {import("next").NextConfig} */
+const config = {
+  pageExtensions: ["js", "jsx", "mdx", "ts", "tsx"],
+  // experimental: {
+  //   mdxRs: true,
+  // },
+};
+
+const isProd = process.env.NODE_ENV === "production";
+
+const exportedConfig = isProd
+// @ts-expect-error - This is a NextJS config file
+  ? withPWA(withMDX(config))
+  : withMDX(config);
+
+export default exportedConfig;

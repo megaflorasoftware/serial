@@ -2,7 +2,6 @@
 
 import { PlusIcon } from "@radix-ui/react-icons";
 import { Button } from "./ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { api } from "~/trpc/react";

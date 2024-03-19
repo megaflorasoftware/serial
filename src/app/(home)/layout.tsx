@@ -6,10 +6,6 @@ import { Inter } from "next/font/google";
 import { type Metadata, type Viewport } from "next";
 import { ThemeProvider } from "~/components/ThemeProvider";
 import { cn } from "~/lib/utils";
-import { TRPCReactProvider } from "~/trpc/react";
-import { Toaster } from "~/components/ui/sonner";
-import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
-import { Suspense } from "react";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -98,26 +94,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body
-          className={cn(`min-h-screen font-sans antialiased ${inter.variable}`)}
-        >
-          <TRPCReactProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <ApplyColorTheme>
-                <Suspense>{children}</Suspense>
-              </ApplyColorTheme>
-              <Toaster />
-            </ThemeProvider>
-          </TRPCReactProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <div className="prose mx-auto p-6 sm:p-8 md:p-10 lg:p-12">{children}</div>
   );
 }

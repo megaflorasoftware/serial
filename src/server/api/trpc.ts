@@ -81,12 +81,12 @@ export const publicProcedure = t.procedure;
 import { type User, type getAuth } from "@clerk/nextjs/server";
 
 // // TODO: protected procedures
-// export const isAuthed = t.middleware(async (opts) => {
-//   if (!opts.ctx.auth?.sessionId || !opts.ctx.auth?.userId) {
-//     throw new Error("Unauthorized");
-//   }
+export const isAuthed = t.middleware(async (opts) => {
+  if (!opts.ctx.auth?.sessionId || !opts.ctx.auth?.userId) {
+    throw new Error("Unauthorized");
+  }
 
-//   return opts.next(opts);
-// });
+  return opts.next(opts);
+});
 
-// export const protectedProcedure = t.procedure.use(isAuthed);
+export const protectedProcedure = t.procedure.use(isAuthed);

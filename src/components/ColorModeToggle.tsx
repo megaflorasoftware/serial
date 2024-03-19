@@ -61,11 +61,11 @@ export function ColorModeToggle() {
         <DropdownMenuItem onClick={() => setTheme("dark")}>
           Dark
         </DropdownMenuItem>
-        {isArcBrowser && (
+        {/* {isArcBrowser && (
           <DropdownMenuItem onClick={() => setTheme("arc")}>
             Arc
           </DropdownMenuItem>
-        )}
+        )} */}
         <DropdownMenuItem onClick={() => setTheme("system")}>
           System
         </DropdownMenuItem>

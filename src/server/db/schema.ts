@@ -92,3 +92,15 @@ export const feedCategories = sqliteTable(
     pk: primaryKey({ columns: [table.feedId, table.categoryId] }),
   }),
 );
+
+export const userConfig = sqliteTable("user_config", {
+  userId: text("user_id").primaryKey(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  lightHSL: text("light_hsl", { length: 16 }).notNull().default(""),
+  darkHSL: text("dark_hsl", { length: 16 }).notNull().default(""),
+});

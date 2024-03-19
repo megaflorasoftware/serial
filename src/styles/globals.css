@@ -3,141 +3,246 @@
 @tailwind utilities;
 
 @layer base {
-    html {
-        background: black;
-    }
+  html {
+    background: black;
+  }
 
-    :root {
-        --background: hsl(20 14.3% 4.1%);
-        --foreground: hsl(60 9.1% 97.8%);
+  :root {
+    --radius: 0.3rem;
 
-        --card: hsl(20 14.3% 4.1%);
-        --card-foreground: hsl(60 9.1% 97.8%);
+    --light-hue: 60;
+    --light-sat: 10%;
+    --light-lgt: 100%;
 
-        --popover: hsl(20 14.3% 4.1%);
-        --popover-foreground: hsl(60 9.1% 97.8%);
+    --dark-hue: 60;
+    --dark-sat: 10%;
+    --dark-lgt: 15%;
+  }
 
-        --primary: hsl(60 9.1% 97.8%);
-        --primary-foreground: hsl(24 9.8% 10%);
+  :root {
+    --bg-hue: var(--light-hue);
+    --bg-sat: var(--light-sat);
+    --bg-lgt: var(--light-lgt);
 
-        --secondary: hsl(12 6.5% 15.1%);
-        --secondary-foreground: hsl(60 9.1% 97.8%);
+    --fg-hue: calc(var(--bg-hue) - 40);
+    --fg-sat: calc(var(--bg-sat) + 5%);
+    --fg-lgt: calc(var(--bg-lgt) - 85%);
 
-        --muted: hsl(12 6.5% 15.1%);
-        --muted-foreground: hsl(24 5.4% 63.9%);
+    --pr-hue: calc(var(--bg-hue) + 8);
+    --pr-sat: calc(var(--bg-sat) + 5%);
+    --pr-lgt: var(--bg-lgt);
 
-        --accent: hsl(12 6.5% 15.1%);
-        --accent-foreground: hsl(60 9.1% 97.8%);
+    --sc-hue: calc(var(--bg-hue) + 8);
+    --sc-sat: calc(var(--bg-sat) * 0.9);
+    --sc-lgt: calc(var(--bg-lgt) - 7.5%);
 
-        --destructive: hsl(0 62.8% 30.6%);
-        --destructive-foreground: hsl(60 9.1% 97.8%);
+    --mf-hue: calc(var(--bg-hue) - 8);
+    --mf-sat: calc(var(--bg-sat) - 10%);
+    --mf-lgt: calc(var(--bg-lgt) - 50%);
 
-        --border: hsl(12 6.5% 15.1%);
-        --input: hsl(12 6.5% 15.1%);
-        --ring: hsl(24 5.7% 82.9%);
+    --rg-lgt: calc(var(--bg-lgt) - 70%);
 
-        --radius: 0.5rem;
-    }
+    --ds-hue: 0;
+    --ds-sat: 60%;
+    --ds-lgt: 30%;
 
-    .arc {
-        --background: var(--arc-palette-background);
-        --foreground: var(--arc-palette-foregroundPrimary);
+    --background:             var(--bg-hue) var(--bg-sat) var(--bg-lgt);
+    --foreground:             var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --card:                   var(--bg-hue) var(--bg-sat) var(--bg-lgt);
+    --card-foreground:        var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --popover:                var(--bg-hue) var(--bg-sat) var(--bg-lgt);
+    --popover-foreground:     var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --primary:                var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --primary-foreground:     var(--pr-hue) var(--pr-sat) var(--pr-lgt);
+    --secondary:              var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --secondary-foreground:   var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --muted:                  var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --muted-foreground:       var(--mf-hue) var(--mf-sat) var(--mf-lgt);
+    --accent:                 var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --accent-foreground:      var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --destructive:            var(--ds-hue) var(--ds-sat) var(--ds-lgt);
+    --destructive-foreground: var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --border:                 var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --input:                  var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --ring:                   var(--mf-hue) var(--mf-sat) var(--rg-lgt);
+  }
 
-        --card: var(--arc-palette-background);
-        --card-foreground: var(--arc-palette-foregroundPrimary);
+  .dark {
+    --bg-hue: var(--dark-hue);
+    --bg-sat: var(--dark-sat);
+    --bg-lgt: var(--dark-lgt);
 
-        --popover: var(--arc-palette-background);
-        --popover-foreground: var(--arc-palette-foregroundPrimary);
+    --fg-hue: calc(var(--bg-hue) + 40);
+    --fg-sat: calc(var(--bg-sat) - 5%);
+    --fg-lgt: calc(var(--bg-lgt) + 85%);
 
-        --primary: var(--arc-palette-foregroundPrimary);
-        --primary-foreground: hsl(24 9.8% 10%);
+    --pr-hue: calc(var(--bg-hue) - 8);
+    --pr-sat: calc(var(--bg-sat) - 5%);
+    --pr-lgt: var(--bg-lgt);
 
-        --secondary: var(--arc-palette-minContrastColor);
-        --secondary-foreground: var(--arc-palette-foregroundPrimary);
+    --sc-hue: calc(var(--bg-hue) - 8);
+    --sc-sat: calc(var(--bg-sat) - 10%);
+    --sc-lgt: max(calc(var(--bg-lgt) * 1.5), calc(var(--bg-lgt) + 10%));
 
-        --muted: var(--arc-palette-minContrastColor);
-        --muted-foreground: var(--arc-palette-foregroundTertiary);
+    --mf-hue: calc(var(--bg-hue) + 8);
+    --mf-sat: calc(var(--bg-sat) - 10%);
+    --mf-lgt: calc(var(--bg-lgt) + 50%);
 
-        --accent: var(--arc-palette-minContrastColor);
-        --accent-foreground: var(--arc-palette-foregroundPrimary);
+    --rg-lgt: calc(var(--bg-lgt) + 70%);
 
-        --destructive: hsl(0 62.8% 30.6%);
-        --destructive-foreground: var(--arc-palette-foregroundPrimary);
+    --ds-hue: 0;
+    --ds-sat: 60%;
+    --ds-lgt: 30%;
 
-        --border: var(--arc-palette-minContrastColor);
-        --input: var(--arc-palette-minContrastColor);
-        --ring: var(--arc-palette-maxContrastColor);
-    }
+    --background:             var(--bg-hue) var(--bg-sat) var(--bg-lgt);
+    --foreground:             var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --card:                   var(--bg-hue) var(--bg-sat) var(--bg-lgt);
+    --card-foreground:        var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --popover:                var(--bg-hue) var(--bg-sat) var(--bg-lgt);
+    --popover-foreground:     var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --primary:                var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --primary-foreground:     var(--pr-hue) var(--pr-sat) var(--pr-lgt);
+    --secondary:              var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --secondary-foreground:   var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --muted:                  var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --muted-foreground:       var(--mf-hue) var(--mf-sat) var(--mf-lgt);
+    --accent:                 var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --accent-foreground:      var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --destructive:            var(--ds-hue) var(--ds-sat) var(--ds-lgt);
+    --destructive-foreground: var(--fg-hue) var(--fg-sat) var(--fg-lgt);
+    --border:                 var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --input:                  var(--sc-hue) var(--sc-sat) var(--sc-lgt);
+    --ring:                   var(--mf-hue) var(--mf-sat) var(--rg-lgt);
+  }
 
-    .light {
-        --background: hsl(0 0% 100%);
-        --foreground: hsl(20 14.3% 4.1%);
+  /* .arc {
+    --background: var(--arc-palette-background);
+    --foreground: var(--arc-palette-foregroundPrimary);
 
-        --card: hsl(0 0% 100%);
-        --card-foreground: hsl(20 14.3% 4.1%);
+    --card: var(--arc-palette-background);
+    --card-foreground: var(--arc-palette-foregroundPrimary);
 
-        --popover: hsl(0 0% 100%);
-        --popover-foreground: hsl(20 14.3% 4.1%);
+    --popover: var(--arc-palette-background);
+    --popover-foreground: var(--arc-palette-foregroundPrimary);
 
-        --primary: hsl(24 9.8% 10%);
-        --primary-foreground: hsl(60 9.1% 97.8%);
+    --primary: var(--arc-palette-foregroundPrimary);
+    --primary-foreground: hsl(24 9.8% 10%);
 
-        --secondary: hsl(60 4.8% 95.9%);
-        --secondary-foreground: hsl(24 9.8% 10%);
+    --secondary: var(--arc-palette-minContrastColor);
+    --secondary-foreground: var(--arc-palette-foregroundPrimary);
 
-        --muted: hsl(60 4.8% 95.9%);
-        --muted-foreground: hsl(25 5.3% 44.7%);
+    --muted: var(--arc-palette-minContrastColor);
+    --muted-foreground: var(--arc-palette-foregroundTertiary);
 
-        --accent: hsl(60 4.8% 95.9%);
-        --accent-foreground: hsl(24 9.8% 10%);
+    --accent: var(--arc-palette-minContrastColor);
+    --accent-foreground: var(--arc-palette-foregroundPrimary);
 
-        --destructive: hsl(0 84.2% 60.2%);
-        --destructive-foreground: hsl(60 9.1% 97.8%);
+    --destructive: hsl(0 62.8% 30.6%);
+    --destructive-foreground: var(--arc-palette-foregroundPrimary);
 
-        --border: hsl(20 5.9% 90%);
-        --input: hsl(20 5.9% 90%);
-        --ring: hsl(20 14.3% 4.1%);
-    }
-
-    .dark {
-        --background: hsl(20 14.3% 4.1%);
-        --foreground: hsl(60 9.1% 97.8%);
-
-        --card: hsl(20 14.3% 4.1%);
-        --card-foreground: hsl(60 9.1% 97.8%);
-
-        --popover: hsl(20 14.3% 4.1%);
-        --popover-foreground: hsl(60 9.1% 97.8%);
-
-        --primary: hsl(60 9.1% 97.8%);
-        --primary-foreground: hsl(24 9.8% 10%);
-
-        --secondary: hsl(12 6.5% 15.1%);
-        --secondary-foreground: hsl(60 9.1% 97.8%);
-
-        --muted: hsl(12 6.5% 15.1%);
-        --muted-foreground: hsl(24 5.4% 63.9%);
-
-        --accent: hsl(12 6.5% 15.1%);
-        --accent-foreground: hsl(60 9.1% 97.8%);
-
-        --destructive: hsl(0 62.8% 30.6%);
-        --destructive-foreground: hsl(60 9.1% 97.8%);
-
-        --border: hsl(12 6.5% 15.1%);
-        --input: hsl(12 6.5% 15.1%);
-        --ring: hsl(24 5.7% 82.9%);
-    }
-
-
+    --border: var(--arc-palette-minContrastColor);
+    --input: var(--arc-palette-minContrastColor);
+    --ring: var(--arc-palette-maxContrastColor);
+  } */
 }
 
 @layer base {
-    * {
-        @apply border-border;
-    }
+  * {
+    @apply border-border;
+  }
 
-    body {
-        @apply bg-background text-foreground;
-    }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  .prose {
+    color: var(--foreground);
+    @apply mx-auto max-w-2xl;
+  }
+
+  .prose h1 {
+    @apply font-mono text-2xl font-bold leading-relaxed lg:text-3xl lg:leading-loose;
+  }
+
+  .prose h2 {
+    @apply font-mono text-xl font-bold leading-relaxed lg:text-2xl lg:leading-loose;
+  }
+
+  .prose h3 {
+    @apply font-mono text-lg font-bold leading-relaxed lg:text-xl lg:leading-loose;
+  }
+
+  .prose h4 {
+    @apply font-mono text-base font-bold leading-relaxed lg:text-lg lg:leading-loose;
+  }
+
+  .prose h5 {
+    @apply font-mono text-base font-bold leading-relaxed lg:text-base lg:leading-loose;
+  }
+
+  .prose h6 {
+    @apply font-mono text-base font-bold leading-relaxed lg:text-base lg:leading-loose;
+  }
+
+  .prose a {
+    @apply -m-1 rounded p-1 font-semibold text-foreground hover:bg-primary hover:text-background;
+  }
+
+  .prose hr {
+    @apply my-6;
+  }
+
+  .prose ul {
+    @apply text-foreground/80 list-disc pl-4;
+  }
+
+  .prose ol {
+    @apply text-foreground/80 list-decimal pl-4;
+  }
+
+  .prose p {
+    @apply text-foreground/80 text-base;
+  }
+
+  .prose p:has(+ p),
+  .prose ul:has(+ p),
+  .prose ol:has(+ p) {
+    @apply pb-2 md:pb-4;
+  }
+
+  .prose p:has(+ h1),
+  .prose ul:has(+ h1),
+  .prose ol:has(+ h1) {
+    @apply pb-8 md:pb-10;
+  }
+
+  .prose p:has(+ h2),
+  .prose ul:has(+ h2),
+  .prose ol:has(+ h2) {
+    @apply pb-8 md:pb-10;
+  }
+
+  .prose p:has(+ h3),
+  .prose ul:has(+ h3),
+  .prose ol:has(+ h3) {
+    @apply pb-8 md:pb-10;
+  }
+
+  .prose p:has(+ h4),
+  .prose ul:has(+ h4),
+  .prose ol:has(+ h4) {
+    @apply pb-8 md:pb-10;
+  }
+
+  .prose p:has(+ h5),
+  .prose ul:has(+ h5),
+  .prose ol:has(+ h5) {
+    @apply pb-8 md:pb-10;
+  }
+
+  .prose p:has(+ h6),
+  .prose ul:has(+ h6),
+  .prose ol:has(+ h6) {
+    @apply pb-8 md:pb-10;
+  }
 }
