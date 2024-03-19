@@ -29,6 +29,34 @@
       "when": 1710806684783,
       "tag": "0003_left_lucky_pierre",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1710816187715,
+      "tag": "0004_magical_korvac",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1710821939200,
+      "tag": "0005_bizarre_sentry",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1710822217305,
+      "tag": "0006_nasty_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1710822228356,
+      "tag": "0007_majestic_tarantula",
+      "breakpoints": true
     }
   ]
 }

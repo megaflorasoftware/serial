@@ -27,10 +27,10 @@ export const feeds = sqliteTable(
     url: text("url", { length: 512 }).notNull().default(""),
     platform: text("platform", { length: 256 }).notNull().default("youtube"),
     createdAt: integer("created_at", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
+      .$default(() => new Date())
       .notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
+      .$default(() => new Date())
       .notNull(),
   },
   (example) => ({
@@ -41,25 +41,28 @@ export const feeds = sqliteTable(
 export const feedItems = sqliteTable(
   "feed_item",
   {
-    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
     feedId: integer("feed_id").references(() => feeds.id),
     contentId: text("content_id", { length: 512 }).notNull(),
     title: text("title", { length: 512 }).notNull(),
+    author: text("author", { length: 512 }).notNull(),
     url: text("url", { length: 512 }).notNull(),
+    thumbnail: text("thumbnail", { length: 512 }).notNull().default(""),
     isWatched: integer("is_watched", { mode: "boolean" })
       .notNull()
       .default(false),
     isHidden: integer("is_hidden", { mode: "boolean" })
       .notNull()
       .default(false),
+    postedAt: integer("posted_at", { mode: "timestamp" }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
+      .$default(() => new Date())
       .notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
+      .$default(() => new Date())
       .notNull(),
   },
   (example) => ({
+    pk: primaryKey({ columns: [example.feedId, example.contentId] }),
     feedIdIndex: index("feed_item_feed_id_idx").on(example.feedId),
   }),
 );
@@ -71,10 +74,10 @@ export const contentCategories = sqliteTable(
     userId: text("user_id").notNull().default(""),
     name: text("name", { length: 256 }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
+      .$default(() => new Date())
       .notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
+      .$default(() => new Date())
       .notNull(),
   },
   (example) => ({
@@ -96,10 +99,10 @@ export const feedCategories = sqliteTable(
 export const userConfig = sqliteTable("user_config", {
   userId: text("user_id").primaryKey(),
   createdAt: integer("created_at", { mode: "timestamp" })
-    .default(sql`CURRENT_TIMESTAMP`)
+    .$default(() => new Date())
     .notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" })
-    .default(sql`CURRENT_TIMESTAMP`)
+    .$default(() => new Date())
     .notNull(),
   lightHSL: text("light_hsl", { length: 16 }).notNull().default(""),
   darkHSL: text("dark_hsl", { length: 16 }).notNull().default(""),

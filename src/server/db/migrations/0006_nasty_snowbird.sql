@@ -1,0 +1,1 @@
+DROP TABLE `serial_feed_item`;

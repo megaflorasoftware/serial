@@ -54,8 +54,6 @@ export const userConfigRouter = createTRPCRouter({
         where: sql`user_id = ${ctx.auth!.userId}`,
       });
 
-      console.log(userConfig);
-
       return {
         lightHSL: parseHSL(userConfig?.lightHSL),
         darkHSL: parseHSL(userConfig?.darkHSL),

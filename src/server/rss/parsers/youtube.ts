@@ -49,6 +49,7 @@ export async function fetchYouTubeFeedData(
     const data = (await parser.parseURL(feed.url)) as unknown as RSSYoutubeData;
 
     return {
+      id: feed.id,
       title: data.title,
       url: data.link,
       items: data.items

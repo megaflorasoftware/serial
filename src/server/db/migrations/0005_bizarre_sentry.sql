@@ -1,0 +1,1 @@
+ALTER TABLE serial_feed_item ADD `thumbnail` text(512) DEFAULT '' NOT NULL;

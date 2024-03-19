@@ -2,6 +2,18 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useFeed } from "./FeedProvider";
+import { useParams, useRouter, usePathname } from "next/navigation";
+import { useDialogStore } from "~/app/(feed)/dialogStore";
+
+function doesAnyInputElementHaveFocus() {
+  const elements = document.querySelectorAll("input, textarea, select, button");
+  for (const element of elements) {
+    if (element === document.activeElement) {
+      return true;
+    }
+  }
+  return false;
+}
 
 type FeedContext = {
   view: "windowed" | "fullscreen";
@@ -16,12 +28,24 @@ type KeyboardProviderProps = {
 };
 
 export function KeyboardProvider({ children }: KeyboardProviderProps) {
+  const params = useParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
   const { items, setSelectedItem } = useFeed();
   const [view, setView] = useState<FeedContext["view"]>("windowed");
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
+  const { dialog, launchDialog, closeDialog } = useDialogStore((store) => ({
+    dialog: store.dialog,
+    launchDialog: store.launchDialog,
+    closeDialog: store.closeDialog,
+  }));
 
   useEffect(() => {
     const processKey = (event: KeyboardEvent) => {
+      const videoID = params.videoID;
+      const currentIndex = items.findIndex((item) => item.contentId === videoID);
+
       switch (event.key) {
         case "`":
           setView((prev) => {
@@ -29,26 +53,54 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
           });
           break;
         case "Escape":
-          setSelectedItem(null);
           break;
         case "[":
-          setSelectedItem((prev) => {
-            if (!prev) return null;
-            const currentIndex = items.findIndex((item) => item.id === prev.id);
+          if (!items.length) return;
 
-            if (currentIndex <= 0) return null;
-            return items[currentIndex - 1]!;
-          });
+          if (!videoID) {
+            const previousVideo = items[items.length - 1]!;
+            void router.push(`/feed/watch/${previousVideo.contentId}`);
+            break;
+          }
+
+          if (currentIndex <= 0) {
+            void router.push("/feed");
+            break;
+          }
+
+          const previousVideo = items[currentIndex - 1]!;
+          void router.push(`/feed/watch/${previousVideo.contentId}`);
           break;
         case "]":
-          setSelectedItem((prev) => {
-            if (!prev) return null;
-            const currentIndex = items.findIndex((item) => item.id === prev.id);
+          if (!items.length) return;
 
-            if (currentIndex >= items.length - 1) return null;
-            return items[currentIndex + 1]!;
-          });
+          if (!videoID) {
+            const previousVideo = items[0]!;
+            void router.push(`/feed/watch/${previousVideo.contentId}`);
+            break;
+          }
+
+          if (currentIndex >= items.length - 1 || currentIndex <= 0) {
+            void router.push("/feed");
+            break;
+          }
+
+          const nextVideo = items[currentIndex + 1]!;
+          void router.push(`/feed/watch/${nextVideo.contentId}`);
           break;
+        case "a":
+          if (doesAnyInputElementHaveFocus()) return;
+
+          event.preventDefault();
+
+          if (dialog === "add-feed") {
+            closeDialog();
+            break;
+          }
+
+          launchDialog("add-feed");
+          break;
+
         // case "e":
         //   // set as watched
         //   break;
@@ -66,7 +118,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
     return () => {
       window.removeEventListener("keydown", processKey);
     };
-  }, [items, setSelectedItem]);
+  }, [items, params.videoID, router, setSelectedItem]);
 
   return (
     <FeedContext.Provider

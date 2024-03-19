@@ -1,5 +1,24 @@
-import MainPanel from "./MainPanel";
+import { DateFilterChips } from "./DateFilterChips";
+import { ItemVisibilityChips } from "./ItemVisibilityChips";
+import TodayItems from "./TodayItems";
+import dayjs from "dayjs";
 
 export default function Home() {
-  return <MainPanel />;
+  return (
+    <div className="lg:pb-18 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center">
+      <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">
+        <h1 className="font-mono text-2xl font-bold">Serial</h1>
+        <p className="pb-2 font-mono">
+          {dayjs().format("dddd, MMMM DD • hh:mma")}
+        </p>
+        <div className="w-max pt-2">
+          <DateFilterChips />
+        </div>
+        <div className="w-max pt-2">
+          <ItemVisibilityChips />
+        </div>
+      </div>
+      <TodayItems />
+    </div>
+  );
 }

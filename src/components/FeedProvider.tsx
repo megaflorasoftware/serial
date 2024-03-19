@@ -7,15 +7,33 @@ import {
   useContext,
   useMemo,
   useState,
+  useEffect,
+  useCallback,
 } from "react";
 import { type RSSContent, type RSSFeed } from "~/server/rss/types";
+import { type feeds, type feedItems } from "~/server/db/schema";
 import { api } from "~/trpc/react";
 
+export type VisibilityFilter = "all" | "unread" | "archived";
+
+type Item = typeof feedItems.$inferSelect;
+
 type FeedContext = {
-  feeds: RSSFeed[];
-  items: RSSContent[];
+  refetch: () => void;
+  feeds: (typeof feeds.$inferSelect)[];
+  items: Item[];
   selectedItem: RSSContent | null;
   setSelectedItem: Dispatch<SetStateAction<RSSContent | null>>;
+  dateFilter: number;
+  setDateFilter: Dispatch<SetStateAction<number>>;
+  visibilityFilter: VisibilityFilter;
+  setVisibilityFilter: Dispatch<SetStateAction<VisibilityFilter>>;
+  updateItemOptimistically: (
+    item: Partial<Item> & {
+      contentId: Item["contentId"];
+      feedId: Item["feedId"];
+    },
+  ) => void;
 };
 
 const FeedContext = createContext<FeedContext | null>(null);
@@ -25,34 +43,95 @@ type FeedProviderProps = {
 };
 
 export function FeedProvider({ children }: FeedProviderProps) {
-  const { data: feeds } = api.feed.getAllFeedData.useQuery();
+  const { data, refetch } = api.feed.getAllFeedData.useQuery();
   const [selectedItem, setSelectedItem] = useState<RSSContent | null>(null);
   const [category, setCategory] = useState<number | null>(null);
 
-  const items = useMemo(() => {
-    return feeds
-      ?.flatMap((feed) => {
-        return feed.items;
-      })
-      .filter((item) => {
-        const date = new Date(item.publishedDate);
-        const now = new Date();
-        const daysAgo = 7;
-        const sevenDaysAgo = new Date(now.setDate(now.getDate() - daysAgo));
-        return date > sevenDaysAgo;
-      })
-      .sort((a, b) => {
-        return a.publishedDate > b.publishedDate ? -1 : 1;
+  const [dateFilter, setDateFilter] = useState<number>(1);
+  const [visibilityFilter, setVisibilityFilter] =
+    useState<VisibilityFilter>("unread");
+
+  const [unsortedItems, setUnsortedItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+
+  const filterAndSortItems = useCallback(
+    (items: Item[]) => {
+      return items
+        .filter((item) => {
+          const date = new Date(item.postedAt);
+          const now = new Date();
+          const sevenDaysAgo = new Date(
+            now.setDate(now.getDate() - dateFilter),
+          );
+          if (date <= sevenDaysAgo) return false;
+
+          if (
+            visibilityFilter === "unread" &&
+            (item.isWatched || item.isHidden)
+          ) {
+            return false;
+          }
+          if (visibilityFilter === "archived" && !item.isHidden) {
+            return false;
+          }
+          if (visibilityFilter === "all" && item.isHidden) {
+            return false;
+          }
+
+          return true;
+        })
+        .sort((a, b) => {
+          return a.postedAt > b.postedAt ? -1 : 1;
+        });
+    },
+    [visibilityFilter, dateFilter],
+  );
+
+  useEffect(() => {
+    if (!data) return;
+
+    setUnsortedItems(data.items);
+    setItems(filterAndSortItems(data.items));
+  }, [data, data?.items, filterAndSortItems]);
+
+  useEffect(() => {
+    setItems(filterAndSortItems(unsortedItems));
+  }, [visibilityFilter, dateFilter, filterAndSortItems, unsortedItems]);
+
+  const updateItemOptimistically = (
+    item: Partial<Item> & {
+      contentId: Item["contentId"];
+      feedId: Item["feedId"];
+    },
+  ) => {
+    setUnsortedItems((_items) => {
+      const updatedUnsortedItems = _items.map((i) => {
+        if (i.contentId === item.contentId) {
+          return { ...i, ...item };
+        }
+        return i;
       });
-  }, [feeds]);
+
+      setItems(filterAndSortItems(updatedUnsortedItems));
+      return updatedUnsortedItems;
+    });
+  };
 
   return (
     <FeedContext.Provider
       value={{
-        feeds: feeds ?? [],
+        refetch: () => {
+          void refetch();
+        },
+        feeds: data?.feeds ?? [],
         items: items ?? [],
         selectedItem,
         setSelectedItem,
+        dateFilter,
+        setDateFilter,
+        visibilityFilter,
+        setVisibilityFilter,
+        updateItemOptimistically,
       }}
     >
       {children}

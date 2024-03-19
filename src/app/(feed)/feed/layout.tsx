@@ -12,6 +12,7 @@ import { FeedProvider } from "~/components/FeedProvider";
 import { KeyboardProvider } from "~/components/KeyboardProvider";
 import { Header } from "../Header";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { AppDialogs } from "../AppDialogs";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -104,7 +105,10 @@ export default function RootLayout({
       <KeyboardProvider>
         <main className="flex h-screen flex-col">
           <Header />
-          <ScrollArea className="h-full w-full">{children}</ScrollArea>
+          <ScrollArea className="h-full w-full">
+            <div className="h-full w-full pb-6 pt-24">{children}</div>
+          </ScrollArea>
+          <AppDialogs />
         </main>
       </KeyboardProvider>
     </FeedProvider>

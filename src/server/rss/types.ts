@@ -33,6 +33,7 @@ export type RSSContent = {
 };
 
 export type RSSFeed = {
+  id: number;
   url: string;
   title: string;
   items: RSSContent[];
