@@ -1,7 +1,7 @@
+import { ClientDatetime } from "./ClientDatetime";
 import { DateFilterChips } from "./DateFilterChips";
 import { ItemVisibilityChips } from "./ItemVisibilityChips";
 import TodayItems from "./TodayItems";
-import dayjs from "dayjs";
 
 export default function Home() {
   return (
@@ -9,7 +9,7 @@ export default function Home() {
       <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">
         <h1 className="font-mono text-2xl font-bold">Serial</h1>
         <p className="pb-2 font-mono">
-          {dayjs().format("dddd, MMMM DD • hh:mma")}
+          <ClientDatetime />
         </p>
         <div className="w-max pt-2">
           <DateFilterChips />
