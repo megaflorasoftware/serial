@@ -38,7 +38,7 @@ function TodayItemsEmptyState() {
           You&apos;ve seen everything!
         </h2>
         <p className="max-w-xs pt-1 text-center text-sm opacity-80">
-          Take a walk, buy a sweet treat, or anything else that will make you
+          Take a walk, buy a sweet treat, or do anything else that will make you
           happy today.
         </p>
       </div>
