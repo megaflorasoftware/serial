@@ -15,7 +15,7 @@ export function useRouterBackHack() {
       if (window.location.pathname === previousPathname) {
         goBack();
       }
-    }, 0);
+    }, 100);
   };
 
   return goBack;
