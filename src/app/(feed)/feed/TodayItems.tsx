@@ -88,22 +88,24 @@ function ItemDisplay({
     >
       <Link
         href={`/feed/watch/${item.contentId}`}
-        className="flex h-20 w-full flex-1 items-center gap-4 pl-6 pr-4 text-left transition-colors sm:hover:bg-muted md:rounded md:pr-0"
+        className="flex w-full flex-1 flex-col gap-4 py-4 pl-6 pr-4 text-left transition-colors sm:hover:bg-muted md:h-20 md:flex-row md:items-center md:rounded md:py-0 md:pr-0"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={item.thumbnail}
           alt={item.title}
-          className="h-12 w-16 rounded object-contain"
+          className="aspect-video w-16 rounded object-cover"
         />
         <div className="flex h-full flex-1 flex-col justify-center">
-          <h3 className="w-full text-sm font-semibold">{item.title}</h3>
-          <p className="w-full text-sm opacity-80">
+          <h3 className="w-full text-xs font-semibold md:text-sm">
+            {item.title}
+          </h3>
+          <p className="w-full text-xs opacity-80 md:text-sm">
             {item.author} • {timeAgo(item.postedAt)}
           </p>
         </div>
       </Link>
-      <div className="flex h-full w-24 flex-wrap items-center justify-center">
+      <div className="flex h-full flex-row flex-wrap items-center justify-center pr-6 md:pr-0">
         <Button
           size="icon"
           variant="ghost"
