@@ -11,6 +11,7 @@ const withPWA = createWithPWA({
   cacheOnFrontEndNav: true,
   reloadOnOnline: true,
   dest: "public",
+  scope: "/feed",
   // fallbacks: {
   //   //image: "/static/images/fallback.png",
   //   // document: "/offline", // if you want to fallback to a custom page rather than /_offline
@@ -33,8 +34,8 @@ const config = {
 const isProd = process.env.NODE_ENV === "production";
 
 const exportedConfig = isProd
-// @ts-expect-error - This is a NextJS config file
-  ? withPWA(withMDX(config))
+  ? // @ts-expect-error - This is a NextJS config file
+    withPWA(withMDX(config))
   : withMDX(config);
 
 export default exportedConfig;
