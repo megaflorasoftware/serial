@@ -1,5 +1,5 @@
-import { TopLeftButton } from "./feed/TopLeftButton";
-import { TopRightHeaderContent } from "./feed/TopRightHeaderContent";
+import { TopLeftButton } from "./TopLeftButton";
+import { TopRightHeaderContent } from "./TopRightHeaderContent";
 
 export function Header() {
   return (

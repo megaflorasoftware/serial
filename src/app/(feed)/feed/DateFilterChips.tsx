@@ -1,6 +1,6 @@
 "use client";
 
-import { useFeed } from "~/components/FeedProvider";
+import { useFeed } from "~/lib/data/FeedProvider";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 
 export function DateFilterChips() {
@@ -10,7 +10,10 @@ export function DateFilterChips() {
     <ToggleGroup
       type="single"
       value={dateFilter}
-      onValueChange={(value) => setDateFilter(value)}
+      onValueChange={(value) => {
+        if (!value) return;
+        setDateFilter(value);
+      }}
       size="sm"
     >
       <ToggleGroupItem value="1">Today</ToggleGroupItem>

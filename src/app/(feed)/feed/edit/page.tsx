@@ -2,12 +2,12 @@
 
 import { TrashIcon } from "lucide-react";
 import { AddFeedButton } from "~/components/AddFeedButton";
-import { useFeed } from "~/components/FeedProvider";
 import { Button } from "~/components/ui/button";
+import { useFeed } from "~/lib/data/FeedProvider";
 import { api } from "~/trpc/react";
 
 export default function EditFeedsPage() {
-  const { feeds, refetch } = useFeed();
+  const { feeds } = useFeed();
   const { data: categories } = api.contentCategories.getAllForUser.useQuery();
   const { mutateAsync, isLoading } = api.feed.delete.useMutation();
 
@@ -42,7 +42,6 @@ export default function EditFeedsPage() {
                   size="icon"
                   onClick={async () => {
                     await mutateAsync(feed.id);
-                    refetch();
                   }}
                 >
                   <TrashIcon size={16} />

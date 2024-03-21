@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { useFeed } from "./FeedProvider";
+import { useFeed } from "../lib/data/FeedProvider";
 import { useParams, useRouter } from "next/navigation";
-import { useDialogStore } from "~/app/(feed)/dialogStore";
+import { useDialogStore } from "~/app/(feed)/feed/dialogStore";
 import { useRouterBackHack } from "~/lib/hooks/use-router-back-hack";
 
 function doesAnyInputElementHaveFocus() {
@@ -33,7 +33,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
   const router = useRouter();
   const goBack = useRouterBackHack();
 
-  const { items, setSelectedItem } = useFeed();
+  const { items } = useFeed();
   const [view, setView] = useState<FeedContext["view"]>("windowed");
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
   const { dialog, launchDialog, closeDialog } = useDialogStore((store) => ({
@@ -128,15 +128,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
     return () => {
       window.removeEventListener("keydown", processKey);
     };
-  }, [
-    closeDialog,
-    dialog,
-    items,
-    launchDialog,
-    params.videoID,
-    router,
-    setSelectedItem,
-  ]);
+  }, [closeDialog, dialog, items, launchDialog, params.videoID, router]);
 
   return (
     <FeedContext.Provider

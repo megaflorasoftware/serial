@@ -11,7 +11,7 @@ const withPWA = createWithPWA({
   cacheOnFrontEndNav: true,
   reloadOnOnline: true,
   dest: "public",
-  scope: "/feed",
+  scope: "/",
   // fallbacks: {
   //   //image: "/static/images/fallback.png",
   //   // document: "/offline", // if you want to fallback to a custom page rather than /_offline

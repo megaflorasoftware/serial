@@ -3,11 +3,12 @@
 import dayjs from "dayjs";
 import { ClockIcon, SproutIcon, EyeIcon } from "lucide-react";
 import Link from "next/link";
-import { useFeed } from "~/components/FeedProvider";
 import { Button } from "~/components/ui/button";
-import { useDialogStore } from "../dialogStore";
+import { useDialogStore } from "./dialogStore";
 import { api } from "~/trpc/react";
 import clsx from "clsx";
+import { useFeed } from "~/lib/data/FeedProvider";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 function timeAgo(date: string | Date) {
   const diff = dayjs().diff(date);
@@ -68,7 +69,7 @@ function ItemDisplay({
 }: {
   item: ReturnType<typeof useFeed>["items"][0];
 }) {
-  const { updateItemOptimistically } = useFeed();
+  const { updateLocalItem } = useFeed();
 
   const { mutateAsync: setIsItemWatchLater } =
     api.feed.setFeedItemWatchLater.useMutation();
@@ -112,7 +113,7 @@ function ItemDisplay({
           onClick={async () => {
             if (!item.feedId) return;
 
-            updateItemOptimistically({
+            updateLocalItem({
               contentId: item.contentId,
               feedId: item.feedId,
               isWatchLater: !item.isWatchLater,
@@ -133,7 +134,7 @@ function ItemDisplay({
           onClick={async () => {
             if (!item.feedId) return;
 
-            updateItemOptimistically({
+            updateLocalItem({
               contentId: item.contentId,
               feedId: item.feedId,
               isWatched: !item.isWatched,
@@ -153,8 +154,9 @@ function ItemDisplay({
   );
 }
 
-export default function TodayItems() {
+export function TodayItems() {
   const { items, feeds } = useFeed();
+  const [parent] = useAutoAnimate(/* optional config */);
 
   if (feeds.length === 0) {
     return <TodayItemsFeedEmptyState />;
@@ -165,7 +167,7 @@ export default function TodayItems() {
   }
 
   return (
-    <div className="flex w-full flex-col md:pt-4">
+    <div className="w-full md:pt-4" ref={parent}>
       {items.map((item) => (
         <ItemDisplay item={item} key={item.contentId} />
       ))}

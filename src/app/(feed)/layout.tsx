@@ -1,23 +1,11 @@
 import "~/styles/globals.css";
 
-import { Inter } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
-
-import { TRPCReactProvider } from "~/trpc/react";
-import { cn } from "~/lib/utils";
-import { ThemeProvider } from "~/components/ThemeProvider";
 import { type Metadata, type Viewport } from "next";
-import { Toaster } from "sonner";
-import { FeedProvider } from "~/components/FeedProvider";
 import { KeyboardProvider } from "~/components/KeyboardProvider";
-import { Header } from "../Header";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { AppDialogs } from "../AppDialogs";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
+import { AppProviders } from "~/lib/data/AppProviders";
+import { AppDialogs } from "./feed/AppDialogs";
+import { Header } from "./feed/Header";
 
 const title = "Serial";
 const description = "Your personal content newsletter";
@@ -101,16 +89,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <FeedProvider>
+    <AppProviders>
       <KeyboardProvider>
+        <Header />
         <main className="flex h-screen flex-col">
-          <Header />
           <ScrollArea className="h-full w-full">
             <div className="h-full w-full pb-6 pt-24">{children}</div>
           </ScrollArea>
           <AppDialogs />
         </main>
       </KeyboardProvider>
-    </FeedProvider>
+    </AppProviders>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { type VisibilityFilter, useFeed } from "~/components/FeedProvider";
+import { type VisibilityFilter, useFeed } from "~/lib/data/FeedProvider";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 
 export function ItemVisibilityChips() {
@@ -10,7 +10,10 @@ export function ItemVisibilityChips() {
     <ToggleGroup
       type="single"
       value={visibilityFilter.toString()}
-      onValueChange={(value) => setVisibilityFilter(value as VisibilityFilter)}
+      onValueChange={(value) => {
+        if (!value) return;
+        setVisibilityFilter(value as VisibilityFilter);
+      }}
       size="sm"
     >
       <ToggleGroupItem value="all">All</ToggleGroupItem>

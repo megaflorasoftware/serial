@@ -49,7 +49,7 @@ export function useSearchParamState<T extends ZodType>(
   useEffect(() => {
     const value = getValue();
     setStateValue(value);
-  }, [getValue, searchParams]);
+  }, []);
 
   const setValue: Dispatch<SetStateAction<z.infer<T>>> = (
     newValueOrCallback,

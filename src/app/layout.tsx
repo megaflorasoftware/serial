@@ -98,11 +98,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body
-          className={cn(`min-h-screen font-sans antialiased ${inter.variable}`)}
-        >
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={cn(`min-h-screen font-sans antialiased ${inter.variable}`)}
+      >
+        <ClerkProvider>
           <TRPCReactProvider>
             <ThemeProvider
               attribute="class"
@@ -116,8 +116,8 @@ export default function RootLayout({
               <Toaster />
             </ThemeProvider>
           </TRPCReactProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

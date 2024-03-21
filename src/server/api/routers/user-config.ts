@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+} from "~/server/api/trpc";
 import { userConfig } from "~/server/db/schema";
 
 export type UserConfigValues = {
@@ -47,11 +51,14 @@ export const userConfigRouter = createTRPCRouter({
           },
         });
     }),
-
-  getConfig: protectedProcedure.query(
+  getConfig: publicProcedure.query(
     async ({ ctx }): Promise<UserConfigValues> => {
+      if (!ctx.auth?.userId) {
+        return { lightHSL: undefined, darkHSL: undefined };
+      }
+
       const userConfig = await ctx.db.query.userConfig.findFirst({
-        where: sql`user_id = ${ctx.auth!.userId}`,
+        where: sql`user_id = ${ctx.auth.userId}`,
       });
 
       return {

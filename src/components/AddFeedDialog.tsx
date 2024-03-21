@@ -2,7 +2,7 @@
 
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { useState } from "react";
-import { useDialogStore } from "~/app/(feed)/dialogStore";
+import { useDialogStore } from "~/app/(feed)/feed/dialogStore";
 import { api } from "~/trpc/react";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";

@@ -1,9 +1,11 @@
+import React from "react";
+import { Suspense } from "react";
 import { ClientDatetime } from "./ClientDatetime";
 import { DateFilterChips } from "./DateFilterChips";
 import { ItemVisibilityChips } from "./ItemVisibilityChips";
-import TodayItems from "./TodayItems";
+import { TodayItems } from "./TodayItems";
 
-export default function Home() {
+export default async function Home() {
   return (
     <div className="lg:pb-18 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center">
       <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">

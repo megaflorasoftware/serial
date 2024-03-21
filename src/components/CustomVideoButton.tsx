@@ -2,12 +2,13 @@
 
 import { VideoIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
-import { useFeed } from "./FeedProvider";
+import { useFeed } from "../lib/data/FeedProvider";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { ResponsiveDialog } from "./ui/responsive-dialog";
+import Link from "next/link";
 
 function getYouTubeVideoIdFromUrl(url: string) {
   const match = url.match(
@@ -24,7 +25,6 @@ function getYouTubeVideoIdFromUrl(url: string) {
 
 export function CustomVideoButton() {
   const [videoUrl, setVideoUrl] = useState("");
-  const { setSelectedItem } = useFeed();
 
   return (
     <ResponsiveDialog
@@ -47,22 +47,9 @@ export function CustomVideoButton() {
             }}
           />
         </div>
-        <Button
-          onClick={async () => {
-            const videoId = getYouTubeVideoIdFromUrl(videoUrl);
-            if (!videoId) return;
-
-            setSelectedItem({
-              id: videoId,
-              url: videoUrl,
-              title: "Video",
-              author: "YouTube",
-              publishedDate: new Date().toISOString(),
-            });
-          }}
-        >
-          Watch
-        </Button>
+        <Link href={`/feed/watch/${getYouTubeVideoIdFromUrl(videoUrl)}`}>
+          <Button>Watch</Button>
+        </Link>
       </div>
     </ResponsiveDialog>
   );

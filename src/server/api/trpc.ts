@@ -78,7 +78,7 @@ export const createTRPCRouter = t.router;
  */
 export const publicProcedure = t.procedure;
 
-import { type User, type getAuth } from "@clerk/nextjs/server";
+import { type getAuth } from "@clerk/nextjs/server";
 
 // // TODO: protected procedures
 export const isAuthed = t.middleware(async (opts) => {
