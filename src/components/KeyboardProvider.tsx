@@ -64,8 +64,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
           if (!items.length || event.metaKey) return;
 
           if (!videoID) {
-            const previousVideo = items[items.length - 1]!;
-            void router.push(`/feed/watch/${previousVideo.contentId}`);
+            void router.push("/feed");
             break;
           }
 
@@ -82,8 +81,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
           if (!items.length || event.metaKey) return;
 
           if (!videoID) {
-            const previousVideo = items[0]!;
-            void router.push(`/feed/watch/${previousVideo.contentId}`);
+            void router.push("/feed");
             break;
           }
 
