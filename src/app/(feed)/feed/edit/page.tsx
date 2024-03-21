@@ -7,11 +7,8 @@ import { useFeed } from "~/lib/data/FeedProvider";
 import { api } from "~/trpc/react";
 
 export default function EditFeedsPage() {
-  const { feeds } = useFeed();
+  const { feeds, deleteFeed } = useFeed();
   // const { data: categories } = api.contentCategories.getAllForUser.useQuery();
-  const { mutateAsync, isLoading } = api.feed.delete.useMutation();
-
-  const disabled = isLoading;
 
   return (
     <div className="mx-auto max-w-2xl p-6">
@@ -37,11 +34,10 @@ export default function EditFeedsPage() {
                   </Button>
                 </Link> */}
                 <Button
-                  disabled={disabled}
                   variant="outline"
                   size="icon"
-                  onClick={async () => {
-                    await mutateAsync(feed.id);
+                  onClick={() => {
+                    void deleteFeed(feed.id);
                   }}
                 >
                   <TrashIcon size={16} />

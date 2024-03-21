@@ -14,6 +14,7 @@ import { type api as serverApi } from "~/trpc/server";
 import { api } from "~/trpc/react";
 import { useSearchParamState } from "../hooks/use-search-param-state";
 import { z } from "zod";
+import { getItemsAndFeeds } from "./getItemsAndFeeds";
 
 export type VisibilityFilter = "all" | "unread" | "later";
 
@@ -32,6 +33,8 @@ type FeedContext = {
   findNextVideoId: (videoID: string) => string | null;
   toggleWatchLater: (videoID: string) => Promise<void>;
   toggleIsWatched: (videoID: string) => Promise<void>;
+  addFeed: (data: { url: string; categoryId?: number }) => Promise<void>;
+  deleteFeed: (id: number) => Promise<void>;
 };
 
 const FeedContext = createContext<FeedContext | null>(null);
@@ -67,7 +70,7 @@ export const FeedProvider = ({
 }: PropsWithChildren<{
   data: FeedData;
 }>) => {
-  const [feeds] = useState(data.feeds);
+  const [feeds, setFeeds] = useState(data.feeds);
   const [items, setItems] = useState(data.items);
 
   const { mutateAsync: setIsItemWatchLater } =
@@ -75,6 +78,9 @@ export const FeedProvider = ({
 
   const { mutateAsync: setIsItemWatched } =
     api.feed.setFeedItemWatched.useMutation();
+
+  const { mutateAsync: addFeedMutation } = api.feed.create.useMutation();
+  const { mutateAsync: deleteFeedMutation } = api.feed.delete.useMutation();
 
   const [dateFilter, setDateFilter] = useSearchParamState(
     "days",
@@ -185,6 +191,28 @@ export const FeedProvider = ({
     [dateFilter, items, visibilityFilter],
   );
 
+  const addFeed = useCallback<FeedContext["addFeed"]>(
+    async ({ url, categoryId }) => {
+      await addFeedMutation({ url, categoryId });
+      const res = await getItemsAndFeeds();
+      setItems(res.items);
+      setFeeds(res.feeds);
+    },
+    [addFeedMutation],
+  );
+
+  const deleteFeed = useCallback<FeedContext["deleteFeed"]>(
+    async (id) => {
+      setFeeds((prevFeeds) => prevFeeds.filter((feed) => feed.id !== id));
+      await deleteFeedMutation(id);
+
+      const res = await getItemsAndFeeds();
+      setItems(res.items);
+      setFeeds(res.feeds);
+    },
+    [addFeedMutation],
+  );
+
   return (
     <FeedContext.Provider
       value={{
@@ -199,6 +227,8 @@ export const FeedProvider = ({
         findNextVideoId,
         toggleWatchLater,
         toggleIsWatched,
+        addFeed,
+        deleteFeed,
       }}
     >
       {children}

@@ -22,8 +22,6 @@ export async function fetchNewFeedDetails(
       .map((id) => id?.[1]?.replaceAll('"', ""))
       .filter(Boolean);
 
-    console.log(idList);
-
     if (!!idList.length) {
       urls = idList.map(
         (id) => `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`,

@@ -11,19 +11,20 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { validateFeedUrl } from "~/server/rss/validateFeedUrl";
 import { toast } from "sonner";
+import { useFeed } from "~/lib/data/FeedProvider";
 
 export function AddFeedDialog() {
   const [feedUrl, setFeedUrl] = useState("");
+  const { addFeed } = useFeed();
+  const [isAddingFeed, setIsAddingFeed] = useState(false);
 
   const {
     data: categories,
     refetch: refetchCategories,
     isLoading: isLoadingCategories,
   } = api.contentCategories.getAllForUser.useQuery();
-  const { refetch: refetchFeeds } = api.feed.getAllFeedData.useQuery();
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
-  const addFeed = api.feed.create.useMutation();
   const addCategory = api.contentCategories.create.useMutation();
 
   const categoryOptions = categories?.map((category) => ({
@@ -81,28 +82,31 @@ export function AddFeedDialog() {
             />
           )}
           <Button
-            disabled={!validateFeedUrl(feedUrl) || addFeed.isLoading}
+            disabled={!validateFeedUrl(feedUrl) || isAddingFeed}
             onClick={async () => {
               const category = !!categoryName
                 ? categories?.find((category) => category.name === categoryName)
                 : undefined;
 
-              if (!category) {
-                await addFeed.mutateAsync({ url: feedUrl });
-              } else {
-                await addFeed.mutateAsync({
-                  url: feedUrl,
-                  categoryId: category.id,
-                });
-              }
+              setIsAddingFeed(true);
 
-              setFeedUrl("");
-
-              toast.success("Feed added!");
-              await refetchFeeds();
+              try {
+                if (!category) {
+                  await addFeed({ url: feedUrl });
+                } else {
+                  await addFeed({
+                    url: feedUrl,
+                    categoryId: category.id,
+                  });
+                }
+                toast.success("Feed added!");
+                setFeedUrl("");
+              } catch {}
+              
+              setIsAddingFeed(false);
             }}
           >
-            {addFeed.isLoading ? "Adding..." : "Add Feed"}
+            {isAddingFeed ? "Adding..." : "Add Feed"}
           </Button>
         </div>
       </DialogContent>
