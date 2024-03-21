@@ -100,7 +100,9 @@ export const feedRouter = createTRPCRouter({
               .returning();
           }),
         )
-      ).flat();
+      )
+        .flat()
+        .sort((a, b) => b.postedAt.getTime() - a.postedAt.getTime());
     });
 
     return {

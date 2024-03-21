@@ -1,11 +1,10 @@
 "use client";
 
 import dayjs from "dayjs";
-import { ClockIcon, SproutIcon, EyeIcon } from "lucide-react";
+import { ClockIcon, SproutIcon, EyeIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { Button } from "~/components/ui/button";
 import { useDialogStore } from "./dialogStore";
-import { api } from "~/trpc/react";
 import clsx from "clsx";
 import { useFeed } from "~/lib/data/FeedProvider";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
@@ -32,13 +31,13 @@ function TodayItemsEmptyState() {
   return (
     <div className="w-full px-6 md:py-6">
       <div className="flex w-full flex-col items-center justify-center rounded bg-muted p-12">
-        <SproutIcon className="h-10 w-10" />
+        <SproutIcon size={40} />
         <h2 className="pt-2 text-lg font-semibold">
           You&apos;ve seen everything!
         </h2>
         <p className="max-w-xs pt-1 text-center text-sm opacity-80">
-          Take a walk, buy a sweet treat, or do anything else that will make you
-          happy today.
+          Take a walk, buy a sweet treat, or do something else that will make
+          you happy today.
         </p>
       </div>
     </div>
@@ -54,7 +53,7 @@ function TodayItemsFeedEmptyState() {
       onClick={() => launchDialog("add-feed")}
     >
       <div className="flex w-full flex-col items-center justify-center rounded bg-muted p-12">
-        <SproutIcon className="h-10 w-10" />
+        <PlusIcon size={40} />
         <h2 className="pt-2 text-lg font-semibold">Add a feed</h2>
         <p className="max-w-xs pt-1 text-center text-sm opacity-80">
           It all starts with a feed! Click here to add one.
@@ -69,13 +68,7 @@ function ItemDisplay({
 }: {
   item: ReturnType<typeof useFeed>["items"][0];
 }) {
-  const { updateLocalItem } = useFeed();
-
-  const { mutateAsync: setIsItemWatchLater } =
-    api.feed.setFeedItemWatchLater.useMutation();
-
-  const { mutateAsync: setIsItemWatched } =
-    api.feed.setFeedItemWatched.useMutation();
+  const { toggleWatchLater, toggleIsWatched } = useFeed();
 
   return (
     <article
@@ -90,6 +83,7 @@ function ItemDisplay({
       <Link
         href={`/feed/watch/${item.contentId}`}
         className="flex w-full flex-1 flex-col gap-4 py-4 pl-6 pr-4 text-left transition-colors sm:hover:bg-muted md:h-20 md:flex-row md:items-center md:rounded md:py-0 md:pr-0"
+        prefetch
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -110,20 +104,8 @@ function ItemDisplay({
         <Button
           size="icon"
           variant="ghost"
-          onClick={async () => {
-            if (!item.feedId) return;
-
-            updateLocalItem({
-              contentId: item.contentId,
-              feedId: item.feedId,
-              isWatchLater: !item.isWatchLater,
-            });
-
-            await setIsItemWatchLater({
-              feedId: item.feedId,
-              contentId: item.contentId,
-              isWatchLater: !item.isWatchLater,
-            });
+          onClick={() => {
+            void toggleWatchLater(item.contentId);
           }}
         >
           <ClockIcon size={16} />
@@ -131,20 +113,8 @@ function ItemDisplay({
         <Button
           size="icon"
           variant="ghost"
-          onClick={async () => {
-            if (!item.feedId) return;
-
-            updateLocalItem({
-              contentId: item.contentId,
-              feedId: item.feedId,
-              isWatched: !item.isWatched,
-            });
-
-            await setIsItemWatched({
-              feedId: item.feedId,
-              contentId: item.contentId,
-              isWatched: !item.isWatched,
-            });
+          onClick={() => {
+            void toggleIsWatched(item.contentId);
           }}
         >
           <EyeIcon size={16} />

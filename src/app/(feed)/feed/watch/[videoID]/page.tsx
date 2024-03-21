@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useKeyboard } from "~/components/KeyboardProvider";
 import ResponsiveVideo from "~/components/ResponsiveVideo";
+import { VideoActions } from "./VideoActions";
 
 export default function WatchVideoPage({
   params,
@@ -49,6 +50,7 @@ export default function WatchVideoPage({
           >
             <ResponsiveVideo videoID={params.videoID} />
           </div>
+          <VideoActions videoID={params.videoID} />
         </div>
       </div>
     </div>

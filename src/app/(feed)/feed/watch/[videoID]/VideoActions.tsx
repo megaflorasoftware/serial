@@ -1,0 +1,39 @@
+import { ClockIcon, EyeIcon, EyeOffIcon, CheckIcon } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { useFeed } from "~/lib/data/FeedProvider";
+
+export function VideoActions({ videoID }: { videoID: string }) {
+  const { allItems, toggleIsWatched, toggleWatchLater } = useFeed();
+
+  const video = allItems.find((item) => item.contentId === videoID);
+
+  const isWatched = video?.isWatched;
+  const isWatchLater = video?.isWatchLater;
+
+  return (
+    <div className="flex w-full items-center justify-center gap-2 p-6">
+      <Button
+        variant={isWatchLater ? "secondary" : "outline"}
+        onClick={() => {
+          void toggleWatchLater(videoID);
+        }}
+      >
+        {isWatchLater ? <CheckIcon size={16} /> : <ClockIcon size={16} />}
+        <span className="pl-1.5 md:pr-1.5">Watch Later</span>
+        <kbd className="hidden rounded bg-muted px-1 md:inline-block">w</kbd>
+      </Button>
+      <Button
+        variant={video?.isWatched ? "secondary" : "outline"}
+        onClick={() => {
+          void toggleIsWatched(videoID);
+        }}
+      >
+        {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+        <span className="pl-1.5 md:pr-1.5">
+          {isWatched ? "Watched" : "Unwatched"}
+        </span>
+        <kbd className="hidden rounded bg-muted px-1 md:inline-block">e</kbd>
+      </Button>
+    </div>
+  );
+}

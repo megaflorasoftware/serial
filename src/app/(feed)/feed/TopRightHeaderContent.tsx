@@ -4,19 +4,38 @@ import { ColorModeToggle } from "~/components/ColorModeToggle";
 import { CustomVideoButton } from "~/components/CustomVideoButton";
 import { Button } from "~/components/ui/button";
 
+function ResponsiveButton({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <div className="md:hidden">
+        <Button variant="outline" size="icon">
+          {children}
+        </Button>
+      </div>
+      <div className="hidden md:block">
+        <Button variant="outline">{children}</Button>
+      </div>
+    </>
+  );
+}
+
 export function TopRightHeaderContent() {
   return (
     <div className="flex items-center gap-2">
-      <Link href="/feed/edit">
-        <Button variant="outline" size="icon">
+      <Link href="/feed/edit" prefetch>
+        <ResponsiveButton>
           <ListIcon size={16} />
-        </Button>
+          <span className="hidden pl-1.5 md:block">Feeds</span>
+        </ResponsiveButton>
       </Link>
-      <CustomVideoButton />
-      <Link href="/feed/colors">
-        <Button variant="outline" size="icon">
+      <div className="md:hidden">
+        <CustomVideoButton />
+      </div>
+      <Link href="/feed/colors" prefetch>
+        <ResponsiveButton>
           <PaletteIcon size={16} />
-        </Button>
+          <span className="hidden pl-1.5 md:block">Theme</span>
+        </ResponsiveButton>
       </Link>
       <ColorModeToggle />
     </div>

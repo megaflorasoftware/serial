@@ -1,40 +1,65 @@
 "use client";
 
 import {
-  Dispatch,
-  PropsWithChildren,
-  SetStateAction,
+  type Dispatch,
+  type PropsWithChildren,
+  type SetStateAction,
   createContext,
   useContext,
   useMemo,
   useState,
+  useCallback,
 } from "react";
-import { api } from "~/trpc/server";
+import { type api as serverApi } from "~/trpc/server";
+import { api } from "~/trpc/react";
 import { useSearchParamState } from "../hooks/use-search-param-state";
 import { z } from "zod";
 
 export type VisibilityFilter = "all" | "unread" | "later";
 
-type FeedData = Awaited<ReturnType<typeof api.feed.getAllFeedData.query>>;
+type FeedData = Awaited<ReturnType<typeof serverApi.feed.getAllFeedData.query>>;
 type Item = FeedData["items"][number];
 
-type UpdateItem = (
-  item: Partial<Item> & {
-    contentId: Item["contentId"];
-    feedId: Item["feedId"];
-  },
-) => void;
 type FeedContext = {
   feeds: FeedData["feeds"];
+  allItems: FeedData["items"];
   items: FeedData["items"];
-  updateLocalItem: UpdateItem;
   dateFilter: string;
   setDateFilter: Dispatch<SetStateAction<string>>;
   visibilityFilter: VisibilityFilter;
   setVisibilityFilter: Dispatch<SetStateAction<VisibilityFilter>>;
+  findPreviousVideoId: (videoID: string) => string | null;
+  findNextVideoId: (videoID: string) => string | null;
+  toggleWatchLater: (videoID: string) => Promise<void>;
+  toggleIsWatched: (videoID: string) => Promise<void>;
 };
 
 const FeedContext = createContext<FeedContext | null>(null);
+
+function doesItemMatchFilters(
+  item: Item,
+  dateFilter: string,
+  visibilityFilter: VisibilityFilter,
+) {
+  const date = new Date(item.postedAt);
+  const now = new Date();
+  const parsedDateFilter = parseInt(dateFilter, 10);
+  const sevenDaysAgo = new Date(
+    now.setDate(
+      now.getDate() - (Number.isNaN(parsedDateFilter) ? 1 : parsedDateFilter),
+    ),
+  );
+  if (date <= sevenDaysAgo) return false;
+
+  if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
+    return false;
+  }
+  if (visibilityFilter === "later" && !item.isWatchLater) {
+    return false;
+  }
+
+  return true;
+}
 
 export const FeedProvider = ({
   children,
@@ -42,8 +67,14 @@ export const FeedProvider = ({
 }: PropsWithChildren<{
   data: FeedData;
 }>) => {
-  const [feeds, setFeeds] = useState(data.feeds);
+  const [feeds] = useState(data.feeds);
   const [items, setItems] = useState(data.items);
+
+  const { mutateAsync: setIsItemWatchLater } =
+    api.feed.setFeedItemWatchLater.useMutation();
+
+  const { mutateAsync: setIsItemWatched } =
+    api.feed.setFeedItemWatched.useMutation();
 
   const [dateFilter, setDateFilter] = useSearchParamState(
     "days",
@@ -57,57 +88,117 @@ export const FeedProvider = ({
   );
 
   const processedItems = useMemo(() => {
-    return items
-      .filter((item) => {
-        const date = new Date(item.postedAt);
-        const now = new Date();
-        const parsedDateFilter = parseInt(dateFilter, 10);
-        const sevenDaysAgo = new Date(
-          now.setDate(
-            now.getDate() -
-              (Number.isNaN(parsedDateFilter) ? 1 : parsedDateFilter),
-          ),
-        );
-        if (date <= sevenDaysAgo) return false;
-
-        if (
-          visibilityFilter === "unread" &&
-          (item.isWatched || item.isWatchLater)
-        ) {
-          return false;
-        }
-        if (visibilityFilter === "later" && !item.isWatchLater) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        return a.postedAt > b.postedAt ? -1 : 1;
-      });
+    return items.filter((item) =>
+      doesItemMatchFilters(item, dateFilter, visibilityFilter),
+    );
   }, [items, dateFilter, visibilityFilter]);
 
-  const updateLocalItem: UpdateItem = (item) => {
-    setItems((prevItems) => {
-      return prevItems.map((prevItem) => {
-        if (prevItem.contentId === item.contentId) {
-          return { ...prevItem, ...item };
-        }
-        return prevItem;
+  const toggleWatchLater = useCallback(
+    async (videoID: string) => {
+      const item = items.find((item) => item.contentId === videoID);
+      // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
+      if (!item || item.feedId === null) return;
+
+      const isWatchLater = !item.isWatchLater;
+
+      setItems((prevItems) => {
+        return prevItems.map((prevItem) => {
+          if (prevItem.contentId === item.contentId) {
+            return { ...prevItem, isWatchLater };
+          }
+          return prevItem;
+        });
       });
-    });
-  };
+
+      await setIsItemWatchLater({
+        feedId: item.feedId,
+        contentId: item.contentId,
+        isWatchLater,
+      });
+    },
+    [items, setIsItemWatchLater],
+  );
+
+  const toggleIsWatched = useCallback(
+    async (videoID: string) => {
+      const item = items.find((item) => item.contentId === videoID);
+      // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
+      if (!item || item.feedId === null) return;
+
+      const isWatched = !item.isWatched;
+
+      setItems((prevItems) => {
+        return prevItems.map((prevItem) => {
+          if (prevItem.contentId === item.contentId) {
+            return { ...prevItem, isWatched };
+          }
+          return prevItem;
+        });
+      });
+
+      await setIsItemWatched({
+        feedId: item.feedId,
+        contentId: item.contentId,
+        isWatched,
+      });
+    },
+    [items, setIsItemWatched],
+  );
+
+  const findPreviousVideoId = useCallback(
+    (videoID: string) => {
+      const currentIndex = items.findIndex(
+        (item) => item.contentId === videoID,
+      );
+      if (currentIndex <= 0) return null;
+
+      let index = currentIndex - 1;
+      let video = items[index]!;
+      while (!doesItemMatchFilters(video, dateFilter, visibilityFilter)) {
+        index = index - 1;
+        if (index < 0) return null;
+        video = items[index]!;
+      }
+
+      return video.contentId;
+    },
+    [dateFilter, items, visibilityFilter],
+  );
+
+  const findNextVideoId = useCallback(
+    (videoID: string) => {
+      const currentIndex = items.findIndex(
+        (item) => item.contentId === videoID,
+      );
+      if (currentIndex === -1 || currentIndex === items.length - 1) return null;
+
+      let index = currentIndex + 1;
+      let video = items[index]!;
+      while (!doesItemMatchFilters(video, dateFilter, visibilityFilter)) {
+        index = index + 1;
+        if (index >= items.length - 1) return null;
+        video = items[index]!;
+      }
+
+      return video.contentId;
+    },
+    [dateFilter, items, visibilityFilter],
+  );
 
   return (
     <FeedContext.Provider
       value={{
         feeds,
         items: processedItems,
-        updateLocalItem,
+        allItems: items,
         dateFilter,
         setDateFilter,
         visibilityFilter,
         setVisibilityFilter,
+        findPreviousVideoId,
+        findNextVideoId,
+        toggleWatchLater,
+        toggleIsWatched,
       }}
     >
       {children}

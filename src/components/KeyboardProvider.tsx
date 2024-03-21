@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useFeed } from "../lib/data/FeedProvider";
 import { useParams, useRouter } from "next/navigation";
 import { useDialogStore } from "~/app/(feed)/feed/dialogStore";
-import { useRouterBackHack } from "~/lib/hooks/use-router-back-hack";
 
 function doesAnyInputElementHaveFocus() {
   const elements = document.querySelectorAll("input, textarea, select, button");
@@ -31,9 +30,14 @@ type KeyboardProviderProps = {
 export function KeyboardProvider({ children }: KeyboardProviderProps) {
   const params = useParams();
   const router = useRouter();
-  const goBack = useRouterBackHack();
 
-  const { items } = useFeed();
+  const {
+    items,
+    findPreviousVideoId,
+    findNextVideoId,
+    toggleIsWatched,
+    toggleWatchLater,
+  } = useFeed();
   const [view, setView] = useState<FeedContext["view"]>("windowed");
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
   const { dialog, launchDialog, closeDialog } = useDialogStore((store) => ({
@@ -44,10 +48,9 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
 
   useEffect(() => {
     const processKey = (event: KeyboardEvent) => {
-      const videoID = params.videoID;
-      const currentIndex = items.findIndex(
-        (item) => item.contentId === videoID,
-      );
+      const videoID = params.videoID as string;
+
+      if (doesAnyInputElementHaveFocus()) return;
 
       switch (event.key) {
         case "`":
@@ -58,14 +61,7 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
         // case "Escape":
         //   break;
         case "[":
-          if (!items.length) return;
-
-          if (event.metaKey) {
-            goBack();
-            event.stopImmediatePropagation();
-            event.preventDefault();
-            return;
-          }
+          if (!items.length || event.metaKey) return;
 
           if (!videoID) {
             const previousVideo = items[items.length - 1]!;
@@ -73,13 +69,14 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
             break;
           }
 
-          if (currentIndex <= 0) {
+          const previousVideoId = findPreviousVideoId(videoID);
+
+          if (!previousVideoId) {
             void router.push("/feed");
             break;
           }
 
-          const previousVideo = items[currentIndex - 1]!;
-          void router.push(`/feed/watch/${previousVideo.contentId}`);
+          void router.push(`/feed/watch/${previousVideoId}`);
           break;
         case "]":
           if (!items.length || event.metaKey) return;
@@ -90,17 +87,16 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
             break;
           }
 
-          if (currentIndex >= items.length - 1 || currentIndex < 0) {
+          const nextVideoId = findNextVideoId(videoID);
+
+          if (!nextVideoId) {
             void router.push("/feed");
             break;
           }
 
-          const nextVideo = items[currentIndex + 1]!;
-          void router.push(`/feed/watch/${nextVideo.contentId}`);
+          void router.push(`/feed/watch/${nextVideoId}`);
           break;
         case "a":
-          if (doesAnyInputElementHaveFocus()) return;
-
           event.preventDefault();
 
           if (dialog === "add-feed") {
@@ -110,16 +106,20 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
 
           launchDialog("add-feed");
           break;
+        case "w":
+          event.preventDefault();
 
-        // case "e":
-        //   // set as watched
-        //   break;
-        // case "h":
-        //   // set as hidden
-        //   break;
-        // case "\\":
-        //   setIsCategoriesOpen((prev) => !prev);
-        //   break;
+          if (!videoID) return;
+
+          void toggleWatchLater(videoID);
+          break;
+        case "e":
+          event.preventDefault();
+
+          if (!videoID) return;
+
+          void toggleIsWatched(videoID);
+          break;
       }
     };
 
@@ -128,7 +128,18 @@ export function KeyboardProvider({ children }: KeyboardProviderProps) {
     return () => {
       window.removeEventListener("keydown", processKey);
     };
-  }, [closeDialog, dialog, items, launchDialog, params.videoID, router]);
+  }, [
+    closeDialog,
+    dialog,
+    findNextVideoId,
+    findPreviousVideoId,
+    items,
+    launchDialog,
+    params.videoID,
+    router,
+    toggleIsWatched,
+    toggleWatchLater,
+  ]);
 
   return (
     <FeedContext.Provider

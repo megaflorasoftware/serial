@@ -8,7 +8,7 @@ import { api } from "~/trpc/react";
 
 export default function EditFeedsPage() {
   const { feeds } = useFeed();
-  const { data: categories } = api.contentCategories.getAllForUser.useQuery();
+  // const { data: categories } = api.contentCategories.getAllForUser.useQuery();
   const { mutateAsync, isLoading } = api.feed.delete.useMutation();
 
   const disabled = isLoading;
@@ -50,9 +50,9 @@ export default function EditFeedsPage() {
             </div>
           ))}
       </div>
-      <div className="flex items-center justify-between pt-12">
+      {/* <div className="flex items-center justify-between pt-12">
         <h2 className="font-mono text-lg">Categories</h2>
-        {/* <AddFeedButton /> */}
+        <AddFeedButton />
       </div>
       <div className="space-y-2 pt-4">
         {categories
@@ -66,16 +66,16 @@ export default function EditFeedsPage() {
             >
               <h3>{category.name}</h3>
               <div className="flex items-center justify-between gap-2">
-                {/* <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon">
                   <EditIcon size={16} />
                 </Button>
                 <Button variant="outline" size="icon">
                   <TrashIcon size={16} />
-                </Button> */}
+                </Button>
               </div>
             </div>
           ))}
-      </div>
+      </div> */}
     </div>
   );
 }
