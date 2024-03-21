@@ -40,16 +40,16 @@ export function AddFeedDialog() {
     <Dialog open={dialog === "add-feed"} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="font-mono">Add RSS Feed</DialogTitle>
+          <DialogTitle className="font-mono">Add Feed</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="url">RSS Feed URL</Label>
+            <Label htmlFor="url">Channel or RSS Feed URL</Label>
             <Input
               id="url"
               type="url"
               value={feedUrl}
-              placeholder="https://www.example.com/feed.xml"
+              placeholder="https://www.youtube.com/@example"
               onChange={(e) => {
                 setFeedUrl(e.target.value);
               }}
