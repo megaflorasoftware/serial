@@ -10,6 +10,8 @@ export function VideoActions({ videoID }: { videoID: string }) {
   const isWatched = video?.isWatched;
   const isWatchLater = video?.isWatchLater;
 
+  if (!video) return null;
+
   return (
     <div className="flex w-full items-center justify-center gap-2 p-6">
       <Button
@@ -23,7 +25,7 @@ export function VideoActions({ videoID }: { videoID: string }) {
         <kbd className="hidden rounded bg-muted px-1 md:inline-block">w</kbd>
       </Button>
       <Button
-        variant={video?.isWatched ? "secondary" : "outline"}
+        variant={isWatched ? "secondary" : "outline"}
         onClick={() => {
           void toggleIsWatched(videoID);
         }}
