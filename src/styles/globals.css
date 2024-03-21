@@ -204,6 +204,10 @@
     @apply text-foreground/80 text-base;
   }
 
+  .prose kbd {
+    @apply rounded bg-muted px-1.5 py-0.5 text-sm;
+  }
+
   .prose p:has(+ p),
   .prose ul:has(+ p),
   .prose ol:has(+ p) {
