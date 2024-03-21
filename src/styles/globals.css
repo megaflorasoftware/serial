@@ -208,6 +208,10 @@
     @apply rounded bg-muted px-1.5 py-0.5 text-sm;
   }
 
+  .prose img {
+    @apply my-8 rounded;
+  }
+
   .prose p:has(+ p),
   .prose ul:has(+ p),
   .prose ol:has(+ p) {
