@@ -99,6 +99,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {process.env.VERCEL_ENV === "production" ? (
+          <>
+            <script
+              async
+              defer
+              data-website-id="b65ad781-e11e-43e3-a53e-35e09c16709a"
+              src="https://umami.henryfellerhoff.com/script.js"
+            ></script>
+          </>
+        ) : (
+          <></>
+        )}
+      </head>
       <body
         className={cn(`min-h-screen font-sans antialiased ${inter.variable}`)}
       >
