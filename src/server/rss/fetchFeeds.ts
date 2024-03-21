@@ -7,27 +7,43 @@ import { type RSSFeed, type NewFeedDetails } from "./types";
 
 export async function fetchNewFeedDetails(
   url: string,
-): Promise<NewFeedDetails | null> {
+): Promise<NewFeedDetails[]> {
+  let urls = [url];
+
   // process url
   if (url.includes("youtube.com/@")) {
     const feed = await fetch(url);
     const text = await feed.text();
 
     // extract channelId from text
-    const channelId = text
-      .match(/"channelId":([^&]{26})/)?.[1]
-      ?.replaceAll('"', "");
+    const channelIds = text.matchAll(/"channelId":([^&]{26})/g);
 
-    if (!!channelId) {
-      url = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+    const idList = Array.from(channelIds)
+      .map((id) => id?.[1]?.replaceAll('"', ""))
+      .filter(Boolean);
+
+    console.log(idList);
+
+    if (!!idList.length) {
+      urls = idList.map(
+        (id) => `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`,
+      );
     }
   }
 
+  const feedDetailList = (
+    await Promise.all(
+      urls.map(async (url) => {
+        if (url.includes("youtube.com")) {
+          return fetchYouTubeFeedDetails(url);
+        }
+        return null;
+      }),
+    )
+  ).filter(Boolean);
+
   // get feeds
-  if (url.includes("youtube.com")) {
-    return fetchYouTubeFeedDetails(url);
-  }
-  return null;
+  return feedDetailList;
 }
 
 export async function fetchFeedData(

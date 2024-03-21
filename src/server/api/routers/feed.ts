@@ -11,32 +11,48 @@ export const feedRouter = createTRPCRouter({
       z.object({ url: z.string().min(5), categoryId: z.number().optional() }),
     )
     .mutation(async ({ ctx, input }) => {
-      const newFeed = await fetchNewFeedDetails(input.url);
-      if (!newFeed?.url) {
+      const newFeeds = await fetchNewFeedDetails(input.url);
+      if (!newFeeds.length) {
         throw new Error("Unsupported feed URL");
       }
 
-      const existingFeed = await ctx.db.query.feeds.findFirst({
-        where: and(
-          eq(feeds.url, newFeed.url),
-          eq(feeds.userId, ctx.auth!.userId!),
-        ),
-      });
+      const errors = (
+        await ctx.db.transaction(async (tx) => {
+          return await Promise.all(
+            newFeeds.map(async (newFeed) => {
+              if (!newFeed.url) return "No feed url found.";
 
-      if (existingFeed) {
-        throw new Error("Feed already exists");
-      }
+              const existingFeed = await tx.query.feeds.findFirst({
+                where: and(
+                  eq(feeds.url, newFeed.url),
+                  eq(feeds.userId, ctx.auth!.userId!),
+                ),
+              });
 
-      const feedRes = await ctx.db.insert(feeds).values({
-        userId: ctx.auth!.userId!,
-        ...newFeed,
-      });
+              if (existingFeed) {
+                return "Feed already exists";
+              }
 
-      if (input.categoryId && feedRes.lastInsertRowid) {
-        await ctx.db.insert(feedCategories).values({
-          feedId: Number(feedRes.lastInsertRowid),
-          categoryId: input.categoryId,
-        });
+              const feedRes = await tx.insert(feeds).values({
+                userId: ctx.auth!.userId!,
+                ...newFeed,
+              });
+
+              if (input.categoryId && feedRes.lastInsertRowid) {
+                await tx.insert(feedCategories).values({
+                  feedId: Number(feedRes.lastInsertRowid),
+                  categoryId: input.categoryId,
+                });
+              }
+
+              return null;
+            }),
+          );
+        })
+      ).filter(Boolean);
+
+      if (errors.length === newFeeds.length) {
+        throw new Error(errors[0]);
       }
     }),
   delete: protectedProcedure
