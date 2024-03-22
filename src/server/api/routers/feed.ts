@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
@@ -119,6 +119,7 @@ export const feedRouter = createTRPCRouter({
     const feedIds = feeds.map((feed) => feed.id);
     const items = await ctx.db.query.feedItems.findMany({
       where: inArray(feedItems.feedId, feedIds),
+      orderBy: desc(feedItems.postedAt),
     });
 
     return {
