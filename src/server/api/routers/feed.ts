@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
@@ -82,7 +82,7 @@ export const feedRouter = createTRPCRouter({
     const feedData = await fetchFeedData(feeds);
     if (!feedData) {
       return {
-        feeds: [],
+        feeds: feeds,
         items: [],
       };
     }
@@ -102,23 +102,23 @@ export const feedRouter = createTRPCRouter({
         });
       }) ?? [];
 
-    const items = await ctx.db.transaction(async (tx) => {
-      return (
-        await Promise.all(
-          feedItemList.map(async (item) => {
-            return await tx
-              .insert(feedItems)
-              .values(item)
-              .onConflictDoUpdate({
-                target: [feedItems.contentId, feedItems.feedId],
-                set: item,
-              })
-              .returning();
-          }),
-        )
-      )
-        .flat()
-        .sort((a, b) => b.postedAt.getTime() - a.postedAt.getTime());
+    await ctx.db.transaction(async (tx) => {
+      return await Promise.all(
+        feedItemList.map(async (item) => {
+          return await tx
+            .insert(feedItems)
+            .values(item)
+            .onConflictDoUpdate({
+              target: [feedItems.contentId, feedItems.feedId],
+              set: item,
+            });
+        }),
+      );
+    });
+
+    const feedIds = feeds.map((feed) => feed.id);
+    const items = await ctx.db.query.feedItems.findMany({
+      where: inArray(feedItems.feedId, feedIds),
     });
 
     return {
