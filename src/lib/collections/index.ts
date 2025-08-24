@@ -1,9 +1,15 @@
 import { useTRPCClient } from "~/trpc/react";
 
-import { createCollection } from "@tanstack/db";
+import { createCollection, localOnlyCollectionOptions } from "@tanstack/db";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { UNSELECTED_VIEW_ID, visibilityFilterSchema } from "../data/atoms";
+import z from "zod";
+
+const COLLECTION_IDS = {
+  FILTERS: "filters",
+};
 
 const QUERY_KEYS = {
   FEEDS: "feeds",
@@ -14,6 +20,46 @@ const QUERY_KEYS = {
 
 export type TRPCClient = ReturnType<typeof useTRPCClient>;
 export type QueryClient = ReturnType<typeof useQueryClient>;
+
+export const filtersSchema = z.tuple([
+  z.object({
+    id: z.literal("date"),
+    value: z.number(),
+  }),
+  z.object({
+    id: z.literal("visibility"),
+    value: visibilityFilterSchema,
+  }),
+  z.object({
+    id: z.literal("category"),
+    value: z.number,
+  }),
+  z.object({
+    id: z.literal("feed"),
+    value: -1,
+  }),
+  z.object({
+    id: z.literal("view"),
+    value: UNSELECTED_VIEW_ID,
+  }),
+]);
+
+export function createFiltersCollection() {
+  return createCollection(
+    localOnlyCollectionOptions({
+      id: COLLECTION_IDS.FILTERS,
+      getKey: (item) => item.id,
+      initialData: [
+        { id: "date", value: 1 },
+        { id: "visibility", value: "unread" },
+        { id: "category", value: -1 },
+        { id: "feed", value: -1 },
+        { id: "view", value: UNSELECTED_VIEW_ID },
+      ],
+      schema: filtersSchema,
+    }),
+  );
+}
 
 export function createFeedsCollection(
   trpcClient: TRPCClient,

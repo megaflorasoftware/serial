@@ -5,12 +5,14 @@ import {
   createFeedCategoriesCollection,
   createFeedItemsCollection,
   createFeedsCollection,
+  createFiltersCollection,
   createViewsCollection,
   type QueryClient,
   type TRPCClient,
 } from ".";
 
 interface TanstackDBContext {
+  filtersCollection: ReturnType<typeof createFiltersCollection>;
   feedsCollection: ReturnType<typeof createFeedsCollection>;
   feedItemsCollection: ReturnType<typeof createFeedItemsCollection>;
   contentCategoriesCollection: ReturnType<
@@ -30,6 +32,7 @@ export function TanstackDBProvider({
   queryClient: QueryClient;
   children: React.ReactNode;
 }) {
+  const filtersCollection = createFiltersCollection();
   const feedsCollection = createFeedsCollection(trpcClient, queryClient);
   const feedItemsCollection = createFeedItemsCollection(
     trpcClient,
@@ -48,6 +51,7 @@ export function TanstackDBProvider({
   return (
     <TanstackDBContext.Provider
       value={{
+        filtersCollection,
         feedsCollection,
         feedItemsCollection,
         contentCategoriesCollection,
