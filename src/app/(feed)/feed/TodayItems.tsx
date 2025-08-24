@@ -1,5 +1,4 @@
 "use client";
-
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import clsx from "clsx";
 import dayjs from "dayjs";
@@ -22,6 +21,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { useAllFeedsLiveQuery } from "~/lib/collections/feeds";
 import {
   useFeedItemGlobalState,
   useHasFetchedFeedItems,
@@ -32,9 +32,9 @@ import {
   useFeedItemsSetWatchedValueMutation,
   useFeedItemsSetWatchLaterValueMutation,
 } from "~/lib/data/feed-items/mutations";
-import { useFeeds } from "~/lib/data/feeds";
 import { useViews } from "~/lib/data/views";
 import { useDialogStore } from "./dialogStore";
+import { useFeedItemsLiveQuery } from "~/lib/collections/feedItems";
 
 function timeAgo(date: string | Date) {
   const diff = dayjs().diff(date);
@@ -126,29 +126,14 @@ function TodayItemsFeedEmptyState() {
       </div>
     </>
   );
-
-  return (
-    <button
-      className="w-full cursor-pointer px-6 md:py-6"
-      onClick={() => launchDialog("add-feed")}
-    >
-      <div className="bg-muted flex w-full flex-col items-center justify-center rounded p-12">
-        <PlusIcon size={40} />
-        <h2 className="pt-2 text-lg font-semibold">Add a feed</h2>
-        <p className="max-w-xs pt-1 text-center text-sm opacity-80">
-          It all starts with a feed! Click here to add one.
-        </p>
-      </div>
-    </button>
-  );
 }
 
 function LoaderDisplay() {
   const hasFetchedFeedItems = useHasFetchedFeedItems();
-  const { hasFetchedFeeds } = useFeeds();
+  const { isReady: areFeedsReady } = useAllFeedsLiveQuery();
   const { hasFetchedFeedCategories } = useFeedCategories();
 
-  if (hasFetchedFeeds && hasFetchedFeedItems && hasFetchedFeedCategories) {
+  if (areFeedsReady && hasFetchedFeedItems && hasFetchedFeedCategories) {
     return null;
   }
 
@@ -241,10 +226,11 @@ function ItemDisplay({ contentId }: { contentId: string }) {
 }
 
 export function TodayItems() {
-  const { feeds, hasFetchedFeeds } = useFeeds();
+  const { data: feeds, isReady: areFeedsReady } = useAllFeedsLiveQuery();
+  const { isReady: areFeedItemsReady } = useFeedItemsLiveQuery();
+
   const { hasFetchedFeedCategories } = useFeedCategories();
   const { views } = useViews();
-  const hasFetchedFeedItems = useHasFetchedFeedItems();
 
   const filteredFeedItemsOrder = useFilteredFeedItemsOrder();
 
@@ -254,13 +240,13 @@ export function TodayItems() {
     return <FeedLoading />;
   }
 
-  if (hasFetchedFeeds && !feeds.length) {
+  if (areFeedsReady && !feeds.length) {
     return <TodayItemsFeedEmptyState />;
   }
 
   if (
-    hasFetchedFeeds &&
-    hasFetchedFeedItems &&
+    areFeedsReady &&
+    areFeedItemsReady &&
     hasFetchedFeedCategories &&
     !filteredFeedItemsOrder.length
   ) {

@@ -217,38 +217,64 @@ export const feedRouter = createTRPCRouter({
     const feedsList = await ctx.db.query.feeds.findMany({
       where: sql`user_id = ${ctx.auth!.user.id}`,
     });
+    const feedIds = feedsList.map((feed) => feed.id);
 
-    return feedsList;
+    const feedCategoriesData = await ctx.db.query.feedCategories.findMany({
+      where: inArray(feedCategories.feedId, feedIds),
+    });
+
+    return feedsList.map((feed) => {
+      const matchingCategoryIds = feedCategoriesData
+        .filter((category) => category.feedId === feed.id)
+        .map((category) => category.categoryId)
+        .filter((categoryId) => typeof categoryId === "number");
+
+      return {
+        ...feed,
+        categoryIds: matchingCategoryIds,
+      };
+    }, []);
   }),
   update: protectedProcedure
     .input(
       z.object({
-        feedId: z.number(),
-        categoryIds: z.number().array(),
+        id: z.number(),
+        categoryIds: z.number().array().optional(),
+        name: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await ctx.db.transaction(async (tx) => {
-        await tx
-          .delete(feedCategories)
-          .where(
-            and(
-              eq(feedCategories.feedId, input.feedId),
-              notInArray(feedCategories.categoryId, input.categoryIds),
-            ),
-          );
+        if (input.categoryIds) {
+          await tx
+            .delete(feedCategories)
+            .where(
+              and(
+                eq(feedCategories.feedId, input.id),
+                notInArray(feedCategories.categoryId, input.categoryIds),
+              ),
+            );
 
-        return await Promise.all(
-          input.categoryIds.map(async (categoryId) => {
-            await tx
-              .insert(feedCategories)
-              .values({
-                feedId: input.feedId,
-                categoryId,
-              })
-              .onConflictDoNothing();
-          }),
-        );
+          await Promise.all(
+            input.categoryIds.map(async (categoryId) => {
+              await tx
+                .insert(feedCategories)
+                .values({
+                  feedId: input.id,
+                  categoryId,
+                })
+                .onConflictDoNothing();
+            }),
+          );
+        }
+        if (input.name) {
+          await tx
+            .update(feeds)
+            .set({ name: input.name })
+            .where(
+              and(eq(feeds.userId, ctx.auth!.user.id), eq(feeds.id, input.id)),
+            );
+        }
       });
     }),
 });

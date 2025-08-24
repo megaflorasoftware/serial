@@ -2,8 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
-import { useTRPC } from "~/trpc/react";
+import { getQueryClient, useTRPC, vanillaTRPCClient } from "~/trpc/react";
 import { feedsAtom, hasFetchedFeedsAtom } from "../atoms";
+
+import { QueryClient } from "@tanstack/query-core";
+import { createCollection } from "@tanstack/db";
+import { queryCollectionOptions } from "@tanstack/query-db-collection";
 
 export function useFeedsQuery() {
   const setHasFetchedFeeds = useSetAtom(hasFetchedFeedsAtom);

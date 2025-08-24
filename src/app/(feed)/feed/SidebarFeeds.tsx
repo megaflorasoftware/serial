@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
+import { useAllFeedsLiveQuery } from "~/lib/collections/feeds";
 import {
   categoryFilterAtom,
   dateFilterAtom,
@@ -30,7 +31,8 @@ function useCheckFilteredFeedItemsForFeed() {
   const feedItemsOrder = useFeedItemsOrder();
   const feedItemsMap = useFeedItemsMap();
   const { feedCategories } = useFeedCategories();
-  const { feeds } = useFeeds();
+
+  const { data: feeds } = useAllFeedsLiveQuery();
 
   const dateFilter = useAtomValue(dateFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
@@ -99,7 +101,7 @@ export function SidebarFeeds() {
     null | number
   >(null);
 
-  const { feeds } = useFeeds();
+  const { data: feeds } = useAllFeedsLiveQuery();
   const launchDialog = useDialogStore((store) => store.launchDialog);
 
   const setDateFilter = useSetAtom(dateFilterAtom);

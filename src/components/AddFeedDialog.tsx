@@ -19,6 +19,12 @@ import { Dialog, DialogContent, DialogHeader } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useShortcut } from "~/lib/hooks/useShortcut";
+import {
+  useFeedsCollection,
+  useAllFeedsLiveQuery,
+  useSingleFeedLiveQuery,
+} from "~/lib/collections/feeds";
+import { useLiveQuery } from "@tanstack/react-db";
 
 export function AddFeedDialog() {
   const [feedUrl, setFeedUrl] = useState("");
@@ -126,37 +132,36 @@ export function EditFeedDialog({
   selectedFeedId: null | number;
   onClose: () => void;
 }) {
-  const [isUpdatingFeed, setIsUpdatingFeed] = useState(false);
-  const [isDeletingFeed, setIsDeletingFeed] = useState(false);
-
-  const { mutateAsync: editFeed } = useEditFeedMutation();
-  const { mutateAsync: deleteFeed } = useDeleteFeedMutation();
+  const { data: feed } = useSingleFeedLiveQuery(selectedFeedId);
+  const feedsCollection = useFeedsCollection();
 
   const [name, setName] = useState<string>("");
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
 
   const isFormDisabled = !name;
 
-  const { feeds } = useFeeds();
-  const { feedCategories } = useFeedCategories();
+  const onOpenChange = (open: boolean) => {
+    if (open) {
+      if (!feed) return;
+
+      setName(feed.name);
+      setSelectedCategories(feed.categoryIds);
+    } else {
+      setName("");
+      setSelectedCategories([]);
+      onClose();
+    }
+  };
 
   useEffect(() => {
-    if (!feeds || !selectedFeedId) return;
-
-    const feed = feeds.find((v) => v.id === selectedFeedId);
-    if (!feed) return;
-
-    const _feedCategories = feedCategories
-      .filter((category) => category.feedId === feed.id)
-      .map((category) => category.categoryId)
-      .filter((id) => typeof id === "number");
-
-    setName(feed.name);
-    setSelectedCategories(_feedCategories);
-  }, [feedCategories, selectedFeedId, feeds]);
+    if (!selectedFeedId || !(name === "" && !selectedCategories.length)) {
+      return;
+    }
+    onOpenChange(true);
+  }, [selectedFeedId, onOpenChange]);
 
   return (
-    <Dialog open={selectedFeedId !== null} onOpenChange={onClose}>
+    <Dialog open={selectedFeedId !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between font-mono">
@@ -170,8 +175,10 @@ export function EditFeedDialog({
               id="name"
               type="text"
               value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+              }}
               placeholder="My Feed"
-              disabled
             />
           </div>
           <ViewCategoriesInput
@@ -180,52 +187,32 @@ export function EditFeedDialog({
           />
           <div className="flex gap-2">
             <Button
-              disabled={isDeletingFeed}
               className="flex-1"
               variant="destructive"
               onClick={async () => {
                 if (selectedFeedId === null) return;
 
-                setIsDeletingFeed(true);
-                try {
-                  const deleteFeedPromise = deleteFeed(selectedFeedId);
-                  toast.promise(deleteFeedPromise, {
-                    loading: "Deleting feed...",
-                    success: () => {
-                      return "Feed deleted!";
-                    },
-                    error: () => {
-                      return "Something went wrong deleting your feed.";
-                    },
-                  });
-                  onClose();
-                } catch {}
-
-                setIsDeletingFeed(false);
+                feedsCollection.delete(selectedFeedId);
+                onOpenChange(false);
               }}
             >
-              {isDeletingFeed ? "Deleting..." : "Delete"}
+              Delete
             </Button>
             <Button
-              disabled={isFormDisabled || isUpdatingFeed}
+              disabled={isFormDisabled}
               onClick={async () => {
                 if (selectedFeedId === null) return;
 
-                setIsUpdatingFeed(true);
-                try {
-                  await editFeed({
-                    feedId: selectedFeedId,
-                    categoryIds: selectedCategories,
-                  });
-                  toast.success("Feed updated!");
-                  onClose();
-                } catch {}
+                feedsCollection.update(selectedFeedId, (draft) => {
+                  draft.categoryIds = selectedCategories;
+                  draft.name = name;
+                });
 
-                setIsUpdatingFeed(false);
+                onOpenChange(false);
               }}
               className="flex-1"
             >
-              {isUpdatingFeed ? "Saving..." : "Save"}
+              Save
             </Button>
           </div>
         </div>

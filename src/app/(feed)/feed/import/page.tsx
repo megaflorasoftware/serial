@@ -3,20 +3,20 @@
 import { CheckIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import FeedLoading from "~/app/loading";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import { useFeeds } from "~/lib/data/feeds";
+import { useAllFeedsLiveQuery } from "~/lib/collections/feeds";
+import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
+import { OPMLSubscriptionImport } from "./opml/OPMLSubscriptionImport";
 import {
-  type SubscriptionImportMethod,
   type SubscriptionImportChannel,
+  type SubscriptionImportMethod,
 } from "./types";
 import { YouTubeSubscriptionImport } from "./youtube/YouTubeSubscriptionImport";
-import { OPMLSubscriptionImport } from "./opml/OPMLSubscriptionImport";
-import FeedLoading from "~/app/loading";
-import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
 
 export default function EditFeedsPage() {
   const [importMethod, setImportMethod] =
@@ -36,7 +36,7 @@ export default function EditFeedsPage() {
     (channel) => channel.shouldImport,
   ).length;
 
-  const { feeds } = useFeeds();
+  const { data: feeds } = useAllFeedsLiveQuery();
 
   if (isSuccess) {
     return (

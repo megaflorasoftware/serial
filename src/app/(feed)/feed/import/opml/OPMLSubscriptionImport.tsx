@@ -4,6 +4,7 @@ import { useFeeds } from "~/lib/data/feeds";
 import { ImportDropzone } from "../ImportDropzone";
 import { type SubscriptionImportMethodProps } from "../types";
 import { parseOPMLSubscriptionInput } from "./parseOPMLSubscriptionInput";
+import { useAllFeedsLiveQuery } from "~/lib/collections/feeds";
 
 export function OPMLSubscriptionImport({
   importedChannels,
@@ -13,7 +14,7 @@ export function OPMLSubscriptionImport({
     null,
   );
 
-  const { feeds } = useFeeds();
+  const { data: feeds } = useAllFeedsLiveQuery();
 
   const onSelectFiles = async () => {
     if (!inputElement || feeds === undefined) return;

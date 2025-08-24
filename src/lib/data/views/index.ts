@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
 import { useSession } from "~/lib/auth-client";
+import { useAllFeedsLiveQuery } from "~/lib/collections/feeds";
 import { FEED_ITEM_ORIENTATION, VIEW_READ_STATUS } from "~/server/db/constants";
 import { type ApplicationView } from "~/server/db/schema";
 import { useTRPC } from "~/trpc/react";
@@ -19,7 +20,6 @@ import {
 import { useContentCategories } from "../content-categories";
 import { useFeedCategories } from "../feed-categories";
 import { doesFeedItemPassFilters } from "../feed-items";
-import { useFeeds } from "../feeds";
 import { sortViewsByPlacement } from "./utils";
 
 export const INBOX_VIEW_ID = -1;
@@ -62,7 +62,7 @@ export function useCheckFilteredFeedItemsForView() {
   const feedItemsOrder = useFeedItemsOrder();
   const feedItemsMap = useFeedItemsMap();
   const { feedCategories } = useFeedCategories();
-  const { feeds } = useFeeds();
+  const { data: feeds } = useAllFeedsLiveQuery();
   const { views } = useViews();
 
   return useCallback(
