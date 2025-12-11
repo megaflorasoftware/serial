@@ -1,16 +1,19 @@
 "use client";
 
+import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
-import { use, useEffect } from "react";
+import { useEffect } from "react";
+import { useView } from "~/_todo/feed/watch/[id]/useView";
+import { useZoom } from "~/_todo/feed/watch/[id]/useZoom";
+import { VideoDisplay } from "~/_todo/feed/watch/[id]/VideoDisplay";
 import useIsInactive from "~/lib/hooks/useIsInactive";
-import { useView } from "./useView";
-import { useZoom } from "./useZoom";
-import { VideoDisplay } from "./VideoDisplay";
 
-export default function WatchVideoPage(props: {
-  params: Promise<{ id: string }>;
-}) {
-  const params = use(props.params);
+export const Route = createFileRoute("/feed/watch/$id")({
+  component: WatchVideoPage,
+});
+
+function WatchVideoPage() {
+  const params = Route.useParams();
 
   const { view } = useView();
   const { zoom } = useZoom();

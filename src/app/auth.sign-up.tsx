@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
@@ -9,9 +8,14 @@ import { CardContent } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { signUp } from "~/lib/auth-client";
-import { AUTH_SIGNED_IN_URL } from "../../server/auth/constants";
+import { AUTH_SIGNED_IN_URL } from "../server/auth/constants";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 
-export default function SignUp() {
+export const Route = createFileRoute("/auth/sign-up")({
+  component: SignUp,
+});
+
+function SignUp() {
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,7 +96,9 @@ export default function SignUp() {
                   toast.error(ctx.error.message ?? "Something went wrong.");
                 },
                 onSuccess: async () => {
-                  router.push(AUTH_SIGNED_IN_URL);
+                  router.navigate({
+                    to: AUTH_SIGNED_IN_URL,
+                  });
                 },
               },
             });

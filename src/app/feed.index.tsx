@@ -1,10 +1,15 @@
-import { ClientDatetime } from "./ClientDatetime";
-import { DateFilterSelect } from "./DateFilterChips";
-import { ItemVisibilitySelect } from "./ItemVisibilityChips";
-import { TodayItems } from "./TodayItems";
-import { ViewFilterChips } from "./ViewFilterChips";
+import { createFileRoute } from "@tanstack/react-router";
+import { ClientDatetime } from "./feed/ClientDatetime";
+import { DateFilterSelect } from "./feed/DateFilterChips";
+import { ItemVisibilitySelect } from "./feed/ItemVisibilityChips";
+import { TodayItems } from "./feed/TodayItems";
+import { ViewFilterChips } from "./feed/ViewFilterChips";
 
-export default async function Home() {
+export const Route = createFileRoute("/feed/")({
+  component: Home,
+});
+
+function Home() {
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center lg:pb-18">
       <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">

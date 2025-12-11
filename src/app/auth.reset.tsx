@@ -1,19 +1,23 @@
 import { env } from "~/env";
-import { AuthResetPageComponent } from "./AuthResetPageComponent";
-import Link from "next/link";
 import { AUTH_SIGNED_OUT_URL } from "~/server/auth/constants";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
-import { AuthHeader } from "../AuthHeader";
+import { AuthHeader } from "./auth/AuthHeader";
 
 const isForgotPasswordEnabled = !!env.SENDGRID_API_KEY;
+
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { AuthResetPageComponent } from "./auth/reset/AuthResetPageComponent";
+export const Route = createFileRoute("/auth/reset")({
+  component: AuthResetPage,
+});
 
 export default function AuthResetPage() {
   if (!isForgotPasswordEnabled) {
     return (
       <>
         <div className="absolute top-6 left-6">
-          <Link href={AUTH_SIGNED_OUT_URL}>
+          <Link to={AUTH_SIGNED_OUT_URL}>
             <Button variant="outline">⭠ Back to Home</Button>
           </Link>
         </div>

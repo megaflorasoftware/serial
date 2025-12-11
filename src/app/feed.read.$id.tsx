@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { use } from "react";
 
-import { useZoom } from "../../watch/[id]/useZoom";
+import { useZoom } from "../_todo/feed/watch/[id]/useZoom";
 
 import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";
@@ -12,8 +12,9 @@ import { unified } from "unified";
 import { useFeeds } from "~/lib/data/feeds";
 import { useFeedItemValue } from "~/lib/data/store";
 import { useFlagState } from "~/lib/hooks/useFlagState";
-import { ContentActions } from "../../watch/[id]/ContentActions";
+import { ContentActions } from "../_todo/feed/watch/[id]/ContentActions";
 import classes from "./article.module.css";
+import { createFileRoute } from "@tanstack/react-router";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
@@ -30,9 +31,14 @@ const MAX_WIDTH_MAP: Record<number, string> = {
   [6]: "container-7xl",
 };
 
-export default function ReadPage(props: { params: Promise<{ id: string }> }) {
+export const Route = createFileRoute("/feed/read/$id")({
+  component: ReadPage,
+});
+
+function ReadPage() {
+  const params = Route.useParams();
+
   const [articleStyle] = useFlagState("ARTICLE_STYLE");
-  const params = use(props.params);
 
   const feedItem = useFeedItemValue(params?.id ?? "");
   const { feeds } = useFeeds();

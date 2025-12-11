@@ -13,7 +13,7 @@ import {
   SproutIcon,
 } from "lucide-react";
 import Link from "next/link";
-import FeedLoading from "~/app/loading";
+import FeedLoading from "~/components/loading";
 import { Button } from "~/components/ui/button";
 import {
   Card,

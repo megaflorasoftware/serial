@@ -9,9 +9,8 @@ import {
   TriangleAlertIcon,
   YoutubeIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useRef, useState } from "react";
-import FeedLoading from "~/app/loading";
+import FeedLoading from "~/components/loading";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -24,9 +23,10 @@ import { useFeeds } from "~/lib/data/feeds";
 import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
 import type { BulkImportFromFileResult } from "~/server/api/routers/feed-router";
 import type { FeedPlatform } from "~/server/db/schema";
-import { ImportDropzone } from "./ImportDropzone";
-import { getInitialFeedDataFromFileInputElement } from "./utils/getInitialFeedDataFromFileInputElement";
-import type { ImportFeedDataItem } from "./utils/shared";
+import { ImportDropzone } from "../_todo/feed/import/ImportDropzone";
+import { getInitialFeedDataFromFileInputElement } from "../_todo/feed/import/utils/getInitialFeedDataFromFileInputElement";
+import type { ImportFeedDataItem } from "../_todo/feed/import/utils/shared";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   switch (platform) {
@@ -40,7 +40,11 @@ function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   }
 }
 
-export default function EditFeedsPage() {
+export const Route = createFileRoute("/feed/import")({
+  component: EditFeedsPage,
+});
+
+function EditFeedsPage() {
   const inputElementRef = useRef<HTMLInputElement | null>(null);
 
   const [feedsFoundFromFile, setFeedsFoundFromFile] = useState<
@@ -136,7 +140,7 @@ export default function EditFeedsPage() {
             imports.
           </p>
           <div className="flex gap-2">
-            <Link href="/feed">
+            <Link to="/feed">
               <Button>Back to feeds</Button>
             </Link>
             <Button variant="outline" onClick={onReset}>

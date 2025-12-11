@@ -2,21 +2,22 @@ import { getServerApi } from "~/server/api/server";
 import { isServerAuthed } from "~/server/auth";
 import { ApplyColorThemeOnServerMount } from "./ApplyColorThemeOnMount";
 
+// TODO
 export async function ApplyColorTheme({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  if (!(await isServerAuthed())) {
-    return children;
-  }
+  // if (!(await isServerAuthed())) {
+  //   return children;
+  // }
 
-  const api = await getServerApi();
-  const data = await api.userConfig.getConfig();
+  // const api = await getServerApi();
+  // const data = await api.userConfig.getConfig();
 
   return (
     <>
-      <ApplyColorThemeOnServerMount data={data} />
+      {/*<ApplyColorThemeOnServerMount data={data} />*/}
       {children}
     </>
   );

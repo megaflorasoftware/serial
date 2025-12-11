@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { getReleasePages } from "~/lib/markdown/releases";
 
-export default async function Page() {
+import { createFileRoute } from "@tanstack/react-router";
+export const Route = createFileRoute("/(markdown)/releases/page")({
+  component: Page,
+});
+
+async function Page() {
   const releases = await getReleasePages();
 
   return (

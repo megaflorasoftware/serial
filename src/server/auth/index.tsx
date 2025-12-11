@@ -1,10 +1,10 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db";
-import { headers as getNextHeaders } from "next/headers";
 import sendgrid from "@sendgrid/mail";
 import { render } from "@react-email/components";
 import ResetPasswordEmail from "~/emails/reset-password";
+import { createServerFn } from "@tanstack/react-start";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -35,18 +35,22 @@ export const auth = betterAuth({
    * Make sure to provide a database to persist user data **/
 });
 
-export async function getServerAuth() {
-  const headers = await getNextHeaders();
+export async function getServerAuth(headers: Headers) {
   return await auth.api.getSession({
     headers,
   });
 }
 
 export async function isServerAuthed() {
-  const headers = await getNextHeaders();
   const authResult = await auth.api.getSession({
     headers,
   });
 
   return !!authResult?.session.id && !!authResult?.user.id;
 }
+
+export export const getIsServerAuthed = createServerFn().handler(async (params) => {
+  params.
+  // This runs only on the server
+  return new Date().toISOString()
+})

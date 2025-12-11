@@ -2,8 +2,6 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
@@ -16,17 +14,26 @@ import { useTRPC } from "~/trpc/react";
 import {
   AUTH_RESET_PASSWORD_URL,
   AUTH_SIGNED_IN_URL,
-} from "../../server/auth/constants";
+} from "../server/auth/constants";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { env } from "~/env";
 
 const ERROR_MESSAGES = {
   INVALID_LOGIN: "Invalid email or password",
 };
 
-export default function SignIn({
-  isForgotPasswordEnabled,
-}: {
-  isForgotPasswordEnabled: boolean;
-}) {
+export const Route = createFileRoute("/auth/sign-in")({
+  component: SignIn,
+  loader: async () => {
+    const isForgotPasswordEnabled = !!env.SENDGRID_API_KEY;
+
+    return { isForgotPasswordEnabled };
+  },
+});
+
+function SignIn() {
+  const { isForgotPasswordEnabled } = Route.useLoaderData();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -60,7 +67,7 @@ export default function SignIn({
             <Label htmlFor="password">Password</Label>
             {isForgotPasswordEnabled && (
               <Link
-                href={`${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`}
+                to={`${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`}
                 className="ml-auto inline-block text-sm underline"
               >
                 Forgot your password?
@@ -104,7 +111,9 @@ export default function SignIn({
                   setLoading(false);
                 },
                 onSuccess: async () => {
-                  router.push(AUTH_SIGNED_IN_URL);
+                  router.navigate({
+                    to: AUTH_SIGNED_IN_URL,
+                  });
                 },
                 onError: async (ctx) => {
                   const errorMessage =
@@ -116,9 +125,9 @@ export default function SignIn({
                     });
 
                     if (isSuccessful) {
-                      router.push(
-                        `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
-                      );
+                      router.navigate({
+                        to: `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
+                      });
                     }
                     return;
                   }
