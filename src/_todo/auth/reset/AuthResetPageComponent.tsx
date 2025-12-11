@@ -1,8 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { type PropsWithChildren, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
@@ -16,6 +14,7 @@ import {
   AUTH_SIGNED_OUT_URL,
 } from "~/server/auth/constants";
 import { AuthHeader } from "../AuthHeader";
+import { Link, useSearch } from "@tanstack/react-router";
 
 function AlertPane({
   title,
@@ -29,7 +28,7 @@ function AlertPane({
   return (
     <>
       <div className="absolute top-6 left-6">
-        <Link href={AUTH_SIGNED_OUT_URL}>
+        <Link to={AUTH_SIGNED_OUT_URL}>
           <Button variant="outline">⭠ Back to Home</Button>
         </Link>
       </div>
@@ -40,7 +39,7 @@ function AlertPane({
             <p className="mx-auto max-w-xs text-center">{description}</p>
             {!hideButton && (
               <CardFooter className="mt-4 w-full">
-                <Link href={AUTH_PAGE_URL} className="w-full">
+                <Link to={AUTH_PAGE_URL} className="w-full">
                   <Button className="w-full">Back to Sign In</Button>
                 </Link>
               </CardFooter>
@@ -61,7 +60,7 @@ function InputPane({
   return (
     <>
       <div className="absolute top-6 left-6">
-        <Link href={AUTH_SIGNED_OUT_URL}>
+        <Link to={AUTH_SIGNED_OUT_URL}>
           <Button variant="outline">⭠ Back to Home</Button>
         </Link>
       </div>
@@ -78,7 +77,7 @@ function InputPane({
 }
 
 export function AuthResetPageComponent() {
-  const params = useSearchParams();
+  const params = useSearch({ from: "/auth/reset" });
 
   const token = params.get("token") ?? "";
 

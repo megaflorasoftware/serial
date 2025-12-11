@@ -5,29 +5,42 @@ import {
   AUTH_SIGNED_IN_URL,
   AUTH_SIGNED_OUT_URL,
 } from "~/server/auth/constants";
-import { getServerAuth } from "~/server/auth";
+import { getIsAuthed, getServerAuth } from "~/server/auth";
 import {
   createFileRoute,
   Link,
   Outlet,
   redirect,
+  useRouter,
 } from "@tanstack/react-router";
 import { AuthHeader } from "~/_todo/auth/AuthHeader";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  loader: async (params) => {
-    const auth = await getServerAuth();
+  beforeLoad: async (params) => {
+    const isAuthed = await getIsAuthed();
 
-    if (!!auth?.session.id) {
+    if (isAuthed) {
       throw redirect({
         to: AUTH_SIGNED_IN_URL,
+      });
+    }
+
+    const isBasePath =
+      params.location.pathname === "/auth" ||
+      params.location.pathname === "/auth/";
+
+    if (isBasePath) {
+      throw redirect({
+        to: "/auth/sign-in",
       });
     }
   },
 });
 
 function AuthPage() {
+  const router = useRouter();
+
   return (
     <>
       <div className="absolute top-6 left-6">
@@ -37,15 +50,20 @@ function AuthPage() {
       </div>
       <div className="grid h-screen w-screen place-items-center p-4">
         <Card className="w-full max-w-md">
-          <Tabs defaultValue="sign-in" className="w-full">
+          <Tabs
+            defaultValue="sign-in"
+            className="w-full"
+            onValueChange={(value) => {
+              console.log(value);
+              router.navigate({
+                to: `/auth/${value}`,
+              });
+            }}
+          >
             <AuthHeader>
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="sign-in">
-                  <Link to="/auth/sign-in">Sign In</Link>
-                </TabsTrigger>
-                <TabsTrigger value="sign-up">
-                  <Link to="/auth/sign-up">Sign Up</Link>
-                </TabsTrigger>
+                <TabsTrigger value="sign-in">Sign In</TabsTrigger>
+                <TabsTrigger value="sign-up">Sign Up</TabsTrigger>
               </TabsList>
             </AuthHeader>
             <Outlet />

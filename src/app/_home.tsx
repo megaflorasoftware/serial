@@ -1,16 +1,16 @@
 import "~/styles/globals.css";
 
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
-import { isServerAuthed } from "~/server/auth";
-import FeedLoading from "../components/loading";
+import { getIsAuthed } from "~/server/auth";
 import { AppDialogs } from "../_todo/feed/AppDialogs";
 import { Header } from "../_todo/feed/Header";
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import FeedLoading from "../components/loading";
 
 const title = "Serial";
 const description = "Your personal content newsletter";
@@ -88,10 +88,10 @@ const description = "Your personal content newsletter";
 //   ],
 // };
 
-export const Route = createFileRoute("/feed")({
+export const Route = createFileRoute("/_home")({
   component: RootLayout,
   beforeLoad: async (params) => {
-    if (!(await isServerAuthed())) {
+    if (!(await getIsAuthed())) {
       throw redirect({
         to: "/auth",
       });

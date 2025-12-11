@@ -31,7 +31,7 @@ const MAX_WIDTH_MAP: Record<number, string> = {
   [6]: "container-7xl",
 };
 
-export const Route = createFileRoute("/feed/read/$id")({
+export const Route = createFileRoute("/_app/read/$id")({
   component: ReadPage,
 });
 

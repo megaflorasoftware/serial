@@ -8,7 +8,7 @@ import { useZoom } from "~/_todo/feed/watch/[id]/useZoom";
 import { VideoDisplay } from "~/_todo/feed/watch/[id]/VideoDisplay";
 import useIsInactive from "~/lib/hooks/useIsInactive";
 
-export const Route = createFileRoute("/feed/watch/$id")({
+export const Route = createFileRoute("/_app/watch/$id")({
   component: WatchVideoPage,
 });
 

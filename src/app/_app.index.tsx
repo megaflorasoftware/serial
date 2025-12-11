@@ -5,7 +5,7 @@ import { ItemVisibilitySelect } from "./feed/ItemVisibilityChips";
 import { TodayItems } from "./feed/TodayItems";
 import { ViewFilterChips } from "./feed/ViewFilterChips";
 
-export const Route = createFileRoute("/feed/")({
+export const Route = createFileRoute("/_app/")({
   component: Home,
 });
 

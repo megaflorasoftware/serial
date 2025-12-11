@@ -40,7 +40,7 @@ function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   }
 }
 
-export const Route = createFileRoute("/feed/import")({
+export const Route = createFileRoute("/_app/import")({
   component: EditFeedsPage,
 });
 

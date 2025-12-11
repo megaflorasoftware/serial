@@ -9,41 +9,34 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './app/__root'
-import { Route as FeedRouteImport } from './app/feed'
 import { Route as AuthRouteImport } from './app/auth'
-import { Route as IndexRouteImport } from './app/index'
-import { Route as FeedIndexRouteImport } from './app/feed.index'
-import { Route as FeedImportRouteImport } from './app/feed.import'
+import { Route as HomeRouteImport } from './app/_home'
+import { Route as AppRouteImport } from './app/_app'
+import { Route as AppIndexRouteImport } from './app/_app.index'
 import { Route as AuthSignUpRouteImport } from './app/auth.sign-up'
 import { Route as AuthSignInRouteImport } from './app/auth.sign-in'
 import { Route as AuthResetRouteImport } from './app/auth.reset'
-import { Route as FeedWatchIdRouteImport } from './app/feed.watch.$id'
-import { Route as FeedReadIdRouteImport } from './app/feed.read.$id'
+import { Route as AppImportRouteImport } from './app/_app.import'
+import { Route as AppWatchIdRouteImport } from './app/_app.watch.$id'
+import { Route as AppReadIdRouteImport } from './app/_app.read.$id'
 
-const FeedRoute = FeedRouteImport.update({
-  id: '/feed',
-  path: '/feed',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const HomeRoute = HomeRouteImport.update({
+  id: '/_home',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FeedIndexRoute = FeedIndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => FeedRoute,
-} as any)
-const FeedImportRoute = FeedImportRouteImport.update({
-  id: '/import',
-  path: '/import',
-  getParentRoute: () => FeedRoute,
+  getParentRoute: () => AppRoute,
 } as any)
 const AuthSignUpRoute = AuthSignUpRouteImport.update({
   id: '/sign-up',
@@ -60,106 +53,98 @@ const AuthResetRoute = AuthResetRouteImport.update({
   path: '/reset',
   getParentRoute: () => AuthRoute,
 } as any)
-const FeedWatchIdRoute = FeedWatchIdRouteImport.update({
+const AppImportRoute = AppImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWatchIdRoute = AppWatchIdRouteImport.update({
   id: '/watch/$id',
   path: '/watch/$id',
-  getParentRoute: () => FeedRoute,
+  getParentRoute: () => AppRoute,
 } as any)
-const FeedReadIdRoute = FeedReadIdRouteImport.update({
+const AppReadIdRoute = AppReadIdRouteImport.update({
   id: '/read/$id',
   path: '/read/$id',
-  getParentRoute: () => FeedRoute,
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
-  '/feed': typeof FeedRouteWithChildren
+  '/import': typeof AppImportRoute
   '/auth/reset': typeof AuthResetRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
-  '/feed/import': typeof FeedImportRoute
-  '/feed/': typeof FeedIndexRoute
-  '/feed/read/$id': typeof FeedReadIdRoute
-  '/feed/watch/$id': typeof FeedWatchIdRoute
+  '/': typeof AppIndexRoute
+  '/read/$id': typeof AppReadIdRoute
+  '/watch/$id': typeof AppWatchIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/import': typeof AppImportRoute
   '/auth/reset': typeof AuthResetRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
-  '/feed/import': typeof FeedImportRoute
-  '/feed': typeof FeedIndexRoute
-  '/feed/read/$id': typeof FeedReadIdRoute
-  '/feed/watch/$id': typeof FeedWatchIdRoute
+  '/': typeof AppIndexRoute
+  '/read/$id': typeof AppReadIdRoute
+  '/watch/$id': typeof AppWatchIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_home': typeof HomeRoute
   '/auth': typeof AuthRouteWithChildren
-  '/feed': typeof FeedRouteWithChildren
+  '/_app/import': typeof AppImportRoute
   '/auth/reset': typeof AuthResetRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
-  '/feed/import': typeof FeedImportRoute
-  '/feed/': typeof FeedIndexRoute
-  '/feed/read/$id': typeof FeedReadIdRoute
-  '/feed/watch/$id': typeof FeedWatchIdRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/read/$id': typeof AppReadIdRoute
+  '/_app/watch/$id': typeof AppWatchIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
     | '/auth'
-    | '/feed'
+    | '/import'
     | '/auth/reset'
     | '/auth/sign-in'
     | '/auth/sign-up'
-    | '/feed/import'
-    | '/feed/'
-    | '/feed/read/$id'
-    | '/feed/watch/$id'
+    | '/'
+    | '/read/$id'
+    | '/watch/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
     | '/auth'
+    | '/import'
     | '/auth/reset'
     | '/auth/sign-in'
     | '/auth/sign-up'
-    | '/feed/import'
-    | '/feed'
-    | '/feed/read/$id'
-    | '/feed/watch/$id'
+    | '/'
+    | '/read/$id'
+    | '/watch/$id'
   id:
     | '__root__'
-    | '/'
+    | '/_app'
+    | '/_home'
     | '/auth'
-    | '/feed'
+    | '/_app/import'
     | '/auth/reset'
     | '/auth/sign-in'
     | '/auth/sign-up'
-    | '/feed/import'
-    | '/feed/'
-    | '/feed/read/$id'
-    | '/feed/watch/$id'
+    | '/_app/'
+    | '/_app/read/$id'
+    | '/_app/watch/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  HomeRoute: typeof HomeRoute
   AuthRoute: typeof AuthRouteWithChildren
-  FeedRoute: typeof FeedRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/feed': {
-      id: '/feed'
-      path: '/feed'
-      fullPath: '/feed'
-      preLoaderRoute: typeof FeedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -167,26 +152,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/_home': {
+      id: '/_home'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/feed/': {
-      id: '/feed/'
-      path: '/'
-      fullPath: '/feed/'
-      preLoaderRoute: typeof FeedIndexRouteImport
-      parentRoute: typeof FeedRoute
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/feed/import': {
-      id: '/feed/import'
-      path: '/import'
-      fullPath: '/feed/import'
-      preLoaderRoute: typeof FeedImportRouteImport
-      parentRoute: typeof FeedRoute
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
     }
     '/auth/sign-up': {
       id: '/auth/sign-up'
@@ -209,22 +194,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthResetRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/feed/watch/$id': {
-      id: '/feed/watch/$id'
-      path: '/watch/$id'
-      fullPath: '/feed/watch/$id'
-      preLoaderRoute: typeof FeedWatchIdRouteImport
-      parentRoute: typeof FeedRoute
+    '/_app/import': {
+      id: '/_app/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof AppImportRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/feed/read/$id': {
-      id: '/feed/read/$id'
+    '/_app/watch/$id': {
+      id: '/_app/watch/$id'
+      path: '/watch/$id'
+      fullPath: '/watch/$id'
+      preLoaderRoute: typeof AppWatchIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/read/$id': {
+      id: '/_app/read/$id'
       path: '/read/$id'
-      fullPath: '/feed/read/$id'
-      preLoaderRoute: typeof FeedReadIdRouteImport
-      parentRoute: typeof FeedRoute
+      fullPath: '/read/$id'
+      preLoaderRoute: typeof AppReadIdRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
+
+interface AppRouteChildren {
+  AppImportRoute: typeof AppImportRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppReadIdRoute: typeof AppReadIdRoute
+  AppWatchIdRoute: typeof AppWatchIdRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppImportRoute: AppImportRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppReadIdRoute: AppReadIdRoute,
+  AppWatchIdRoute: AppWatchIdRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface AuthRouteChildren {
   AuthResetRoute: typeof AuthResetRoute
@@ -240,26 +248,10 @@ const AuthRouteChildren: AuthRouteChildren = {
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
-interface FeedRouteChildren {
-  FeedImportRoute: typeof FeedImportRoute
-  FeedIndexRoute: typeof FeedIndexRoute
-  FeedReadIdRoute: typeof FeedReadIdRoute
-  FeedWatchIdRoute: typeof FeedWatchIdRoute
-}
-
-const FeedRouteChildren: FeedRouteChildren = {
-  FeedImportRoute: FeedImportRoute,
-  FeedIndexRoute: FeedIndexRoute,
-  FeedReadIdRoute: FeedReadIdRoute,
-  FeedWatchIdRoute: FeedWatchIdRoute,
-}
-
-const FeedRouteWithChildren = FeedRoute._addFileChildren(FeedRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  HomeRoute: HomeRoute,
   AuthRoute: AuthRouteWithChildren,
-  FeedRoute: FeedRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

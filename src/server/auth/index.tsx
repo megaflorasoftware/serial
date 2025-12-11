@@ -1,10 +1,11 @@
+import { render } from "@react-email/components";
+import sendgrid from "@sendgrid/mail";
+import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { db } from "../db";
-import sendgrid from "@sendgrid/mail";
-import { render } from "@react-email/components";
 import ResetPasswordEmail from "~/emails/reset-password";
-import { createServerFn } from "@tanstack/react-start";
+import { db } from "../db";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -41,16 +42,15 @@ export async function getServerAuth(headers: Headers) {
   });
 }
 
-export async function isServerAuthed() {
-  const authResult = await auth.api.getSession({
-    headers,
-  });
+export async function isServerAuthed(headers: Headers) {
+  const authResult = await getServerAuth(headers);
 
   return !!authResult?.session.id && !!authResult?.user.id;
 }
 
-export export const getIsServerAuthed = createServerFn().handler(async (params) => {
-  params.
-  // This runs only on the server
-  return new Date().toISOString()
-})
+export const getIsAuthed = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const req = getRequest();
+    return isServerAuthed(req.headers);
+  },
+);

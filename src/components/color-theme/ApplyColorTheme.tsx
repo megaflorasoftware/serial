@@ -1,7 +1,3 @@
-import { getServerApi } from "~/server/api/server";
-import { isServerAuthed } from "~/server/auth";
-import { ApplyColorThemeOnServerMount } from "./ApplyColorThemeOnMount";
-
 // TODO
 export async function ApplyColorTheme({
   children,

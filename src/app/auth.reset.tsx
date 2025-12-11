@@ -2,17 +2,31 @@ import { env } from "~/env";
 import { AUTH_SIGNED_OUT_URL } from "~/server/auth/constants";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
-import { AuthHeader } from "./auth/AuthHeader";
 
 const isForgotPasswordEnabled = !!env.SENDGRID_API_KEY;
 
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AuthResetPageComponent } from "./auth/reset/AuthResetPageComponent";
+import { AuthHeader } from "~/_todo/auth/AuthHeader";
+import { AuthResetPageComponent } from "~/_todo/auth/reset/AuthResetPageComponent";
 export const Route = createFileRoute("/auth/reset")({
   component: AuthResetPage,
+  loader: async () => {
+    const isForgotPasswordEnabled = !!env.SENDGRID_API_KEY;
+
+    return { isForgotPasswordEnabled };
+  },
+  validateSearch: (search: Record<string, unknown>) => {
+    // validate and parse the search params into a typed state
+    return {
+      page: search?.token ?? "",
+      email: search?.email ?? "",
+    };
+  },
 });
 
 export default function AuthResetPage() {
+  const { isForgotPasswordEnabled } = Route.useLoaderData();
+
   if (!isForgotPasswordEnabled) {
     return (
       <>
