@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 import {
   Carousel,
   CarouselContent,
@@ -15,14 +13,14 @@ const STEPS = [
     content: (
       <p>
         Navigate to{" "}
-        <Link
+        <a
           className="font-semibold underline"
           href="https://takeout.google.com"
           target="_blank"
           rel="noopener noreferrer"
         >
           Google Takeout
-        </Link>
+        </a>
         . Once, there, hit &quot;Deselect all&quot; to exclude unneeded app
         data.
       </p>

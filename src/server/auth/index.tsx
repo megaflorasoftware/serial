@@ -6,6 +6,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import ResetPasswordEmail from "~/emails/reset-password";
 import { db } from "../db";
+import { tanstackStartCookies } from "better-auth/tanstack-start";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -31,6 +32,7 @@ export const auth = betterAuth({
       await sendgrid.send(options);
     },
   },
+  plugins: [tanstackStartCookies()],
 
   /** if no database is provided, the user data will be stored in memory.
    * Make sure to provide a database to persist user data **/
@@ -48,9 +50,9 @@ export async function isServerAuthed(headers: Headers) {
   return !!authResult?.session.id && !!authResult?.user.id;
 }
 
-export const getIsAuthed = createServerFn({ method: "GET" }).handler(
+export const fetchIsAuthed = createServerFn({ method: "GET" }).handler(
   async () => {
-    const req = getRequest();
-    return isServerAuthed(req.headers);
+    const request = getRequest();
+    return isServerAuthed(request.headers);
   },
 );

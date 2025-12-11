@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { notFound } from "next/navigation";
 import { compileMDX } from "next-mdx-remote/rsc";
+import { notFound } from "@tanstack/react-router";
 
 type Frontmatter = {
   title: string;

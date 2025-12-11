@@ -2,10 +2,8 @@
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { ToggleGroup } from "@radix-ui/react-toggle-group";
 import { ImportIcon } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useDialogStore } from "~/app/(feed)/feed/dialogStore";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import {
@@ -23,6 +21,8 @@ import { Dialog, DialogContent, DialogHeader } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ToggleGroupItem } from "./ui/toggle-group";
+import { useDialogStore } from "~/_todo/feed/dialogStore";
+import { Link } from "@tanstack/react-router";
 
 export function AddFeedDialog() {
   const [feedUrl, setFeedUrl] = useState("");
@@ -109,7 +109,7 @@ export function AddFeedDialog() {
             <hr />
           </div>
           <Label>Have a lot of feeds to add?</Label>
-          <Link href="/feed/import">
+          <Link to="/import">
             <Button
               variant="outline"
               className="w-full"

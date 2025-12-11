@@ -9,7 +9,8 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { signUp } from "~/lib/auth-client";
 import { AUTH_SIGNED_IN_URL } from "../server/auth/constants";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { AuthHeader } from "~/_todo/auth/AuthHeader";
 
 export const Route = createFileRoute("/auth/sign-up")({
   component: SignUp,
@@ -25,6 +26,7 @@ function SignUp() {
 
   return (
     <>
+      <AuthHeader removePadding></AuthHeader>
       <CardContent>
         <div className="grid gap-4">
           <div className="grid gap-2">
@@ -110,6 +112,12 @@ function SignUp() {
             "Create an account"
           )}
         </Button>
+        <Link
+          className="mt-4 block text-center text-sm underline"
+          to="/auth/sign-in"
+        >
+          Have an account? Sign in
+        </Link>
       </CardContent>
     </>
   );

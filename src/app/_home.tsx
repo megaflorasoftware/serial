@@ -7,7 +7,7 @@ import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
-import { getIsAuthed } from "~/server/auth";
+import { fetchIsAuthed } from "~/server/auth";
 import { AppDialogs } from "../_todo/feed/AppDialogs";
 import { Header } from "../_todo/feed/Header";
 import FeedLoading from "../components/loading";
@@ -91,7 +91,7 @@ const description = "Your personal content newsletter";
 export const Route = createFileRoute("/_home")({
   component: RootLayout,
   beforeLoad: async (params) => {
-    if (!(await getIsAuthed())) {
+    if (!(await fetchIsAuthed())) {
       throw redirect({
         to: "/auth",
       });

@@ -1,7 +1,7 @@
 "use client";
 
+import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { usePathname } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { articleZoomAtom, videoZoomAtom } from "~/lib/data/atoms";
 import { useFeedItemValue } from "~/lib/data/store";
@@ -14,7 +14,7 @@ const VIDEO_PLATFORMS: FeedPlatform[] = ["youtube", "peertube"];
 const ARTICLE_PLATFORMS: FeedPlatform[] = ["website"];
 
 export function useZoom() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const videoId = pathname.split("/feed/watch/")[1]!;
   const contentId = pathname.split("/feed/read/")[1]!;
 

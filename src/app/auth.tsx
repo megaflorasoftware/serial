@@ -1,11 +1,11 @@
-import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Card } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import {
   AUTH_SIGNED_IN_URL,
   AUTH_SIGNED_OUT_URL,
 } from "~/server/auth/constants";
-import { getIsAuthed, getServerAuth } from "~/server/auth";
+import { fetchIsAuthed, getServerAuth } from "~/server/auth";
 import {
   createFileRoute,
   Link,
@@ -18,7 +18,7 @@ import { AuthHeader } from "~/_todo/auth/AuthHeader";
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
   beforeLoad: async (params) => {
-    const isAuthed = await getIsAuthed();
+    const isAuthed = await fetchIsAuthed();
 
     if (isAuthed) {
       throw redirect({
@@ -50,24 +50,7 @@ function AuthPage() {
       </div>
       <div className="grid h-screen w-screen place-items-center p-4">
         <Card className="w-full max-w-md">
-          <Tabs
-            defaultValue="sign-in"
-            className="w-full"
-            onValueChange={(value) => {
-              console.log(value);
-              router.navigate({
-                to: `/auth/${value}`,
-              });
-            }}
-          >
-            <AuthHeader>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="sign-in">Sign In</TabsTrigger>
-                <TabsTrigger value="sign-up">Sign Up</TabsTrigger>
-              </TabsList>
-            </AuthHeader>
-            <Outlet />
-          </Tabs>
+          <Outlet />
         </Card>
       </div>
     </>

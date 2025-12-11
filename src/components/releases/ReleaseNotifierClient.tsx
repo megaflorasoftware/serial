@@ -3,50 +3,50 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
-import Link from "next/link";
 
 const RELEASE_SLUG_KEY = "last-viewed-release";
 
 export function ReleaseNotifierClient({ slug }: { slug: string | undefined }) {
-  useEffect(() => {
-    if (!slug) return;
+  // TODO
+  // useEffect(() => {
+  //   if (!slug) return;
 
-    const lastViewedSlug = window.localStorage.getItem(RELEASE_SLUG_KEY);
+  //   const lastViewedSlug = window.localStorage.getItem(RELEASE_SLUG_KEY);
 
-    if (lastViewedSlug !== slug) {
-      window.localStorage.setItem(RELEASE_SLUG_KEY, slug);
+  //   if (lastViewedSlug !== slug) {
+  //     window.localStorage.setItem(RELEASE_SLUG_KEY, slug);
 
-      const toastId = toast(
-        "There have been improvements to Serial since your last visit! Check out the release notes.",
-        {
-          action: (
-            <Link href={`/releases/${slug}`}>
-              <Button
-                size="sm"
-                onClick={() => {
-                  toast.dismiss(toastId);
-                }}
-              >
-                View
-              </Button>
-            </Link>
-          ),
-          cancel: (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                toast.dismiss(toastId);
-              }}
-            >
-              Close
-            </Button>
-          ),
-          duration: Infinity,
-        },
-      );
-    }
-  }, [slug]);
+  //     const toastId = toast(
+  //       "There have been improvements to Serial since your last visit! Check out the release notes.",
+  //       {
+  //         action: (
+  //           <Link href={`/releases/${slug}`}>
+  //             <Button
+  //               size="sm"
+  //               onClick={() => {
+  //                 toast.dismiss(toastId);
+  //               }}
+  //             >
+  //               View
+  //             </Button>
+  //           </Link>
+  //         ),
+  //         cancel: (
+  //           <Button
+  //             size="sm"
+  //             variant="outline"
+  //             onClick={() => {
+  //               toast.dismiss(toastId);
+  //             }}
+  //           >
+  //             Close
+  //           </Button>
+  //         ),
+  //         duration: Infinity,
+  //       },
+  //     );
+  //   }
+  // }, [slug]);
 
   return null;
 }

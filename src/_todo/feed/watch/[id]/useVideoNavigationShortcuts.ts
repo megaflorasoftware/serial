@@ -1,14 +1,14 @@
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter } from "@tanstack/react-router";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function useVideoNavigationShortcuts() {
-  const params = useParams();
+  const params = useParams({ from: "/_app/watch/$id" });
   const router = useRouter();
 
   const filteredFeedItemsOrder = useFilteredFeedItemsOrder();
 
-  const videoID = params.videoID as string;
+  const videoID = params.id;
 
   const currentItemIndex = filteredFeedItemsOrder?.indexOf(videoID);
 
@@ -16,18 +16,18 @@ export function useVideoNavigationShortcuts() {
     if (!filteredFeedItemsOrder?.length) return;
 
     if (!videoID || currentItemIndex <= 0) {
-      void router.push("/feed");
+      void router.navigate({ to: "/" });
       return;
     }
 
     const previousVideoId = filteredFeedItemsOrder[currentItemIndex - 1];
 
     if (!previousVideoId) {
-      void router.push("/feed");
+      void router.navigate({ to: "/" });
       return;
     }
 
-    void router.push(`/feed/watch/${previousVideoId}`);
+    void router.navigate({ to: `/watch/${previousVideoId}` });
   };
   useShortcut("[", goToPreviousVideo);
 
@@ -39,18 +39,18 @@ export function useVideoNavigationShortcuts() {
       currentItemIndex < 0 ||
       currentItemIndex >= filteredFeedItemsOrder.length - 1
     ) {
-      void router.push("/feed");
+      void router.navigate({ to: "/" });
       return;
     }
 
     const nextVideoId = filteredFeedItemsOrder[currentItemIndex + 1];
 
     if (!nextVideoId) {
-      void router.push("/feed");
+      void router.navigate({ to: "/" });
       return;
     }
 
-    void router.push(`/feed/watch/${nextVideoId}`);
+    void router.navigate({ to: `/watch/${nextVideoId}` });
   };
   useShortcut("]", goToNextVideo);
 }

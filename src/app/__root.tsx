@@ -1,4 +1,3 @@
-import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
 import { ThemeProvider } from "~/components/ThemeProvider";
 import { Toaster } from "~/components/ui/sonner";
 import { TRPCReactProvider } from "~/trpc/react";
@@ -9,6 +8,9 @@ import {
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
+import { ApplyColorThemeOnServerMount } from "~/components/color-theme/ApplyColorThemeOnMount";
+import { orpcRouterClient } from "~/lib/orpc";
+import { fetchIsAuthed } from "~/server/auth";
 import appCss from "~/styles/globals.css?url";
 
 // const inter = Inter({
@@ -109,9 +111,26 @@ export const Route = createRootRoute({
     ],
   }),
   component: RootLayout,
+  loader: async () => {
+    const isAuthed = fetchIsAuthed();
+
+    if (!isAuthed) {
+      return {
+        variables: null,
+      };
+    }
+
+    const data = await orpcRouterClient.userConfig.getConfig();
+
+    return {
+      variables: data,
+    };
+  },
 });
 
 export function RootLayout() {
+  const data = Route.useLoaderData();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -143,6 +162,7 @@ export function RootLayout() {
         // className={cn(`min-h-screen font-sans antialiased ${inter.variable}`)}
         className="min-h-screen font-sans antialiased"
       >
+        <ApplyColorThemeOnServerMount data={data.variables} />
         <TRPCReactProvider>
           <ThemeProvider
             attribute="class"
@@ -150,11 +170,9 @@ export function RootLayout() {
             enableSystem
             disableTransitionOnChange
           >
-            <ApplyColorTheme>
-              <Outlet />
-              <Scripts />
-              <Toaster />
-            </ApplyColorTheme>
+            <Outlet />
+            <Scripts />
+            <Toaster />
           </ThemeProvider>
         </TRPCReactProvider>
       </body>

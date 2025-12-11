@@ -1,16 +1,16 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
 import clsx from "clsx";
 import { RefreshCwIcon } from "lucide-react";
-import { usePathname } from "next/navigation";
 import { useCallback } from "react";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useFetchFeedItems, useFetchFeedItemsStatus } from "~/lib/data/store";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function RefetchItemsButton() {
-  const pathname = usePathname();
+  const pathname = useLocation();
 
   const queryClient = useQueryClient();
 
@@ -24,7 +24,7 @@ export function RefetchItemsButton() {
 
   useShortcut("r", onClick);
 
-  if (pathname !== "/feed") return null;
+  if (location.pathname !== "/") return null;
 
   const isLoading = fetchStatus === "fetching";
 

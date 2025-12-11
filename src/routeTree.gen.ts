@@ -17,6 +17,9 @@ import { Route as AuthSignUpRouteImport } from './app/auth.sign-up'
 import { Route as AuthSignInRouteImport } from './app/auth.sign-in'
 import { Route as AuthResetRouteImport } from './app/auth.reset'
 import { Route as AppImportRouteImport } from './app/_app.import'
+import { Route as ApiTrpcSplatRouteImport } from './app/api/trpc.$'
+import { Route as ApiRpcSplatRouteImport } from './app/api/rpc.$'
+import { Route as ApiAuthSplatRouteImport } from './app/api/auth.$'
 import { Route as AppWatchIdRouteImport } from './app/_app.watch.$id'
 import { Route as AppReadIdRouteImport } from './app/_app.read.$id'
 
@@ -58,6 +61,21 @@ const AppImportRoute = AppImportRouteImport.update({
   path: '/import',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
+  id: '/api/trpc/$',
+  path: '/api/trpc/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRpcSplatRoute = ApiRpcSplatRouteImport.update({
+  id: '/api/rpc/$',
+  path: '/api/rpc/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppWatchIdRoute = AppWatchIdRouteImport.update({
   id: '/watch/$id',
   path: '/watch/$id',
@@ -78,6 +96,9 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/read/$id': typeof AppReadIdRoute
   '/watch/$id': typeof AppWatchIdRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
@@ -88,6 +109,9 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/read/$id': typeof AppReadIdRoute
   '/watch/$id': typeof AppWatchIdRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -101,6 +125,9 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/read/$id': typeof AppReadIdRoute
   '/_app/watch/$id': typeof AppWatchIdRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -113,6 +140,9 @@ export interface FileRouteTypes {
     | '/'
     | '/read/$id'
     | '/watch/$id'
+    | '/api/auth/$'
+    | '/api/rpc/$'
+    | '/api/trpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -123,6 +153,9 @@ export interface FileRouteTypes {
     | '/'
     | '/read/$id'
     | '/watch/$id'
+    | '/api/auth/$'
+    | '/api/rpc/$'
+    | '/api/trpc/$'
   id:
     | '__root__'
     | '/_app'
@@ -135,12 +168,18 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/read/$id'
     | '/_app/watch/$id'
+    | '/api/auth/$'
+    | '/api/rpc/$'
+    | '/api/trpc/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   HomeRoute: typeof HomeRoute
   AuthRoute: typeof AuthRouteWithChildren
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiRpcSplatRoute: typeof ApiRpcSplatRoute
+  ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -201,6 +240,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppImportRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/trpc/$': {
+      id: '/api/trpc/$'
+      path: '/api/trpc/$'
+      fullPath: '/api/trpc/$'
+      preLoaderRoute: typeof ApiTrpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/rpc/$': {
+      id: '/api/rpc/$'
+      path: '/api/rpc/$'
+      fullPath: '/api/rpc/$'
+      preLoaderRoute: typeof ApiRpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/watch/$id': {
       id: '/_app/watch/$id'
       path: '/watch/$id'
@@ -252,6 +312,9 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   HomeRoute: HomeRoute,
   AuthRoute: AuthRouteWithChildren,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiRpcSplatRoute: ApiRpcSplatRoute,
+  ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

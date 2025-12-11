@@ -6,12 +6,9 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
-import { CustomVideoButton } from "~/components/CustomVideoButton";
 import { Button } from "~/components/ui/button";
 import { useSidebar } from "~/components/ui/sidebar";
 import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
@@ -20,9 +17,10 @@ import { useShortcut } from "~/lib/hooks/useShortcut";
 import { OpenRightSidebarButton } from "./OpenRightSidebarButton";
 import { RefetchItemsButton } from "./RefetchItemsButton";
 import { MAX_ZOOM, MIN_ZOOM, useZoom } from "./watch/[id]/useZoom";
+import { useLocation } from "@tanstack/react-router";
 
 function OpenInYouTubeButton() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const videoId = pathname.split("/feed/watch/")[1]!;
   const contentId = pathname.split("/feed/read/")[1]!;
 
@@ -31,7 +29,7 @@ function OpenInYouTubeButton() {
   // If not a Serial item, assume YouTube
   if (!feedItem) {
     return (
-      <Link
+      <a
         href={`https://www.youtube.com/watch?v=${videoId}`}
         target="_blank"
         rel="noopener noreferrer"
@@ -40,24 +38,24 @@ function OpenInYouTubeButton() {
           <span className="hidden pr-1.5 md:block">YouTube</span>
           <ExternalLinkIcon size={16} />
         </Button>
-      </Link>
+      </a>
     );
   }
 
   return (
-    <Link href={feedItem.url} target="_blank" rel="noopener noreferrer">
+    <a href={feedItem.url} target="_blank" rel="noopener noreferrer">
       <Button variant="outline" size="icon md:default">
         <span className="hidden pr-1.5 md:block">
           {PLATFORM_TO_FORMATTED_NAME_MAP[feedItem.platform]}
         </span>
         <ExternalLinkIcon size={16} />
       </Button>
-    </Link>
+    </a>
   );
 }
 
 function EditFeedButton() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const videoId = pathname.split("/feed/watch/")[1]!;
   const contentId = pathname.split("/feed/read/")[1]!;
 
@@ -87,7 +85,7 @@ function EditFeedButton() {
 }
 
 export function TopRightHeaderContent() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
 
   const { isMobile } = useSidebar();
   const { zoom, zoomIn, zoomOut } = useZoom();
@@ -95,7 +93,7 @@ export function TopRightHeaderContent() {
   useShortcut("=", zoomIn);
   useShortcut("-", zoomOut);
 
-  if (pathname.includes("/feed/watch/") || pathname.includes("/feed/read/")) {
+  if (pathname.includes("/watch/") || pathname.includes("/read/")) {
     if (isMobile) {
       return (
         <div className="flex items-center gap-2">

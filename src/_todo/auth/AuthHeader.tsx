@@ -1,9 +1,14 @@
 import { type PropsWithChildren } from "react";
 import { CardHeader } from "~/components/ui/card";
 
-export function AuthHeader({ children }: PropsWithChildren) {
+export function AuthHeader({
+  children,
+  removePadding = false,
+}: PropsWithChildren<{
+  removePadding?: boolean;
+}>) {
   return (
-    <CardHeader className="pb-4">
+    <CardHeader className={removePadding ? "" : "pb-4"}>
       <div className="flex flex-col items-center justify-center gap-4 pb-6">
         <img
           className="size-16 rounded-xl"

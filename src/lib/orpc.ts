@@ -11,8 +11,8 @@ const link = new RPCLink({
       return {};
     }
 
-    const { headers } = await import("next/headers");
-    return await headers();
+    const { getRequest } = await import("@tanstack/react-start/server");
+    return getRequest().headers;
   },
 });
 

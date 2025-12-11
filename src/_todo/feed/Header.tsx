@@ -1,18 +1,20 @@
 "use client";
 
+import { useLocation, useRouter } from "@tanstack/react-router";
 import { useShortcut } from "~/lib/hooks/useShortcut";
+import { FeedLoader } from "./FeedLoader";
 import { TopLeftButton } from "./TopLeftButton";
 import { TopRightHeaderContent } from "./TopRightHeaderContent";
-import { usePathname, useRouter } from "next/navigation";
-import { FeedLoader } from "./FeedLoader";
 
 export function Header() {
-  const pathname = usePathname();
+  const location = useLocation();
   const router = useRouter();
 
   useShortcut("h", () => {
-    if (pathname === "/feed") return;
-    router.push("/feed");
+    if (location.pathname === "/") return;
+    router.navigate({
+      to: "/",
+    });
   });
 
   return (

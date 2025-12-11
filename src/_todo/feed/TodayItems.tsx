@@ -9,10 +9,8 @@ import {
   EyeIcon,
   ImportIcon,
   PlusIcon,
-  RefreshCwIcon,
   SproutIcon,
 } from "lucide-react";
-import Link from "next/link";
 import FeedLoading from "~/components/loading";
 import { Button } from "~/components/ui/button";
 import {
@@ -33,10 +31,10 @@ import { useFeeds } from "~/lib/data/feeds";
 import {
   useFeedItemValue,
   useFetchFeedItemsLastFetchedAt,
-  useFetchFeedItemsStatus,
 } from "~/lib/data/store";
 import { useViews } from "~/lib/data/views";
 import { useDialogStore } from "./dialogStore";
+import { Link } from "@tanstack/react-router";
 
 function timeAgo(date: string | Date) {
   const diff = dayjs().diff(date);
@@ -118,7 +116,7 @@ function TodayItemsFeedEmptyState() {
           </CardHeader>
           <CardContent className="flex h-full flex-col justify-end">
             <Button asChild>
-              <Link href="/feed/import">
+              <Link to="/import">
                 <ImportIcon size={16} />
                 <span className="pl-1.5">Import Feeds</span>
               </Link>
@@ -165,11 +163,10 @@ function ItemDisplay({ contentId }: { contentId: string }) {
       )}
     >
       <Link
-        href={href}
+        to={href}
         target={target}
         rel={rel}
         className="sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 py-4 pr-4 pl-6 text-left transition-colors md:h-20 md:flex-row md:items-center md:rounded md:py-0 md:pr-0"
-        prefetch
       >
         {!!item.thumbnail ? (
           <img

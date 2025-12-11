@@ -15,9 +15,9 @@ import { useUpdateNameMutation } from "~/lib/data/user/useUpdateNameMutation";
 import { userEmailSchema, userNameSchema } from "~/server/api/schemas";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
-import Link from "next/link";
 import { AUTH_RESET_PASSWORD_URL } from "~/server/auth/constants";
 import { DeleteAccountSection } from "./DeleteAccountSection";
+import { Link } from "@tanstack/react-router";
 
 export function UserProfileEditDialog() {
   const { data, refetch: refetchUser } = authClient.useSession();
@@ -61,7 +61,10 @@ export function UserProfileEditDialog() {
             <Label>Password</Label>
             <Button variant="outline" asChild>
               <Link
-                href={`${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(userEmail)}`}
+                to={AUTH_RESET_PASSWORD_URL}
+                search={{
+                  email: userEmail,
+                }}
               >
                 Update password
               </Link>
