@@ -48,6 +48,13 @@ function SignIn() {
     <>
       <AuthHeader removePadding></AuthHeader>
       <CardContent>
+        <button
+          onClick={() => {
+            console.log("howdy");
+          }}
+        >
+          hey
+        </button>
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
@@ -87,9 +94,7 @@ function SignIn() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-
           <Button
-            type="submit"
             className="w-full"
             disabled={loading}
             onClick={async () => {

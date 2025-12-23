@@ -10,7 +10,6 @@ import {
 } from "@tanstack/react-router";
 import { ApplyColorThemeOnServerMount } from "~/components/color-theme/ApplyColorThemeOnMount";
 import { orpcRouterClient } from "~/lib/orpc";
-import { fetchIsAuthed } from "~/server/auth";
 import appCss from "~/styles/globals.css?url";
 
 // const inter = Inter({
@@ -112,14 +111,6 @@ export const Route = createRootRoute({
   }),
   component: RootLayout,
   loader: async () => {
-    const isAuthed = fetchIsAuthed();
-
-    if (!isAuthed) {
-      return {
-        variables: null,
-      };
-    }
-
     const data = await orpcRouterClient.userConfig.getConfig();
 
     return {
@@ -171,7 +162,8 @@ export function RootLayout() {
             disableTransitionOnChange
           >
             <Outlet />
-            <Scripts />
+            {/*TODO: what is happening here*/}
+            {/*<Scripts />*/}
             <Toaster />
           </ThemeProvider>
         </TRPCReactProvider>

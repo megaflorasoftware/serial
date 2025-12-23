@@ -1,9 +1,5 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { fetchIsAuthed, getServerAuth } from "~/server/auth";
-import {
-  AUTH_SIGNED_IN_URL,
-  AUTH_SIGNED_OUT_URL,
-} from "~/server/auth/constants";
+import { fetchIsAuthed } from "~/server/auth";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async () => {
