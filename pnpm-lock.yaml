@@ -133,16 +133,16 @@ importers:
         specifier: ^5.90.18
         version: 5.90.18(@tanstack/react-query@5.90.16(react@19.2.3))(react@19.2.3)
       '@tanstack/react-router':
-        specifier: ^1.147.3
+        specifier: 1.147.3
         version: 1.147.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@tanstack/react-start':
-        specifier: ^1.147.3
+        specifier: 1.147.3
         version: 1.147.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@25.0.6)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))(webpack@5.102.1(esbuild@0.25.12))
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@tanstack/zod-adapter':
-        specifier: ^1.147.3
+        specifier: 1.147.3
         version: 1.147.3(@tanstack/react-router@1.147.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(zod@4.3.5)
       '@trpc/client':
         specifier: ^11.8.1
@@ -3391,9 +3391,6 @@ packages:
 
   '@types/node@16.9.1':
     resolution: {integrity: sha512-QpLcX9ZSsq3YYUUnD3nFDY8H7wctAhQj/TFKL8Ya8v5fMm3CFXxo8zStsLAl780ltoYoo1WvKUVGBQK+1ifr7g==}
-
-  '@types/node@24.10.7':
-    resolution: {integrity: sha512-+054pVMzVTmRQV8BhpGv3UyfZ2Llgl8rdpDTon+cUH9+na0ncBVXj3wTUKh14+Kiz18ziM3b4ikpP5/Pc0rQEQ==}
 
   '@types/node@25.0.6':
     resolution: {integrity: sha512-NNu0sjyNxpoiW3YuVFfNz7mxSQ+S4X2G28uqg2s+CzoqoQjLPsWSbsFFyztIAqt2vb8kfEAsJNepMGPTxFDx3Q==}
@@ -10558,7 +10555,7 @@ snapshots:
 
   '@types/better-sqlite3@7.6.13':
     dependencies:
-      '@types/node': 24.10.7
+      '@types/node': 25.0.6
     optional: true
 
   '@types/core-js@2.5.8': {}
@@ -10656,11 +10653,6 @@ snapshots:
       - supports-color
 
   '@types/node@16.9.1': {}
-
-  '@types/node@24.10.7':
-    dependencies:
-      undici-types: 7.16.0
-    optional: true
 
   '@types/node@25.0.6':
     dependencies:
