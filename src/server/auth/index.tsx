@@ -49,10 +49,3 @@ export async function isServerAuthed(headers: Headers) {
 
   return !!authResult?.session.id && !!authResult?.user.id;
 }
-
-export const fetchIsAuthed = createServerFn({ method: "GET" }).handler(
-  async () => {
-    const request = getRequest();
-    return isServerAuthed(request.headers);
-  },
-);

@@ -1,17 +1,12 @@
 import {
   createFileRoute,
-  Link,
   Outlet,
   redirect,
   useRouter,
 } from "@tanstack/react-router";
-import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
-import { fetchIsAuthed } from "~/server/auth";
-import {
-  AUTH_SIGNED_IN_URL,
-  AUTH_SIGNED_OUT_URL,
-} from "~/server/auth/constants";
+import { AUTH_SIGNED_IN_URL } from "~/server/auth/constants";
+import { fetchIsAuthed } from "~/server/auth/endpoints";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -41,11 +36,6 @@ function AuthPage() {
 
   return (
     <>
-      <div className="absolute top-6 left-6">
-        <Link to={AUTH_SIGNED_OUT_URL}>
-          <Button variant="outline">⭠ Back to Home</Button>
-        </Link>
-      </div>
       <div className="grid h-screen w-screen place-items-center p-4">
         <Card className="w-full max-w-md">
           <Outlet />

@@ -1,9 +1,7 @@
-"use client";
-
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AuthHeader } from "~/_todo/auth/AuthHeader";
 import { Button } from "~/components/ui/button";
@@ -25,9 +23,8 @@ const ERROR_MESSAGES = {
 export const Route = createFileRoute("/auth/sign-in")({
   component: SignIn,
   loader: async () => {
-    const isForgotPasswordEnabled = await fetchIsForgotPasswordEnabled();
-
-    return { isForgotPasswordEnabled };
+    // const isForgotPasswordEnabled = await fetchIsForgotPasswordEnabled();
+    return { isForgotPasswordEnabled: false };
   },
 });
 
@@ -40,9 +37,15 @@ function SignIn() {
   const router = useRouter();
 
   const trpc = useTRPC();
-  const { mutateAsync: getIsLegacyUser } = useMutation(
-    trpc.user.checkIsLegacyUser.mutationOptions(),
-  );
+  // const { mutateAsync: getIsLegacyUser } = useMutation(
+  //   trpc.user.checkIsLegacyUser.mutationOptions(),
+  // );
+
+  const [flag, setFlag] = useState(false);
+
+  useEffect(() => {
+    console.log("hey");
+  });
 
   return (
     <>
@@ -50,10 +53,10 @@ function SignIn() {
       <CardContent>
         <button
           onClick={() => {
-            console.log("howdy");
+            setFlag((f) => !f);
           }}
         >
-          hey
+          {String(flag)}
         </button>
         <div className="grid gap-4">
           <div className="grid gap-2">
@@ -119,18 +122,18 @@ function SignIn() {
                     const errorMessage =
                       ctx.error.message ?? "Something went wrong.";
 
-                    if (errorMessage === ERROR_MESSAGES.INVALID_LOGIN) {
-                      const isSuccessful = await getIsLegacyUser({
-                        email,
-                      });
+                    // if (errorMessage === ERROR_MESSAGES.INVALID_LOGIN) {
+                    //   const isSuccessful = await getIsLegacyUser({
+                    //     email,
+                    //   });
 
-                      if (isSuccessful) {
-                        router.navigate({
-                          to: `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
-                        });
-                      }
-                      return;
-                    }
+                    //   if (isSuccessful) {
+                    //     router.navigate({
+                    //       to: `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
+                    //     });
+                    //   }
+                    //   return;
+                    // }
 
                     toast.error(errorMessage);
                   },

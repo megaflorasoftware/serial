@@ -13,7 +13,7 @@ import { useFeeds } from "~/lib/data/feeds";
 import { useFeedItemValue } from "~/lib/data/store";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import { ContentActions } from "../_todo/feed/watch/[id]/ContentActions";
-import classes from "./article.module.css";
+import classes from "../_todo/feed/read/article.module.css";
 import { createFileRoute } from "@tanstack/react-router";
 
 const parser = unified()

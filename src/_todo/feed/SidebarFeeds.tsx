@@ -39,7 +39,7 @@ import {
   useFetchFeedItemsStatus,
 } from "~/lib/data/store";
 import { useDeselectViewFilter } from "~/lib/data/views";
-import { ApplicationFeed } from "~/server/db/schema";
+import type { ApplicationFeed } from "~/server/db/schema";
 import { useDialogStore } from "./dialogStore";
 
 function useCheckFilteredFeedItemsForFeed() {

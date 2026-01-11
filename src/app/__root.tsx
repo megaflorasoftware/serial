@@ -5,12 +5,16 @@ import { TRPCReactProvider } from "~/trpc/react";
 import {
   createRootRoute,
   HeadContent,
+  Link,
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
 import { ApplyColorThemeOnServerMount } from "~/components/color-theme/ApplyColorThemeOnMount";
 import { orpcRouterClient } from "~/lib/orpc";
 import appCss from "~/styles/globals.css?url";
+import { SproutIcon } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { AUTH_SIGNED_IN_URL } from "~/server/auth/constants";
 
 // const inter = Inter({
 //   subsets: ["latin"],
@@ -117,6 +121,17 @@ export const Route = createRootRoute({
       variables: data,
     };
   },
+  notFoundComponent: () => (
+    <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 text-center">
+      <SproutIcon size={36} className="text-foreground" />
+      <div className="max-w-xs text-2xl font-semibold">
+        Oops! We couldn't find what you're looking for.
+      </div>
+      <Button asChild>
+        <Link to={AUTH_SIGNED_IN_URL}>Back to Home</Link>
+      </Button>
+    </div>
+  ),
 });
 
 export function RootLayout() {
@@ -163,7 +178,7 @@ export function RootLayout() {
           >
             <Outlet />
             {/*TODO: what is happening here*/}
-            {/*<Scripts />*/}
+            <Scripts />
             <Toaster />
           </ThemeProvider>
         </TRPCReactProvider>

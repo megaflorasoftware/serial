@@ -19,6 +19,9 @@ export default defineConfig({
         // Specifies the directory TanStack Router uses for your routes.
         routesDirectory: "app", // Defaults to "routes", relative to srcDirectory
       },
+      spa: {
+        enabled: true,
+      },
     }),
     viteReact(),
   ],

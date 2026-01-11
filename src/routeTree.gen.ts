@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './app/__root'
 import { Route as AuthRouteImport } from './app/auth'
-import { Route as HomeRouteImport } from './app/_home'
 import { Route as AppRouteImport } from './app/_app'
 import { Route as AppIndexRouteImport } from './app/_app.index'
 import { Route as AuthSignUpRouteImport } from './app/auth.sign-up'
@@ -26,10 +25,6 @@ import { Route as AppReadIdRouteImport } from './app/_app.read.$id'
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HomeRoute = HomeRouteImport.update({
-  id: '/_home',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -116,7 +111,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
-  '/_home': typeof HomeRoute
   '/auth': typeof AuthRouteWithChildren
   '/_app/import': typeof AppImportRoute
   '/auth/reset': typeof AuthResetRoute
@@ -159,7 +153,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
-    | '/_home'
     | '/auth'
     | '/_app/import'
     | '/auth/reset'
@@ -175,7 +168,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
-  HomeRoute: typeof HomeRoute
   AuthRoute: typeof AuthRouteWithChildren
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRpcSplatRoute: typeof ApiRpcSplatRoute
@@ -189,13 +181,6 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_home': {
-      id: '/_home'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -310,7 +295,6 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
-  HomeRoute: HomeRoute,
   AuthRoute: AuthRouteWithChildren,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,
