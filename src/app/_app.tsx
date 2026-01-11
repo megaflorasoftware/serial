@@ -4,7 +4,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 // import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
-import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
+// import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
 import { AppDialogs } from "../_todo/feed/AppDialogs";
@@ -121,7 +121,7 @@ function RootLayout() {
               </div>
               <AppDialogs />
             </main>
-            <ReleaseNotifier />
+            {/*<ReleaseNotifier />*/}
           </SidebarInset>
           <AppRightSidebar />
         </SidebarProvider>

@@ -21,8 +21,8 @@ import { useLocation } from "@tanstack/react-router";
 
 function OpenInYouTubeButton() {
   const { pathname } = useLocation();
-  const videoId = pathname.split("/feed/watch/")[1]!;
-  const contentId = pathname.split("/feed/read/")[1]!;
+  const videoId = pathname.split("/watch/")[1]!;
+  const contentId = pathname.split("/read/")[1]!;
 
   const feedItem = useFeedItemValue(videoId || contentId || "");
 
@@ -56,8 +56,8 @@ function OpenInYouTubeButton() {
 
 function EditFeedButton() {
   const { pathname } = useLocation();
-  const videoId = pathname.split("/feed/watch/")[1]!;
-  const contentId = pathname.split("/feed/read/")[1]!;
+  const videoId = pathname.split("/watch/")[1]!;
+  const contentId = pathname.split("/read/")[1]!;
 
   const feedItem = useFeedItemValue(videoId || contentId || "");
 

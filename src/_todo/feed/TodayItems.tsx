@@ -146,9 +146,7 @@ function ItemDisplay({ contentId }: { contentId: string }) {
   const shouldOpenInSerial =
     feed?.openLocation === "serial" || !feed?.openLocation;
 
-  const href = shouldOpenInSerial
-    ? `/feed/${itemDestination}/${item.id}`
-    : item.url;
+  const href = shouldOpenInSerial ? `/${itemDestination}/${item.id}` : item.url;
 
   const target = shouldOpenInSerial ? undefined : "_blank";
   const rel = shouldOpenInSerial ? undefined : "noopener noreferrer";

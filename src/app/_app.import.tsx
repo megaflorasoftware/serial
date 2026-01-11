@@ -140,7 +140,7 @@ function EditFeedsPage() {
             imports.
           </p>
           <div className="flex gap-2">
-            <Link to="/feed">
+            <Link to="/">
               <Button>Back to feeds</Button>
             </Link>
             <Button variant="outline" onClick={onReset}>

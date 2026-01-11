@@ -32,6 +32,8 @@ function WatchVideoPage() {
     };
   }, [isInactive]);
 
+  console.log(zoom);
+
   return (
     <div
       className={clsx("mx-auto grid h-full w-full place-items-center", {
