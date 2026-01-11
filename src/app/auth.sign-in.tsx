@@ -37,27 +37,14 @@ function SignIn() {
   const router = useRouter();
 
   const trpc = useTRPC();
-  // const { mutateAsync: getIsLegacyUser } = useMutation(
-  //   trpc.user.checkIsLegacyUser.mutationOptions(),
-  // );
-
-  const [flag, setFlag] = useState(false);
-
-  useEffect(() => {
-    console.log("hey");
-  });
+  const { mutateAsync: getIsLegacyUser } = useMutation(
+    trpc.user.checkIsLegacyUser.mutationOptions(),
+  );
 
   return (
     <>
       <AuthHeader removePadding></AuthHeader>
       <CardContent>
-        <button
-          onClick={() => {
-            setFlag((f) => !f);
-          }}
-        >
-          {String(flag)}
-        </button>
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
@@ -122,18 +109,18 @@ function SignIn() {
                     const errorMessage =
                       ctx.error.message ?? "Something went wrong.";
 
-                    // if (errorMessage === ERROR_MESSAGES.INVALID_LOGIN) {
-                    //   const isSuccessful = await getIsLegacyUser({
-                    //     email,
-                    //   });
+                    if (errorMessage === ERROR_MESSAGES.INVALID_LOGIN) {
+                      const isSuccessful = await getIsLegacyUser({
+                        email,
+                      });
 
-                    //   if (isSuccessful) {
-                    //     router.navigate({
-                    //       to: `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
-                    //     });
-                    //   }
-                    //   return;
-                    // }
+                      if (isSuccessful) {
+                        router.navigate({
+                          to: `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
+                        });
+                      }
+                      return;
+                    }
 
                     toast.error(errorMessage);
                   },

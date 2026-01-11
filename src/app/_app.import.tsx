@@ -152,7 +152,7 @@ function EditFeedsPage() {
       <input
         ref={inputElementRef}
         type="file"
-        accept="text/*"
+        accept="text/csv,.opml"
         className="hidden"
         multiple={false}
         onChange={onSelectFiles}

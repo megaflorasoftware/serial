@@ -14,7 +14,7 @@ export function TopLeftButton() {
   const location = useLocation();
   const { toggleSidebar, openLeftMobile, isMobile } = useSidebar();
 
-  if (location.pathname !== "/feed") {
+  if (location.pathname !== "/") {
     return (
       <div className="flex gap-2">
         <ButtonWithShortcut
