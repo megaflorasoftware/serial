@@ -10,7 +10,7 @@ import { useFetchFeedItems, useFetchFeedItemsStatus } from "~/lib/data/store";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function RefetchItemsButton() {
-  const pathname = useLocation();
+  const location = useLocation();
 
   const queryClient = useQueryClient();
 
