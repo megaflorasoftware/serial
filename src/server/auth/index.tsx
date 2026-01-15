@@ -1,12 +1,10 @@
 import { render } from "@react-email/components";
 import sendgrid from "@sendgrid/mail";
-import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { tanstackStartCookies } from "better-auth/tanstack-start";
 import ResetPasswordEmail from "~/emails/reset-password";
 import { db } from "../db";
-import { tanstackStartCookies } from "better-auth/tanstack-start";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
