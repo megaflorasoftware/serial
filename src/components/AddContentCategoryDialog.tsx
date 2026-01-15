@@ -2,7 +2,6 @@
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useDialogStore } from "~/app/(feed)/feed/dialogStore";
 import { useContentCategories } from "~/lib/data/content-categories";
 import {
   useCreateContentCategoryMutation,
@@ -20,6 +19,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
 import { useFeedItemsDict, useFeedItemsOrder } from "~/lib/data/store";
+import { useDialogStore } from "~/_todo/feed/dialogStore";
 
 function CategoryNameInput({
   name,

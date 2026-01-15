@@ -2,7 +2,6 @@
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useDialogStore } from "~/app/(feed)/feed/dialogStore";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useViews } from "~/lib/data/views";
 import {
@@ -17,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import { useDialogStore } from "~/_todo/feed/dialogStore";
 
 function AddViewToggleItem({
   value,

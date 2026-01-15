@@ -1,10 +1,10 @@
+import { render } from "@react-email/components";
+import sendgrid from "@sendgrid/mail";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { db } from "../db";
-import { headers as getNextHeaders } from "next/headers";
-import sendgrid from "@sendgrid/mail";
-import { render } from "@react-email/components";
+import { tanstackStartCookies } from "better-auth/tanstack-start";
 import ResetPasswordEmail from "~/emails/reset-password";
+import { db } from "../db";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -30,23 +30,20 @@ export const auth = betterAuth({
       await sendgrid.send(options);
     },
   },
+  plugins: [tanstackStartCookies()],
 
   /** if no database is provided, the user data will be stored in memory.
    * Make sure to provide a database to persist user data **/
 });
 
-export async function getServerAuth() {
-  const headers = await getNextHeaders();
+export async function getServerAuth(headers: Headers) {
   return await auth.api.getSession({
     headers,
   });
 }
 
-export async function isServerAuthed() {
-  const headers = await getNextHeaders();
-  const authResult = await auth.api.getSession({
-    headers,
-  });
+export async function isServerAuthed(headers: Headers) {
+  const authResult = await getServerAuth(headers);
 
   return !!authResult?.session.id && !!authResult?.user.id;
 }
