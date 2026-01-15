@@ -2,7 +2,7 @@
 
 import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { articleZoomAtom, videoZoomAtom } from "~/lib/data/atoms";
 import { useFeedItemValue } from "~/lib/data/store";
 import type { FeedPlatform } from "~/server/db/schema";
@@ -18,6 +18,8 @@ export function useZoom() {
   const videoId = pathname.split("/watch/")[1]!;
   const contentId = pathname.split("/read/")[1]!;
 
+  const [zoom, setZoom] = useState(MIN_ZOOM);
+
   const feedItem = useFeedItemValue(videoId || contentId || "");
 
   const platform = feedItem?.platform ?? "";
@@ -28,14 +30,16 @@ export function useZoom() {
   const isVideoPlatform = VIDEO_PLATFORMS.includes(platform);
   const isArticlePlatform = ARTICLE_PLATFORMS.includes(platform);
 
-  const zoom = useMemo(() => {
-    if (isVideoPlatform) {
-      return videoZoom;
-    }
-    if (isArticlePlatform) {
-      return articleZoom;
-    }
-    return 0;
+  useEffect(() => {
+    setZoom((prevZoom) => {
+      if (isVideoPlatform) {
+        return videoZoom;
+      }
+      if (isArticlePlatform) {
+        return articleZoom;
+      }
+      return prevZoom;
+    });
   }, [isVideoPlatform, videoZoom, isArticlePlatform, articleZoom]);
 
   const zoomIn = useCallback(() => {
