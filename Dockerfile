@@ -1,7 +1,7 @@
 FROM node:22.12.0-slim AS build
 WORKDIR /src
 
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 RUN pnpm ci
 
 COPY . .
