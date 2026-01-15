@@ -56,4 +56,6 @@ yarn-error.log*
 
 .env.local
 
+# tanstack
 dist
+.output
