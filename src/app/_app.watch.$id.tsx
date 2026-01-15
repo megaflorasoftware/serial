@@ -7,8 +7,16 @@ import { useView } from "~/_todo/feed/watch/[id]/useView";
 import { useZoom } from "~/_todo/feed/watch/[id]/useZoom";
 import { VideoDisplay } from "~/_todo/feed/watch/[id]/VideoDisplay";
 import useIsInactive from "~/lib/hooks/useIsInactive";
+import { orpcRouterClient } from "~/lib/orpc";
 
 export const Route = createFileRoute("/_app/watch/$id")({
+  loader: async ({ params }) => {
+    const item = await orpcRouterClient.feedItem.getById({ id: params.id });
+    return { item };
+  },
+  head: ({ loaderData }) => ({
+    meta: loaderData?.item?.title ? [{ title: loaderData.item.title }] : [],
+  }),
   component: WatchVideoPage,
 });
 

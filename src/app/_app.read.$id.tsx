@@ -1,7 +1,6 @@
 "use client";
 
 import clsx from "clsx";
-import { use } from "react";
 
 import { useZoom } from "../_todo/feed/watch/[id]/useZoom";
 
@@ -15,6 +14,7 @@ import { useFlagState } from "~/lib/hooks/useFlagState";
 import { ContentActions } from "../_todo/feed/watch/[id]/ContentActions";
 import classes from "../_todo/feed/read/article.module.css";
 import { createFileRoute } from "@tanstack/react-router";
+import { orpcRouterClient } from "~/lib/orpc";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
@@ -32,6 +32,13 @@ const MAX_WIDTH_MAP: Record<number, string> = {
 };
 
 export const Route = createFileRoute("/_app/read/$id")({
+  loader: async ({ params }) => {
+    const item = await orpcRouterClient.feedItem.getById({ id: params.id });
+    return { item };
+  },
+  head: ({ loaderData }) => ({
+    meta: loaderData?.item?.title ? [{ title: loaderData.item.title }] : [],
+  }),
   component: ReadPage,
 });
 

@@ -16,85 +16,9 @@ import { SproutIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { AUTH_SIGNED_IN_URL } from "~/server/auth/constants";
 
-// const inter = Inter({
-//   subsets: ["latin"],
-//   variable: "--font-sans",
-// });
-
-// const title = "Serial";
-// const description =
-//   "A snappy, customizable video feed. Designed to show you exactly the content you want to see and nothing else.";
-
-// export const metadata: Metadata = {
-//   title: title,
-//   applicationName: title,
-//   appleWebApp: {
-//     capable: true,
-//     title: title,
-//     startupImage: "/apple-touch-icon.png",
-//     statusBarStyle: "default",
-//   },
-//   description: description,
-//   formatDetection: {
-//     telephone: false,
-//   },
-//   generator: "Next.js",
-//   manifest: "/app.webmanifest",
-//   keywords: ["video", "rss", "newsletter", "content", "youtube", "podcast"],
-//   authors: [
-//     {
-//       name: "Henry Fellerhoff",
-//       url: "https://www.henryfellerhoff.com",
-//     },
-//   ],
-//   icons: [
-//     { rel: "icon", url: "/favicon.ico" },
-//     {
-//       rel: "icon",
-//       sizes: "16x16",
-//       type: "image/png",
-//       url: "/favicon-16x16.png",
-//     },
-//     {
-//       rel: "icon",
-//       sizes: "32x32",
-//       type: "image/png",
-//       url: "/favicon-32x32.png",
-//     },
-//     { rel: "apple-touch-icon", sizes: "180x180", url: "/apple-touch-icon.png" },
-//     {
-//       rel: "icon",
-//       type: "image/png",
-//       sizes: "512x512",
-//       url: "/android-chrome-512x512.png",
-//     },
-//   ],
-//   twitter: {
-//     card: "summary",
-//     creator: "@henryfellerhoff",
-//     title: title,
-//     description: description,
-//   },
-//   openGraph: {
-//     title: title,
-//     description: description,
-//     type: "website",
-//     images: [
-//       {
-//         url: "/masonry-preview.png",
-//         alt: title,
-//       },
-//     ],
-//   },
-// };
-
-// export const viewport: Viewport = {
-//   themeColor: [
-//     { color: "hsl(20 14.3% 4.1%)" },
-//     // { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
-//     // { media: "(prefers-color-scheme: dark)", color: "hsl(20 14.3% 4.1%)" },
-//   ],
-// };
+const title = "Serial";
+const description =
+  "A snappy, customizable video feed. Designed to show you exactly the content you want to see and nothing else.";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -104,12 +28,59 @@ export const Route = createRootRoute({
         name: "viewport",
         content: "width=device-width, initial-scale=1",
       },
-      { title: "TanStack Start Starter" },
+      { title: title },
+      { name: "description", content: description },
+      { name: "application-name", content: title },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: title },
+      { name: "format-detection", content: "telephone=no" },
+      {
+        name: "keywords",
+        content: "video, rss, newsletter, content, youtube, podcast",
+      },
+      { name: "author", content: "Henry Fellerhoff" },
+      { name: "theme-color", content: "hsl(20 14.3% 4.1%)" },
+      // Twitter
+      { name: "twitter:card", content: "summary" },
+      { name: "twitter:creator", content: "@henryfellerhoff" },
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: description },
+      // Open Graph
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:type", content: "website" },
+      { property: "og:image", content: "/masonry-preview.png" },
+      { property: "og:image:alt", content: title },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      { rel: "manifest", href: "/app.webmanifest" },
+      { rel: "icon", href: "/favicon.ico" },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "16x16",
+        href: "/favicon-16x16.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "32x32",
+        href: "/favicon-32x32.png",
+      },
+      {
+        rel: "apple-touch-icon",
+        sizes: "180x180",
+        href: "/apple-touch-icon.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "512x512",
+        href: "/android-chrome-512x512.png",
       },
     ],
   }),
