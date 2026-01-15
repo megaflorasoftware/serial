@@ -90,7 +90,7 @@ const description = "Your personal content newsletter";
 
 export const Route = createFileRoute("/_app")({
   component: RootLayout,
-  beforeLoad: async (params) => {
+  beforeLoad: async () => {
     if (!(await fetchIsAuthed())) {
       throw redirect({
         to: "/auth",
