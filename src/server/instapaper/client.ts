@@ -11,7 +11,6 @@ interface OAuthParams {
   oauth_version: string;
   oauth_token?: string;
   oauth_signature?: string;
-  // [key: string]: string | undefined;
 }
 
 interface BodyParams {
