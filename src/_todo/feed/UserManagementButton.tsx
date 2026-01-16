@@ -92,7 +92,7 @@ export function UserManagementNavItem() {
                     onSuccess: async () => {
                       queryClient.clear();
                       clearAllUserData();
-                      router.navigate({ to: AUTH_SIGNED_OUT_URL });
+                      router.navigate({ to: "/auth/sign-in" });
                     },
                   },
                 });

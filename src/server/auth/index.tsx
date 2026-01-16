@@ -5,6 +5,20 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import ResetPasswordEmail from "~/emails/reset-password";
 import { db } from "../db";
+import { createMiddleware } from "@tanstack/react-start";
+import { getRequestHeaders } from "@tanstack/react-start/server";
+import { redirect } from "@tanstack/react-router";
+
+export const authMiddleware = createMiddleware().server(
+  async ({ pathname, next }) => {
+    const headers = getRequestHeaders();
+    const session = await auth.api.getSession({ headers });
+    if (!session && !pathname.includes("/auth/")) {
+      throw redirect({ to: "/auth/sign-in" });
+    }
+    return await next();
+  },
+);
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -40,10 +54,4 @@ export async function getServerAuth(headers: Headers) {
   return await auth.api.getSession({
     headers,
   });
-}
-
-export async function isServerAuthed(headers: Headers) {
-  const authResult = await getServerAuth(headers);
-
-  return !!authResult?.session.id && !!authResult?.user.id;
 }

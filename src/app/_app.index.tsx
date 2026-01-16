@@ -7,15 +7,9 @@ import { ViewFilterChips } from "~/_todo/feed/ViewFilterChips";
 
 export const Route = createFileRoute("/_app/")({
   component: Home,
-  loader: async () => {
-    // const isForgotPasswordEnabled = await fetchIsForgotPasswordEnabled();
-    // return { isForgotPasswordEnabled };
-  },
 });
 
 function Home() {
-  // const { isForgotPasswordEnabled } = Route.useLoaderData();
-
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center lg:pb-18">
       <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">

@@ -27,7 +27,6 @@ const isWithinLastMonth = gte(
 );
 
 export const getAll = protectedProcedure.handler(async function* ({ context }) {
-  console.log(context.user.id);
   // Get existing items, yield
   const feedsList = await context.db.query.feeds.findMany({
     where: eq(feeds.userId, context.user.id),
