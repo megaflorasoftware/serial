@@ -71,10 +71,13 @@ export function ContentActions({ contentID }: { contentID: string }) {
   };
 
   useShortcut("s", () => {
-    if (instapaperStatus?.isConnected) {
+    if (instapaperStatus?.isConnected && video?.platform === "website") {
       void handleSaveToInstapaper();
     }
   });
+
+  const showInstapaperAction =
+    instapaperStatus?.isConnected && video?.platform === "website";
 
   if (!video) return null;
 
@@ -83,6 +86,16 @@ export function ContentActions({ contentID }: { contentID: string }) {
 
     return (
       <div className="absolute inset-x-0 bottom-0 z-0 flex w-full items-center justify-center gap-2 p-6">
+        {showInstapaperAction && (
+          <Button
+            variant="outline"
+            onClick={handleSaveToInstapaper}
+            size="icon"
+            disabled={isSavingToInstapaper}
+          >
+            <SendIcon size={16} />
+          </Button>
+        )}
         <Button
           variant={isWatchLater ? "secondary" : "outline"}
           onClick={toggleWatchLater}
@@ -97,22 +110,23 @@ export function ContentActions({ contentID }: { contentID: string }) {
         >
           {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
         </Button>
-        {instapaperStatus?.isConnected && (
-          <Button
-            variant="outline"
-            onClick={handleSaveToInstapaper}
-            size="icon"
-            disabled={isSavingToInstapaper}
-          >
-            <SendIcon size={16} />
-          </Button>
-        )}
       </div>
     );
   }
 
   return (
     <div className="flex w-full items-center justify-center gap-2 p-6">
+      {showInstapaperAction && (
+        <ButtonWithShortcut
+          shortcut="s"
+          variant="outline"
+          onClick={handleSaveToInstapaper}
+          disabled={isSavingToInstapaper}
+        >
+          <SendIcon size={16} />
+          <span className="pl-1.5">Instapaper</span>
+        </ButtonWithShortcut>
+      )}
       <ButtonWithShortcut
         shortcut="w"
         variant={isWatchLater ? "secondary" : "outline"}
@@ -129,17 +143,6 @@ export function ContentActions({ contentID }: { contentID: string }) {
         {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
         <span className="pl-1.5">{isWatched ? "Watched" : "Unwatched"}</span>
       </ButtonWithShortcut>
-      {instapaperStatus?.isConnected && (
-        <ButtonWithShortcut
-          shortcut="s"
-          variant="outline"
-          onClick={handleSaveToInstapaper}
-          disabled={isSavingToInstapaper}
-        >
-          <SendIcon size={16} />
-          <span className="pl-1.5">Instapaper</span>
-        </ButtonWithShortcut>
-      )}
     </div>
   );
 }

@@ -205,6 +205,18 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         </div>
       </Link>
       <div className="flex h-full flex-row flex-wrap items-center justify-center pr-6 md:pr-0">
+        {instapaperStatus?.isConnected && item.platform === "website" && (
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={isSavingToInstapaper}
+            onClick={() => {
+              void saveToInstapaper({ feedItemId: item.id });
+            }}
+          >
+            <SendIcon size={16} />
+          </Button>
+        )}
         <Button
           size="icon"
           variant="ghost"
@@ -235,18 +247,6 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         >
           <EyeIcon size={16} />
         </Button>
-        {instapaperStatus?.isConnected && (
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={isSavingToInstapaper}
-            onClick={() => {
-              void saveToInstapaper({ feedItemId: item.id });
-            }}
-          >
-            <SendIcon size={16} />
-          </Button>
-        )}
       </div>
     </article>
   );
