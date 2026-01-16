@@ -116,7 +116,7 @@ function TodayItemsFeedEmptyState() {
           </CardHeader>
           <CardContent className="flex h-full flex-col justify-end">
             <Button asChild>
-              <Link to="/import" preload="intent">
+              <Link to="/import">
                 <ImportIcon size={16} />
                 <span className="pl-1.5">Import Feeds</span>
               </Link>
@@ -164,7 +164,7 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         to={href}
         target={target}
         rel={rel}
-        preload={shouldOpenInSerial ? "intent" : undefined}
+        preload={shouldOpenInSerial ? "viewport" : undefined}
         className="sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 py-4 pr-4 pl-6 text-left transition-colors md:h-20 md:flex-row md:items-center md:rounded md:py-0 md:pr-0"
       >
         {!!item.thumbnail ? (
