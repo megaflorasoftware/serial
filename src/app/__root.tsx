@@ -96,7 +96,7 @@ export const Route = createRootRoute({
     ],
   }),
   component: RootLayout,
-  staleTime: 1000 * 60,
+  staleTime: 1000 * 60 * 60 * 10,
   loader: async () => {
     const data = await orpcRouterClient.userConfig.getConfig();
 
