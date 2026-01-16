@@ -46,10 +46,49 @@ function createSignatureBaseString(
   const keys = Object.keys(params) as (keyof typeof params)[];
   const sortedParams = keys
     .sort()
-    .map((key) => `${percentEncode(key)}=${percentEncode(params[key]!)}`)
+    .map((key) => `${percentEncode(key)}=${percentEncode(params[key])}`)
     .join("&");
 
   return `${method.toUpperCase()}&${percentEncode(url)}&${percentEncode(sortedParams)}`;
+}
+
+function createOAuthParams(params: {
+  consumerKey: string;
+  token?: string;
+}): OAuthParams {
+  return {
+    oauth_consumer_key: params.consumerKey,
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: generateTimestamp(),
+    oauth_nonce: generateNonce(),
+    oauth_version: "1.0",
+    ...(params.token ? { oauth_token: params.token } : {}),
+  };
+}
+
+async function instapaperFetch(
+  url: string,
+  options: {
+    oauthParams: OAuthParams;
+    bodyParams?: BodyParams;
+  },
+) {
+  const body = !!options.bodyParams
+    ? {
+        body: new URLSearchParams(
+          options.bodyParams as Record<string, string>,
+        ).toString(),
+      }
+    : {};
+
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: createAuthorizationHeader(options.oauthParams),
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    ...body,
+  });
 }
 
 function createSignature(
@@ -90,13 +129,7 @@ export async function getAccessToken(
 
   const url = `${INSTAPAPER_API_BASE}/api/1/oauth/access_token`;
 
-  const oauthParams: OAuthParams = {
-    oauth_consumer_key: consumerKey,
-    oauth_signature_method: "HMAC-SHA1",
-    oauth_timestamp: generateTimestamp(),
-    oauth_nonce: generateNonce(),
-    oauth_version: "1.0",
-  };
+  const oauthParams = createOAuthParams({ consumerKey });
 
   const bodyParams: BodyParams = {
     x_auth_username: username,
@@ -110,14 +143,7 @@ export async function getAccessToken(
 
   oauthParams.oauth_signature = signature;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: createAuthorizationHeader(oauthParams),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams(bodyParams as Record<string, string>).toString(),
-  });
+  const response = await instapaperFetch(url, { oauthParams, bodyParams });
 
   if (!response.ok) {
     const text = await response.text();
@@ -157,14 +183,10 @@ export async function addBookmark(
 
   const url = `${INSTAPAPER_API_BASE}/api/1/bookmarks/add`;
 
-  const oauthParams: OAuthParams = {
-    oauth_consumer_key: consumerKey,
-    oauth_signature_method: "HMAC-SHA1",
-    oauth_timestamp: generateTimestamp(),
-    oauth_nonce: generateNonce(),
-    oauth_version: "1.0",
-    oauth_token: tokens.oauthToken,
-  };
+  const oauthParams = createOAuthParams({
+    consumerKey,
+    token: tokens.oauthToken,
+  });
 
   const bodyParams: BodyParams = {
     url: params.url,
@@ -190,14 +212,7 @@ export async function addBookmark(
 
   oauthParams.oauth_signature = signature;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: createAuthorizationHeader(oauthParams),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams(bodyParams as Record<string, string>).toString(),
-  });
+  const response = await instapaperFetch(url, { oauthParams, bodyParams });
 
   if (!response.ok) {
     const text = await response.text();
@@ -223,14 +238,10 @@ export async function verifyCredentials(
 
   const url = `${INSTAPAPER_API_BASE}/api/1/account/verify_credentials`;
 
-  const oauthParams: OAuthParams = {
-    oauth_consumer_key: consumerKey,
-    oauth_signature_method: "HMAC-SHA1",
-    oauth_timestamp: generateTimestamp(),
-    oauth_nonce: generateNonce(),
-    oauth_version: "1.0",
-    oauth_token: tokens.oauthToken,
-  };
+  const oauthParams = createOAuthParams({
+    consumerKey,
+    token: tokens.oauthToken,
+  });
 
   const baseString = createSignatureBaseString("POST", url, oauthParams);
   const signature = createSignature(
@@ -241,12 +252,7 @@ export async function verifyCredentials(
 
   oauthParams.oauth_signature = signature;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: createAuthorizationHeader(oauthParams),
-    },
-  });
+  const response = await instapaperFetch(url, { oauthParams });
 
   return response.ok;
 }
