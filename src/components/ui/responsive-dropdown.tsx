@@ -4,6 +4,7 @@ import type {
   DropdownMenuContentProps,
   DropdownMenuItemProps,
 } from "@radix-ui/react-dropdown-menu";
+import { ArrowLeftIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -112,6 +113,7 @@ interface ControlledResponsiveDialogProps {
   children: React.ReactNode;
   title?: string;
   description?: string;
+  onBack?: () => void;
 }
 export function ControlledResponsiveDialog({
   open,
@@ -119,6 +121,7 @@ export function ControlledResponsiveDialog({
   children,
   title,
   description,
+  onBack,
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");
 
@@ -127,6 +130,15 @@ export function ControlledResponsiveDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
           <DialogHeader>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="text-muted-foreground hover:text-foreground mb-4 flex w-fit items-center gap-1 text-sm transition-colors"
+              >
+                <ArrowLeftIcon size={16} />
+                <span>Back</span>
+              </button>
+            )}
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
@@ -140,6 +152,15 @@ export function ControlledResponsiveDialog({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DrawerHeader className="text-left">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="text-muted-foreground hover:text-foreground mb-2 flex w-fit items-center gap-1 text-sm transition-colors"
+            >
+              <ArrowLeftIcon size={16} />
+              <span>Back</span>
+            </button>
+          )}
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription>{description}</DrawerDescription>
         </DrawerHeader>

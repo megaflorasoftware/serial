@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, Loader2Icon, UnplugIcon } from "lucide-react";
+import { ChevronRightIcon, Loader2Icon, UnplugIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useDialogStore } from "~/_todo/feed/dialogStore";
@@ -8,6 +8,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
+
+type ConnectionView = "list" | "instapaper";
 
 function InstapaperConnectionForm({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState("");
@@ -76,8 +78,16 @@ function InstapaperConnectionForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function InstapaperConnectedState({ username }: { username: string }) {
+function ConnectionsList({
+  onSelectService,
+}: {
+  onSelectService: (service: ConnectionView) => void;
+}) {
   const queryClient = useQueryClient();
+
+  const { data: instapaperStatus, isLoading: isLoadingInstapaper } = useQuery(
+    orpc.instapaper.getConnectionStatus.queryOptions(),
+  );
 
   const unlinkMutation = useMutation(
     orpc.instapaper.unlinkAccount.mutationOptions({
@@ -85,82 +95,119 @@ function InstapaperConnectedState({ username }: { username: string }) {
         await queryClient.invalidateQueries({
           queryKey: orpc.instapaper.getConnectionStatus.queryKey(),
         });
-        toast.success("Instapaper account unlinked");
+        toast.success("Instapaper account disconnected");
       },
       onError: (error) => {
-        toast.error(error.message || "Failed to unlink Instapaper account");
+        toast.error(error.message || "Failed to disconnect Instapaper");
       },
     }),
   );
 
+  const isClickable =
+    !isLoadingInstapaper &&
+    !instapaperStatus?.isConnected &&
+    instapaperStatus?.isConfigured;
+
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-      <div className="flex items-center gap-3">
-        <div className="bg-primary/10 flex size-10 items-center justify-center rounded-full">
-          <CheckIcon className="text-primary size-5" />
-        </div>
-        <div>
-          <p className="font-medium">Connected</p>
-          <p className="text-muted-foreground text-sm">{username}</p>
-        </div>
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => unlinkMutation.mutate()}
-        disabled={unlinkMutation.isPending}
+    <div className="grid gap-2">
+      <div
+        role={isClickable ? "button" : undefined}
+        tabIndex={isClickable ? 0 : undefined}
+        onClick={isClickable ? () => onSelectService("instapaper") : undefined}
+        onKeyDown={
+          isClickable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectService("instapaper");
+                }
+              }
+            : undefined
+        }
+        className={`flex items-center justify-between rounded-lg border p-4 ${
+          isClickable ? "hover:bg-muted cursor-pointer transition-colors" : ""
+        }`}
       >
-        {unlinkMutation.isPending ? (
-          <Loader2Icon className="animate-spin" size={16} />
-        ) : (
-          <>
-            <UnplugIcon size={16} />
-            <span className="ml-1.5">Disconnect</span>
-          </>
-        )}
-      </Button>
+        <div className="flex flex-col">
+          <span className="font-medium">Instapaper</span>
+          {isLoadingInstapaper ? (
+            <span className="text-muted-foreground text-sm">Loading...</span>
+          ) : instapaperStatus?.isConnected ? (
+            <span className="text-muted-foreground text-sm">
+              {instapaperStatus.username}
+            </span>
+          ) : !instapaperStatus?.isConfigured ? (
+            <span className="text-muted-foreground text-sm">
+              Not configured
+            </span>
+          ) : (
+            <span className="text-muted-foreground text-sm">Not connected</span>
+          )}
+        </div>
+        {isLoadingInstapaper ? (
+          <Loader2Icon
+            className="text-muted-foreground animate-spin"
+            size={20}
+          />
+        ) : instapaperStatus?.isConnected ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              unlinkMutation.mutate();
+            }}
+            disabled={unlinkMutation.isPending}
+          >
+            {unlinkMutation.isPending ? (
+              <Loader2Icon className="animate-spin" size={16} />
+            ) : (
+              <>
+                <UnplugIcon size={16} />
+                <span className="ml-1.5">Disconnect</span>
+              </>
+            )}
+          </Button>
+        ) : instapaperStatus?.isConfigured ? (
+          <ChevronRightIcon className="text-muted-foreground" size={20} />
+        ) : null}
+      </div>
     </div>
   );
 }
 
 export function ConnectionsDialog() {
+  const [view, setView] = useState<ConnectionView>("list");
+
   const dialog = useDialogStore((store) => store.dialog);
   const onDialogOpenChange = useDialogStore((store) => store.onOpenChange);
 
-  const { data: connectionStatus, isLoading } = useQuery(
-    orpc.instapaper.getConnectionStatus.queryOptions({
-      enabled: dialog === "connections",
-    }),
-  );
+  const handleOpenChange = (open: boolean) => {
+    onDialogOpenChange(open);
+    if (!open) {
+      setView("list");
+    }
+  };
+
+  const title = view === "list" ? "Connections" : "Instapaper";
+  const description =
+    view === "list"
+      ? "Manage your connected services"
+      : "Connect your Instapaper account";
 
   return (
     <ControlledResponsiveDialog
       open={dialog === "connections"}
-      onOpenChange={onDialogOpenChange}
-      title="Connections"
-      description="Manage your connected services"
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      onBack={view !== "list" ? () => setView("list") : undefined}
     >
-      <div className="grid gap-6 pt-2">
-        <div className="grid gap-3">
-          <h3 className="font-semibold">Instapaper</h3>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2Icon className="animate-spin" size={24} />
-            </div>
-          ) : !connectionStatus?.isConfigured ? (
-            <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm">
-              Instapaper integration is not configured. Contact the admin to set
-              up OAuth credentials.
-            </div>
-          ) : connectionStatus?.isConnected ? (
-            <InstapaperConnectedState
-              username={connectionStatus.username ?? ""}
-            />
-          ) : (
-            <InstapaperConnectionForm onSuccess={() => {}} />
-          )}
-        </div>
-      </div>
+      {view === "list" ? (
+        <ConnectionsList onSelectService={setView} />
+      ) : view === "instapaper" ? (
+        <InstapaperConnectionForm onSuccess={() => setView("list")} />
+      ) : null}
     </ControlledResponsiveDialog>
   );
 }
