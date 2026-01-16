@@ -1,14 +1,24 @@
-import { CheckIcon, ClockIcon, EyeIcon, EyeOffIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ClockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  SendIcon,
+} from "lucide-react";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
 import {
   useFeedItemsSetWatchedValueMutation,
   useFeedItemsSetWatchLaterValueMutation,
 } from "~/lib/data/feed-items/mutations";
-import { useMediaQuery } from "~/lib/hooks/use-media-query";
-import { useView } from "./useView";
-import { useShortcut } from "~/lib/hooks/useShortcut";
+import {
+  useInstapaperConnectionStatus,
+  useSaveToInstapaperMutation,
+} from "~/lib/data/instapaper";
 import { useFeedItemValue } from "~/lib/data/store";
+import { useMediaQuery } from "~/lib/hooks/use-media-query";
+import { useShortcut } from "~/lib/hooks/useShortcut";
+import { useView } from "./useView";
 
 export function ContentActions({ contentID }: { contentID: string }) {
   const { view } = useView();
@@ -19,6 +29,10 @@ export function ContentActions({ contentID }: { contentID: string }) {
     useFeedItemsSetWatchedValueMutation(contentID);
   const { mutateAsync: setWatchLaterValue } =
     useFeedItemsSetWatchLaterValueMutation(contentID);
+
+  const { data: instapaperStatus } = useInstapaperConnectionStatus();
+  const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
+    useSaveToInstapaperMutation(contentID);
 
   const isWatched = video?.isWatched;
   const isWatchLater = video?.isWatchLater;
@@ -51,6 +65,17 @@ export function ContentActions({ contentID }: { contentID: string }) {
     void toggleWatched();
   });
 
+  const handleSaveToInstapaper = async () => {
+    if (!video || !instapaperStatus?.isConnected) return;
+    await saveToInstapaper({ feedItemId: video.id });
+  };
+
+  useShortcut("s", () => {
+    if (instapaperStatus?.isConnected) {
+      void handleSaveToInstapaper();
+    }
+  });
+
   if (!video) return null;
 
   if (view === "fullscreen") {
@@ -72,6 +97,16 @@ export function ContentActions({ contentID }: { contentID: string }) {
         >
           {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
         </Button>
+        {instapaperStatus?.isConnected && (
+          <Button
+            variant="outline"
+            onClick={handleSaveToInstapaper}
+            size="icon"
+            disabled={isSavingToInstapaper}
+          >
+            <SendIcon size={16} />
+          </Button>
+        )}
       </div>
     );
   }
@@ -94,6 +129,17 @@ export function ContentActions({ contentID }: { contentID: string }) {
         {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
         <span className="pl-1.5">{isWatched ? "Watched" : "Unwatched"}</span>
       </ButtonWithShortcut>
+      {instapaperStatus?.isConnected && (
+        <ButtonWithShortcut
+          shortcut="s"
+          variant="outline"
+          onClick={handleSaveToInstapaper}
+          disabled={isSavingToInstapaper}
+        >
+          <SendIcon size={16} />
+          <span className="pl-1.5">Instapaper</span>
+        </ButtonWithShortcut>
+      )}
     </div>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { EllipsisVerticalIcon, Loader2Icon } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
+import { EllipsisVerticalIcon, Loader2Icon, PlugIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
+import { DropdownMenuSeparator } from "~/components/ui/dropdown-menu";
 import {
   ResponsiveDropdown,
   ResponsiveDropdownLabel,
@@ -16,9 +18,7 @@ import {
 } from "~/components/ui/sidebar";
 import { authClient, signOut } from "~/lib/auth-client";
 import { useClearAllUserData } from "~/lib/data/atoms";
-import { AUTH_SIGNED_OUT_URL } from "~/server/auth/constants";
 import { useDialogStore } from "./dialogStore";
-import { useRouter } from "@tanstack/react-router";
 
 export function UserManagementNavItem() {
   const {
@@ -69,6 +69,21 @@ export function UserManagementNavItem() {
               </p>
             </div>
           </ResponsiveDropdownLabel>
+          <ResponsiveDropdownMenuItem asChild>
+            <Button
+              variant="outline"
+              className="mb-2 w-full"
+              onClick={() => {
+                launchDialog("connections");
+              }}
+            >
+              <PlugIcon size={16} />
+              <span className="pl-1.5">Connections</span>
+            </Button>
+          </ResponsiveDropdownMenuItem>
+          <div className="my-4">
+            <DropdownMenuSeparator />
+          </div>
           <ResponsiveDropdownMenuItem asChild>
             <Button
               variant="outline"

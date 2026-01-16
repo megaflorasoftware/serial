@@ -17,6 +17,8 @@ export const env = createEnv({
     DATABASE_AUTH_TOKEN: z.string(),
     BETTER_AUTH_SECRET: z.string(),
     SENDGRID_API_KEY: z.string().optional(),
+    INSTAPAPER_OAUTH_ID: z.string().optional(),
+    INSTAPAPER_OAUTH_SECRET: z.string().optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -32,6 +34,8 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+    INSTAPAPER_OAUTH_ID: process.env.INSTAPAPER_OAUTH_ID,
+    INSTAPAPER_OAUTH_SECRET: process.env.INSTAPAPER_OAUTH_SECRET,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

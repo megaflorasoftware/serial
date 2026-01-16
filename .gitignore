@@ -59,3 +59,8 @@ yarn-error.log*
 # tanstack
 dist
 .output
+
+plans
+plans/**
+
+CLAUDE.md

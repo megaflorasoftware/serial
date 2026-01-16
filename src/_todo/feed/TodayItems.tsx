@@ -9,6 +9,7 @@ import {
   EyeIcon,
   ImportIcon,
   PlusIcon,
+  SendIcon,
   SproutIcon,
 } from "lucide-react";
 import FeedLoading from "~/components/loading";
@@ -21,6 +22,7 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 
+import { Link } from "@tanstack/react-router";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
 import {
@@ -29,12 +31,15 @@ import {
 } from "~/lib/data/feed-items/mutations";
 import { useFeeds } from "~/lib/data/feeds";
 import {
+  useInstapaperConnectionStatus,
+  useSaveToInstapaperMutation,
+} from "~/lib/data/instapaper";
+import {
   useFeedItemValue,
   useFetchFeedItemsLastFetchedAt,
 } from "~/lib/data/store";
 import { useViews } from "~/lib/data/views";
 import { useDialogStore } from "./dialogStore";
-import { Link } from "@tanstack/react-router";
 
 function timeAgo(date: string | Date) {
   const diff = dayjs().diff(date);
@@ -137,6 +142,10 @@ function ItemDisplay({ contentId }: { contentId: string }) {
   const { mutateAsync: setWatchLaterValue } =
     useFeedItemsSetWatchLaterValueMutation(contentId);
 
+  const { data: instapaperStatus } = useInstapaperConnectionStatus();
+  const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
+    useSaveToInstapaperMutation(contentId);
+
   if (!item) return null;
 
   const feed = feeds.find((f) => f.id === item.feedId);
@@ -226,6 +235,18 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         >
           <EyeIcon size={16} />
         </Button>
+        {instapaperStatus?.isConnected && (
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={isSavingToInstapaper}
+            onClick={() => {
+              void saveToInstapaper({ feedItemId: item.id });
+            }}
+          >
+            <SendIcon size={16} />
+          </Button>
+        )}
       </div>
     </article>
   );
