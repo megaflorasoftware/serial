@@ -129,19 +129,19 @@ export function InstapaperConnectionListItem({
         <span className="font-medium">Instapaper</span>
         {isLoading ? (
           <span className="text-muted-foreground text-sm">Loading...</span>
+        ) : !status?.isConfigured ? (
+          <span className="text-muted-foreground text-sm">Not available</span>
         ) : status?.isConnected ? (
           <span className="text-muted-foreground text-sm">
             {status.username}
           </span>
-        ) : !status?.isConfigured ? (
-          <span className="text-muted-foreground text-sm">Not configured</span>
         ) : (
           <span className="text-muted-foreground text-sm">Not connected</span>
         )}
       </div>
       {isLoading ? (
         <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
-      ) : status?.isConnected ? (
+      ) : !status?.isConfigured ? null : status?.isConnected ? (
         <Button
           variant="outline"
           size="sm"
@@ -160,9 +160,9 @@ export function InstapaperConnectionListItem({
             </>
           )}
         </Button>
-      ) : status?.isConfigured ? (
+      ) : (
         <ChevronRightIcon className="text-muted-foreground" size={20} />
-      ) : null}
+      )}
     </div>
   );
 }

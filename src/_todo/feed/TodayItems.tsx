@@ -205,7 +205,9 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         </div>
       </Link>
       <div className="flex h-full flex-row flex-wrap items-center justify-center pr-6 md:pr-0">
-        {instapaperStatus?.isConnected && item.platform === "website" && (
+        {instapaperStatus?.isConfigured &&
+          instapaperStatus?.isConnected &&
+          item.platform === "website" && (
           <Button
             size="icon"
             variant="ghost"

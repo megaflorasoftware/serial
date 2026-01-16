@@ -70,14 +70,16 @@ export function ContentActions({ contentID }: { contentID: string }) {
     await saveToInstapaper({ feedItemId: video.id });
   };
 
+  const showInstapaperAction =
+    instapaperStatus?.isConfigured &&
+    instapaperStatus?.isConnected &&
+    video?.platform === "website";
+
   useShortcut("s", () => {
-    if (instapaperStatus?.isConnected && video?.platform === "website") {
+    if (showInstapaperAction) {
       void handleSaveToInstapaper();
     }
   });
-
-  const showInstapaperAction =
-    instapaperStatus?.isConnected && video?.platform === "website";
 
   if (!video) return null;
 
