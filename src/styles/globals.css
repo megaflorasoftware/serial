@@ -369,8 +369,8 @@ dialog:modal {
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
-  --animate-in: enter 0.2s ease-out;
-  --animate-out: exit 0.15s ease-in forwards;
+  --animate-in: enter 0.15s ease-out;
+  --animate-out: exit 0.1s ease-in forwards;
 
   @keyframes accordion-down {
     from {
