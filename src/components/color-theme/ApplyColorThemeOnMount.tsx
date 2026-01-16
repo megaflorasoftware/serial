@@ -1,6 +1,3 @@
-"use client";
-
-import { useRef } from "react";
 import { type UserConfigValues } from "~/server/api/routers/userConfigRouter";
 
 export function ApplyColorThemeOnServerMount({
