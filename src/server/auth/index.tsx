@@ -13,8 +13,10 @@ export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {
     const headers = getRequestHeaders();
     const session = await auth.api.getSession({ headers });
-    if (!session && !pathname.includes("/auth/")) {
-      throw redirect({ to: "/auth/sign-in" });
+    if (!session) {
+      if (!pathname.includes("auth")) {
+        throw redirect({ to: "/welcome" });
+      }
     }
     return await next();
   },
@@ -54,4 +56,12 @@ export async function getServerAuth(headers: Headers) {
   return await auth.api.getSession({
     headers,
   });
+}
+
+export async function isServerAuthed(headers: Headers) {
+  const authResult = await auth.api.getSession({
+    headers,
+  });
+
+  return !!authResult?.session.id && !!authResult?.user.id;
 }

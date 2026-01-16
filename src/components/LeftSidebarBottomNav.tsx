@@ -30,14 +30,14 @@ export function LeftSidebarBottomNav() {
             </ColorThemeDropdownSidebar>
           </SidebarMenuItem>
           {/*TODO*/}
-          {/*<SidebarMenuItem>
+          <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link href="/releases">
+              <Link to="/releases">
                 <NotebookIcon />
                 <span>Release Log</span>
               </Link>
             </SidebarMenuButton>
-          </SidebarMenuItem>*/}
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <a

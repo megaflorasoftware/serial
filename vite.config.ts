@@ -4,12 +4,14 @@ import viteReact from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
+import contentCollections from "@content-collections/vite";
 
 export default defineConfig({
   server: {
     port: 3000,
   },
   plugins: [
+    contentCollections(),
     tailwindcss(),
     tsconfigPaths({
       projects: ["./tsconfig.json"],

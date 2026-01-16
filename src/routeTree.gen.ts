@@ -10,21 +10,29 @@
 
 import { Route as rootRouteImport } from './app/__root'
 import { Route as AuthRouteImport } from './app/auth'
+import { Route as WebRouteImport } from './app/_web'
 import { Route as AppRouteImport } from './app/_app'
 import { Route as AppIndexRouteImport } from './app/_app.index'
 import { Route as AuthSignUpRouteImport } from './app/auth.sign-up'
 import { Route as AuthSignInRouteImport } from './app/auth.sign-in'
 import { Route as AuthResetRouteImport } from './app/auth.reset'
-import { Route as AppImportRouteImport } from './app/_app.import'
+import { Route as WebWelcomeRouteImport } from './app/_web.welcome'
+import { Route as AppImportRouteImport } from '././app/_web.releases.index
+import { Route as WebReleasesIndexRouteImport } from './app/_web.releases.index'
 import { Route as ApiTrpcSplatRouteImport } from './app/api/trpc.$'
 import { Route as ApiRpcSplatRouteImport } from './app/api/rpc.$'
 import { Route as ApiAuthSplatRouteImport } from './app/api/auth.$'
+import { Route as WebReleasesSlugRouteImport } from './app/_web.releases.$slug'
 import { Route as AppWatchIdRouteImport } from './app/_app.watch.$id'
 import { Route as AppReadIdRouteImport } from './app/_app.read.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WebRoute = WebRouteImport.update({
+  id: '/_web',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -51,10 +59,20 @@ const AuthResetRoute = AuthResetRouteImport.update({
   path: '/reset',
   getParentRoute: () => AuthRoute,
 } as any)
+const WebWelcomeRoute = WebWelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => WebRoute,
+} as any)
 const AppImportRoute = AppImportRouteImport.update({
   id: '/import',
   path: '/import',
   getParentRoute: () => AppRoute,
+} as any)
+const WebReleasesIndexRoute = WebReleasesIndexRouteImport.update({
+  id: '/releases/',
+  path: '/releases/',
+  getParentRoute: () => WebRoute,
 } as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
@@ -71,6 +89,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WebReleasesSlugRoute = WebReleasesSlugRouteImport.update({
+  id: '/releases/$slug',
+  path: '/releases/$slug',
+  getParentRoute: () => WebRoute,
+} as any)
 const AppWatchIdRoute = AppWatchIdRouteImport.update({
   id: '/watch/$id',
   path: '/watch/$id',
@@ -85,89 +108,110 @@ const AppReadIdRoute = AppReadIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/import': typeof AppImportRoute
+  '/welcome': typeof WebWelcomeRoute
   '/auth/reset': typeof AuthResetRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AppIndexRoute
   '/read/$id': typeof AppReadIdRoute
   '/watch/$id': typeof AppWatchIdRoute
+  '/releases/$slug': typeof WebReleasesSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/releases': typeof WebReleasesIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
   '/import': typeof AppImportRoute
+  '/welcome': typeof WebWelcomeRoute
   '/auth/reset': typeof AuthResetRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/': typeof AppIndexRoute
   '/read/$id': typeof AppReadIdRoute
   '/watch/$id': typeof AppWatchIdRoute
+  '/releases/$slug': typeof WebReleasesSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/releases': typeof WebReleasesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/_web': typeof WebRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/_app/import': typeof AppImportRoute
+  '/_web/welcome': typeof WebWelcomeRoute
   '/auth/reset': typeof AuthResetRoute
   '/auth/sign-in': typeof AuthSignInRoute
   '/auth/sign-up': typeof AuthSignUpRoute
   '/_app/': typeof AppIndexRoute
   '/_app/read/$id': typeof AppReadIdRoute
   '/_app/watch/$id': typeof AppWatchIdRoute
+  '/_web/releases/$slug': typeof WebReleasesSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/_web/releases/': typeof WebReleasesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/auth'
     | '/import'
+    | '/welcome'
     | '/auth/reset'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/'
     | '/read/$id'
     | '/watch/$id'
+    | '/releases/$slug'
     | '/api/auth/$'
     | '/api/rpc/$'
     | '/api/trpc/$'
+    | '/releases'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
     | '/import'
+    | '/welcome'
     | '/auth/reset'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/'
     | '/read/$id'
     | '/watch/$id'
+    | '/releases/$slug'
     | '/api/auth/$'
     | '/api/rpc/$'
     | '/api/trpc/$'
+    | '/releases'
   id:
     | '__root__'
     | '/_app'
+    | '/_web'
     | '/auth'
     | '/_app/import'
+    | '/_web/welcome'
     | '/auth/reset'
     | '/auth/sign-in'
     | '/auth/sign-up'
     | '/_app/'
     | '/_app/read/$id'
     | '/_app/watch/$id'
+    | '/_web/releases/$slug'
     | '/api/auth/$'
     | '/api/rpc/$'
     | '/api/trpc/$'
+    | '/_web/releases/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  WebRoute: typeof WebRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRpcSplatRoute: typeof ApiRpcSplatRoute
@@ -181,6 +225,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_web': {
+      id: '/_web'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof WebRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -218,12 +269,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthResetRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_web/welcome': {
+      id: '/_web/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WebWelcomeRouteImport
+      parentRoute: typeof WebRoute
+    }
     '/_app/import': {
       id: '/_app/import'
       path: '/import'
       fullPath: '/import'
       preLoaderRoute: typeof AppImportRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_web/releases/': {
+      id: '/_web/releases/'
+      path: '/releases'
+      fullPath: '/releases'
+      preLoaderRoute: typeof WebReleasesIndexRouteImport
+      parentRoute: typeof WebRoute
     }
     '/api/trpc/$': {
       id: '/api/trpc/$'
@@ -245,6 +310,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_web/releases/$slug': {
+      id: '/_web/releases/$slug'
+      path: '/releases/$slug'
+      fullPath: '/releases/$slug'
+      preLoaderRoute: typeof WebReleasesSlugRouteImport
+      parentRoute: typeof WebRoute
     }
     '/_app/watch/$id': {
       id: '/_app/watch/$id'
@@ -279,6 +351,20 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface WebRouteChildren {
+  WebWelcomeRoute: typeof WebWelcomeRoute
+  WebReleasesSlugRoute: typeof WebReleasesSlugRoute
+  WebReleasesIndexRoute: typeof WebReleasesIndexRoute
+}
+
+const WebRouteChildren: WebRouteChildren = {
+  WebWelcomeRoute: WebWelcomeRoute,
+  WebReleasesSlugRoute: WebReleasesSlugRoute,
+  WebReleasesIndexRoute: WebReleasesIndexRoute,
+}
+
+const WebRouteWithChildren = WebRoute._addFileChildren(WebRouteChildren)
+
 interface AuthRouteChildren {
   AuthResetRoute: typeof AuthResetRoute
   AuthSignInRoute: typeof AuthSignInRoute
@@ -295,6 +381,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  WebRoute: WebRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,

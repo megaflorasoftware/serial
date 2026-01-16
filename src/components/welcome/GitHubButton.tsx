@@ -1,11 +1,10 @@
 import { GithubIcon } from "lucide-react";
-import Link from "next/link";
 import { Button } from "~/components/ui/button";
 
 export function GitHubButton() {
   return (
     <div className="mt-4 mb-8 flex gap-2 md:mb-12">
-      <Link
+      <a
         href="https://github.com/hfellerhoff/serial"
         className="hover:bg-transparent"
       >
@@ -13,7 +12,7 @@ export function GitHubButton() {
           <GithubIcon size={16} />
           <span className="pl-1">GitHub</span>
         </Button>
-      </Link>
+      </a>
     </div>
   );
 }

@@ -3,23 +3,29 @@ import "~/styles/globals.css";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
-// import { ApplyColorTheme } from "~/components/color-theme/ApplyColorTheme";
-// import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
+import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
 import { authMiddleware } from "~/server/auth";
 import { AppDialogs } from "../_todo/feed/AppDialogs";
 import { Header } from "../_todo/feed/Header";
 import FeedLoading from "../components/loading";
+import { getMostRecentRelease } from "~/lib/markdown/loaders";
 
 export const Route = createFileRoute("/_app")({
   component: RootLayout,
   server: {
     middleware: [authMiddleware],
   },
+  loader: async () => {
+    const mostRecentRelease = getMostRecentRelease();
+    return { mostRecentRelease };
+  },
 });
 
 function RootLayout() {
+  const { mostRecentRelease } = Route.useLoaderData();
+
   return (
     // <ApplyColorTheme>
     <Suspense fallback={<FeedLoading />}>
@@ -41,7 +47,7 @@ function RootLayout() {
               </div>
               <AppDialogs />
             </main>
-            {/*<ReleaseNotifier />*/}
+            <ReleaseNotifier mostRecentRelease={mostRecentRelease} />
           </SidebarInset>
           <AppRightSidebar />
         </SidebarProvider>
