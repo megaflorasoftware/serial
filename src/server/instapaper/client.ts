@@ -11,13 +11,23 @@ interface OAuthParams {
   oauth_version: string;
   oauth_token?: string;
   oauth_signature?: string;
-  [key: string]: string | undefined;
+  // [key: string]: string | undefined;
+}
+
+interface BodyParams {
+  x_auth_username?: string;
+  x_auth_password?: string;
+  x_auth_mode?: "client_auth";
+  url?: string;
+  title?: string;
+  description?: string;
+  content?: string;
 }
 
 function percentEncode(str: string): string {
   return encodeURIComponent(str).replace(
     /[!'()*]/g,
-    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 
@@ -32,9 +42,10 @@ function generateTimestamp(): string {
 function createSignatureBaseString(
   method: string,
   url: string,
-  params: Record<string, string>
+  params: OAuthParams | BodyParams,
 ): string {
-  const sortedParams = Object.keys(params)
+  const keys = Object.keys(params) as (keyof typeof params)[];
+  const sortedParams = keys
     .sort()
     .map((key) => `${percentEncode(key)}=${percentEncode(params[key]!)}`)
     .join("&");
@@ -45,7 +56,7 @@ function createSignatureBaseString(
 function createSignature(
   baseString: string,
   consumerSecret: string,
-  tokenSecret = ""
+  tokenSecret = "",
 ): string {
   const signingKey = `${percentEncode(consumerSecret)}&${percentEncode(tokenSecret)}`;
   const hmac = createHmac("sha1", signingKey);
@@ -69,7 +80,7 @@ export interface InstapaperTokens {
 
 export async function getAccessToken(
   username: string,
-  password: string
+  password: string,
 ): Promise<InstapaperTokens> {
   const consumerKey = env.INSTAPAPER_OAUTH_ID;
   const consumerSecret = env.INSTAPAPER_OAUTH_SECRET;
@@ -88,13 +99,13 @@ export async function getAccessToken(
     oauth_version: "1.0",
   };
 
-  const bodyParams: Record<string, string> = {
+  const bodyParams: BodyParams = {
     x_auth_username: username,
     x_auth_password: password,
     x_auth_mode: "client_auth",
   };
 
-  const allParams: Record<string, string> = { ...oauthParams, ...bodyParams };
+  const allParams = { ...oauthParams, ...bodyParams };
   const baseString = createSignatureBaseString("POST", url, allParams);
   const signature = createSignature(baseString, consumerSecret);
 
@@ -106,7 +117,7 @@ export async function getAccessToken(
       Authorization: createAuthorizationHeader(oauthParams),
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams(bodyParams).toString(),
+    body: new URLSearchParams(bodyParams as Record<string, string>).toString(),
   });
 
   if (!response.ok) {
@@ -136,7 +147,7 @@ export interface AddBookmarkParams {
 
 export async function addBookmark(
   tokens: InstapaperTokens,
-  params: AddBookmarkParams
+  params: AddBookmarkParams,
 ): Promise<{ bookmark_id: number }> {
   const consumerKey = env.INSTAPAPER_OAUTH_ID;
   const consumerSecret = env.INSTAPAPER_OAUTH_SECRET;
@@ -156,7 +167,7 @@ export async function addBookmark(
     oauth_token: tokens.oauthToken,
   };
 
-  const bodyParams: Record<string, string> = {
+  const bodyParams: BodyParams = {
     url: params.url,
   };
 
@@ -170,12 +181,12 @@ export async function addBookmark(
     bodyParams.content = params.content;
   }
 
-  const allParams: Record<string, string> = { ...oauthParams, ...bodyParams };
+  const allParams = { ...oauthParams, ...bodyParams };
   const baseString = createSignatureBaseString("POST", url, allParams);
   const signature = createSignature(
     baseString,
     consumerSecret,
-    tokens.oauthTokenSecret
+    tokens.oauthTokenSecret,
   );
 
   oauthParams.oauth_signature = signature;
@@ -186,7 +197,7 @@ export async function addBookmark(
       Authorization: createAuthorizationHeader(oauthParams),
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams(bodyParams).toString(),
+    body: new URLSearchParams(bodyParams as Record<string, string>).toString(),
   });
 
   if (!response.ok) {
@@ -194,12 +205,15 @@ export async function addBookmark(
     throw new Error(`Failed to add bookmark: ${response.status} - ${text}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as { bookmark_id: number }[];
+  if (!data[0]?.bookmark_id) {
+    throw new Error(`Couldn't access bookmark`);
+  }
   return { bookmark_id: data[0]?.bookmark_id };
 }
 
 export async function verifyCredentials(
-  tokens: InstapaperTokens
+  tokens: InstapaperTokens,
 ): Promise<boolean> {
   const consumerKey = env.INSTAPAPER_OAUTH_ID;
   const consumerSecret = env.INSTAPAPER_OAUTH_SECRET;
@@ -223,7 +237,7 @@ export async function verifyCredentials(
   const signature = createSignature(
     baseString,
     consumerSecret,
-    tokens.oauthTokenSecret
+    tokens.oauthTokenSecret,
   );
 
   oauthParams.oauth_signature = signature;

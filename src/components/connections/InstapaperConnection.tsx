@@ -147,6 +147,7 @@ export function InstapaperConnectionListItem({
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
+            // @ts-expect-error this should be fine
             unlinkMutation.mutate();
           }}
           disabled={unlinkMutation.isPending}
