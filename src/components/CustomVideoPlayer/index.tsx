@@ -84,7 +84,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
               <div className="absolute inset-0 h-full w-full bg-black">
                 <img
                   className="h-full w-full object-contain"
-                  src={`http://img.youtube.com/vi/${props.videoID}/maxresdefault.jpg`}
+                  src={`https://img.youtube.com/vi/${props.videoID}/maxresdefault.jpg`}
                 />
               </div>
               <button

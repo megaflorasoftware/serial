@@ -82,6 +82,17 @@ export const Route = createRootRoute({
         sizes: "512x512",
         href: "/android-chrome-512x512.png",
       },
+      // YouTube preconnect hints for faster video loading
+      { rel: "preconnect", href: "https://www.youtube-nocookie.com" },
+      { rel: "preconnect", href: "https://i.ytimg.com" },
+      { rel: "preconnect", href: "https://img.youtube.com" },
+      { rel: "dns-prefetch", href: "https://www.youtube-nocookie.com" },
+      // Preload YouTube IFrame API
+      {
+        rel: "preload",
+        href: "https://www.youtube.com/iframe_api",
+        as: "script",
+      },
     ],
   }),
   component: RootLayout,
