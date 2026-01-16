@@ -32,8 +32,12 @@ function RouteComponent() {
           return (
             <li key={slug}>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                {/* @ts-expect-error this is fine */}
-                <Link to={`/releases/${slug}`} className="text-lg">
+                <Link
+                  // @ts-expect-error this is fine
+                  to={`/releases/${slug}`}
+                  className="text-lg"
+                  preload="viewport"
+                >
                   {title}
                 </Link>
                 <p className="text-md text-muted-foreground font-semibold">

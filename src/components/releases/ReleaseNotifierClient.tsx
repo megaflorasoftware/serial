@@ -19,7 +19,7 @@ export function ReleaseNotifierClient({ slug }: { slug: string | undefined }) {
         {
           action: (
             // @ts-expect-error this is fine
-            <Link to={`/releases/${slug}`}>
+            <Link to={`/releases/${slug}`} preload="viewport">
               <Button
                 size="sm"
                 onClick={() => {
