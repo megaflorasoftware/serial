@@ -17,7 +17,7 @@ import { Route as AuthSignUpRouteImport } from './app/auth.sign-up'
 import { Route as AuthSignInRouteImport } from './app/auth.sign-in'
 import { Route as AuthResetRouteImport } from './app/auth.reset'
 import { Route as WebWelcomeRouteImport } from './app/_web.welcome'
-import { Route as AppImportRouteImport } from '././app/_web.releases.index
+import { Route as AppImportRouteImport } from './app/_app.import'
 import { Route as WebReleasesIndexRouteImport } from './app/_web.releases.index'
 import { Route as ApiTrpcSplatRouteImport } from './app/api/trpc.$'
 import { Route as ApiRpcSplatRouteImport } from './app/api/rpc.$'
