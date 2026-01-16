@@ -31,7 +31,7 @@ function RouteComponent() {
         {releases.map(({ slug, title, description, publish_date }) => {
           return (
             <li key={slug}>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                 {/* @ts-expect-error this is fine */}
                 <Link to={`/releases/${slug}`} className="text-lg">
                   {title}
