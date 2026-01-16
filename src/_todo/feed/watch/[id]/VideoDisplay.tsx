@@ -27,7 +27,7 @@ export function VideoDisplay({
   useEffect(() => {
     const timeout = setTimeout(() => {
       setShowVideo(true);
-    }, 250);
+    }, 100);
 
     return () => {
       clearTimeout(timeout);
