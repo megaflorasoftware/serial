@@ -5,6 +5,13 @@ import type {
   DropdownMenuItemProps,
 } from "@radix-ui/react-dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -88,6 +95,49 @@ export function ResponsiveDropdown({
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+      <DrawerContent>
+        <DrawerHeader className="text-left">
+          <DrawerTitle>{title}</DrawerTitle>
+          <DrawerDescription>{description}</DrawerDescription>
+        </DrawerHeader>
+        <div className="px-4 pb-4">{children}</div>
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+interface ControlledResponsiveDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+  title?: string;
+  description?: string;
+}
+export function ControlledResponsiveDialog({
+  open,
+  onOpenChange,
+  children,
+  title,
+  description,
+}: ControlledResponsiveDialogProps) {
+  const isDesktop = useMediaQuery("(min-width: 640px)");
+
+  if (isDesktop) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          {children}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DrawerHeader className="text-left">
           <DrawerTitle>{title}</DrawerTitle>

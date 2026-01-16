@@ -1,12 +1,7 @@
 "use client";
 
 import { EditableSavableTextField } from "~/components/form/EditableSavableTextField";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
+import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { authClient } from "~/lib/auth-client";
 import { useDialogStore } from "../dialogStore";
 
@@ -30,50 +25,50 @@ export function UserProfileEditDialog() {
   const userEmail = data?.user.email ?? "";
 
   return (
-    <Dialog open={dialog === "edit-user-profile"} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="font-mono">Edit Profile</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-6">
-          <EditableSavableTextField
-            label="Name"
-            placeholder="Serial User"
-            initialValue={data?.user.name ?? ""}
-            onSave={async (updatedName) => {
-              await updateName({ name: updatedName });
-              refetchUser();
-            }}
-            schema={userNameSchema}
-          />
-          <EditableSavableTextField
-            label="Email"
-            helperText="Be careful! This will be your new sign in email."
-            placeholder="user@example.com"
-            initialValue={userEmail}
-            onSave={async (updatedEmail) => {
-              await updateEmail({ email: updatedEmail });
-              refetchUser();
-            }}
-            schema={userEmailSchema}
-          />
-          <div className="grid gap-2">
-            <Label>Password</Label>
-            <Button variant="outline" asChild>
-              <Link
-                to={AUTH_RESET_PASSWORD_URL}
-                search={{
-                  email: userEmail,
-                }}
-              >
-                Update password
-              </Link>
-            </Button>
-          </div>
-          <hr />
-          <DeleteAccountSection />
+    <ControlledResponsiveDialog
+      open={dialog === "edit-user-profile"}
+      onOpenChange={onOpenChange}
+      title="Edit Profile"
+      description="Update your profile information"
+    >
+      <div className="grid gap-6">
+        <EditableSavableTextField
+          label="Name"
+          placeholder="Serial User"
+          initialValue={data?.user.name ?? ""}
+          onSave={async (updatedName) => {
+            await updateName({ name: updatedName });
+            refetchUser();
+          }}
+          schema={userNameSchema}
+        />
+        <EditableSavableTextField
+          label="Email"
+          helperText="Be careful! This will be your new sign in email."
+          placeholder="user@example.com"
+          initialValue={userEmail}
+          onSave={async (updatedEmail) => {
+            await updateEmail({ email: updatedEmail });
+            refetchUser();
+          }}
+          schema={userEmailSchema}
+        />
+        <div className="grid gap-2">
+          <Label>Password</Label>
+          <Button variant="outline" asChild>
+            <Link
+              to={AUTH_RESET_PASSWORD_URL}
+              search={{
+                email: userEmail,
+              }}
+            >
+              Update password
+            </Link>
+          </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+        <hr />
+        <DeleteAccountSection />
+      </div>
+    </ControlledResponsiveDialog>
   );
 }
