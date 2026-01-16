@@ -23,9 +23,9 @@ import { useFeeds } from "~/lib/data/feeds";
 import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
 import type { BulkImportFromFileResult } from "~/server/api/routers/feed-router";
 import type { FeedPlatform } from "~/server/db/schema";
-import { ImportDropzone } from "../_todo/feed/import/ImportDropzone";
-import { getInitialFeedDataFromFileInputElement } from "../_todo/feed/import/utils/getInitialFeedDataFromFileInputElement";
-import type { ImportFeedDataItem } from "../_todo/feed/import/utils/shared";
+import { ImportDropzone } from "../components/feed/import/ImportDropzone";
+import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
+import type { ImportFeedDataItem } from "../components/feed/import/utils/shared";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {

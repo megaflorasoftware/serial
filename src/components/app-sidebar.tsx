@@ -1,9 +1,9 @@
 "use client";
 
-import { SidebarCategories } from "~/_todo/feed/SidebarCategories";
-import { SidebarFeeds } from "~/_todo/feed/SidebarFeeds";
-import { SidebarViews } from "~/_todo/feed/SidebarViews";
-import { UserManagementNavItem } from "~/_todo/feed/UserManagementButton";
+import { SidebarCategories } from "~/components/feed/SidebarCategories";
+import { SidebarFeeds } from "~/components/feed/SidebarFeeds";
+import { SidebarViews } from "~/components/feed/SidebarViews";
+import { UserManagementNavItem } from "~/components/feed/UserManagementButton";
 import { LeftSidebarBottomNav } from "~/components/LeftSidebarBottomNav";
 import {
   Sidebar,

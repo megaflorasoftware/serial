@@ -18,7 +18,7 @@ import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ScrollArea } from "./ui/scroll-area";
 import { useFeedItemsDict, useFeedItemsOrder } from "~/lib/data/store";
-import { useDialogStore } from "~/_todo/feed/dialogStore";
+import { useDialogStore } from "~/components/feed/dialogStore";
 
 function CategoryNameInput({
   name,

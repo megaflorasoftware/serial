@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ClientDatetime } from "~/_todo/feed/ClientDatetime";
-import { DateFilterSelect } from "~/_todo/feed/DateFilterChips";
-import { ItemVisibilitySelect } from "~/_todo/feed/ItemVisibilityChips";
-import { TodayItems } from "~/_todo/feed/TodayItems";
-import { ViewFilterChips } from "~/_todo/feed/ViewFilterChips";
+import { ClientDatetime } from "~/components/feed/ClientDatetime";
+import { DateFilterSelect } from "~/components/feed/DateFilterChips";
+import { ItemVisibilitySelect } from "~/components/feed/ItemVisibilityChips";
+import { TodayItems } from "~/components/feed/TodayItems";
+import { ViewFilterChips } from "~/components/feed/ViewFilterChips";
 
 export const Route = createFileRoute("/_app/")({
   component: Home,

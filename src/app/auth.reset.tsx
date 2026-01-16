@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import z from "zod";
-import { AuthHeader } from "~/_todo/auth/AuthHeader";
-import { AuthResetPageComponent } from "~/_todo/auth/reset/AuthResetPageComponent";
+import { AuthHeader } from "~/components/auth/AuthHeader";
+import { AuthResetPageComponent } from "~/components/auth/reset/AuthResetPageComponent";
 import { fetchIsForgotPasswordEnabled } from "~/server/auth/endpoints";
 
 const authSearchSchema = z.object({

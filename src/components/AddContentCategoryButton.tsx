@@ -1,4 +1,4 @@
-import { useDialogStore } from "~/_todo/feed/dialogStore";
+import { useDialogStore } from "~/components/feed/dialogStore";
 import { Button } from "./ui/button";
 import { PlusIcon } from "lucide-react";
 

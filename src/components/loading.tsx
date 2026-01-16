@@ -1,5 +1,5 @@
 import { Loader2Icon } from "lucide-react";
-import { ClientDatetime } from "~/_todo/feed/ClientDatetime";
+import { ClientDatetime } from "~/components/feed/ClientDatetime";
 
 export default function FeedLoading() {
   return (

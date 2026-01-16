@@ -3,9 +3,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { useEffect } from "react";
-import { useView } from "~/_todo/feed/watch/[id]/useView";
-import { useZoom } from "~/_todo/feed/watch/[id]/useZoom";
-import { VideoDisplay } from "~/_todo/feed/watch/[id]/VideoDisplay";
+import { useView } from "~/components/feed/watch/[id]/useView";
+import { useZoom } from "~/components/feed/watch/[id]/useZoom";
+import { VideoDisplay } from "~/components/feed/watch/[id]/VideoDisplay";
 import useIsInactive from "~/lib/hooks/useIsInactive";
 
 export const Route = createFileRoute("/_app/watch/$id")({

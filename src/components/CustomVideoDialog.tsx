@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
-import { useDialogStore } from "~/_todo/feed/dialogStore";
+import { useDialogStore } from "~/components/feed/dialogStore";
 import { Link } from "@tanstack/react-router";
 
 function getYouTubeVideoIdFromUrl(url: string) {

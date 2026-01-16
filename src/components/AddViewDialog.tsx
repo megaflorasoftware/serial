@@ -15,7 +15,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
-import { useDialogStore } from "~/_todo/feed/dialogStore";
+import { useDialogStore } from "~/components/feed/dialogStore";
 
 function AddViewToggleItem({
   value,

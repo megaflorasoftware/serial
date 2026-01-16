@@ -7,8 +7,8 @@ import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
 import { authMiddleware } from "~/server/auth";
-import { AppDialogs } from "../_todo/feed/AppDialogs";
-import { Header } from "../_todo/feed/Header";
+import { AppDialogs } from "../components/feed/AppDialogs";
+import { Header } from "../components/feed/Header";
 import FeedLoading from "../components/loading";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
 

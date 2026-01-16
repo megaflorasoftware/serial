@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 
-import { useZoom } from "../_todo/feed/watch/[id]/useZoom";
+import { useZoom } from "../components/feed/watch/[id]/useZoom";
 
 import { createFileRoute } from "@tanstack/react-router";
 import rehypeParse from "rehype-parse";
@@ -12,8 +12,8 @@ import { unified } from "unified";
 import { useFeeds } from "~/lib/data/feeds";
 import { useFeedItemValue } from "~/lib/data/store";
 import { useFlagState } from "~/lib/hooks/useFlagState";
-import classes from "../_todo/feed/read/article.module.css";
-import { ContentActions } from "../_todo/feed/watch/[id]/ContentActions";
+import classes from "~/components/feed/read/article.module.css";
+import { ContentActions } from "../components/feed/watch/[id]/ContentActions";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })

@@ -10,7 +10,7 @@ import { Label } from "~/components/ui/label";
 import { signUp } from "~/lib/auth-client";
 import { AUTH_SIGNED_IN_URL } from "../server/auth/constants";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { AuthHeader } from "~/_todo/auth/AuthHeader";
+import { AuthHeader } from "~/components/auth/AuthHeader";
 
 export const Route = createFileRoute("/auth/sign-up")({
   component: SignUp,
