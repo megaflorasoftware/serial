@@ -35,7 +35,6 @@ export function FeedDiscoveryInput({
       />
       <Button
         type="button"
-        variant="secondary"
         disabled={!canDiscover || isDiscovering}
         onClick={onDiscover}
       >

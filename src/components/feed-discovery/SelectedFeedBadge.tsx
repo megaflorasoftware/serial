@@ -9,15 +9,13 @@ interface SelectedFeedBadgeProps {
 
 export function SelectedFeedBadge({ feed, onClear }: SelectedFeedBadgeProps) {
   return (
-    <div className="bg-muted flex min-w-0 items-center gap-2 overflow-hidden rounded-md border p-2">
+    <div className="flex min-w-0 items-center gap-3 overflow-hidden rounded-md border px-3 py-2">
       <RssIcon className="text-muted-foreground h-4 w-4 shrink-0" />
-      <div className="min-w-0 flex-1 overflow-hidden">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
           {feed.title || feed.url}
         </p>
-        {feed.title && (
-          <p className="text-muted-foreground truncate text-xs">{feed.url}</p>
-        )}
+        <p className="text-muted-foreground truncate text-xs">{feed.url}</p>
       </div>
       <Button
         type="button"

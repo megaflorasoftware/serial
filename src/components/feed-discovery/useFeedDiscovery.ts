@@ -22,8 +22,13 @@ export function useFeedDiscovery() {
       return;
     }
 
+    let normalizedUrl = url;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      normalizedUrl = `https://${url}`;
+    }
+
     try {
-      new URL(url);
+      new URL(normalizedUrl);
     } catch {
       return;
     }
@@ -33,7 +38,7 @@ export function useFeedDiscovery() {
     setSelectedFeed(null);
 
     try {
-      const feeds = await orpcRouterClient.feed.discoverFeeds({ url });
+      const feeds = await orpcRouterClient.feed.discoverFeeds({ url: normalizedUrl });
 
       if (feeds.length === 0) {
         setDiscoveryState("input");
@@ -69,11 +74,17 @@ export function useFeedDiscovery() {
   const feedUrl = selectedFeed?.url ?? url;
 
   let canDiscover = false;
-  try {
-    new URL(url);
-    canDiscover = discoveryState === "input" && url.length > 0;
-  } catch {
-    canDiscover = false;
+  if (discoveryState === "input" && url.length > 0) {
+    let testUrl = url;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      testUrl = `https://${url}`;
+    }
+    try {
+      new URL(testUrl);
+      canDiscover = true;
+    } catch {
+      canDiscover = false;
+    }
   }
 
   return {

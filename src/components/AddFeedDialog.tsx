@@ -121,20 +121,24 @@ export function AddFeedDialog() {
             </Button>
           </>
         )}
-        <hr />
-        <Label>Have a lot of feeds to add?</Label>
-        <Link to="/import">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              onOpenChange(false);
-            }}
-          >
-            <ImportIcon size={16} />
-            <span className="pl-1.5">Bulk Import</span>
-          </Button>
-        </Link>
+        {!discovery.isLocked && (
+          <>
+            <hr />
+            <Label>Have a lot of feeds to add?</Label>
+            <Link to="/import">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  onOpenChange(false);
+                }}
+              >
+                <ImportIcon size={16} />
+                <span className="pl-1.5">Bulk Import</span>
+              </Button>
+            </Link>
+          </>
+        )}
       </div>
     </ControlledResponsiveDialog>
   );
