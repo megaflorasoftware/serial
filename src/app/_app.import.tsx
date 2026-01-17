@@ -3,6 +3,7 @@
 import {
   CheckIcon,
   CircleQuestionMarkIcon,
+  ExternalLinkIcon,
   GlobeIcon,
   MinusIcon,
   PlayCircleIcon,
@@ -218,6 +219,22 @@ function EditFeedsPage() {
                       >
                         {displayTitle}
                       </label>
+                      {channel.websiteUrl && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <a
+                              href={channel.websiteUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground hover:text-foreground ml-1 shrink-0 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLinkIcon size={16} />
+                            </a>
+                          </TooltipTrigger>
+                          <TooltipContent>Open original</TooltipContent>
+                        </Tooltip>
+                      )}
                       {!isSuccess && (
                         <span className="space-x-1 px-2">
                           {channel.categories.map((category) => (
