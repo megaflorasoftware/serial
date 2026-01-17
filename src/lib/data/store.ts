@@ -62,11 +62,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         const timeToWait = DEBOUNCE_TIME - timeSinceLastUpdate;
         const shouldWaitToRender = timeToWait > 0;
 
-        const feedStatusDict = shouldWaitToRender
-          ? get().feedStatusDict
-          : {
-              ...get().feedStatusDict,
-            };
+        const feedStatusDict = get().feedStatusDict;
 
         const feedItemsDict = shouldWaitToRender
           ? get().feedItemsDict

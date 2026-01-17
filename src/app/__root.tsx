@@ -124,14 +124,14 @@ export function RootLayout() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
-        {/* {process.env.NODE_ENV !== "production" && (
+        {process.env.NODE_ENV !== "production" && (
           <>
             <script
               crossOrigin="anonymous"
               src="//unpkg.com/react-scan/dist/auto.global.js"
             />
           </>
-        )} */}
+        )}
         {process.env.NODE_ENV === "production" && (
           <>
             <script
