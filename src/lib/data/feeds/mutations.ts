@@ -6,6 +6,7 @@ import {
   useFeedItemsDict,
   useFeedItemsOrder,
   useFetchFeedItems,
+  useFetchFeedItemsForFeed,
 } from "../store";
 import {
   useAddFeed,
@@ -16,7 +17,7 @@ import {
 } from "./store";
 
 export function useCreateFeedMutation() {
-  const refetchFeedItems = useFetchFeedItems();
+  const fetchFeedItemsForFeed = useFetchFeedItemsForFeed();
   const fetchFeedCategories = useFetchFeedCategories();
   const addFeed = useAddFeed();
 
@@ -24,7 +25,7 @@ export function useCreateFeedMutation() {
     orpc.feed.create.mutationOptions({
       onSuccess: async (createdFeeds) => {
         createdFeeds.forEach((feed) => addFeed(feed));
-        refetchFeedItems();
+        await Promise.all(createdFeeds.map((feed) => fetchFeedItemsForFeed(feed.id)));
         await fetchFeedCategories();
       },
     }),
