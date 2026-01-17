@@ -9,7 +9,7 @@
     "dev:atomic": "vite dev",
     "dev": "concurrently --kill-others \"pnpm dev:db\" \"pnpm dev:migrate && pnpm dev:atomic\"",
     "dev:email": "email dev --dir ./src/emails --port 4000",
-    "build": "vite build && pnpm schema:migrate && node --import=tsx ./src/server/scripts/addIdsToFeedItems.ts",
+    "build": "pnpm typecheck && vite build && pnpm schema:migrate && node --import=tsx ./src/server/scripts/addIdsToFeedItems.ts",
     "build:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm build\"",
     "build:atomic": "vite build",
     "schema:generate": "drizzle-kit generate",
