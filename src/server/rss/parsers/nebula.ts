@@ -30,7 +30,9 @@ export const nebulaSchema = z.object({
   link: z.string(),
 });
 
-function extractThumbnailFromContent(content: string | undefined): string | undefined {
+function extractThumbnailFromContent(
+  content: string | undefined,
+): string | undefined {
   if (!content) return undefined;
 
   // Match img src from the HTML content (handles both quoted and unquoted src)
@@ -39,13 +41,10 @@ function extractThumbnailFromContent(content: string | undefined): string | unde
 }
 
 function convertNebulaUrlToRssUrl(url: string): string {
-  // Already an RSS URL
   if (url.includes("rss.nebula.app")) {
     return url;
   }
 
-  // Convert channel page URL to RSS URL
-  // https://nebula.tv/lindsayellis -> https://rss.nebula.app/video/channels/lindsayellis.rss
   const match = url.match(/nebula\.tv\/([^\/\?]+)/);
   if (match?.[1]) {
     return `https://rss.nebula.app/video/channels/${match[1]}.rss`;
@@ -83,7 +82,6 @@ export async function getNebulaFeedIfMatches(
   rssString: string,
   url: string,
 ): Promise<NewFeedDetails | null> {
-  // Check if the URL is from Nebula
   if (!url.includes("nebula.app") && !url.includes("nebula.tv")) {
     return null;
   }
