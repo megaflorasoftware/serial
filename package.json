@@ -17,7 +17,8 @@
     "schema:update": "pnpm schema:generate && pnpm schema:migrate",
     "db:studio": "drizzle-kit studio",
     "start": "node .output/server/index.mjs",
-    "start:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm start\""
+    "start:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm start\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",
@@ -86,7 +87,6 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-fast-marquee": "^1.6.5",
-    "react-resizable-panels": "^4.4.1",
     "react-youtube": "^10.1.0",
     "recharts": "^3.6.0",
     "rehype-autolink-headings": "^7.1.0",

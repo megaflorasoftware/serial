@@ -54,7 +54,7 @@ function DeleteAccountConfirmationSection({
             return;
           }
 
-          deleteAccount();
+          deleteAccount(undefined);
         }}
       >
         <Input name={DELETE_FIELD_NAME} />
