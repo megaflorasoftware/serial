@@ -30,6 +30,7 @@ import {
   useFeedItemsSetWatchLaterValueMutation,
 } from "~/lib/data/feed-items/mutations";
 import { useFeeds } from "~/lib/data/feeds";
+import { useFeeds as useFeedsArray } from "~/lib/data/feeds/store";
 import {
   useInstapaperConnectionStatus,
   useSaveToInstapaperMutation,
@@ -134,7 +135,7 @@ function TodayItemsFeedEmptyState() {
 }
 
 function ItemDisplay({ contentId }: { contentId: string }) {
-  const { feeds } = useFeeds();
+  const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
 
   const { mutateAsync: setWatchedValue } =
