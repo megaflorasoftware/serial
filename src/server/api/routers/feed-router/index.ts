@@ -84,7 +84,8 @@ export const create = protectedProcedure
 
     const createdFeeds = results
       .filter(
-        (r): r is { feed: typeof feeds.$inferSelect } => "feed" in r && !!r.feed,
+        (r): r is { feed: typeof feeds.$inferSelect } =>
+          "feed" in r && !!r.feed,
       )
       .map((r) => r.feed);
 
@@ -365,13 +366,7 @@ export const discoverFeeds = protectedProcedure
     }
 
     if (feedscoutResult.status === "fulfilled") {
-      const feedscoutFeeds = feedscoutResult.value
-        .filter((f) => f.isValid)
-        .map((f) => ({
-          url: f.url,
-          title: f.isValid ? f.title : undefined,
-          format: f.isValid ? f.format : undefined,
-        }));
+      const feedscoutFeeds = feedscoutResult.value.filter((f) => f.isValid);
       feeds.push(...feedscoutFeeds);
     }
 
@@ -380,8 +375,12 @@ export const discoverFeeds = protectedProcedure
     return feeds.filter((feed) => {
       if (seen.has(feed.url)) return false;
       seen.add(feed.url);
+
       // Filter out YouTube feeds without channel_id
-      if (feed.url.includes("youtube.com") && !feed.url.includes("channel_id=")) {
+      if (
+        feed.url.includes("youtube.com") &&
+        !feed.url.includes("channel_id=")
+      ) {
         return false;
       }
       return true;
