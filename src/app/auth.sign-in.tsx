@@ -101,6 +101,7 @@ function SignIn() {
                   onSuccess: async () => {
                     router.navigate({
                       to: AUTH_SIGNED_IN_URL,
+                      reloadDocument: true,
                     });
                   },
                   onError: async (ctx) => {
