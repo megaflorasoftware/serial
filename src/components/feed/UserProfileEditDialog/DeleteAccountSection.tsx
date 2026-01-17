@@ -1,3 +1,4 @@
+import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { Button } from "~/components/ui/button";
@@ -32,6 +33,7 @@ function DeleteAccountConfirmationSection({
 }: {
   onCancel: () => void;
 }) {
+  const router = useRouter();
   const { mutate: deleteAccount } = useDeleteAccountMutation();
 
   return (
@@ -55,6 +57,11 @@ function DeleteAccountConfirmationSection({
           }
 
           deleteAccount(undefined);
+
+          router.navigate({
+            to: "/welcome",
+            reloadDocument: true,
+          });
         }}
       >
         <Input name={DELETE_FIELD_NAME} />
