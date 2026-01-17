@@ -208,17 +208,17 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         {instapaperStatus?.isConfigured &&
           instapaperStatus?.isConnected &&
           item.platform === "website" && (
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={isSavingToInstapaper}
-            onClick={() => {
-              void saveToInstapaper({ feedItemId: item.id });
-            }}
-          >
-            <SendIcon size={16} />
-          </Button>
-        )}
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={isSavingToInstapaper}
+              onClick={() => {
+                void saveToInstapaper({ feedItemId: item.id });
+              }}
+            >
+              <SendIcon size={16} />
+            </Button>
+          )}
         <Button
           size="icon"
           variant="ghost"
