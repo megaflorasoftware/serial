@@ -9,13 +9,13 @@ import {
   categoryFilterAtom,
   dateFilterAtom,
   feedFilterAtom,
-  feedsAtom,
   viewFilterAtom,
   type VisibilityFilter,
   visibilityFilterAtom,
 } from "../atoms";
 import { feedItemsStore } from "../store";
 import { useFeedCategories } from "../feed-categories/store";
+import { useFeeds } from "../feeds/store";
 import { INBOX_VIEW_ID } from "../views";
 
 export function doesFeedItemPassFilters(
@@ -102,7 +102,7 @@ export const useFilteredFeedItemsOrder = () => {
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
   const feedCategories = useFeedCategories();
   const feedFilter = useAtomValue(feedFilterAtom);
-  const feeds = useAtomValue(feedsAtom);
+  const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
 
   return feedItemsOrder.filter((id) => {
@@ -128,7 +128,7 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const feedCategories = useFeedCategories();
   const feedFilter = useAtomValue(feedFilterAtom);
-  const feeds = useAtomValue(feedsAtom);
+  const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
 
   return doesFeedItemPassFilters(

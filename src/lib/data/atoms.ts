@@ -1,16 +1,11 @@
 import { atom, useSetAtom } from "jotai";
 import { z } from "zod";
-import type {
-  ApplicationFeed,
-  ApplicationView,
-} from "~/server/db/schema";
+import type { ApplicationView } from "~/server/db/schema";
 import { feedItemsStore } from "./store";
 import { contentCategoriesStore } from "./content-categories/store";
 import { feedCategoriesStore } from "./feed-categories/store";
 import { viewsStore } from "./views/store";
-
-export const hasFetchedFeedsAtom = atom(false);
-export const feedsAtom = atom<ApplicationFeed[]>([]);
+import { feedsStore } from "./feeds/store";
 
 export const feedItemsOrderAtom = atom<string[]>([]);
 
@@ -38,7 +33,7 @@ export const viewFilterAtom = atom<ApplicationView | null>((get) => {
 });
 
 export const useClearAllUserData = () => {
-  const setFeedsAtom = useSetAtom(feedsAtom);
+  const resetFeeds = feedsStore.useReset();
   const resetFeedItems = feedItemsStore.useReset();
   const resetContentCategories = contentCategoriesStore.useReset();
   const resetFeedCategories = feedCategoriesStore.useReset();
@@ -46,7 +41,7 @@ export const useClearAllUserData = () => {
   const setViewsAtom = useSetAtom(viewsAtom);
 
   return () => {
-    setFeedsAtom([]);
+    resetFeeds();
     resetFeedItems();
     resetContentCategories();
     resetFeedCategories();

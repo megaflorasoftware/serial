@@ -1,5 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useFeeds } from ".";
+import { useMutation } from "@tanstack/react-query";
 import { orpc } from "~/lib/orpc";
 import {
   feedItemsStore,
@@ -8,18 +7,25 @@ import {
   useFetchFeedItems,
 } from "../store";
 import { useFetchFeedCategories } from "../feed-categories/store";
+import {
+  useFeeds as useFeedsFromStore,
+  useSetFeeds,
+  useFetchFeeds,
+  feedsStore,
+} from "./store";
 
 export function useCreateFeedMutation() {
-  const queryClient = useQueryClient();
   const refetchFeedItems = useFetchFeedItems();
   const fetchFeedCategories = useFetchFeedCategories();
+  const setFeeds = useSetFeeds();
+  const fetchFeeds = useFetchFeeds();
 
   return useMutation(
     orpc.feed.create.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: orpc.feed.getAll.queryKey(),
-        });
+        // Reset and refetch feeds
+        setFeeds([]);
+        await fetchFeeds();
         refetchFeedItems();
         await fetchFeedCategories();
       },
@@ -28,16 +34,17 @@ export function useCreateFeedMutation() {
 }
 
 export function useCreateFeedsFromSubscriptionImportMutation() {
-  const queryClient = useQueryClient();
   const refetchFeedItems = useFetchFeedItems();
   const fetchFeedCategories = useFetchFeedCategories();
+  const setFeeds = useSetFeeds();
+  const fetchFeeds = useFetchFeeds();
 
   return useMutation(
     orpc.feed.createFromSubscriptionImport.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: orpc.feed.getAll.queryKey(),
-        });
+        // Reset and refetch feeds
+        setFeeds([]);
+        await fetchFeeds();
         refetchFeedItems();
         await fetchFeedCategories();
       },
@@ -46,9 +53,9 @@ export function useCreateFeedsFromSubscriptionImportMutation() {
 }
 
 export function useDeleteFeedMutation() {
-  const queryClient = useQueryClient();
-
-  const { feeds, setFeeds } = useFeeds();
+  const feeds = useFeedsFromStore();
+  const setFeeds = useSetFeeds();
+  const fetchFeeds = useFetchFeeds();
 
   const feedItemsOrder = useFeedItemsOrder();
   const feedItemsDict = useFeedItemsDict();
@@ -87,9 +94,9 @@ export function useDeleteFeedMutation() {
         setFeedItemsOrder(updatedFeedItemsOrder);
         setFeedItemsDict(updatedfeedItemsDict);
 
-        await queryClient.invalidateQueries({
-          queryKey: orpc.feed.getAll.queryKey(),
-        });
+        // Reset and refetch feeds
+        setFeeds([]);
+        await fetchFeeds();
         refetchFeedItems();
       },
     }),
@@ -97,15 +104,16 @@ export function useDeleteFeedMutation() {
 }
 
 export function useEditFeedMutation() {
-  const queryClient = useQueryClient();
   const fetchFeedCategories = useFetchFeedCategories();
+  const setFeeds = useSetFeeds();
+  const fetchFeeds = useFetchFeeds();
 
   return useMutation(
     orpc.feed.update.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: orpc.feed.getAll.queryKey(),
-        });
+        // Reset and refetch feeds
+        setFeeds([]);
+        await fetchFeeds();
         await fetchFeedCategories();
       },
     }),
