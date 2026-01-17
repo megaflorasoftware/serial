@@ -16,6 +16,7 @@ const PEERTUBE_URL_SEGMENTS = [
 const NEBULA_URL_SEGMENTS = [
   "https://nebula.tv",
   "https://www.nebula.tv",
+  "https://rss.nebula.app",
 ];
 
 export const FEED_PLATFORM_LABEL_MAP = {
