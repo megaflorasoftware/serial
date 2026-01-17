@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useTRPC } from "~/trpc/react";
 import { useFeeds } from ".";
 import { orpc } from "~/lib/orpc";
 import {
@@ -8,11 +7,12 @@ import {
   useFeedItemsOrder,
   useFetchFeedItems,
 } from "../store";
+import { useFetchFeedCategories } from "../feed-categories/store";
 
 export function useCreateFeedMutation() {
-  const api = useTRPC();
   const queryClient = useQueryClient();
   const refetchFeedItems = useFetchFeedItems();
+  const fetchFeedCategories = useFetchFeedCategories();
 
   return useMutation(
     orpc.feed.create.mutationOptions({
@@ -21,18 +21,16 @@ export function useCreateFeedMutation() {
           queryKey: orpc.feed.getAll.queryKey(),
         });
         refetchFeedItems();
-        await queryClient.invalidateQueries({
-          queryKey: api.feedCategories.getAll.queryKey(),
-        });
+        await fetchFeedCategories();
       },
     }),
   );
 }
 
 export function useCreateFeedsFromSubscriptionImportMutation() {
-  const api = useTRPC();
   const queryClient = useQueryClient();
   const refetchFeedItems = useFetchFeedItems();
+  const fetchFeedCategories = useFetchFeedCategories();
 
   return useMutation(
     orpc.feed.createFromSubscriptionImport.mutationOptions({
@@ -41,9 +39,7 @@ export function useCreateFeedsFromSubscriptionImportMutation() {
           queryKey: orpc.feed.getAll.queryKey(),
         });
         refetchFeedItems();
-        await queryClient.invalidateQueries({
-          queryKey: api.feedCategories.getAll.queryKey(),
-        });
+        await fetchFeedCategories();
       },
     }),
   );
@@ -101,8 +97,8 @@ export function useDeleteFeedMutation() {
 }
 
 export function useEditFeedMutation() {
-  const api = useTRPC();
   const queryClient = useQueryClient();
+  const fetchFeedCategories = useFetchFeedCategories();
 
   return useMutation(
     orpc.feed.update.mutationOptions({
@@ -110,9 +106,7 @@ export function useEditFeedMutation() {
         await queryClient.invalidateQueries({
           queryKey: orpc.feed.getAll.queryKey(),
         });
-        await queryClient.invalidateQueries({
-          queryKey: api.feedCategories.getAll.queryKey(),
-        });
+        await fetchFeedCategories();
       },
     }),
   );

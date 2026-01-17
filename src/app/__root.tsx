@@ -1,6 +1,6 @@
 import { ThemeProvider } from "~/components/ThemeProvider";
 import { Toaster } from "~/components/ui/sonner";
-import { TRPCReactProvider } from "~/trpc/react";
+import { QueryProvider } from "~/lib/query-provider";
 
 import {
   createRootRoute,
@@ -152,7 +152,7 @@ export function RootLayout() {
         className="min-h-screen font-sans antialiased"
       >
         <ApplyColorThemeOnServerMount data={data.variables} />
-        <TRPCReactProvider>
+        <QueryProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -164,7 +164,7 @@ export function RootLayout() {
             <Scripts />
             <Toaster />
           </ThemeProvider>
-        </TRPCReactProvider>
+        </QueryProvider>
       </body>
     </html>
   );

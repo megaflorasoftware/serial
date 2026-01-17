@@ -1,4 +1,4 @@
-import { atom, useAtomValue } from "jotai";
+import { useAtomValue } from "jotai";
 import type {
   ApplicationFeedItem,
   ApplicationView,
@@ -8,7 +8,6 @@ import type {
 import {
   categoryFilterAtom,
   dateFilterAtom,
-  feedCategoriesAtom,
   feedFilterAtom,
   feedsAtom,
   viewFilterAtom,
@@ -16,6 +15,7 @@ import {
   visibilityFilterAtom,
 } from "../atoms";
 import { feedItemsStore } from "../store";
+import { useFeedCategories } from "../feed-categories/store";
 import { INBOX_VIEW_ID } from "../views";
 
 export function doesFeedItemPassFilters(
@@ -100,7 +100,7 @@ export const useFilteredFeedItemsOrder = () => {
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const feedItemsOrder = feedItemsStore.useFeedItemsOrder();
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
-  const feedCategories = useAtomValue(feedCategoriesAtom);
+  const feedCategories = useFeedCategories();
   const feedFilter = useAtomValue(feedFilterAtom);
   const feeds = useAtomValue(feedsAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
@@ -126,7 +126,7 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const dateFilter = useAtomValue(dateFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
-  const feedCategories = useAtomValue(feedCategoriesAtom);
+  const feedCategories = useFeedCategories();
   const feedFilter = useAtomValue(feedFilterAtom);
   const feeds = useAtomValue(feedsAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
