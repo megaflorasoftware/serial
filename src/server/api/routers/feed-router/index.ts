@@ -82,9 +82,11 @@ export const create = protectedProcedure
       throw new Error(errors[0]?.error ?? "Failed to create feed");
     }
 
-    const createdFeeds = results.filter(
-      (r): r is { feed: typeof feeds.$inferSelect } => "feed" in r && !!r.feed,
-    );
+    const createdFeeds = results
+      .filter(
+        (r): r is { feed: typeof feeds.$inferSelect } => "feed" in r && !!r.feed,
+      )
+      .map((r) => r.feed);
 
     return parseArrayOfSchema(createdFeeds, feedsSchema);
   });
