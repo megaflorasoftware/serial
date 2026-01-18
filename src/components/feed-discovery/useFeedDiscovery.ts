@@ -38,7 +38,9 @@ export function useFeedDiscovery() {
     setSelectedFeed(null);
 
     try {
-      const feeds = await orpcRouterClient.feed.discoverFeeds({ url: normalizedUrl });
+      const feeds = await orpcRouterClient.feed.discoverFeeds({
+        url: normalizedUrl,
+      });
 
       if (feeds.length === 0) {
         setDiscoveryState("input");

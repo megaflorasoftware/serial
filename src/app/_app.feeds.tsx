@@ -32,11 +32,23 @@ function useFeedManagementShortcuts({
   isDialogOpen: boolean;
   hasSelection: boolean;
 }) {
-  const actionsRef = useRef({ onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete });
+  const actionsRef = useRef({
+    onEscape,
+    onSelectAll,
+    onEditCategories,
+    onClearCategories,
+    onDelete,
+  });
   const stateRef = useRef({ isDialogOpen, hasSelection });
 
   useEffect(() => {
-    actionsRef.current = { onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete };
+    actionsRef.current = {
+      onEscape,
+      onSelectAll,
+      onEditCategories,
+      onClearCategories,
+      onDelete,
+    };
   }, [onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete]);
 
   useEffect(() => {
@@ -53,7 +65,13 @@ function useFeedManagementShortcuts({
       const isInDialog = target.closest('[role="dialog"]') !== null;
 
       const { isDialogOpen, hasSelection } = stateRef.current;
-      const { onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete } = actionsRef.current;
+      const {
+        onEscape,
+        onSelectAll,
+        onEditCategories,
+        onClearCategories,
+        onDelete,
+      } = actionsRef.current;
 
       switch (event.key) {
         case "Escape":
@@ -358,7 +376,6 @@ function ManageFeedsPage() {
     });
   };
 
-  
   if (!feeds?.length) {
     return (
       <div className="mx-auto max-w-2xl p-6">

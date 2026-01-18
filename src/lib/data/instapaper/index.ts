@@ -22,6 +22,6 @@ export function useSaveToInstapaperMutation(contentId: string) {
       onError: (error) => {
         toast.error(error.message || "Failed to save to Instapaper");
       },
-    })
+    }),
   );
 }

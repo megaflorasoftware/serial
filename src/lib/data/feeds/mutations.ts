@@ -26,7 +26,9 @@ export function useCreateFeedMutation() {
     orpc.feed.create.mutationOptions({
       onSuccess: async (createdFeeds) => {
         createdFeeds.forEach((feed) => addFeed(feed));
-        await Promise.all(createdFeeds.map((feed) => fetchFeedItemsForFeed(feed.id)));
+        await Promise.all(
+          createdFeeds.map((feed) => fetchFeedItemsForFeed(feed.id)),
+        );
         await fetchFeedCategories();
       },
     }),
@@ -127,18 +129,19 @@ export function useBulkDeleteFeedsMutation() {
       onSuccess: (_, { feedIds }) => {
         // Remove feed items belonging to deleted feeds
         const feedIdSet = new Set(feedIds);
-        const [updatedFeedItemsOrder, removedFeedItemIds] = feedItemsOrder.reduce(
-          ([keptItems, removedItems], feedItemContentId) => {
-            const feedItem = feedItemsDict[feedItemContentId];
-            if (feedItem && feedIdSet.has(feedItem.feedId)) {
-              removedItems.push(feedItemContentId);
-            } else {
-              keptItems.push(feedItemContentId);
-            }
-            return [keptItems, removedItems];
-          },
-          [[], []] as [string[], string[]],
-        );
+        const [updatedFeedItemsOrder, removedFeedItemIds] =
+          feedItemsOrder.reduce(
+            ([keptItems, removedItems], feedItemContentId) => {
+              const feedItem = feedItemsDict[feedItemContentId];
+              if (feedItem && feedIdSet.has(feedItem.feedId)) {
+                removedItems.push(feedItemContentId);
+              } else {
+                keptItems.push(feedItemContentId);
+              }
+              return [keptItems, removedItems];
+            },
+            [[], []] as [string[], string[]],
+          );
 
         const updatedFeedItemsDict = removedFeedItemIds.reduce(
           (partialMap, feedItemContentId) => {

@@ -352,7 +352,10 @@ export const bulkDelete = protectedProcedure
     await context.db
       .delete(feeds)
       .where(
-        and(inArray(feeds.id, input.feedIds), eq(feeds.userId, context.user.id)),
+        and(
+          inArray(feeds.id, input.feedIds),
+          eq(feeds.userId, context.user.id),
+        ),
       );
   });
 

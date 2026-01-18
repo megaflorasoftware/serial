@@ -56,9 +56,7 @@ export const update = protectedProcedure
           orientation: input.orientation,
           placement: input.placement,
         })
-        .where(
-          and(eq(views.userId, context.user.id), eq(views.id, input.id)),
-        )
+        .where(and(eq(views.userId, context.user.id), eq(views.id, input.id)))
         .returning();
 
       const view = viewsResult?.[0];
@@ -126,9 +124,7 @@ export const deleteView = protectedProcedure
 
       return await tx
         .delete(views)
-        .where(
-          and(eq(views.id, input.id), eq(views.userId, context.user.id)),
-        );
+        .where(and(eq(views.id, input.id), eq(views.userId, context.user.id)));
     });
   });
 

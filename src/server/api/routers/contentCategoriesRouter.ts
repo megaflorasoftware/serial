@@ -29,9 +29,10 @@ export const create = protectedProcedure
   )
   .handler(async ({ context, input }) => {
     await context.db.transaction(async (tx) => {
-      const feedIdsToCategorize = input.feedCategorizations
-        ?.filter((categorization) => categorization.selected)
-        .map((categorization) => categorization.feedId) ?? [];
+      const feedIdsToCategorize =
+        input.feedCategorizations
+          ?.filter((categorization) => categorization.selected)
+          .map((categorization) => categorization.feedId) ?? [];
 
       if (feedIdsToCategorize.length > 0) {
         const isOwned = await verifyFeedsOwnedByUser({
@@ -41,7 +42,9 @@ export const create = protectedProcedure
         });
 
         if (!isOwned) {
-          throw new Error("Unauthorized: One or more feeds do not belong to user");
+          throw new Error(
+            "Unauthorized: One or more feeds do not belong to user",
+          );
         }
       }
 
@@ -97,7 +100,9 @@ export const update = protectedProcedure
         });
 
         if (!isOwned) {
-          throw new Error("Unauthorized: One or more feeds do not belong to user");
+          throw new Error(
+            "Unauthorized: One or more feeds do not belong to user",
+          );
         }
       }
 

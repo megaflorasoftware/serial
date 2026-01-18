@@ -44,10 +44,7 @@ export async function verifyFeedsOwnedByUser({
     .select({ id: schema.feeds.id })
     .from(schema.feeds)
     .where(
-      and(
-        inArray(schema.feeds.id, feedIds),
-        eq(schema.feeds.userId, userId),
-      ),
+      and(inArray(schema.feeds.id, feedIds), eq(schema.feeds.userId, userId)),
     );
 
   return userFeeds.length === feedIds.length;

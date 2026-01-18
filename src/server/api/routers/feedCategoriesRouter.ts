@@ -83,7 +83,9 @@ export const bulkAssignToFeeds = protectedProcedure
       });
 
       if (!isOwned) {
-        throw new Error("Unauthorized: One or more feeds do not belong to user");
+        throw new Error(
+          "Unauthorized: One or more feeds do not belong to user",
+        );
       }
 
       await Promise.all(
@@ -113,7 +115,9 @@ export const bulkRemoveFromFeeds = protectedProcedure
       });
 
       if (!isOwned) {
-        throw new Error("Unauthorized: One or more feeds do not belong to user");
+        throw new Error(
+          "Unauthorized: One or more feeds do not belong to user",
+        );
       }
 
       await tx
