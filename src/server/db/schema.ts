@@ -23,6 +23,7 @@ import {
   viewReadStatusSchema,
 } from "./constants";
 
+
 /**
  * This is an example of how to use the multi-project schema feature of Drizzle ORM. Use the same
  * database instance for multiple projects.
@@ -274,15 +275,17 @@ export const viewCategories = sqliteTable(
 );
 export type DatabaseViewCategory = typeof viewCategories.$inferSelect;
 
-export const createViewSchema = createInsertSchema(views).merge(
-  z.object({
-    readStatus: viewReadStatusSchema.optional(),
-    orientation: feedItemOrientationSchema.optional(),
-    daysWindow: z.number().lte(30).optional(),
-    placement: z.number().gte(-1).optional(),
-    categoryIds: z.array(z.number()).optional(),
-  }),
-);
+export const createViewSchema = createInsertSchema(views)
+  .omit({ userId: true })
+  .merge(
+    z.object({
+      readStatus: viewReadStatusSchema.optional(),
+      orientation: feedItemOrientationSchema.optional(),
+      daysWindow: z.number().lte(30).optional(),
+      placement: z.number().gte(-1).optional(),
+      categoryIds: z.array(z.number()).optional(),
+    }),
+  );
 
 export const updateViewSchema = createUpdateSchema(views).merge(
   z.object({
