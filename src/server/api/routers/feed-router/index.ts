@@ -241,15 +241,9 @@ export const createFromSubscriptionImport = protectedProcedure
 const deleteFeed = protectedProcedure
   .input(z.number())
   .handler(async ({ context, input }) => {
-    await context.db.transaction(async (tx) => {
-      await tx.delete(feedItems).where(eq(feedItems.feedId, input));
-
-      await tx.delete(feedCategories).where(eq(feedCategories.feedId, input));
-
-      await tx
-        .delete(feeds)
-        .where(and(eq(feeds.id, input), eq(feeds.userId, context.user.id)));
-    });
+    await context.db
+      .delete(feeds)
+      .where(and(eq(feeds.id, input), eq(feeds.userId, context.user.id)));
   });
 export { deleteFeed as delete };
 
@@ -355,27 +349,11 @@ async function discoverYouTubeFeeds(url: string) {
 export const bulkDelete = protectedProcedure
   .input(z.object({ feedIds: z.number().array() }))
   .handler(async ({ context, input }) => {
-    await context.db.transaction(async (tx) => {
-      // Delete all feed items for these feeds
-      await tx
-        .delete(feedItems)
-        .where(inArray(feedItems.feedId, input.feedIds));
-
-      // Delete all feed categories for these feeds
-      await tx
-        .delete(feedCategories)
-        .where(inArray(feedCategories.feedId, input.feedIds));
-
-      // Delete the feeds themselves (only if they belong to the user)
-      await tx
-        .delete(feeds)
-        .where(
-          and(
-            inArray(feeds.id, input.feedIds),
-            eq(feeds.userId, context.user.id),
-          ),
-        );
-    });
+    await context.db
+      .delete(feeds)
+      .where(
+        and(inArray(feeds.id, input.feedIds), eq(feeds.userId, context.user.id)),
+      );
   });
 
 export const discoverFeeds = protectedProcedure
