@@ -21,3 +21,5 @@
     - If you want to use a local libsql database, no changes are needed
     - If you want to use a cloud libsql database provider (like [Turso](https://turso.tech/)), set up a database with them and add your `DATABASE_AUTH_TOKEN` and `DATABASE_URL` to your environment variables.
 10. Click deploy and wait for your app to be ready! You'll be able to access it once Coolify says it's "Healthy" at the domain you set up earlier.
+
+If you'd like to support additional features, [see this section](https://github.com/hfellerhoff/serial#enabling-additional-features)!
