@@ -8,7 +8,6 @@ import {
   YoutubeIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Badge } from "~/components/ui/badge";
@@ -252,16 +251,9 @@ function ManageFeedsPage() {
 
   const handleDelete = async () => {
     const feedIds = Array.from(selectedFeedIds);
-    const deletePromise = bulkDeleteFeeds({ feedIds });
-    toast.promise(deletePromise, {
-      loading: `Deleting ${feedIds.length} feed${feedIds.length > 1 ? "s" : ""}...`,
-      success: () => {
-        setSelectedFeedIds(new Set());
-        setShowDeleteDialog(false);
-        return `Deleted ${feedIds.length} feed${feedIds.length > 1 ? "s" : ""}!`;
-      },
-      error: () => "Failed to delete feeds",
-    });
+    await bulkDeleteFeeds({ feedIds });
+    setSelectedFeedIds(new Set());
+    setShowDeleteDialog(false);
   };
 
   const getSharedCategories = () => {
@@ -322,16 +314,9 @@ function ManageFeedsPage() {
       return;
     }
 
-    const editPromise = Promise.all(promises);
-    toast.promise(editPromise, {
-      loading: "Updating categories...",
-      success: () => {
-        setSelectedCategoryIds([]);
-        setShowEditCategoriesDialog(false);
-        return "Categories updated!";
-      },
-      error: () => "Failed to update categories",
-    });
+    await Promise.all(promises);
+    setSelectedCategoryIds([]);
+    setShowEditCategoriesDialog(false);
   };
 
   if (!feeds?.length) {
@@ -372,10 +357,11 @@ function ManageFeedsPage() {
             <ButtonWithShortcut
               variant="outline"
               size="sm"
-              onClick={toggleSelectAll}
+              onClick={selectAll}
+              disabled={allSelected}
               shortcut="s"
             >
-              {allSelected ? "Deselect All" : "Select All"}
+              Select All
             </ButtonWithShortcut>
             <ButtonWithShortcut
               variant="outline"
