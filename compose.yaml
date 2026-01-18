@@ -40,10 +40,3 @@ services:
         required: false
     ports:
       - 3000:3000
-    healthcheck:
-      test:
-        ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
