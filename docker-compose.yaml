@@ -1,10 +1,13 @@
+volumes:
+  libsql-data:
+
 services:
   # Local libsql database - exits immediately if DATABASE_URL is set
   libsql:
     image: ghcr.io/tursodatabase/libsql-server:latest
     platform: linux/amd64
     volumes:
-      - ./data/libsql:/var/lib/sqld
+      - libsql-data:/var/lib/sqld
     environment:
       DATABASE_URL: ${DATABASE_URL:-}
     entrypoint:
