@@ -46,12 +46,16 @@ function useFeedManagementShortcuts({
       if (event.repeat) return;
       if (doesAnyFormElementHaveFocus()) return;
 
+      // Check if event originated from within a dialog
+      const target = event.target as HTMLElement;
+      const isInDialog = target.closest('[role="dialog"]') !== null;
+
       const { isDialogOpen, hasSelection } = stateRef.current;
       const { onEscape, onSelectAll, onEditCategories, onDelete } = actionsRef.current;
 
       switch (event.key) {
         case "Escape":
-          if (!isDialogOpen) {
+          if (!isDialogOpen && !isInDialog) {
             onEscape();
           }
           break;
