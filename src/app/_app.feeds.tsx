@@ -5,8 +5,6 @@ import {
   GlobeIcon,
   PlayCircleIcon,
   Trash2Icon,
-  PlusIcon,
-  MinusIcon,
   YoutubeIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -95,9 +93,7 @@ function ManageFeedsPage() {
     observer.observe(headerRef.current);
     return () => observer.disconnect();
   }, []);
-  const [showAddCategoryDialog, setShowAddCategoryDialog] = useState(false);
-  const [showRemoveCategoryDialog, setShowRemoveCategoryDialog] =
-    useState(false);
+  const [showEditCategoriesDialog, setShowEditCategoriesDialog] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
   const { mutateAsync: bulkDeleteFeeds, isPending: isDeletingFeeds } =
@@ -173,39 +169,58 @@ function ManageFeedsPage() {
     });
   };
 
-  const handleAddCategory = async () => {
-    if (selectedCategoryIds.length === 0) return;
+  const getSharedCategories = () => {
     const feedIds = Array.from(selectedFeedIds);
-    const categoryId = selectedCategoryIds[0];
-    if (!categoryId) return;
+    if (feedIds.length === 0) return [];
 
-    const assignPromise = bulkAssignCategory({ feedIds, categoryId });
-    toast.promise(assignPromise, {
-      loading: "Adding category...",
-      success: () => {
-        setSelectedCategoryIds([]);
-        setShowAddCategoryDialog(false);
-        return "Category added to selected feeds!";
-      },
-      error: () => "Failed to add category",
-    });
+    const firstFeedCategories = feedCategoriesMap.get(feedIds[0]!) ?? [];
+    return firstFeedCategories.filter((categoryId) =>
+      feedIds.every((feedId) =>
+        feedCategoriesMap.get(feedId)?.includes(categoryId),
+      ),
+    );
   };
 
-  const handleRemoveCategory = async () => {
-    if (selectedCategoryIds.length === 0) return;
-    const feedIds = Array.from(selectedFeedIds);
-    const categoryId = selectedCategoryIds[0];
-    if (!categoryId) return;
+  const openEditCategoriesDialog = () => {
+    setSelectedCategoryIds(getSharedCategories());
+    setShowEditCategoriesDialog(true);
+  };
 
-    const removePromise = bulkRemoveCategory({ feedIds, categoryId });
-    toast.promise(removePromise, {
-      loading: "Removing category...",
+  const handleEditCategories = async () => {
+    const feedIds = Array.from(selectedFeedIds);
+    const currentShared = getSharedCategories();
+
+    const categoriesToAdd = selectedCategoryIds.filter(
+      (id) => !currentShared.includes(id),
+    );
+    const categoriesToRemove = currentShared.filter(
+      (id) => !selectedCategoryIds.includes(id),
+    );
+
+    const promises: Promise<void>[] = [];
+
+    categoriesToAdd.forEach((categoryId) => {
+      promises.push(bulkAssignCategory({ feedIds, categoryId }));
+    });
+
+    categoriesToRemove.forEach((categoryId) => {
+      promises.push(bulkRemoveCategory({ feedIds, categoryId }));
+    });
+
+    if (promises.length === 0) {
+      setShowEditCategoriesDialog(false);
+      return;
+    }
+
+    const editPromise = Promise.all(promises);
+    toast.promise(editPromise, {
+      loading: "Updating categories...",
       success: () => {
         setSelectedCategoryIds([]);
-        setShowRemoveCategoryDialog(false);
-        return "Category removed from selected feeds!";
+        setShowEditCategoriesDialog(false);
+        return "Categories updated!";
       },
-      error: () => "Failed to remove category",
+      error: () => "Failed to update categories",
     });
   };
 
@@ -304,30 +319,13 @@ function ManageFeedsPage() {
       {selectedCount > 0 && (
         <div className="bg-background fixed inset-x-0 bottom-0 border-t border-solid">
           <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedCategoryIds([]);
-                  setShowAddCategoryDialog(true);
-                }}
-                disabled={isAssigningCategory}
-              >
-                <PlusIcon size={16} className="mr-2" />
-                Add Category
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedCategoryIds([]);
-                  setShowRemoveCategoryDialog(true);
-                }}
-                disabled={isRemovingCategory}
-              >
-                <MinusIcon size={16} className="mr-2" />
-                Remove Category
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              onClick={openEditCategoriesDialog}
+              disabled={isAssigningCategory || isRemovingCategory}
+            >
+              Edit Categories
+            </Button>
             <Button
               variant="destructive"
               onClick={() => setShowDeleteDialog(true)}
@@ -366,65 +364,30 @@ function ManageFeedsPage() {
       </ControlledResponsiveDialog>
 
       <ControlledResponsiveDialog
-        open={showAddCategoryDialog}
-        onOpenChange={setShowAddCategoryDialog}
-        title="Add Category"
-        description={`Select a category to add to ${selectedCount} feed${selectedCount > 1 ? "s" : ""}.`}
+        open={showEditCategoriesDialog}
+        onOpenChange={setShowEditCategoriesDialog}
+        title="Edit Categories"
+        description={`Select categories for ${selectedCount} feed${selectedCount > 1 ? "s" : ""}.`}
       >
         <div className="grid gap-4">
           <ViewCategoriesInput
             selectedCategories={selectedCategoryIds}
-            setSelectedCategories={(ids) =>
-              setSelectedCategoryIds(ids.slice(-1))
-            }
+            setSelectedCategories={setSelectedCategoryIds}
           />
           <div className="flex gap-2">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => setShowAddCategoryDialog(false)}
+              onClick={() => setShowEditCategoriesDialog(false)}
             >
               Cancel
             </Button>
             <Button
               className="flex-1"
-              onClick={handleAddCategory}
-              disabled={isAssigningCategory || selectedCategoryIds.length === 0}
+              onClick={handleEditCategories}
+              disabled={isAssigningCategory || isRemovingCategory}
             >
-              {isAssigningCategory ? "Adding..." : "Add Category"}
-            </Button>
-          </div>
-        </div>
-      </ControlledResponsiveDialog>
-
-      <ControlledResponsiveDialog
-        open={showRemoveCategoryDialog}
-        onOpenChange={setShowRemoveCategoryDialog}
-        title="Remove Category"
-        description={`Select a category to remove from ${selectedCount} feed${selectedCount > 1 ? "s" : ""}.`}
-      >
-        <div className="grid gap-4">
-          <ViewCategoriesInput
-            selectedCategories={selectedCategoryIds}
-            setSelectedCategories={(ids) =>
-              setSelectedCategoryIds(ids.slice(-1))
-            }
-          />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setShowRemoveCategoryDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              className="flex-1"
-              onClick={handleRemoveCategory}
-              disabled={isRemovingCategory || selectedCategoryIds.length === 0}
-            >
-              {isRemovingCategory ? "Removing..." : "Remove Category"}
+              {isAssigningCategory || isRemovingCategory ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>
