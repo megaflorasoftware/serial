@@ -44,3 +44,32 @@ export const removeFromFeed = protectedProcedure
         ),
       );
   });
+
+export const bulkAssignToFeeds = protectedProcedure
+  .input(z.object({ feedIds: z.number().array(), categoryId: z.number() }))
+  .handler(async ({ context, input }) => {
+    await Promise.all(
+      input.feedIds.map(async (feedId) => {
+        await context.db
+          .insert(feedCategories)
+          .values({
+            feedId,
+            categoryId: input.categoryId,
+          })
+          .onConflictDoNothing();
+      }),
+    );
+  });
+
+export const bulkRemoveFromFeeds = protectedProcedure
+  .input(z.object({ feedIds: z.number().array(), categoryId: z.number() }))
+  .handler(async ({ context, input }) => {
+    await context.db
+      .delete(feedCategories)
+      .where(
+        and(
+          inArray(feedCategories.feedId, input.feedIds),
+          eq(feedCategories.categoryId, input.categoryId),
+        ),
+      );
+  });

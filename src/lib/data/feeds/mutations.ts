@@ -108,3 +108,50 @@ export function useEditFeedMutation() {
     }),
   );
 }
+
+export function useBulkDeleteFeedsMutation() {
+  const feedItemsOrder = useFeedItemsOrder();
+  const feedItemsDict = useFeedItemsDict();
+
+  const setFeedItemsOrder = feedItemsStore.useSetFeedItemsOrder();
+  const setFeedItemsDict = feedItemsStore.useSetFeedItemsDict();
+
+  const fetchFeeds = useFetchFeeds();
+  const fetchFeedCategories = useFetchFeedCategories();
+
+  return useMutation(
+    orpc.feed.bulkDelete.mutationOptions({
+      onSuccess: (_, { feedIds }) => {
+        // Remove feed items belonging to deleted feeds
+        const feedIdSet = new Set(feedIds);
+        const [updatedFeedItemsOrder, removedFeedItemIds] = feedItemsOrder.reduce(
+          ([keptItems, removedItems], feedItemContentId) => {
+            const feedItem = feedItemsDict[feedItemContentId];
+            if (feedItem && feedIdSet.has(feedItem.feedId)) {
+              removedItems.push(feedItemContentId);
+            } else {
+              keptItems.push(feedItemContentId);
+            }
+            return [keptItems, removedItems];
+          },
+          [[], []] as [string[], string[]],
+        );
+
+        const updatedFeedItemsDict = removedFeedItemIds.reduce(
+          (partialMap, feedItemContentId) => {
+            delete partialMap[feedItemContentId];
+            return partialMap;
+          },
+          { ...feedItemsDict },
+        );
+
+        setFeedItemsOrder(updatedFeedItemsOrder);
+        setFeedItemsDict(updatedFeedItemsDict);
+
+        // Refetch feeds to update the list
+        fetchFeeds();
+        fetchFeedCategories();
+      },
+    }),
+  );
+}
