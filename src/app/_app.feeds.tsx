@@ -18,6 +18,7 @@ function useFeedManagementShortcuts({
   onEscape,
   onSelectAll,
   onEditCategories,
+  onClearCategories,
   onDelete,
   isDialogOpen,
   hasSelection,
@@ -25,16 +26,17 @@ function useFeedManagementShortcuts({
   onEscape: () => void;
   onSelectAll: () => void;
   onEditCategories: () => void;
+  onClearCategories: () => void;
   onDelete: () => void;
   isDialogOpen: boolean;
   hasSelection: boolean;
 }) {
-  const actionsRef = useRef({ onEscape, onSelectAll, onEditCategories, onDelete });
+  const actionsRef = useRef({ onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete });
   const stateRef = useRef({ isDialogOpen, hasSelection });
 
   useEffect(() => {
-    actionsRef.current = { onEscape, onSelectAll, onEditCategories, onDelete };
-  }, [onEscape, onSelectAll, onEditCategories, onDelete]);
+    actionsRef.current = { onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete };
+  }, [onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete]);
 
   useEffect(() => {
     stateRef.current = { isDialogOpen, hasSelection };
@@ -50,7 +52,7 @@ function useFeedManagementShortcuts({
       const isInDialog = target.closest('[role="dialog"]') !== null;
 
       const { isDialogOpen, hasSelection } = stateRef.current;
-      const { onEscape, onSelectAll, onEditCategories, onDelete } = actionsRef.current;
+      const { onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete } = actionsRef.current;
 
       switch (event.key) {
         case "Escape":
@@ -63,9 +65,14 @@ function useFeedManagementShortcuts({
             onSelectAll();
           }
           break;
-        case "c":
+        case "e":
           if (!isDialogOpen && hasSelection) {
             onEditCategories();
+          }
+          break;
+        case "c":
+          if (!isDialogOpen && hasSelection) {
+            onClearCategories();
           }
           break;
         case "d":
@@ -273,16 +280,7 @@ function ManageFeedsPage() {
     setShowEditCategoriesDialog(true);
   };
 
-  useFeedManagementShortcuts({
-    onEscape: deselectAll,
-    onSelectAll: toggleSelectAll,
-    onEditCategories: openEditCategoriesDialog,
-    onDelete: () => setShowDeleteDialog(true),
-    isDialogOpen: showDeleteDialog || showEditCategoriesDialog,
-    hasSelection: selectedCount > 0,
-  });
-
-  const handleEditCategories = async () => {
+  const handleClearCategories = async () => {
     const feedIds = Array.from(selectedFeedIds);
 
     // Get all categories that any selected feed currently has
@@ -292,10 +290,34 @@ function ManageFeedsPage() {
       categories.forEach((c) => allCurrentCategories.add(c));
     });
 
+    const promises = Array.from(allCurrentCategories).map((categoryId) =>
+      bulkRemoveCategory({ feedIds, categoryId }),
+    );
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
+  };
+
+  useFeedManagementShortcuts({
+    onEscape: deselectAll,
+    onSelectAll: toggleSelectAll,
+    onEditCategories: openEditCategoriesDialog,
+    onClearCategories: handleClearCategories,
+    onDelete: () => setShowDeleteDialog(true),
+    isDialogOpen: showDeleteDialog || showEditCategoriesDialog,
+    hasSelection: selectedCount > 0,
+  });
+
+  const handleEditCategories = async () => {
+    const feedIds = Array.from(selectedFeedIds);
+    const sharedCategories = getSharedCategories();
+
     // Categories to add: selected in dialog
-    // Categories to remove: any category that a feed has but is not selected
     const categoriesToAdd = selectedCategoryIds;
-    const categoriesToRemove = Array.from(allCurrentCategories).filter(
+
+    // Categories to remove: only those that ALL feeds have (shared) and are unchecked
+    const categoriesToRemove = sharedCategories.filter(
       (id) => !selectedCategoryIds.includes(id),
     );
 
@@ -319,6 +341,7 @@ function ManageFeedsPage() {
     setShowEditCategoriesDialog(false);
   };
 
+  
   if (!feeds?.length) {
     return (
       <div className="mx-auto max-w-2xl p-6">
@@ -431,14 +454,24 @@ function ManageFeedsPage() {
           }`}
         >
           <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
-            <ButtonWithShortcut
-              variant="outline"
-              onClick={openEditCategoriesDialog}
-              disabled={isAssigningCategory || isRemovingCategory}
-              shortcut="c"
-            >
-              Edit Categories
-            </ButtonWithShortcut>
+            <div className="flex gap-2">
+              <ButtonWithShortcut
+                variant="outline"
+                onClick={openEditCategoriesDialog}
+                disabled={isAssigningCategory || isRemovingCategory}
+                shortcut="e"
+              >
+                Edit Categories
+              </ButtonWithShortcut>
+              <ButtonWithShortcut
+                variant="outline"
+                onClick={handleClearCategories}
+                disabled={isRemovingCategory}
+                shortcut="c"
+              >
+                Clear Categories
+              </ButtonWithShortcut>
+            </div>
             <ButtonWithShortcut
               variant="destructive"
               onClick={() => setShowDeleteDialog(true)}
