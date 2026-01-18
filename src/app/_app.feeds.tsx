@@ -188,12 +188,18 @@ function ManageFeedsPage() {
 
   const handleEditCategories = async () => {
     const feedIds = Array.from(selectedFeedIds);
-    const currentShared = getSharedCategories();
 
-    const categoriesToAdd = selectedCategoryIds.filter(
-      (id) => !currentShared.includes(id),
-    );
-    const categoriesToRemove = currentShared.filter(
+    // Get all categories that any selected feed currently has
+    const allCurrentCategories = new Set<number>();
+    feedIds.forEach((feedId) => {
+      const categories = feedCategoriesMap.get(feedId) ?? [];
+      categories.forEach((c) => allCurrentCategories.add(c));
+    });
+
+    // Categories to add: selected in dialog
+    // Categories to remove: any category that a feed has but is not selected
+    const categoriesToAdd = selectedCategoryIds;
+    const categoriesToRemove = Array.from(allCurrentCategories).filter(
       (id) => !selectedCategoryIds.includes(id),
     );
 
