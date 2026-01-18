@@ -27,6 +27,7 @@ export default defineConfig({
     }),
     nitro({
       preset: "node",
+      trustProxy: true,
     }),
     viteReact(),
   ],
