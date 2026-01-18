@@ -8,8 +8,7 @@
 # database or a cache. For examples, see the Awesome Compose repository:
 # https://github.com/docker/awesome-compose
 services:
-  # Local libsql database - runs by default
-  # For external DB: run `docker compose up server` with DATABASE_URL set
+  # Local libsql database - exits immediately if DATABASE_URL is set
   libsql:
     image: ghcr.io/tursodatabase/libsql-server:latest
     platform: linux/amd64
@@ -17,6 +16,20 @@ services:
       - "8080:8080"
     volumes:
       - ./data/libsql:/var/lib/sqld
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        [ -z "$DATABASE_URL" ] || exit 0
+        exec sqld --http-listen-addr 0.0.0.0:8080
+    healthcheck:
+      test: ["CMD-SHELL", "[ -n \"$DATABASE_URL\" ] || wget -q -O /dev/null http://localhost:8080/"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 2s
   server:
     build:
       context: .
@@ -34,10 +47,16 @@ services:
       INSTAPAPER_OAUTH_SECRET: ${INSTAPAPER_OAUTH_SECRET}
     depends_on:
       libsql:
-        condition: service_started
+        condition: service_healthy
         required: false
     ports:
       - 3000:3000
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 # The commented out section below is an example of how to define a PostgreSQL
 # database that your application can use. `depends_on` tells Docker Compose to
