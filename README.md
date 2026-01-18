@@ -43,6 +43,7 @@ If your preferred platform doesn't have a guide, follow these rough steps:
     - If you want to use a cloud libsql database provider (like [Turso](https://turso.tech/)), set up a database with them and add your `DATABASE_AUTH_TOKEN` and `DATABASE_URL` to your environment variables.
 5. Navigate to [Better Auth](https://www.better-auth.com/docs/installation#set-environment-variables) and generate an auth secret. Set this as `BETTER_AUTH_SECRET` in your environment variables.
 6. Deploy your application
+7. To update Serial in the future, just sync your forked code from the main repo and the app will redeploy
 
 If you'd like to support additional features, [see below!](#enabling-additional-features)
 
