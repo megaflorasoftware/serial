@@ -79,8 +79,10 @@ function ManageFeedsPage() {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const headerRef = useRef<HTMLHeadingElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!headerRef.current) return;
@@ -95,19 +97,30 @@ function ManageFeedsPage() {
     observer.observe(headerRef.current);
     return () => observer.disconnect();
   }, []);
-  const [showEditCategoriesDialog, setShowEditCategoriesDialog] = useState(false);
+
+  useEffect(() => {
+    if (!bottomRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsAtBottom(entry?.isIntersecting ?? false);
+      },
+      { threshold: 0 },
+    );
+
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, []);
+  const [showEditCategoriesDialog, setShowEditCategoriesDialog] =
+    useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
   const { mutateAsync: bulkDeleteFeeds, isPending: isDeletingFeeds } =
     useBulkDeleteFeedsMutation();
-  const {
-    mutateAsync: bulkAssignCategory,
-    isPending: isAssigningCategory,
-  } = useBulkAssignFeedCategoryMutation();
-  const {
-    mutateAsync: bulkRemoveCategory,
-    isPending: isRemovingCategory,
-  } = useBulkRemoveFeedCategoryMutation();
+  const { mutateAsync: bulkAssignCategory, isPending: isAssigningCategory } =
+    useBulkAssignFeedCategoryMutation();
+  const { mutateAsync: bulkRemoveCategory, isPending: isRemovingCategory } =
+    useBulkRemoveFeedCategoryMutation();
 
   const feedCategoriesMap = useMemo(() => {
     const map = new Map<number, number[]>();
@@ -139,7 +152,8 @@ function ManageFeedsPage() {
   }, [feeds, searchQuery]);
 
   const selectedCount = selectedFeedIds.size;
-  const allSelected = filteredFeeds.length > 0 && selectedCount === filteredFeeds.length;
+  const allSelected =
+    filteredFeeds.length > 0 && selectedCount === filteredFeeds.length;
 
   const toggleFeedSelection = (feedId: number) => {
     setSelectedFeedIds((prev) => {
@@ -253,9 +267,11 @@ function ManageFeedsPage() {
   }
 
   return (
-    <div className="pb-24">
+    <div>
       <div className="mx-auto max-w-2xl px-6 pt-6">
-        <h2 ref={headerRef} className="font-mono text-lg">Manage Feeds</h2>
+        <h2 ref={headerRef} className="font-mono text-lg">
+          Manage Feeds
+        </h2>
       </div>
 
       <div
@@ -271,7 +287,12 @@ function ManageFeedsPage() {
             className="flex-1"
           />
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={selectAll} disabled={allSelected}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={selectAll}
+              disabled={allSelected}
+            >
               Select All
             </Button>
             <ButtonWithShortcut
@@ -288,51 +309,59 @@ function ManageFeedsPage() {
       </div>
 
       <div className="mx-auto max-w-2xl px-6">
+        <div className="-mx-3">
+          {filteredFeeds.map((feed) => {
+            const isSelected = selectedFeedIds.has(feed.id);
+            const feedCategoryIds = feedCategoriesMap.get(feed.id) ?? [];
 
-      <div className="-mx-3 mt-6">
-        {filteredFeeds.map((feed) => {
-          const isSelected = selectedFeedIds.has(feed.id);
-          const feedCategoryIds = feedCategoriesMap.get(feed.id) ?? [];
-
-          return (
-            <div
-              key={feed.id}
-              className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-muted/50"
-              onClick={() => toggleFeedSelection(feed.id)}
-            >
-              <Checkbox
-                id={`feed-${feed.id}`}
-                checked={isSelected}
-                onCheckedChange={() => toggleFeedSelection(feed.id)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <FeedImage imageUrl={feed.imageUrl} name={feed.name} platform={feed.platform} />
-              <span className="line-clamp-1 flex-1">{feed.name}</span>
-              <div className="flex flex-wrap gap-1">
-                {feedCategoryIds.map((categoryId) => {
-                  const categoryName = categoryNamesMap.get(categoryId);
-                  if (!categoryName) return null;
-                  return (
-                    <Badge key={categoryId} variant="outline">
-                      {categoryName}
-                    </Badge>
-                  );
-                })}
+            return (
+              <div
+                key={feed.id}
+                className="hover:bg-muted/50 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 transition-colors"
+                onClick={() => toggleFeedSelection(feed.id)}
+              >
+                <Checkbox
+                  id={`feed-${feed.id}`}
+                  checked={isSelected}
+                  onCheckedChange={() => toggleFeedSelection(feed.id)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <FeedImage
+                  imageUrl={feed.imageUrl}
+                  name={feed.name}
+                  platform={feed.platform}
+                />
+                <span className="line-clamp-1 flex-1">{feed.name}</span>
+                <div className="flex flex-wrap gap-1">
+                  {feedCategoryIds.map((categoryId) => {
+                    const categoryName = categoryNamesMap.get(categoryId);
+                    if (!categoryName) return null;
+                    return (
+                      <Badge key={categoryId} variant="outline">
+                        {categoryName}
+                      </Badge>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        {filteredFeeds.length === 0 && searchQuery && (
-          <p className="text-muted-foreground py-8 text-center">
-            No feeds match &quot;{searchQuery}&quot;
-          </p>
-        )}
-      </div>
+          {filteredFeeds.length === 0 && searchQuery && (
+            <p className="text-muted-foreground py-8 text-center">
+              No feeds match &quot;{searchQuery}&quot;
+            </p>
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {selectedCount > 0 && (
-        <div className="bg-background fixed inset-x-0 bottom-0 border-t border-solid">
+        <div
+          className={`bg-background sticky bottom-0 z-10 transition-[border-color] ${
+            isAtBottom ? "border-t border-transparent" : "border-t border-solid"
+          }`}
+        >
           <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
             <Button
               variant="outline"
