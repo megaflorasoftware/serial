@@ -141,6 +141,7 @@ function ManageFeedsPage() {
   }, [feeds, searchQuery]);
 
   const selectedCount = selectedFeedIds.size;
+  const allSelected = filteredFeeds.length > 0 && selectedCount === filteredFeeds.length;
 
   const toggleFeedSelection = (feedId: number) => {
     setSelectedFeedIds((prev) => {
@@ -241,7 +242,7 @@ function ManageFeedsPage() {
             className="flex-1"
           />
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={selectAll}>
+            <Button variant="outline" size="sm" onClick={selectAll} disabled={allSelected}>
               Select All
             </Button>
             <Button
@@ -302,7 +303,31 @@ function ManageFeedsPage() {
 
       {selectedCount > 0 && (
         <div className="bg-background fixed inset-x-0 bottom-0 border-t border-solid">
-          <div className="mx-auto flex max-w-2xl items-center gap-2 p-4">
+          <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedCategoryIds([]);
+                  setShowAddCategoryDialog(true);
+                }}
+                disabled={isAssigningCategory}
+              >
+                <PlusIcon size={16} className="mr-2" />
+                Add Category
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedCategoryIds([]);
+                  setShowRemoveCategoryDialog(true);
+                }}
+                disabled={isRemovingCategory}
+              >
+                <MinusIcon size={16} className="mr-2" />
+                Remove Category
+              </Button>
+            </div>
             <Button
               variant="destructive"
               onClick={() => setShowDeleteDialog(true)}
@@ -310,28 +335,6 @@ function ManageFeedsPage() {
             >
               <Trash2Icon size={16} className="mr-2" />
               Delete ({selectedCount})
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedCategoryIds([]);
-                setShowAddCategoryDialog(true);
-              }}
-              disabled={isAssigningCategory}
-            >
-              <PlusIcon size={16} className="mr-2" />
-              Add Category
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedCategoryIds([]);
-                setShowRemoveCategoryDialog(true);
-              }}
-              disabled={isRemovingCategory}
-            >
-              <MinusIcon size={16} className="mr-2" />
-              Remove Category
             </Button>
           </div>
         </div>
