@@ -286,6 +286,9 @@ importers:
         specifier: ^5.0.10
         version: 5.0.10(@types/react@19.2.2)(immer@11.1.3)(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
     devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.2
+        version: 9.39.2
       '@react-email/preview-server':
         specifier: 5.2.5
         version: 5.2.5(@babel/core@7.28.6)(babel-plugin-react-compiler@19.1.0-rc.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -370,6 +373,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.53.0
+        version: 8.53.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       vite:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@25.0.9)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -1834,7 +1840,6 @@ packages:
 
   '@libsql/linux-arm64-musl@0.5.22':
     resolution: {integrity: sha512-mCHSMAsDTLK5YH//lcV3eFEgiR23Ym0U9oEvgZA0667gqRZg/2px+7LshDvErEKv2XZ8ixzw3p1IrBzLQHGSsw==}
-    cpu: [arm64]
     os: [linux]
 
   '@libsql/linux-x64-gnu@0.5.22':
