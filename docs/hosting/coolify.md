@@ -2,7 +2,7 @@
 
 1. If you don't have a [Coolify](https://coolify.io/) instance set up:
     1. Set up a locally hosted server, or purchase a VPS.
-        - The cheapest option (that I know of in January 2026) is through Hetzner, where a VPS based in Germany or Finland will be around $4 a month. 
+        - The cheapest option (that I know of in January 2026) is through Hetzner, where a VPS based in Germany or Finland will be around $4 a month. An `x86` architecure is recommended, but not required.
     2. SSH into your server, then complete the very short [installation steps](https://coolify.io/docs/get-started/installation).
     3. Access your Coolify UI and you should be ready for the next step!
 2. Fork the `hfellerhoff/serial` respository to your own GitHub account.
