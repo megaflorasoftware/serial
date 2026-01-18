@@ -4,7 +4,7 @@ services:
     image: ghcr.io/tursodatabase/libsql-server:latest
     platform: linux/amd64
     ports:
-      - "8080:8080"
+      - "8080:8085"
     volumes:
       - ./data/libsql:/var/lib/sqld
     environment:
@@ -25,12 +25,12 @@ services:
     build:
       context: .
       args:
-        DATABASE_URL: ${DATABASE_URL:-http://libsql:8080}
+        DATABASE_URL: ${DATABASE_URL:-http://libsql:8085}
         DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN}
         BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-http://libsql:8080}
+      DATABASE_URL: ${DATABASE_URL:-http://libsql:8085}
       DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
