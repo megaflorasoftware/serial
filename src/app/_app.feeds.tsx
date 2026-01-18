@@ -9,7 +9,7 @@ import {
   MinusIcon,
   YoutubeIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { Badge } from "~/components/ui/badge";
@@ -78,7 +78,23 @@ function ManageFeedsPage() {
     new Set(),
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [isScrolled, setIsScrolled] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const headerRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!headerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry?.isIntersecting);
+      },
+      { threshold: 0 },
+    );
+
+    observer.observe(headerRef.current);
+    return () => observer.disconnect();
+  }, []);
   const [showAddCategoryDialog, setShowAddCategoryDialog] = useState(false);
   const [showRemoveCategoryDialog, setShowRemoveCategoryDialog] =
     useState(false);
@@ -125,8 +141,6 @@ function ManageFeedsPage() {
   }, [feeds, searchQuery]);
 
   const selectedCount = selectedFeedIds.size;
-  const allSelected =
-    filteredFeeds.length > 0 && selectedFeedIds.size === filteredFeeds.length;
 
   const toggleFeedSelection = (feedId: number) => {
     setSelectedFeedIds((prev) => {
@@ -140,12 +154,8 @@ function ManageFeedsPage() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedFeedIds(new Set());
-    } else {
-      setSelectedFeedIds(new Set(filteredFeeds.map((f) => f.id)));
-    }
+  const selectAll = () => {
+    setSelectedFeedIds(new Set(filteredFeeds.map((f) => f.id)));
   };
 
   const handleDelete = async () => {
@@ -213,22 +223,42 @@ function ManageFeedsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl p-6 pb-24">
-      <h2 className="font-mono text-lg">Manage Feeds</h2>
-
-      <div className="mt-6 flex items-center justify-between gap-4">
-        <Input
-          placeholder="Search feeds..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1"
-        />
-        <Button variant="outline" size="sm" onClick={toggleSelectAll}>
-          {allSelected ? "Deselect All" : "Select All"}
-        </Button>
+    <div className="pb-24">
+      <div className="mx-auto max-w-2xl px-6 pt-6">
+        <h2 ref={headerRef} className="font-mono text-lg">Manage Feeds</h2>
       </div>
 
-      <div className="mt-6">
+      <div
+        className={`bg-background sticky top-0 z-10 transition-[border-color] ${
+          isScrolled ? "border-b border-solid" : "border-b border-transparent"
+        }`}
+      >
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-6 py-4">
+          <Input
+            placeholder="Search feeds..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1"
+          />
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={selectAll}>
+              Select All
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedFeedIds(new Set())}
+              disabled={selectedCount === 0}
+            >
+              Deselect All
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-2xl px-6">
+
+      <div className="-mx-3 mt-6">
         {filteredFeeds.map((feed) => {
           const isSelected = selectedFeedIds.has(feed.id);
           const feedCategoryIds = feedCategoriesMap.get(feed.id) ?? [];
@@ -236,20 +266,17 @@ function ManageFeedsPage() {
           return (
             <div
               key={feed.id}
-              className="border-muted/50 flex items-center justify-between gap-3 border-0 border-t border-solid py-4"
+              className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-muted/50"
+              onClick={() => toggleFeedSelection(feed.id)}
             >
               <Checkbox
                 id={`feed-${feed.id}`}
                 checked={isSelected}
                 onCheckedChange={() => toggleFeedSelection(feed.id)}
+                onClick={(e) => e.stopPropagation()}
               />
               <FeedImage imageUrl={feed.imageUrl} name={feed.name} platform={feed.platform} />
-              <label
-                htmlFor={`feed-${feed.id}`}
-                className="line-clamp-1 flex-1 cursor-pointer"
-              >
-                {feed.name}
-              </label>
+              <span className="line-clamp-1 flex-1">{feed.name}</span>
               <div className="flex flex-wrap gap-1">
                 {feedCategoryIds.map((categoryId) => {
                   const categoryName = categoryNamesMap.get(categoryId);
@@ -270,6 +297,7 @@ function ManageFeedsPage() {
             No feeds match &quot;{searchQuery}&quot;
           </p>
         )}
+      </div>
       </div>
 
       {selectedCount > 0 && (
