@@ -365,8 +365,8 @@ function ManageFeedsPage() {
       </div>
 
       <div
-        className={`bg-background sticky top-0 z-10 transition-[border-color] ${
-          isScrolled ? "border-b border-solid" : "border-b border-transparent"
+        className={`bg-background sticky top-0 z-10 border-b transition-[border-color] ${
+          isScrolled ? "border-border" : "border-transparent"
         }`}
       >
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-6 py-4">
@@ -449,8 +449,8 @@ function ManageFeedsPage() {
 
       {selectedCount > 0 && (
         <div
-          className={`bg-background sticky bottom-0 z-10 transition-[border-color] ${
-            isAtBottom ? "border-t border-transparent" : "border-t border-solid"
+          className={`bg-background sticky bottom-0 z-10 border-t transition-[border-color] ${
+            isAtBottom ? "border-transparent" : "border-border"
           }`}
         >
           <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
