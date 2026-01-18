@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { orpc } from "~/lib/orpc";
+import { useFetchContentCategories } from "../content-categories/store";
 import { useFetchFeedCategories } from "../feed-categories/store";
 import {
   feedItemsStore,
@@ -35,6 +36,7 @@ export function useCreateFeedMutation() {
 export function useCreateFeedsFromSubscriptionImportMutation() {
   const refetchFeedItems = useFetchFeedItems();
   const fetchFeedCategories = useFetchFeedCategories();
+  const fetchContentCategories = useFetchContentCategories();
   const setFeeds = useSetFeeds();
   const fetchFeeds = useFetchFeeds();
 
@@ -46,6 +48,7 @@ export function useCreateFeedsFromSubscriptionImportMutation() {
         fetchFeeds();
         refetchFeedItems();
         fetchFeedCategories();
+        fetchContentCategories();
       },
     }),
   );
