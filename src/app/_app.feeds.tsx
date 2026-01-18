@@ -10,8 +10,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
+import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useShortcut } from "~/lib/hooks/useShortcut";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
@@ -155,6 +157,12 @@ function ManageFeedsPage() {
     setSelectedFeedIds(new Set(filteredFeeds.map((f) => f.id)));
   };
 
+  const deselectAll = () => {
+    setSelectedFeedIds(new Set());
+  };
+
+  useShortcut("Escape", deselectAll);
+
   const handleDelete = async () => {
     const feedIds = Array.from(selectedFeedIds);
     const deletePromise = bulkDeleteFeeds({ feedIds });
@@ -266,14 +274,15 @@ function ManageFeedsPage() {
             <Button variant="outline" size="sm" onClick={selectAll} disabled={allSelected}>
               Select All
             </Button>
-            <Button
+            <ButtonWithShortcut
               variant="outline"
               size="sm"
-              onClick={() => setSelectedFeedIds(new Set())}
+              onClick={deselectAll}
               disabled={selectedCount === 0}
+              shortcut="esc"
             >
               Deselect All
-            </Button>
+            </ButtonWithShortcut>
           </div>
         </div>
       </div>
