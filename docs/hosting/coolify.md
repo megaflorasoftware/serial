@@ -11,13 +11,13 @@
 5. Choose the server to deploy Serial on.
 5. Choose "serial" from the available repositories.
 6. Update `Build Pack` to be `Docker Compose`
-  - IMPORTANT: If you have an ARM-based VPS, update your `Docker Compose Location` to be `/docker-compose.arm.yaml`. This is marginally less supported than x86 architectures, but should still work.
+    - IMPORTANT: If you have an ARM-based VPS, update your `Docker Compose Location` to be `/docker-compose.arm.yaml`. This is marginally less supported than x86 architectures, but should still work.
 7. Update your domain in `Domains for server`:
-  - If you don't have a custom domain, click `Generate domain`
-  - Otherwise, add your custom domain (e.g. `https://example.com`)
+    - If you don't have a custom domain, click `Generate domain`
+    - Otherwise, add your custom domain (e.g. `https://example.com`)
 8. Navigate to `Environment Variables` and update your `BETTER_AUTH_SECRET`
-  - You can generate one in [this section of the Better Auth documentation](https://www.better-auth.com/docs/installation#set-environment-variables)
+    - You can generate one in [this section of the Better Auth documentation](https://www.better-auth.com/docs/installation#set-environment-variables)
 9. Set up your database
-  - If you want to use a local libsql database, no changes are needed
-  - If you want to use a cloud libsql database provider (like [Turso](https://turso.tech/)), set up a database with them and add your `DATABASE_AUTH_TOKEN` and `DATABASE_URL` to your environment variables.
+    - If you want to use a local libsql database, no changes are needed
+    - If you want to use a cloud libsql database provider (like [Turso](https://turso.tech/)), set up a database with them and add your `DATABASE_AUTH_TOKEN` and `DATABASE_URL` to your environment variables.
 10. Click deploy and wait for your app to be ready! You'll be able to access it once Coolify says it's "Healthy" at the domain you set up earlier.
