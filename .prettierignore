@@ -1,4 +1,3 @@
-**/src/server/scripts/*.ts
 package.json
 pnpm-lock.yaml
 src/server/db/migrations/
