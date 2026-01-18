@@ -18,7 +18,11 @@
     "db:studio": "drizzle-kit studio",
     "start": "node .output/server/index.mjs",
     "start:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm start\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "lint:check": "eslint .",
+    "lint:fix": "eslint --fix ."
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",
