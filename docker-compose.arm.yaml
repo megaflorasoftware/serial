@@ -2,7 +2,6 @@ volumes:
   libsql-data:
 
 services:
-  # Local libsql database - exits immediately if DATABASE_URL is set
   libsql:
     image: ghcr.io/tursodatabase/libsql-server:latest-arm
     volumes:
