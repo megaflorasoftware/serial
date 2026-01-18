@@ -8,6 +8,7 @@ import {
   YoutubeIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Badge } from "~/components/ui/badge";
@@ -256,11 +257,17 @@ function ManageFeedsPage() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     const feedIds = Array.from(selectedFeedIds);
-    await bulkDeleteFeeds({ feedIds });
-    setSelectedFeedIds(new Set());
+    const count = feedIds.length;
     setShowDeleteDialog(false);
+    setSelectedFeedIds(new Set());
+
+    toast.promise(bulkDeleteFeeds({ feedIds }), {
+      loading: `Deleting ${count} feed${count > 1 ? "s" : ""}...`,
+      success: `Deleted ${count} feed${count > 1 ? "s" : ""}!`,
+      error: "Failed to delete feeds",
+    });
   };
 
   const getSharedCategories = () => {
@@ -280,8 +287,9 @@ function ManageFeedsPage() {
     setShowEditCategoriesDialog(true);
   };
 
-  const handleClearCategories = async () => {
+  const handleClearCategories = () => {
     const feedIds = Array.from(selectedFeedIds);
+    const count = feedIds.length;
 
     // Get all categories that any selected feed currently has
     const allCurrentCategories = new Set<number>();
@@ -290,13 +298,17 @@ function ManageFeedsPage() {
       categories.forEach((c) => allCurrentCategories.add(c));
     });
 
+    if (allCurrentCategories.size === 0) return;
+
     const promises = Array.from(allCurrentCategories).map((categoryId) =>
       bulkRemoveCategory({ feedIds, categoryId }),
     );
 
-    if (promises.length > 0) {
-      await Promise.all(promises);
-    }
+    toast.promise(Promise.all(promises), {
+      loading: `Clearing categories from ${count} feed${count > 1 ? "s" : ""}...`,
+      success: `Cleared categories from ${count} feed${count > 1 ? "s" : ""}!`,
+      error: "Failed to clear categories",
+    });
   };
 
   useFeedManagementShortcuts({
@@ -309,8 +321,9 @@ function ManageFeedsPage() {
     hasSelection: selectedCount > 0,
   });
 
-  const handleEditCategories = async () => {
+  const handleEditCategories = () => {
     const feedIds = Array.from(selectedFeedIds);
+    const count = feedIds.length;
     const sharedCategories = getSharedCategories();
 
     // Categories to add: selected in dialog
@@ -331,14 +344,18 @@ function ManageFeedsPage() {
       promises.push(bulkRemoveCategory({ feedIds, categoryId }));
     });
 
+    setSelectedCategoryIds([]);
+    setShowEditCategoriesDialog(false);
+
     if (promises.length === 0) {
-      setShowEditCategoriesDialog(false);
       return;
     }
 
-    await Promise.all(promises);
-    setSelectedCategoryIds([]);
-    setShowEditCategoriesDialog(false);
+    toast.promise(Promise.all(promises), {
+      loading: `Updating categories for ${count} feed${count > 1 ? "s" : ""}...`,
+      success: `Updated categories for ${count} feed${count > 1 ? "s" : ""}!`,
+      error: "Failed to update categories",
+    });
   };
 
   
