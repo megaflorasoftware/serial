@@ -43,6 +43,32 @@ function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   }
 }
 
+function FeedImage({
+  imageUrl,
+  name,
+  platform,
+}: {
+  imageUrl: string;
+  name: string;
+  platform: FeedPlatform;
+}) {
+  if (!imageUrl) {
+    return (
+      <div className="bg-muted text-muted-foreground grid size-7 shrink-0 place-items-center rounded">
+        <PlatformIcon platform={platform} />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt={name}
+      className="size-7 shrink-0 rounded object-cover"
+    />
+  );
+}
+
 function ManageFeedsPage() {
   const { feeds } = useFeeds();
   const { feedCategories } = useFeedCategories();
@@ -217,9 +243,7 @@ function ManageFeedsPage() {
                 checked={isSelected}
                 onCheckedChange={() => toggleFeedSelection(feed.id)}
               />
-              <span className="bg-background border-foreground/30 text-foreground/50 grid size-7 shrink-0 place-items-center rounded border border-solid">
-                <PlatformIcon platform={feed.platform} />
-              </span>
+              <FeedImage imageUrl={feed.imageUrl} name={feed.name} platform={feed.platform} />
               <label
                 htmlFor={`feed-${feed.id}`}
                 className="line-clamp-1 flex-1 cursor-pointer"
