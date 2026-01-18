@@ -196,7 +196,7 @@ export function SidebarFeeds() {
         emptyFeedOptions,
         errorFeedOptions,
       } = acc;
-      if (!!searchQuery) {
+      if (searchQuery) {
         const lowercaseQuery = searchQuery.toLowerCase();
         const lowercaseName = feedOption.name.toLowerCase();
 
@@ -219,7 +219,7 @@ export function SidebarFeeds() {
         return acc;
       }
 
-      const feedStatus = !!feedStatusDict[feedOption.id]
+      const feedStatus = feedStatusDict[feedOption.id]
         ? feedStatusDict[feedOption.id]
         : fetchFeedItemsStatus === "fetching"
           ? "success"
@@ -304,7 +304,7 @@ export function SidebarFeeds() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           {preferredFeedOptions.map((feed) => {
-            const feedStatus = !!feedStatusDict[feed.id]
+            const feedStatus = feedStatusDict[feed.id]
               ? feedStatusDict[feed.id]
               : fetchFeedItemsStatus === "fetching"
                 ? "success"

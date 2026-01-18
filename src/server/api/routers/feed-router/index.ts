@@ -323,9 +323,7 @@ async function discoverYouTubeFeeds(url: string) {
       /<link rel="alternate" type="application\/rss\+xml" title="RSS" href="(https:\/\/www\.youtube\.com\/feeds\/videos\.xml\?channel_id=[^&]{24})">/gm,
     );
 
-    const channelNameMatch = text.match(
-      /<meta property="og:title" content="([^"]+)">/,
-    );
+    const channelNameMatch = /<meta property="og:title" content="([^"]+)">/.exec(text);
     const channelName = channelNameMatch?.[1];
 
     const feedUrls = Array.from(rssFeedUrlMatches)

@@ -7,7 +7,7 @@ import { type ApplicationFeedItem, feedItems, feeds } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import {
   fetchAndInsertFeedData,
-  FetchFeedsStatus,
+  type FetchFeedsStatus,
 } from "~/server/rss/fetchFeeds";
 import { verifyFeedsOwnedByUser } from "./feed-router/utils";
 
@@ -200,7 +200,7 @@ export const getById = protectedProcedure
     }
 
     const feed = await context.db.query.feeds.findFirst({
-      where: and(eq(feeds.id, item.feedId!), eq(feeds.userId, context.user.id)),
+      where: and(eq(feeds.id, item.feedId), eq(feeds.userId, context.user.id)),
     });
 
     if (!feed) {

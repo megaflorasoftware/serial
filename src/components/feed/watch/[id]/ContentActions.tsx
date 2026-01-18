@@ -43,7 +43,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
     if (!video) return;
     await setWatchLaterValue({
       id: video.id,
-      feedId: video.feedId!,
+      feedId: video.feedId,
       isWatchLater: !video.isWatchLater,
     });
   };
@@ -56,7 +56,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
     if (!video) return;
     await setWatchedValue({
       id: video.id,
-      feedId: video.feedId!,
+      feedId: video.feedId,
       isWatched: !video.isWatched,
     });
   };

@@ -7,7 +7,7 @@ import parse, {
   Element,
 } from "html-react-parser";
 import { useEffect, useState } from "react";
-import { MarkdownResult, renderMarkdown } from "~/lib/markdown";
+import { type MarkdownResult, renderMarkdown } from "~/lib/markdown";
 
 type MarkdownProps = {
   content: string;

@@ -1,4 +1,4 @@
-import { ApplicationStore } from "./data/store";
+import { type ApplicationStore } from "./data/store";
 
 export function sortFeedItemsOrderByDate(
   feedItems: ApplicationStore["feedItemsDict"],

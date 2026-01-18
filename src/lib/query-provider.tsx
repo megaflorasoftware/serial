@@ -26,9 +26,9 @@ export const createQueryClient = () =>
         onError: (err) => {
           try {
             // @ts-expect-error deal with this later
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
             JSON.parse(err.message).forEach((error: { message: string }) => {
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+               
               toast.error(error.message);
             });
           } catch {

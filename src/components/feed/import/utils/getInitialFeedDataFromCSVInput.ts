@@ -53,7 +53,7 @@ export function getInitialFeedDataFromCSVInput(
     })
     .filter(Boolean);
 
-  if (!!initialFeedData.length) {
+  if (initialFeedData.length) {
     return formSuccess(initialFeedData);
   }
 

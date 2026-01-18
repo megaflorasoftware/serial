@@ -73,7 +73,7 @@ async function instapaperFetch(
     bodyParams?: BodyParams;
   },
 ) {
-  const body = !!options.bodyParams
+  const body = options.bodyParams
     ? {
         body: new URLSearchParams(
           options.bodyParams as Record<string, string>,
@@ -105,7 +105,7 @@ function createSignature(
 function createAuthorizationHeader(params: OAuthParams): string {
   const headerParams = Object.entries(params)
     .filter(([key]) => key.startsWith("oauth_"))
-    .map(([key, value]) => `${percentEncode(key)}="${percentEncode(value!)}"`)
+    .map(([key, value]) => `${percentEncode(key)}="${percentEncode(value)}"`)
     .join(", ");
 
   return `OAuth ${headerParams}`;

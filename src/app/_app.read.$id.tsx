@@ -69,7 +69,7 @@ function ReadPage() {
       }}
     >
       <div className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6">
-        {!!feed?.imageUrl ? (
+        {feed?.imageUrl ? (
           <img
             src={feed?.imageUrl}
             alt={feedItem?.title}

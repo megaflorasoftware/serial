@@ -1,7 +1,7 @@
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
-import { ApplicationFeedItem, DatabaseFeed, feedItems } from "../db/schema";
+import { type ApplicationFeedItem, type DatabaseFeed, feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
-import { ORPCContext } from "../orpc/base";
+import { type ORPCContext } from "../orpc/base";
 import { fetchNebulaFeedData, fetchNebulaFeedDetails } from "./parsers/nebula";
 import { fetchPeerTubeFeedData } from "./parsers/peertube";
 import { fetchUnknownRssFeed } from "./parsers/unknown";

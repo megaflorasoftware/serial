@@ -1,6 +1,6 @@
-import { SQL, getTableColumns, sql } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
-import { SQLiteTable } from "drizzle-orm/sqlite-core";
+import { type SQL, getTableColumns, sql } from "drizzle-orm";
+import { type PgTable } from "drizzle-orm/pg-core";
+import { type SQLiteTable } from "drizzle-orm/sqlite-core";
 
 export const buildConflictUpdateColumns = <
   T extends PgTable | SQLiteTable,
