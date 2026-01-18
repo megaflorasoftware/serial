@@ -13,7 +13,70 @@ import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { useShortcut } from "~/lib/hooks/useShortcut";
+import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
+
+function useFeedManagementShortcuts({
+  onEscape,
+  onSelectAll,
+  onEditCategories,
+  onDelete,
+  isDialogOpen,
+  hasSelection,
+}: {
+  onEscape: () => void;
+  onSelectAll: () => void;
+  onEditCategories: () => void;
+  onDelete: () => void;
+  isDialogOpen: boolean;
+  hasSelection: boolean;
+}) {
+  const actionsRef = useRef({ onEscape, onSelectAll, onEditCategories, onDelete });
+  const stateRef = useRef({ isDialogOpen, hasSelection });
+
+  useEffect(() => {
+    actionsRef.current = { onEscape, onSelectAll, onEditCategories, onDelete };
+  }, [onEscape, onSelectAll, onEditCategories, onDelete]);
+
+  useEffect(() => {
+    stateRef.current = { isDialogOpen, hasSelection };
+  }, [isDialogOpen, hasSelection]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (doesAnyFormElementHaveFocus()) return;
+
+      const { isDialogOpen, hasSelection } = stateRef.current;
+      const { onEscape, onSelectAll, onEditCategories, onDelete } = actionsRef.current;
+
+      switch (event.key) {
+        case "Escape":
+          if (!isDialogOpen) {
+            onEscape();
+          }
+          break;
+        case "s":
+          if (!isDialogOpen) {
+            onSelectAll();
+          }
+          break;
+        case "c":
+          if (!isDialogOpen && hasSelection) {
+            onEditCategories();
+          }
+          break;
+        case "d":
+          if (!isDialogOpen && hasSelection) {
+            onDelete();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+}
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
@@ -175,7 +238,13 @@ function ManageFeedsPage() {
     setSelectedFeedIds(new Set());
   };
 
-  useShortcut("Escape", deselectAll);
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      deselectAll();
+    } else {
+      selectAll();
+    }
+  };
 
   const handleDelete = async () => {
     const feedIds = Array.from(selectedFeedIds);
@@ -207,6 +276,15 @@ function ManageFeedsPage() {
     setSelectedCategoryIds(getSharedCategories());
     setShowEditCategoriesDialog(true);
   };
+
+  useFeedManagementShortcuts({
+    onEscape: deselectAll,
+    onSelectAll: toggleSelectAll,
+    onEditCategories: openEditCategoriesDialog,
+    onDelete: () => setShowDeleteDialog(true),
+    isDialogOpen: showDeleteDialog || showEditCategoriesDialog,
+    hasSelection: selectedCount > 0,
+  });
 
   const handleEditCategories = async () => {
     const feedIds = Array.from(selectedFeedIds);
@@ -287,14 +365,14 @@ function ManageFeedsPage() {
             className="flex-1"
           />
           <div className="flex gap-2">
-            <Button
+            <ButtonWithShortcut
               variant="outline"
               size="sm"
-              onClick={selectAll}
-              disabled={allSelected}
+              onClick={toggleSelectAll}
+              shortcut="s"
             >
-              Select All
-            </Button>
+              {allSelected ? "Deselect All" : "Select All"}
+            </ButtonWithShortcut>
             <ButtonWithShortcut
               variant="outline"
               size="sm"
@@ -363,21 +441,23 @@ function ManageFeedsPage() {
           }`}
         >
           <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
-            <Button
+            <ButtonWithShortcut
               variant="outline"
               onClick={openEditCategoriesDialog}
               disabled={isAssigningCategory || isRemovingCategory}
+              shortcut="c"
             >
               Edit Categories
-            </Button>
-            <Button
+            </ButtonWithShortcut>
+            <ButtonWithShortcut
               variant="destructive"
               onClick={() => setShowDeleteDialog(true)}
               disabled={isDeletingFeeds}
+              shortcut="d"
             >
               <Trash2Icon size={16} className="mr-2" />
               Delete ({selectedCount})
-            </Button>
+            </ButtonWithShortcut>
           </div>
         </div>
       )}
