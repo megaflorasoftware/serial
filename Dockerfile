@@ -1,11 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/go/dockerfile-reference/
-
-# Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
-
 ARG NODE_VERSION=24.7.0
 ARG PNPM_VERSION=10.8.0
 
@@ -57,30 +51,30 @@ RUN --mount=type=bind,source=package.json,target=package.json \
 # Copy the rest of the source files into the image.
 COPY . .
 
-# Run the build script.
-RUN pnpm run build
+# Run the build script (without migrations - those run at container startup)
+RUN pnpm typecheck && pnpm run build:atomic
 
 ################################################################################
 # Create a new stage to run the application with minimal runtime dependencies
 # where the necessary files are copied from the build stage.
 FROM base as final
 
-# Run the application as a non-root user.
-USER node
+# Copy package.json and pnpm-lock.yaml so that package manager commands can be used.
+COPY package.json pnpm-lock.yaml ./
 
-# Copy package.json so that package manager commands can be used.
-COPY package.json .
+# Copy node_modules from build stage (includes all deps needed for migrations)
+COPY --from=build /usr/src/app/node_modules ./node_modules
 
-# Copy the production dependencies from the deps stage and also
-# the built application from the build stage into the image.
-COPY --from=deps /usr/src/app/node_modules ./node_modules
+# Copy the built application from the build stage into the image.
 COPY --from=build /usr/src/app/.output ./.output
 COPY --from=build /usr/src/app/.content-collections ./.content-collections
 
-
+# Copy migration files and source needed for running migrations
+COPY --from=build /usr/src/app/src/server/db ./src/server/db
+COPY --from=build /usr/src/app/src/env.js ./src/env.js
 
 # Expose the port that the application listens on.
 EXPOSE 3000
 
-# Run the application.
-CMD pnpm start
+# Run migrations then start the application.
+CMD node --experimental-specifier-resolution=node --loader ts-node/esm src/server/db/migrate.js 2>/dev/null || node --import=tsx src/server/db/migrate.ts && node .output/server/index.mjs

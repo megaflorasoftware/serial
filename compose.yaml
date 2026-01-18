@@ -8,6 +8,8 @@
 # database or a cache. For examples, see the Awesome Compose repository:
 # https://github.com/docker/awesome-compose
 services:
+  # Local libsql database - runs by default
+  # For external DB: run `docker compose up server` with DATABASE_URL set
   libsql:
     image: ghcr.io/tursodatabase/libsql-server:latest
     platform: linux/amd64
@@ -19,17 +21,21 @@ services:
     build:
       context: .
       args:
-        DATABASE_URL: ${DATABASE_URL}
+        DATABASE_URL: ${DATABASE_URL:-http://libsql:8080}
         DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN}
         BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:-http://libsql:8080}
       DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
       INSTAPAPER_OAUTH_ID: ${INSTAPAPER_OAUTH_ID}
       INSTAPAPER_OAUTH_SECRET: ${INSTAPAPER_OAUTH_SECRET}
+    depends_on:
+      libsql:
+        condition: service_started
+        required: false
     ports:
       - 3000:3000
 
