@@ -8,358 +8,358 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from "./app/__root";
-import { Route as AuthRouteImport } from "./app/auth";
-import { Route as WebRouteImport } from "./app/_web";
-import { Route as AppRouteImport } from "./app/_app";
-import { Route as AppIndexRouteImport } from "./app/_app.index";
-import { Route as AuthSignUpRouteImport } from "./app/auth.sign-up";
-import { Route as AuthSignInRouteImport } from "./app/auth.sign-in";
-import { Route as AuthResetRouteImport } from "./app/auth.reset";
-import { Route as ApiHealthRouteImport } from "./app/api/health";
-import { Route as WebWelcomeRouteImport } from "./app/_web.welcome";
-import { Route as AppImportRouteImport } from "./app/_app.import";
-import { Route as AppFeedsRouteImport } from "./app/_app.feeds";
-import { Route as WebReleasesIndexRouteImport } from "./app/_web.releases.index";
-import { Route as ApiRpcSplatRouteImport } from "./app/api/rpc.$";
-import { Route as ApiAuthSplatRouteImport } from "./app/api/auth.$";
-import { Route as WebReleasesSlugRouteImport } from "./app/_web.releases.$slug";
-import { Route as AppWatchIdRouteImport } from "./app/_app.watch.$id";
-import { Route as AppReadIdRouteImport } from "./app/_app.read.$id";
+import { Route as rootRouteImport } from './app/__root'
+import { Route as AuthRouteImport } from './app/auth'
+import { Route as WebRouteImport } from './app/_web'
+import { Route as AppRouteImport } from './app/_app'
+import { Route as AppIndexRouteImport } from './app/_app.index'
+import { Route as AuthSignUpRouteImport } from './app/auth.sign-up'
+import { Route as AuthSignInRouteImport } from './app/auth.sign-in'
+import { Route as AuthResetRouteImport } from './app/auth.reset'
+import { Route as ApiHealthRouteImport } from './app/api/health'
+import { Route as WebWelcomeRouteImport } from './app/_web.welcome'
+import { Route as AppImportRouteImport } from './app/_app.import'
+import { Route as AppFeedsRouteImport } from './app/_app.feeds'
+import { Route as WebReleasesIndexRouteImport } from './app/_web.releases.index'
+import { Route as ApiRpcSplatRouteImport } from './app/api/rpc.$'
+import { Route as ApiAuthSplatRouteImport } from './app/api/auth.$'
+import { Route as WebReleasesSlugRouteImport } from './app/_web.releases.$slug'
+import { Route as AppWatchIdRouteImport } from './app/_app.watch.$id'
+import { Route as AppReadIdRouteImport } from './app/_app.read.$id'
 
 const AuthRoute = AuthRouteImport.update({
-  id: "/auth",
-  path: "/auth",
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WebRoute = WebRouteImport.update({
-  id: "/_web",
+  id: '/_web',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const AppRoute = AppRouteImport.update({
-  id: "/_app",
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
-  id: "/",
-  path: "/",
+  id: '/',
+  path: '/',
   getParentRoute: () => AppRoute,
-} as any);
+} as any)
 const AuthSignUpRoute = AuthSignUpRouteImport.update({
-  id: "/sign-up",
-  path: "/sign-up",
+  id: '/sign-up',
+  path: '/sign-up',
   getParentRoute: () => AuthRoute,
-} as any);
+} as any)
 const AuthSignInRoute = AuthSignInRouteImport.update({
-  id: "/sign-in",
-  path: "/sign-in",
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => AuthRoute,
-} as any);
+} as any)
 const AuthResetRoute = AuthResetRouteImport.update({
-  id: "/reset",
-  path: "/reset",
+  id: '/reset',
+  path: '/reset',
   getParentRoute: () => AuthRoute,
-} as any);
+} as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
-  id: "/api/health",
-  path: "/api/health",
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WebWelcomeRoute = WebWelcomeRouteImport.update({
-  id: "/welcome",
-  path: "/welcome",
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => WebRoute,
-} as any);
+} as any)
 const AppImportRoute = AppImportRouteImport.update({
-  id: "/import",
-  path: "/import",
+  id: '/import',
+  path: '/import',
   getParentRoute: () => AppRoute,
-} as any);
+} as any)
 const AppFeedsRoute = AppFeedsRouteImport.update({
-  id: "/feeds",
-  path: "/feeds",
+  id: '/feeds',
+  path: '/feeds',
   getParentRoute: () => AppRoute,
-} as any);
+} as any)
 const WebReleasesIndexRoute = WebReleasesIndexRouteImport.update({
-  id: "/releases/",
-  path: "/releases/",
+  id: '/releases/',
+  path: '/releases/',
   getParentRoute: () => WebRoute,
-} as any);
+} as any)
 const ApiRpcSplatRoute = ApiRpcSplatRouteImport.update({
-  id: "/api/rpc/$",
-  path: "/api/rpc/$",
+  id: '/api/rpc/$',
+  path: '/api/rpc/$',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: "/api/auth/$",
-  path: "/api/auth/$",
+  id: '/api/auth/$',
+  path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WebReleasesSlugRoute = WebReleasesSlugRouteImport.update({
-  id: "/releases/$slug",
-  path: "/releases/$slug",
+  id: '/releases/$slug',
+  path: '/releases/$slug',
   getParentRoute: () => WebRoute,
-} as any);
+} as any)
 const AppWatchIdRoute = AppWatchIdRouteImport.update({
-  id: "/watch/$id",
-  path: "/watch/$id",
+  id: '/watch/$id',
+  path: '/watch/$id',
   getParentRoute: () => AppRoute,
-} as any);
+} as any)
 const AppReadIdRoute = AppReadIdRouteImport.update({
-  id: "/read/$id",
-  path: "/read/$id",
+  id: '/read/$id',
+  path: '/read/$id',
   getParentRoute: () => AppRoute,
-} as any);
+} as any)
 
 export interface FileRoutesByFullPath {
-  "/auth": typeof AuthRouteWithChildren;
-  "/feeds": typeof AppFeedsRoute;
-  "/import": typeof AppImportRoute;
-  "/welcome": typeof WebWelcomeRoute;
-  "/api/health": typeof ApiHealthRoute;
-  "/auth/reset": typeof AuthResetRoute;
-  "/auth/sign-in": typeof AuthSignInRoute;
-  "/auth/sign-up": typeof AuthSignUpRoute;
-  "/": typeof AppIndexRoute;
-  "/read/$id": typeof AppReadIdRoute;
-  "/watch/$id": typeof AppWatchIdRoute;
-  "/releases/$slug": typeof WebReleasesSlugRoute;
-  "/api/auth/$": typeof ApiAuthSplatRoute;
-  "/api/rpc/$": typeof ApiRpcSplatRoute;
-  "/releases": typeof WebReleasesIndexRoute;
+  '/': typeof AppIndexRoute
+  '/auth': typeof AuthRouteWithChildren
+  '/feeds': typeof AppFeedsRoute
+  '/import': typeof AppImportRoute
+  '/welcome': typeof WebWelcomeRoute
+  '/api/health': typeof ApiHealthRoute
+  '/auth/reset': typeof AuthResetRoute
+  '/auth/sign-in': typeof AuthSignInRoute
+  '/auth/sign-up': typeof AuthSignUpRoute
+  '/read/$id': typeof AppReadIdRoute
+  '/watch/$id': typeof AppWatchIdRoute
+  '/releases/$slug': typeof WebReleasesSlugRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/releases/': typeof WebReleasesIndexRoute
 }
 export interface FileRoutesByTo {
-  "/auth": typeof AuthRouteWithChildren;
-  "/feeds": typeof AppFeedsRoute;
-  "/import": typeof AppImportRoute;
-  "/welcome": typeof WebWelcomeRoute;
-  "/api/health": typeof ApiHealthRoute;
-  "/auth/reset": typeof AuthResetRoute;
-  "/auth/sign-in": typeof AuthSignInRoute;
-  "/auth/sign-up": typeof AuthSignUpRoute;
-  "/": typeof AppIndexRoute;
-  "/read/$id": typeof AppReadIdRoute;
-  "/watch/$id": typeof AppWatchIdRoute;
-  "/releases/$slug": typeof WebReleasesSlugRoute;
-  "/api/auth/$": typeof ApiAuthSplatRoute;
-  "/api/rpc/$": typeof ApiRpcSplatRoute;
-  "/releases": typeof WebReleasesIndexRoute;
+  '/': typeof AppIndexRoute
+  '/auth': typeof AuthRouteWithChildren
+  '/feeds': typeof AppFeedsRoute
+  '/import': typeof AppImportRoute
+  '/welcome': typeof WebWelcomeRoute
+  '/api/health': typeof ApiHealthRoute
+  '/auth/reset': typeof AuthResetRoute
+  '/auth/sign-in': typeof AuthSignInRoute
+  '/auth/sign-up': typeof AuthSignUpRoute
+  '/read/$id': typeof AppReadIdRoute
+  '/watch/$id': typeof AppWatchIdRoute
+  '/releases/$slug': typeof WebReleasesSlugRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/releases': typeof WebReleasesIndexRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport;
-  "/_app": typeof AppRouteWithChildren;
-  "/_web": typeof WebRouteWithChildren;
-  "/auth": typeof AuthRouteWithChildren;
-  "/_app/feeds": typeof AppFeedsRoute;
-  "/_app/import": typeof AppImportRoute;
-  "/_web/welcome": typeof WebWelcomeRoute;
-  "/api/health": typeof ApiHealthRoute;
-  "/auth/reset": typeof AuthResetRoute;
-  "/auth/sign-in": typeof AuthSignInRoute;
-  "/auth/sign-up": typeof AuthSignUpRoute;
-  "/_app/": typeof AppIndexRoute;
-  "/_app/read/$id": typeof AppReadIdRoute;
-  "/_app/watch/$id": typeof AppWatchIdRoute;
-  "/_web/releases/$slug": typeof WebReleasesSlugRoute;
-  "/api/auth/$": typeof ApiAuthSplatRoute;
-  "/api/rpc/$": typeof ApiRpcSplatRoute;
-  "/_web/releases/": typeof WebReleasesIndexRoute;
+  __root__: typeof rootRouteImport
+  '/_app': typeof AppRouteWithChildren
+  '/_web': typeof WebRouteWithChildren
+  '/auth': typeof AuthRouteWithChildren
+  '/_app/feeds': typeof AppFeedsRoute
+  '/_app/import': typeof AppImportRoute
+  '/_web/welcome': typeof WebWelcomeRoute
+  '/api/health': typeof ApiHealthRoute
+  '/auth/reset': typeof AuthResetRoute
+  '/auth/sign-in': typeof AuthSignInRoute
+  '/auth/sign-up': typeof AuthSignUpRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/read/$id': typeof AppReadIdRoute
+  '/_app/watch/$id': typeof AppWatchIdRoute
+  '/_web/releases/$slug': typeof WebReleasesSlugRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/_web/releases/': typeof WebReleasesIndexRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath;
+  fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | "/auth"
-    | "/feeds"
-    | "/import"
-    | "/welcome"
-    | "/api/health"
-    | "/auth/reset"
-    | "/auth/sign-in"
-    | "/auth/sign-up"
-    | "/"
-    | "/read/$id"
-    | "/watch/$id"
-    | "/releases/$slug"
-    | "/api/auth/$"
-    | "/api/rpc/$"
-    | "/releases";
-  fileRoutesByTo: FileRoutesByTo;
+    | '/'
+    | '/auth'
+    | '/feeds'
+    | '/import'
+    | '/welcome'
+    | '/api/health'
+    | '/auth/reset'
+    | '/auth/sign-in'
+    | '/auth/sign-up'
+    | '/read/$id'
+    | '/watch/$id'
+    | '/releases/$slug'
+    | '/api/auth/$'
+    | '/api/rpc/$'
+    | '/releases/'
+  fileRoutesByTo: FileRoutesByTo
   to:
-    | "/auth"
-    | "/feeds"
-    | "/import"
-    | "/welcome"
-    | "/api/health"
-    | "/auth/reset"
-    | "/auth/sign-in"
-    | "/auth/sign-up"
-    | "/"
-    | "/read/$id"
-    | "/watch/$id"
-    | "/releases/$slug"
-    | "/api/auth/$"
-    | "/api/rpc/$"
-    | "/releases";
+    | '/'
+    | '/auth'
+    | '/feeds'
+    | '/import'
+    | '/welcome'
+    | '/api/health'
+    | '/auth/reset'
+    | '/auth/sign-in'
+    | '/auth/sign-up'
+    | '/read/$id'
+    | '/watch/$id'
+    | '/releases/$slug'
+    | '/api/auth/$'
+    | '/api/rpc/$'
+    | '/releases'
   id:
-    | "__root__"
-    | "/_app"
-    | "/_web"
-    | "/auth"
-    | "/_app/feeds"
-    | "/_app/import"
-    | "/_web/welcome"
-    | "/api/health"
-    | "/auth/reset"
-    | "/auth/sign-in"
-    | "/auth/sign-up"
-    | "/_app/"
-    | "/_app/read/$id"
-    | "/_app/watch/$id"
-    | "/_web/releases/$slug"
-    | "/api/auth/$"
-    | "/api/rpc/$"
-    | "/_web/releases/";
-  fileRoutesById: FileRoutesById;
+    | '__root__'
+    | '/_app'
+    | '/_web'
+    | '/auth'
+    | '/_app/feeds'
+    | '/_app/import'
+    | '/_web/welcome'
+    | '/api/health'
+    | '/auth/reset'
+    | '/auth/sign-in'
+    | '/auth/sign-up'
+    | '/_app/'
+    | '/_app/read/$id'
+    | '/_app/watch/$id'
+    | '/_web/releases/$slug'
+    | '/api/auth/$'
+    | '/api/rpc/$'
+    | '/_web/releases/'
+  fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AppRoute: typeof AppRouteWithChildren;
-  WebRoute: typeof WebRouteWithChildren;
-  AuthRoute: typeof AuthRouteWithChildren;
-  ApiHealthRoute: typeof ApiHealthRoute;
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute;
-  ApiRpcSplatRoute: typeof ApiRpcSplatRoute;
+  AppRoute: typeof AppRouteWithChildren
+  WebRoute: typeof WebRouteWithChildren
+  AuthRoute: typeof AuthRouteWithChildren
+  ApiHealthRoute: typeof ApiHealthRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiRpcSplatRoute: typeof ApiRpcSplatRoute
 }
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    "/auth": {
-      id: "/auth";
-      path: "/auth";
-      fullPath: "/auth";
-      preLoaderRoute: typeof AuthRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/_web": {
-      id: "/_web";
-      path: "";
-      fullPath: "";
-      preLoaderRoute: typeof WebRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/_app": {
-      id: "/_app";
-      path: "";
-      fullPath: "";
-      preLoaderRoute: typeof AppRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/_app/": {
-      id: "/_app/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof AppIndexRouteImport;
-      parentRoute: typeof AppRoute;
-    };
-    "/auth/sign-up": {
-      id: "/auth/sign-up";
-      path: "/sign-up";
-      fullPath: "/auth/sign-up";
-      preLoaderRoute: typeof AuthSignUpRouteImport;
-      parentRoute: typeof AuthRoute;
-    };
-    "/auth/sign-in": {
-      id: "/auth/sign-in";
-      path: "/sign-in";
-      fullPath: "/auth/sign-in";
-      preLoaderRoute: typeof AuthSignInRouteImport;
-      parentRoute: typeof AuthRoute;
-    };
-    "/auth/reset": {
-      id: "/auth/reset";
-      path: "/reset";
-      fullPath: "/auth/reset";
-      preLoaderRoute: typeof AuthResetRouteImport;
-      parentRoute: typeof AuthRoute;
-    };
-    "/api/health": {
-      id: "/api/health";
-      path: "/api/health";
-      fullPath: "/api/health";
-      preLoaderRoute: typeof ApiHealthRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/_web/welcome": {
-      id: "/_web/welcome";
-      path: "/welcome";
-      fullPath: "/welcome";
-      preLoaderRoute: typeof WebWelcomeRouteImport;
-      parentRoute: typeof WebRoute;
-    };
-    "/_app/import": {
-      id: "/_app/import";
-      path: "/import";
-      fullPath: "/import";
-      preLoaderRoute: typeof AppImportRouteImport;
-      parentRoute: typeof AppRoute;
-    };
-    "/_app/feeds": {
-      id: "/_app/feeds";
-      path: "/feeds";
-      fullPath: "/feeds";
-      preLoaderRoute: typeof AppFeedsRouteImport;
-      parentRoute: typeof AppRoute;
-    };
-    "/_web/releases/": {
-      id: "/_web/releases/";
-      path: "/releases";
-      fullPath: "/releases";
-      preLoaderRoute: typeof WebReleasesIndexRouteImport;
-      parentRoute: typeof WebRoute;
-    };
-    "/api/rpc/$": {
-      id: "/api/rpc/$";
-      path: "/api/rpc/$";
-      fullPath: "/api/rpc/$";
-      preLoaderRoute: typeof ApiRpcSplatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/api/auth/$": {
-      id: "/api/auth/$";
-      path: "/api/auth/$";
-      fullPath: "/api/auth/$";
-      preLoaderRoute: typeof ApiAuthSplatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/_web/releases/$slug": {
-      id: "/_web/releases/$slug";
-      path: "/releases/$slug";
-      fullPath: "/releases/$slug";
-      preLoaderRoute: typeof WebReleasesSlugRouteImport;
-      parentRoute: typeof WebRoute;
-    };
-    "/_app/watch/$id": {
-      id: "/_app/watch/$id";
-      path: "/watch/$id";
-      fullPath: "/watch/$id";
-      preLoaderRoute: typeof AppWatchIdRouteImport;
-      parentRoute: typeof AppRoute;
-    };
-    "/_app/read/$id": {
-      id: "/_app/read/$id";
-      path: "/read/$id";
-      fullPath: "/read/$id";
-      preLoaderRoute: typeof AppReadIdRouteImport;
-      parentRoute: typeof AppRoute;
-    };
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_web': {
+      id: '/_web'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof WebRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/auth/sign-up': {
+      id: '/auth/sign-up'
+      path: '/sign-up'
+      fullPath: '/auth/sign-up'
+      preLoaderRoute: typeof AuthSignUpRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/auth/sign-in': {
+      id: '/auth/sign-in'
+      path: '/sign-in'
+      fullPath: '/auth/sign-in'
+      preLoaderRoute: typeof AuthSignInRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/auth/reset': {
+      id: '/auth/reset'
+      path: '/reset'
+      fullPath: '/auth/reset'
+      preLoaderRoute: typeof AuthResetRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_web/welcome': {
+      id: '/_web/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WebWelcomeRouteImport
+      parentRoute: typeof WebRoute
+    }
+    '/_app/import': {
+      id: '/_app/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof AppImportRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/feeds': {
+      id: '/_app/feeds'
+      path: '/feeds'
+      fullPath: '/feeds'
+      preLoaderRoute: typeof AppFeedsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_web/releases/': {
+      id: '/_web/releases/'
+      path: '/releases'
+      fullPath: '/releases/'
+      preLoaderRoute: typeof WebReleasesIndexRouteImport
+      parentRoute: typeof WebRoute
+    }
+    '/api/rpc/$': {
+      id: '/api/rpc/$'
+      path: '/api/rpc/$'
+      fullPath: '/api/rpc/$'
+      preLoaderRoute: typeof ApiRpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_web/releases/$slug': {
+      id: '/_web/releases/$slug'
+      path: '/releases/$slug'
+      fullPath: '/releases/$slug'
+      preLoaderRoute: typeof WebReleasesSlugRouteImport
+      parentRoute: typeof WebRoute
+    }
+    '/_app/watch/$id': {
+      id: '/_app/watch/$id'
+      path: '/watch/$id'
+      fullPath: '/watch/$id'
+      preLoaderRoute: typeof AppWatchIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/read/$id': {
+      id: '/_app/read/$id'
+      path: '/read/$id'
+      fullPath: '/read/$id'
+      preLoaderRoute: typeof AppReadIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
-  AppFeedsRoute: typeof AppFeedsRoute;
-  AppImportRoute: typeof AppImportRoute;
-  AppIndexRoute: typeof AppIndexRoute;
-  AppReadIdRoute: typeof AppReadIdRoute;
-  AppWatchIdRoute: typeof AppWatchIdRoute;
+  AppFeedsRoute: typeof AppFeedsRoute
+  AppImportRoute: typeof AppImportRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppReadIdRoute: typeof AppReadIdRoute
+  AppWatchIdRoute: typeof AppWatchIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -368,37 +368,37 @@ const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppReadIdRoute: AppReadIdRoute,
   AppWatchIdRoute: AppWatchIdRoute,
-};
+}
 
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren);
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface WebRouteChildren {
-  WebWelcomeRoute: typeof WebWelcomeRoute;
-  WebReleasesSlugRoute: typeof WebReleasesSlugRoute;
-  WebReleasesIndexRoute: typeof WebReleasesIndexRoute;
+  WebWelcomeRoute: typeof WebWelcomeRoute
+  WebReleasesSlugRoute: typeof WebReleasesSlugRoute
+  WebReleasesIndexRoute: typeof WebReleasesIndexRoute
 }
 
 const WebRouteChildren: WebRouteChildren = {
   WebWelcomeRoute: WebWelcomeRoute,
   WebReleasesSlugRoute: WebReleasesSlugRoute,
   WebReleasesIndexRoute: WebReleasesIndexRoute,
-};
+}
 
-const WebRouteWithChildren = WebRoute._addFileChildren(WebRouteChildren);
+const WebRouteWithChildren = WebRoute._addFileChildren(WebRouteChildren)
 
 interface AuthRouteChildren {
-  AuthResetRoute: typeof AuthResetRoute;
-  AuthSignInRoute: typeof AuthSignInRoute;
-  AuthSignUpRoute: typeof AuthSignUpRoute;
+  AuthResetRoute: typeof AuthResetRoute
+  AuthSignInRoute: typeof AuthSignInRoute
+  AuthSignUpRoute: typeof AuthSignUpRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthResetRoute: AuthResetRoute,
   AuthSignInRoute: AuthSignInRoute,
   AuthSignUpRoute: AuthSignUpRoute,
-};
+}
 
-const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren);
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
@@ -407,16 +407,16 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,
-};
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>();
+  ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from "./router.tsx";
-import type { createStart } from "@tanstack/react-start";
-declare module "@tanstack/react-start" {
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
   interface Register {
-    ssr: true;
-    router: Awaited<ReturnType<typeof getRouter>>;
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
   }
 }
