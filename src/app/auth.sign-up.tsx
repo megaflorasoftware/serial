@@ -3,7 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { AUTH_SIGNED_IN_URL } from "../server/auth/constants";
 import { Button } from "~/components/ui/button";
 import { CardContent } from "~/components/ui/card";

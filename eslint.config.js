@@ -28,6 +28,15 @@ export default tseslint.config(
       "@typescript-eslint/array-type": ["error", { default: "array-simple" }],
       "react-hooks/set-state-in-effect": "warn",
       "no-undef": "off",
+      "sort-imports": [
+        "error",
+        {
+          ignoreCase: true,
+          ignoreDeclarationSort: true,
+          ignoreMemberSort: false,
+          allowSeparatedGroups: true,
+        },
+      ],
     },
   },
   {

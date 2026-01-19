@@ -1,9 +1,9 @@
 import {
+  createRootRoute,
   HeadContent,
   Link,
   Outlet,
   Scripts,
-  createRootRoute,
 } from "@tanstack/react-router";
 import { SproutIcon } from "lucide-react";
 import { ThemeProvider } from "~/components/ThemeProvider";

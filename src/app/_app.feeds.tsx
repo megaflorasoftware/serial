@@ -1,6 +1,6 @@
 "use client";
 
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   GlobeIcon,
   PlayCircleIcon,

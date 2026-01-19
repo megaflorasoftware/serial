@@ -1,10 +1,10 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
 import {
-  UNSELECTED_VIEW_ID,
   categoryFilterAtom,
   dateFilterAtom,
   feedFilterAtom,
+  UNSELECTED_VIEW_ID,
   viewFilterIdAtom,
   viewsAtom,
 } from "../atoms";

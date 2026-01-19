@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  QueryClient as TanstackQueryClient,
   defaultShouldDehydrateQuery,
+  QueryClient as TanstackQueryClient,
 } from "@tanstack/react-query";
 import SuperJSON from "superjson";
 import { toast } from "sonner";

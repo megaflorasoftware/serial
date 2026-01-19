@@ -9,8 +9,8 @@ import { useView } from "./useView";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
 import {
-  useFeedItemsSetWatchLaterValueMutation,
   useFeedItemsSetWatchedValueMutation,
+  useFeedItemsSetWatchLaterValueMutation,
 } from "~/lib/data/feed-items/mutations";
 import {
   useInstapaperConnectionStatus,

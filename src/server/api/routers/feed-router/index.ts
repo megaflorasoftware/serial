@@ -6,12 +6,12 @@ import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 import { prepareArrayChunks } from "~/lib/iterators";
 import {
-  PLATFORM_DEFAULT_OPEN_LOCATION,
   contentCategories,
   feedCategories,
   feeds,
   feedsSchema,
   openLocationSchema,
+  PLATFORM_DEFAULT_OPEN_LOCATION,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
