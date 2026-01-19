@@ -176,6 +176,13 @@
       "when": 1768777095518,
       "tag": "0024_nosy_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1768853928402,
+      "tag": "0025_typical_jackpot",
+      "breakpoints": true
     }
   ]
 }

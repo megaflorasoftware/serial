@@ -24,6 +24,7 @@ export const create = protectedProcedure
           daysWindow: input.daysWindow,
           readStatus: input.readStatus,
           orientation: input.orientation,
+          contentType: input.contentType,
           placement: input.placement,
         })
         .returning();
@@ -54,6 +55,7 @@ export const update = protectedProcedure
           daysWindow: input.daysWindow,
           readStatus: input.readStatus,
           orientation: input.orientation,
+          contentType: input.contentType,
           placement: input.placement,
         })
         .where(and(eq(views.userId, context.user.id), eq(views.id, input.id)))

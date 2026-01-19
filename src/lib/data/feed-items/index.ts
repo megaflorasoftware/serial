@@ -79,6 +79,21 @@ export function doesFeedItemPassFilters(
     return false;
   }
 
+  // Content type filter (from view)
+  if (viewFilter?.contentType) {
+    const ct = viewFilter.contentType;
+    if (ct === "longform" && item.orientation === "vertical") {
+      return false;
+    }
+    if (ct === "horizontal-video" && item.orientation !== "horizontal") {
+      return false;
+    }
+    if (ct === "vertical-video" && item.orientation !== "vertical") {
+      return false;
+    }
+    // "all" passes through
+  }
+
   return true;
 }
 

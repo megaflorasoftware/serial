@@ -21,7 +21,11 @@ import {
   useViews as useViewsStore,
 } from "./store";
 import type { ApplicationView } from "~/server/db/schema";
-import { FEED_ITEM_ORIENTATION, VIEW_READ_STATUS } from "~/server/db/constants";
+import {
+  FEED_ITEM_ORIENTATION,
+  VIEW_CONTENT_TYPE,
+  VIEW_READ_STATUS,
+} from "~/server/db/constants";
 import { useSession } from "~/lib/auth-client";
 
 export const INBOX_VIEW_ID = -1;
@@ -128,6 +132,7 @@ export function useViewsQuery() {
       name: "Inbox",
       daysWindow: 30,
       orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
+      contentType: VIEW_CONTENT_TYPE.LONGFORM,
       readStatus: VIEW_READ_STATUS.UNREAD,
       placement: INBOX_VIEW_PLACEMENT,
       userId: data?.user.id ?? "",
