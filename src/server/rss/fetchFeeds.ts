@@ -157,7 +157,6 @@ export async function* fetchAndInsertFeedData(
     }
   });
 
-   
   while (feedPromises.length > 0) {
     const result = await Promise.any(Array.from(feedPromises));
 

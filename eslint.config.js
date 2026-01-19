@@ -31,6 +31,8 @@ export default tseslint.config(
           checksVoidReturn: { attributes: false },
         },
       ],
+      // TanStack Router's redirect() and notFound() are designed to be thrown
+      "@typescript-eslint/only-throw-error": "off",
       "no-empty-function": "off",
       "@typescript-eslint/no-empty-function": "off",
     },

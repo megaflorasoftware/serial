@@ -7,6 +7,7 @@ import ResetPasswordEmail from "~/emails/reset-password";
 import { db } from "../db";
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
+import { redirect } from "@tanstack/react-router";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {
@@ -14,7 +15,7 @@ export const authMiddleware = createMiddleware().server(
     const session = await auth.api.getSession({ headers });
     if (!session) {
       if (!pathname.includes("auth")) {
-        throw new Error("Redirect to /welcome");
+        throw redirect({ to: "/welcome" });
       }
     }
     return await next();
