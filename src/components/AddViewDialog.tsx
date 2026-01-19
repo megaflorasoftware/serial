@@ -188,19 +188,35 @@ export function ViewCategoriesInput({
     );
   }
 
+  const isAllSelected = selectedCategories.length === 0;
+
   return (
     <div className="grid gap-2">
       <Label htmlFor="categories">Categories</Label>
       <ToggleGroup
         id="categories"
         type="multiple"
-        value={selectedCategories.map((category) => category.toString())}
+        value={
+          isAllSelected
+            ? ["all"]
+            : selectedCategories.map((category) => category.toString())
+        }
         onValueChange={(value) => {
-          setSelectedCategories(value.map((id) => parseInt(id)));
+          // If "all" was just selected, clear all categories
+          if (value.includes("all") && !isAllSelected) {
+            setSelectedCategories([]);
+            return;
+          }
+          // Filter out "all" and set the selected category ids
+          const categoryIds = value
+            .filter((id) => id !== "all")
+            .map((id) => parseInt(id));
+          setSelectedCategories(categoryIds);
         }}
         size="sm"
         className="flex w-fit flex-wrap justify-start gap-1"
       >
+        <AddViewToggleItem value="all">All</AddViewToggleItem>
         {contentCategories.map((category) => {
           return (
             <AddViewToggleItem key={category.id} value={category.id.toString()}>
