@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
 import FeedLoading from "../components/loading";
+import type React from "react";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/_app")({
   server: {
     middleware: [authMiddleware],
   },
-  loader: async () => {
+  loader: () => {
     const mostRecentRelease = getMostRecentRelease();
     return { mostRecentRelease };
   },

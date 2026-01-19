@@ -26,7 +26,7 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
   const updateViewFilter = useUpdateViewFilter();
 
   useEffect(() => {
-    if (!!views?.length && !hasSetInitialView) {
+    if (views.length > 0 && !hasSetInitialView) {
       setHasSetInitialView(true);
       updateViewFilter(views[0]!.id);
     }

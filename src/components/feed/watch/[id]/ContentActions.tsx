@@ -72,7 +72,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
 
   const showInstapaperAction =
     instapaperStatus?.isConfigured &&
-    instapaperStatus?.isConnected &&
+    instapaperStatus.isConnected &&
     video?.platform === "website";
 
   useShortcut("s", () => {

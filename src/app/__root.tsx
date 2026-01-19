@@ -108,7 +108,7 @@ export const Route = createRootRoute({
     <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 text-center">
       <SproutIcon size={36} className="text-foreground" />
       <div className="max-w-xs text-2xl font-semibold">
-        Oops! We couldn't find what you're looking for.
+        Oops! We couldn&apos;t find what you&apos;re looking for.
       </div>
       <Button asChild>
         <Link to={AUTH_SIGNED_IN_URL}>Back to Home</Link>

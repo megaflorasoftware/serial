@@ -203,7 +203,7 @@ export function EditFeedDialog({
   const { feedCategories } = useFeedCategories();
 
   useEffect(() => {
-    if (!feeds || selectedFeedId == null) return;
+    if (selectedFeedId == null) return;
 
     const feed = feeds.find((v) => v.id === selectedFeedId);
     if (!feed) return;

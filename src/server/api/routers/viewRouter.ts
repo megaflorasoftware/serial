@@ -28,7 +28,7 @@ export const create = protectedProcedure
         })
         .returning();
 
-      const view = viewsResult?.[0];
+      const view = viewsResult[0];
 
       if (!input.categoryIds || !view) return;
 
@@ -59,9 +59,9 @@ export const update = protectedProcedure
         .where(and(eq(views.userId, context.user.id), eq(views.id, input.id)))
         .returning();
 
-      const view = viewsResult?.[0];
+      const view = viewsResult[0];
 
-      if (!input.categoryIds || !view) return;
+      if (input.categoryIds.length === 0) return;
 
       await tx
         .delete(viewCategories)

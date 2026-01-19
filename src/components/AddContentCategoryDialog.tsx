@@ -128,7 +128,7 @@ export function EditContentCategoryDialog({
 
   const { contentCategories } = useContentCategories();
   useEffect(() => {
-    if (!contentCategories || !selectedContentCategoryId) return;
+    if (!selectedContentCategoryId) return;
 
     const category = contentCategories.find(
       (v) => v.id === selectedContentCategoryId,

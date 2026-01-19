@@ -10,7 +10,7 @@ export async function getInitialFeedDataFromFileInputElement(
     return formError("Couldn't find a file.");
   }
 
-  const file = inputElement.files?.[0];
+  const file = inputElement.files[0];
   if (!file) {
     return formError("Couldn't find a file.");
   }

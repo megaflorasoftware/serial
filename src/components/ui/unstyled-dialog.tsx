@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {  useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { useRouter } from "@tanstack/react-router";
-import type { ElementRef } from "react";
+import type {ElementRef} from "react";
+import type React from "react";
 
 export function UnstyledDialog({
   children,
@@ -30,6 +31,7 @@ export function UnstyledDialog({
   }
 
   return createPortal(
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <dialog
       ref={dialogRef}
       className={clsx(
@@ -38,6 +40,9 @@ export function UnstyledDialog({
       )}
       onClose={onDismiss}
       onClick={onDismiss}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onDismiss();
+      }}
     >
       {children}
       {/* <button onClick={onDismiss} className="close-button" /> */}

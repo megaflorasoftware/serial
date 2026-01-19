@@ -208,7 +208,7 @@ export const getById = protectedProcedure
 
     return {
       ...item,
-      platform: feed.platform ?? "youtube",
+      platform: feed.platform,
     } as ApplicationFeedItem;
   });
 
@@ -230,7 +230,7 @@ export const getByFeedId = protectedProcedure
 
     const existingApplicationFeedItems = itemsData.map((item) => ({
       ...item,
-      platform: feed.platform ?? "youtube",
+      platform: feed.platform,
     })) as ApplicationFeedItem[];
 
     for (const chunk of prepareArrayChunks(existingApplicationFeedItems, 50)) {

@@ -38,7 +38,7 @@ function ReadPage() {
 
   const [articleStyle] = useFlagState("ARTICLE_STYLE");
 
-  const feedItem = useFeedItemValue(params?.id ?? "");
+  const feedItem = useFeedItemValue(params.id);
   const { feeds } = useFeeds();
 
   const feed = feeds.find((f) => f.id === feedItem?.feedId);
@@ -68,9 +68,9 @@ function ReadPage() {
       }}
     >
       <div className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6">
-        {feed?.imageUrl ? (
+        {feed.imageUrl ? (
           <img
-            src={feed?.imageUrl}
+            src={feed.imageUrl}
             alt={feedItem?.title}
             className="aspect-square h-6 rounded object-cover"
           />
@@ -89,7 +89,7 @@ function ReadPage() {
         />
       </div>
       <div className="sticky inset-x-0 bottom-0 left-0 grid place-items-center">
-        <ContentActions contentID={params.id ?? ""} />
+        <ContentActions contentID={params.id} />
       </div>
     </div>
   );

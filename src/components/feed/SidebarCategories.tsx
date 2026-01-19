@@ -34,7 +34,6 @@ function useCheckFilteredFeedItemsForCategory() {
 
   return useCallback(
     (category: number) => {
-      if (!feedItemsOrder || !feedCategories) return [];
       return feedItemsOrder.filter(
         (item) =>
           feedItemsMap[item] &&
@@ -72,7 +71,7 @@ export function SidebarCategories() {
 
   const { contentCategories } = useContentCategories();
 
-  const categoryOptions = contentCategories?.map((category) => ({
+  const categoryOptions = contentCategories.map((category) => ({
     ...category,
     hasEntries: !!checkFilteredFeedItemsForCategory(category.id).length,
   }));
@@ -123,7 +122,7 @@ export function SidebarCategories() {
               All
             </SidebarMenuButton>
           </SidebarMenuItem>
-          {categoryOptions?.map((option) => {
+          {categoryOptions.map((option) => {
             return (
               <SidebarMenuItem key={option.id} className="group flex gap-1">
                 <SidebarMenuButton

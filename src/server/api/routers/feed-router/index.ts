@@ -60,7 +60,7 @@ export const create = protectedProcedure
             })
             .returning();
 
-          const newFeedRow = insertedFeeds?.[0];
+          const newFeedRow = insertedFeeds[0];
 
           if (!!input.categoryIds.length && !!newFeedRow) {
             await Promise.all(
@@ -119,7 +119,7 @@ export const createFromSubscriptionImport = protectedProcedure
         chunk.map(async (feed) => {
           return await context.db.transaction(async (tx) => {
             const newFeedDetails = await fetchNewFeedDetails(feed.feedUrl);
-            const newFeed = newFeedDetails?.[0];
+            const newFeed = newFeedDetails[0];
 
             if (!newFeed?.url) {
               return {
@@ -150,7 +150,7 @@ export const createFromSubscriptionImport = protectedProcedure
                 openLocation: PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
               })
               .returning();
-            const newFeedRow = newFeeds?.[0];
+            const newFeedRow = newFeeds[0];
 
             if (!newFeedRow) {
               return {
@@ -198,13 +198,13 @@ export const createFromSubscriptionImport = protectedProcedure
                     userId: context.user.id,
                   })
                   .returning();
-                const newContentCategory = newContentCategoryList?.[0];
+                const newContentCategory = newContentCategoryList[0];
 
                 if (!newContentCategory?.id) return;
 
                 await tx.insert(feedCategories).values({
                   feedId: newFeedRow.id,
-                  categoryId: newContentCategory?.id,
+                  categoryId: newContentCategory.id,
                 });
               },
             );
@@ -327,7 +327,7 @@ async function discoverYouTubeFeeds(url: string) {
     const channelName = channelNameMatch?.[1];
 
     const feedUrls = Array.from(rssFeedUrlMatches)
-      .map((match) => match?.[1])
+      .map((match) => match[1])
       .filter(Boolean);
 
     if (feedUrls.length === 0) {

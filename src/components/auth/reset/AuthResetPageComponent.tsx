@@ -117,9 +117,9 @@ export function AuthResetPageComponent() {
                     setLoading(true);
                   },
                   onError: (ctx) => {
-                    toast.error(ctx.error.message ?? "Something went wrong.");
+                    toast.error(ctx.error.message);
                   },
-                  onSuccess: async () => {
+                  onSuccess: () => {
                     setIsSent(true);
                   },
                 },
@@ -169,9 +169,9 @@ export function AuthResetPageComponent() {
                   setLoading(true);
                 },
                 onError: (ctx) => {
-                  toast.error(ctx.error.message ?? "Something went wrong.");
+                  toast.error(ctx.error.message);
                 },
-                onSuccess: async () => {
+                onSuccess: () => {
                   setIsSent(true);
                 },
               },

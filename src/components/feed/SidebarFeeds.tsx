@@ -59,7 +59,6 @@ function useCheckFilteredFeedItemsForFeed() {
 
   return useCallback(
     (feed: number) => {
-      if (!feedItemsOrder || !feedCategories) return [];
       return feedItemsOrder.filter(
         (item) =>
           feedItemsDict[item] &&
@@ -177,7 +176,7 @@ export function SidebarFeeds() {
     );
   }
 
-  const feedOptions = feeds?.map((feed) => ({
+  const feedOptions = feeds.map((feed) => ({
     ...feed,
     hasEntries: !!checkFilteredFeedItemsForFeed(feed.id).length,
   }));
@@ -187,14 +186,8 @@ export function SidebarFeeds() {
     feedOptionsWithContent,
     emptyFeedOptions,
     errorFeedOptions,
-  } = (feedOptions ?? []).reduce(
+  } = feedOptions.reduce(
     (acc, feedOption) => {
-      const {
-        preferredFeedOptions,
-        feedOptionsWithContent,
-        emptyFeedOptions,
-        errorFeedOptions,
-      } = acc;
       if (searchQuery) {
         const lowercaseQuery = searchQuery.toLowerCase();
         const lowercaseName = feedOption.name.toLowerCase();

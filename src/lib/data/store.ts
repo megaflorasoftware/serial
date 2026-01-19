@@ -82,7 +82,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
         if (incomingChunk.type === "feed-status") {
           feedStatusDict[incomingChunk.feedId] = incomingChunk.status;
-        } else if (incomingChunk.type === "feed-items") {
+        } else {
           const incomingFeedItems = incomingChunk.feedItems;
 
           incomingFeedItems.forEach((item) => {
@@ -132,7 +132,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
         if (incomingChunk.type === "feed-status") {
           feedStatusDict[incomingChunk.feedId] = incomingChunk.status;
-        } else if (incomingChunk.type === "feed-items") {
+        } else {
           const incomingFeedItems = incomingChunk.feedItems;
 
           incomingFeedItems.forEach((item) => {
@@ -189,7 +189,7 @@ export const {
 export const useFeedItemValue = (id: string) => {
   return useStore(
     feedItemsStore,
-    useShallow((store) => store.feedItemsDict?.[id]),
+    useShallow((store) => store.feedItemsDict[id]),
   );
 };
 export const useSetFeedItemValue = (id: string) => {

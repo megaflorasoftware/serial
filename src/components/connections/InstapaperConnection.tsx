@@ -129,9 +129,9 @@ export function InstapaperConnectionListItem({
         <span className="font-medium">Instapaper</span>
         {isLoading ? (
           <span className="text-muted-foreground text-sm">Loading...</span>
-        ) : !status?.isConfigured ? (
+        ) : !status.isConfigured ? (
           <span className="text-muted-foreground text-sm">Not available</span>
-        ) : status?.isConnected ? (
+        ) : status.isConnected ? (
           <span className="text-muted-foreground text-sm">
             {status.username}
           </span>
@@ -141,7 +141,7 @@ export function InstapaperConnectionListItem({
       </div>
       {isLoading ? (
         <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
-      ) : !status?.isConfigured ? null : status?.isConnected ? (
+      ) : !status.isConfigured ? null : status.isConnected ? (
         <Button
           variant="outline"
           size="sm"

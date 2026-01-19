@@ -11,6 +11,7 @@ import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persi
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Persister } from "@tanstack/react-query-persist-client";
+import type React from "react";
 
 export const createQueryClient = () =>
   new TanstackQueryClient({
@@ -64,7 +65,8 @@ export const getAsyncStoragePersister = () => {
   if (typeof window === "undefined") {
     return asyncStoragePersister;
   }
-  return (asyncStoragePersister ??= createSerialAsyncStoragePersister());
+  asyncStoragePersister = createSerialAsyncStoragePersister();
+  return asyncStoragePersister;
 };
 
 let clientQueryClientSingleton: QueryClient | undefined = undefined;
@@ -74,7 +76,10 @@ export const getQueryClient = () => {
     return createQueryClient();
   } else {
     // Browser: use singleton pattern to keep the same query client
-    return (clientQueryClientSingleton ??= createQueryClient());
+    if (!clientQueryClientSingleton) {
+      clientQueryClientSingleton = createQueryClient();
+    }
+    return clientQueryClientSingleton;
   }
 };
 

@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AddContentCategoriesButton } from "./AddContentCategoryButton";
@@ -7,6 +8,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import type React from "react";
 import { VIEW_READ_STATUS } from "~/server/db/constants";
 import {
   useCreateViewMutation,
@@ -143,7 +145,6 @@ export function ViewCategoriesInput({
         type="multiple"
         value={selectedCategories.map((category) => category.toString())}
         onValueChange={(value) => {
-          if (!value) return;
           setSelectedCategories(value.map((id) => parseInt(id)));
         }}
         size="sm"
@@ -266,7 +267,7 @@ export function EditViewDialog({
 
   const { views } = useViews();
   useEffect(() => {
-    if (!views || !selectedViewId) return;
+    if (!selectedViewId) return;
 
     const view = views.find((v) => v.id === selectedViewId);
     if (!view) return;

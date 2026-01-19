@@ -95,7 +95,7 @@ function SignUp() {
                   setLoading(true);
                 },
                 onError: (ctx) => {
-                  toast.error(ctx.error.message ?? "Something went wrong.");
+                  toast.error(ctx.error.message);
                 },
                 onSuccess: () => {
                   void router.navigate({

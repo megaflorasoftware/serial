@@ -216,7 +216,7 @@ function ManageFeedsPage() {
 
   const feedCategoriesMap = useMemo(() => {
     const map = new Map<number, number[]>();
-    feedCategories?.forEach((fc) => {
+    feedCategories.forEach((fc) => {
       const existing = map.get(fc.feedId) ?? [];
       existing.push(fc.categoryId);
       map.set(fc.feedId, existing);
@@ -226,14 +226,13 @@ function ManageFeedsPage() {
 
   const categoryNamesMap = useMemo(() => {
     const map = new Map<number, string>();
-    contentCategories?.forEach((c) => {
+    contentCategories.forEach((c) => {
       map.set(c.id, c.name);
     });
     return map;
   }, [contentCategories]);
 
   const filteredFeeds = useMemo(() => {
-    if (!feeds) return [];
     const sorted = [...feeds].sort((a, b) => a.name.localeCompare(b.name));
     if (!searchQuery.trim()) return sorted;
 
@@ -376,7 +375,7 @@ function ManageFeedsPage() {
     });
   };
 
-  if (!feeds?.length) {
+  if (!feeds.length) {
     return (
       <div className="mx-auto max-w-2xl p-6">
         <h2 className="font-mono text-lg">Manage Feeds</h2>
@@ -440,9 +439,10 @@ function ManageFeedsPage() {
             const feedCategoryIds = feedCategoriesMap.get(feed.id) ?? [];
 
             return (
-              <div
+              <button
+                type="button"
                 key={feed.id}
-                className="hover:bg-muted/50 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 transition-colors"
+                className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-colors"
                 onClick={() => toggleFeedSelection(feed.id)}
               >
                 <Checkbox
@@ -468,7 +468,7 @@ function ManageFeedsPage() {
                     );
                   })}
                 </div>
-              </div>
+              </button>
             );
           })}
 

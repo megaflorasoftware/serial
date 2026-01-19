@@ -45,6 +45,7 @@ export function Combobox<T extends string>({
   const triggerRef = React.useRef<HTMLButtonElement>(null);
 
   const computedWidth =
+    // eslint-disable-next-line react-hooks/refs
     width === "full" ? `${triggerRef.current?.clientWidth}px` : `${width}px`;
 
   return (
@@ -86,7 +87,7 @@ export function Combobox<T extends string>({
               <Button
                 variant="default"
                 onClick={() => {
-                  onAddOption?.(localValue as T);
+                  onAddOption(localValue as T);
                 }}
               >
                 <span

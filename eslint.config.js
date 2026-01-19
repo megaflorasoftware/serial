@@ -26,6 +26,10 @@ export default tseslint.config(
       // TanStack Router's redirect() and notFound() are designed to be thrown
       "@typescript-eslint/only-throw-error": "off",
       "@typescript-eslint/array-type": ["error", { default: "array-simple" }],
+      // Allow setState in effects for form initialization patterns
+      "react-hooks/set-state-in-effect": "warn",
+      // TypeScript handles undefined variables, so this rule is redundant
+      "no-undef": "off",
     },
   },
   {

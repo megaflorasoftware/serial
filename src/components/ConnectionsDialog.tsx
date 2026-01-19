@@ -49,11 +49,10 @@ export function ConnectionsDialog() {
       description={description}
       onBack={view !== "list" ? () => setView("list") : undefined}
     >
-      {view === "list" ? (
-        <ConnectionsList onSelectService={setView} />
-      ) : view === "instapaper" ? (
+      {view === "list" && <ConnectionsList onSelectService={setView} />}
+      {view === "instapaper" && (
         <InstapaperConnectionForm onSuccess={() => setView("list")} />
-      ) : null}
+      )}
     </ControlledResponsiveDialog>
   );
 }

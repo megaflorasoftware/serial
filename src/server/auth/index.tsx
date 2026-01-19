@@ -30,7 +30,7 @@ export const auth = betterAuth({
     enabled: true,
     maxPasswordLength: 64,
     async sendResetPassword(data) {
-      sendgrid.setApiKey(process.env.SENDGRID_API_KEY ?? "");
+      sendgrid.setApiKey(import.meta.env.SENDGRID_API_KEY ?? "");
 
       const forgotPasswordEmailHtml = await render(
         <ResetPasswordEmail resetUrl={data.url} />,
@@ -63,5 +63,5 @@ export async function isServerAuthed(headers: Headers) {
     headers,
   });
 
-  return !!authResult?.session.id && !!authResult?.user.id;
+  return !!authResult?.session.id && !!authResult.user.id;
 }

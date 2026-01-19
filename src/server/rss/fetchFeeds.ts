@@ -30,7 +30,7 @@ export async function fetchNewFeedDetails(
     );
 
     urls = Array.from(rssFeedUrlMatches)
-      .map((id) => id?.[1])
+      .map((id) => id[1])
       .filter(Boolean);
   }
 
@@ -103,11 +103,11 @@ export async function* fetchAndInsertFeedData(
           return {
             feedId: feed.id,
             contentId: item.id,
-            content: item.content ?? "",
-            title: item.title ?? "",
-            author: item.author ?? "",
-            thumbnail: item.thumbnail ?? "",
-            url: item.url ?? "",
+            content: item.content,
+            title: item.title,
+            author: item.author,
+            thumbnail: item.thumbnail,
+            url: item.url,
             postedAt: new Date(item.publishedDate),
             orientation: checkFeedItemIsVerticalFromUrl(item.url),
           } satisfies typeof feedItems.$inferInsert;

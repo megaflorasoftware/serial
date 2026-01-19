@@ -7,6 +7,7 @@ import {
   AUTH_RESET_PASSWORD_URL,
   AUTH_SIGNED_IN_URL,
 } from "../server/auth/constants";
+import { fetchIsForgotPasswordEnabled } from "~/server/auth/endpoints";
 import { AuthHeader } from "~/components/auth/AuthHeader";
 import { Button } from "~/components/ui/button";
 import { CardContent } from "~/components/ui/card";
@@ -22,8 +23,8 @@ const ERROR_MESSAGES = {
 export const Route = createFileRoute("/auth/sign-in")({
   component: SignIn,
   loader: async () => {
-    // const isForgotPasswordEnabled = await fetchIsForgotPasswordEnabled();
-    return { isForgotPasswordEnabled: false };
+    const isForgotPasswordEnabled = await fetchIsForgotPasswordEnabled();
+    return { isForgotPasswordEnabled };
   },
 });
 
@@ -105,8 +106,7 @@ function SignIn() {
                     });
                   },
                   onError: async (ctx) => {
-                    const errorMessage =
-                      ctx.error.message ?? "Something went wrong.";
+                    const errorMessage = ctx.error.message;
 
                     if (errorMessage === ERROR_MESSAGES.INVALID_LOGIN) {
                       const isSuccessful = await getIsLegacyUser({

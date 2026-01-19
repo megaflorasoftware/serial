@@ -44,6 +44,7 @@ export function Markdown({ content, className }: MarkdownProps) {
           return (
             <img
               {...domNode.attribs}
+              alt={domNode.attribs.alt ?? ""}
               loading="lazy"
               className="rounded-lg shadow-md"
             />

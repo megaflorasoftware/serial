@@ -47,7 +47,7 @@ export function useUpdateViewFilter() {
     updatedViews?: ApplicationView[],
   ) => {
     const _views = updatedViews ?? views;
-    const view = _views?.find((view) => view.id === viewId);
+    const view = _views.find((view) => view.id === viewId);
 
     if (!view) return;
 
@@ -69,7 +69,6 @@ export function useCheckFilteredFeedItemsForView() {
 
   return useCallback(
     (viewId: number) => {
-      if (!feedItemsOrder || !feedCategories) return [];
       const viewFilter = views.find((view) => view.id === viewId) || null;
 
       return feedItemsOrder.filter(
@@ -109,7 +108,7 @@ export function useViewsQuery() {
   const transformedData = useMemo(() => {
     const now = new Date();
 
-    const customViews: ApplicationView[] = (rawViews ?? []).map((view) => ({
+    const customViews: ApplicationView[] = rawViews.map((view) => ({
       ...view,
     }));
 

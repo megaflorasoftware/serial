@@ -226,7 +226,7 @@ export async function addBookmark(
   if (!data[0]?.bookmark_id) {
     throw new Error(`Couldn't access bookmark`);
   }
-  return { bookmark_id: data[0]?.bookmark_id };
+  return { bookmark_id: data[0].bookmark_id };
 }
 
 export async function verifyCredentials(

@@ -139,7 +139,7 @@ export function SidebarViews() {
 
   useEffect(() => {
     setViewOptions(
-      views?.map((view) => ({
+      views.map((view) => ({
         ...view,
         hasEntries: !!checkFilteredFeedItemsForView(view.id).length,
       })),
@@ -149,7 +149,7 @@ export function SidebarViews() {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
 
-    if (!!over && active.id !== over?.id) {
+    if (over && active.id !== over.id) {
       setViewOptions((options) => {
         const oldIndex = options.findIndex((view) => view.id === active.id);
         const newIndex = options.findIndex((view) => view.id === over.id);
@@ -158,6 +158,7 @@ export function SidebarViews() {
 
         const updatedViews = calculateViewsPlacement(
           updatedOptions.map((option) => {
+            // eslint-disable-next-line no-unused-vars
             const { hasEntries, ...restOfOption } = option;
             return restOfOption;
           }),
@@ -196,7 +197,7 @@ export function SidebarViews() {
               items={viewOptions}
               strategy={verticalListSortingStrategy}
             >
-              {viewOptions?.map((option) => {
+              {viewOptions.map((option) => {
                 return (
                   <ViewSidebarItem
                     view={option}

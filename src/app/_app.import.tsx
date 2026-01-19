@@ -75,7 +75,7 @@ function EditFeedsPage() {
   const resetFeedItems = useResetFeedItems();
 
   const onSelectFiles = async () => {
-    if (!inputElementRef.current || feeds === undefined) return;
+    if (!inputElementRef.current) return;
 
     const feedResult = await getInitialFeedDataFromFileInputElement(
       inputElementRef.current,
@@ -205,7 +205,7 @@ function EditFeedsPage() {
             )}
             <div className="mt-4">
               {feedsFoundFromFile
-                ?.sort((a, b) => {
+                .sort((a, b) => {
                   if (!a.title && !b.title) return 0;
                   if (!a.title) return -1;
                   if (!b.title) return -1;
@@ -214,7 +214,7 @@ function EditFeedsPage() {
                 .map((channel, i) => {
                   const displayTitle = channel.title ?? channel.feedUrl;
                   const result = feedResults.find(
-                    (result) => result.feedUrl === channel.feedUrl,
+                    (r) => r.feedUrl === channel.feedUrl,
                   );
 
                   return (
@@ -277,7 +277,7 @@ function EditFeedsPage() {
                                 });
                               }}
                               disabled={
-                                !!feeds?.find(
+                                !!feeds.find(
                                   (feed) => feed.url === channel.feedUrl,
                                 )
                               }
@@ -341,7 +341,7 @@ function EditFeedsPage() {
                   className="w-full"
                   size="lg"
                   onClick={onFeedImport}
-                  disabled={isPending || channelImportCount === 0}
+                  disabled={channelImportCount === 0}
                 >
                   Import {channelImportCount} feeds
                 </Button>
