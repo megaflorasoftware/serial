@@ -248,7 +248,7 @@ export const views = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name", { length: 256 }).notNull().default(""),
-    daysWindow: integer("days_window", { mode: "number" }).notNull().default(1),
+    daysWindow: integer("days_window", { mode: "number" }).notNull().default(0),
     readStatus: integer("read_status", { mode: "number" })
       .notNull()
       .default(VIEW_READ_STATUS.UNREAD),

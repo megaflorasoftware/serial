@@ -183,6 +183,13 @@
       "when": 1768853928402,
       "tag": "0025_typical_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1768854379207,
+      "tag": "0026_daffy_jasper_sitwell",
+      "breakpoints": true
     }
   ]
 }

@@ -77,6 +77,7 @@ function ViewTimeInput({
         size="sm"
         className="w-fit"
       >
+        <AddViewToggleItem value="0">All time</AddViewToggleItem>
         <AddViewToggleItem value="1">Today</AddViewToggleItem>
         <AddViewToggleItem value="7">This Week</AddViewToggleItem>
         <AddViewToggleItem value="30">This Month</AddViewToggleItem>
@@ -204,7 +205,7 @@ export function AddViewDialog() {
   const { mutateAsync: createView } = useCreateViewMutation();
 
   const [name, setName] = useState<string>("");
-  const [daysTimeWindow, setDaysTimeWindow] = useState<number>(1);
+  const [daysTimeWindow, setDaysTimeWindow] = useState<number>(0);
   const [readStatus, setReadStatus] = useState<number>(VIEW_READ_STATUS.UNREAD);
   const [contentType, setContentType] = useState<string>(
     VIEW_CONTENT_TYPE.LONGFORM,
@@ -221,7 +222,7 @@ export function AddViewDialog() {
 
     if (!value) {
       setName("");
-      setDaysTimeWindow(1);
+      setDaysTimeWindow(0);
       setReadStatus(VIEW_READ_STATUS.UNREAD);
       setContentType(VIEW_CONTENT_TYPE.LONGFORM);
       setSelectedCategories([]);
@@ -308,7 +309,7 @@ export function EditViewDialog({
   const { mutateAsync: deleteView } = useDeleteViewMutation();
 
   const [name, setName] = useState<string>("");
-  const [daysTimeWindow, setDaysTimeWindow] = useState<number>(1);
+  const [daysTimeWindow, setDaysTimeWindow] = useState<number>(0);
   const [readStatus, setReadStatus] = useState<number>(VIEW_READ_STATUS.UNREAD);
   const [contentType, setContentType] = useState<string>(
     VIEW_CONTENT_TYPE.LONGFORM,

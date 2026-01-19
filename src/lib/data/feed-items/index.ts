@@ -94,6 +94,18 @@ export function doesFeedItemPassFilters(
     // "all" passes through
   }
 
+  // Time window filter (from view)
+  // 0 means "All time", so skip filtering
+  if (viewFilter?.daysWindow && viewFilter.daysWindow > 0) {
+    const now = new Date();
+    const cutoffDate = new Date(now);
+    cutoffDate.setDate(cutoffDate.getDate() - viewFilter.daysWindow);
+
+    if (item.postedAt < cutoffDate) {
+      return false;
+    }
+  }
+
   return true;
 }
 
