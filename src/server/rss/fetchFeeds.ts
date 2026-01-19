@@ -149,7 +149,7 @@ export async function* fetchAndInsertFeedData(
         feedItems: applicationFeedItems,
         id: feed.id,
       };
-    } catch (err) {
+    } catch {
       return {
         status: "error",
         id: feed.id,
@@ -157,11 +157,12 @@ export async function* fetchAndInsertFeedData(
     }
   });
 
+   
   while (feedPromises.length > 0) {
-    const result = await Promise.any(feedPromises);
+    const result = await Promise.any(Array.from(feedPromises));
 
     const resultIndex = feedIds.findIndex((id) => id === result.id);
-    feedPromises.splice(resultIndex, 1);
+    void feedPromises.splice(resultIndex, 1);
     feedIds.splice(resultIndex, 1);
 
     yield result;

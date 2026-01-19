@@ -105,7 +105,8 @@ const vanillaFeedsStore = createStore<FeedsStore>()((set, get) => ({
   },
 
   remove: (id) => {
-    const { [id]: _, ...rest } = get().feedsDict;
+    const { [id]: _removed, ...rest } = get().feedsDict;
+    void _removed;
     const newFeeds = get().feeds.filter((f) => f.id !== id);
 
     set({

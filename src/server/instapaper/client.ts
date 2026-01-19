@@ -105,7 +105,7 @@ function createSignature(
 function createAuthorizationHeader(params: OAuthParams): string {
   const headerParams = Object.entries(params)
     .filter(([key]) => key.startsWith("oauth_"))
-    .map(([key, value]) => `${percentEncode(key)}="${percentEncode(value)}"`)
+    .map(([key, value]) => `${percentEncode(key)}="${percentEncode(String(value))}"`)
     .join(", ");
 
   return `OAuth ${headerParams}`;

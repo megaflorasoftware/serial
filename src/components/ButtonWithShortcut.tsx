@@ -1,6 +1,6 @@
 "use client";
 
-import { cva, type VariantProps } from "class-variance-authority";
+import { cva } from "class-variance-authority";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import { type ButtonProps, ResponsiveButton } from "./ui/button";
 

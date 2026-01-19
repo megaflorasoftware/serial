@@ -3,7 +3,7 @@
 import { type ElementRef, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { useLocation, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 
 export function UnstyledDialog({
   children,

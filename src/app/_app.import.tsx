@@ -106,8 +106,8 @@ function EditFeedsPage() {
     resetFeeds();
     resetFeedItems();
 
-    fetchFeeds();
-    fetchFeedItems();
+    void fetchFeeds();
+    void fetchFeedItems();
   };
 
   const onReset = () => {

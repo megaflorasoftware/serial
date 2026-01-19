@@ -12,7 +12,7 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
   const fetchFeedItems = useFetchFeedItems();
 
   useEffect(() => {
-    fetchFeedItems();
+    void fetchFeedItems();
   }, []);
 
   useFeedsQuery();

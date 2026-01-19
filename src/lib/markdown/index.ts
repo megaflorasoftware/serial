@@ -35,12 +35,18 @@ export async function renderMarkdown(content: string): Promise<MarkdownResult> {
       // Extract headings for table of contents
       const { visit } = await import("unist-util-visit");
       const { toString } = await import("hast-util-to-string");
+      type ElementNode = {
+        type: string;
+        tagName: string;
+        properties?: { id?: string };
+        children?: unknown[];
+      };
 
-      visit(tree, "element", (node: any) => {
+      visit(tree, "element", (node: ElementNode) => {
         if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(node.tagName)) {
           headings.push({
-            id: node.properties?.id || "",
-            text: toString(node),
+            id: node.properties?.id ?? "",
+            text: toString(node as Parameters<typeof toString>[0]),
             level: parseInt(node.tagName.charAt(1), 10),
           });
         }

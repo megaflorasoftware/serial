@@ -86,7 +86,8 @@ const vanillaContentCategoriesStore = createStore<ContentCategoriesStore>()(
     },
 
     remove: (id) => {
-      const { [id]: _, ...rest } = get().contentCategoriesDict;
+      const { [id]: _removed, ...rest } = get().contentCategoriesDict;
+      void _removed;
 
       set({
         contentCategories: get().contentCategories.filter((c) => c.id !== id),

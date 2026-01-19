@@ -11,7 +11,7 @@ export function useFeedCategoriesQuery() {
 
   useEffect(() => {
     if (fetchStatus === "idle") {
-      fetchFeedCategories();
+      void fetchFeedCategories();
     }
   }, [fetchStatus, fetchFeedCategories]);
 

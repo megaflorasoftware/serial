@@ -18,7 +18,7 @@ export function Markdown({ content, className }: MarkdownProps) {
   const [result, setResult] = useState<MarkdownResult | null>(null);
 
   useEffect(() => {
-    renderMarkdown(content).then(setResult);
+    void renderMarkdown(content).then(setResult);
   }, [content]);
 
   if (!result) {

@@ -45,7 +45,7 @@ function convertNebulaUrlToRssUrl(url: string): string {
     return url;
   }
 
-  const match = /nebula\.tv\/([^\/\?]+)/.exec(url);
+  const match = /nebula\.tv\/([^/?]+)/.exec(url);
   if (match?.[1]) {
     return `https://rss.nebula.app/video/channels/${match[1]}.rss`;
   }

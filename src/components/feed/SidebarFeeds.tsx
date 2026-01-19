@@ -4,7 +4,6 @@ import {
   AlertCircleIcon,
   CircleSmall,
   Edit2Icon,
-  Loader2Icon,
   MinusIcon,
   PlusIcon,
   SettingsIcon,
@@ -188,7 +187,7 @@ export function SidebarFeeds() {
     feedOptionsWithContent,
     emptyFeedOptions,
     errorFeedOptions,
-  } = feedOptions?.reduce(
+  } = (feedOptions ?? []).reduce(
     (acc, feedOption) => {
       const {
         preferredFeedOptions,

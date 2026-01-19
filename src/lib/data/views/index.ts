@@ -23,7 +23,6 @@ import {
   useFetchViews,
   useSetViews,
 } from "./store";
-import "core-js/full/set/difference";
 
 export const INBOX_VIEW_ID = -1;
 export const INBOX_VIEW_PLACEMENT = -1;
@@ -103,7 +102,7 @@ export function useViewsQuery() {
 
   useEffect(() => {
     if (fetchStatus === "idle") {
-      fetchViews();
+      void fetchViews();
     }
   }, [fetchStatus, fetchViews]);
 
@@ -121,9 +120,8 @@ export function useViewsQuery() {
       customViews.flatMap((view) => view.categoryIds),
     );
 
-    // @ts-expect-error Polyfilling this
-    const inboxViewCategoryIds = allCategoryIdsSet.difference(
-      customViewCategoryIdsSet,
+    const inboxViewCategoryIds = new Set(
+      [...allCategoryIdsSet].filter((id) => !customViewCategoryIdsSet.has(id)),
     );
 
     const inboxView: ApplicationView = {

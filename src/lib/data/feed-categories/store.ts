@@ -77,7 +77,8 @@ const vanillaFeedCategoriesStore = createStore<FeedCategoriesStore>()(
 
     remove: (feedId, categoryId) => {
       const key = getFeedCategoryKey(feedId, categoryId);
-      const { [key]: _, ...rest } = get().feedCategoriesDict;
+      const { [key]: _removed, ...rest } = get().feedCategoriesDict;
+      void _removed;
 
       set({
         feedCategories: get().feedCategories.filter(

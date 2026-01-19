@@ -7,7 +7,6 @@ import { prepareArrayChunks } from "~/lib/iterators";
 import {
   contentCategories,
   feedCategories,
-  feedItems,
   feeds,
   feedsSchema,
   openLocationSchema,

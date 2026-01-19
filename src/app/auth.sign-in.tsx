@@ -98,8 +98,8 @@ function SignIn() {
                   onResponse: () => {
                     setLoading(false);
                   },
-                  onSuccess: async () => {
-                    router.navigate({
+                  onSuccess: () => {
+                    void router.navigate({
                       to: AUTH_SIGNED_IN_URL,
                       reloadDocument: true,
                     });
@@ -114,7 +114,7 @@ function SignIn() {
                       });
 
                       if (isSuccessful) {
-                        router.navigate({
+                        void router.navigate({
                           to: `${AUTH_RESET_PASSWORD_URL}?email=${encodeURIComponent(email)}`,
                         });
                       }

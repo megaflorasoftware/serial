@@ -230,7 +230,9 @@ export function AddViewDialog() {
                 },
               });
               onOpenChange(false);
-            } catch {}
+            } catch {
+              // Error handled by toast.promise
+            }
 
             setIsAddingView(false);
           }}
@@ -319,7 +321,9 @@ export function EditViewDialog({
                   },
                 });
                 onClose();
-              } catch {}
+              } catch {
+                // Error handled by toast.promise
+              }
 
               setIsDeletingView(false);
             }}
@@ -350,7 +354,9 @@ export function EditViewDialog({
                   },
                 });
                 onClose();
-              } catch {}
+              } catch {
+                // Error handled by toast.promise
+              }
 
               setIsUpdatingView(false);
             }}

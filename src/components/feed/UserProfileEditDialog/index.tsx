@@ -38,7 +38,7 @@ export function UserProfileEditDialog() {
           initialValue={data?.user.name ?? ""}
           onSave={async (updatedName) => {
             await updateName({ name: updatedName });
-            refetchUser();
+            void refetchUser();
           }}
           schema={userNameSchema}
         />
@@ -49,7 +49,7 @@ export function UserProfileEditDialog() {
           initialValue={userEmail}
           onSave={async (updatedEmail) => {
             await updateEmail({ email: updatedEmail });
-            refetchUser();
+            void refetchUser();
           }}
           schema={userEmailSchema}
         />

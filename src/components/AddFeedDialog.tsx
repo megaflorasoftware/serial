@@ -112,7 +112,9 @@ export function AddFeedDialog() {
                   });
                   discovery.reset();
                   onOpenChange(false);
-                } catch {}
+                } catch {
+                  // Error handled by toast.promise
+                }
 
                 setIsAddingFeed(false);
               }}
@@ -265,7 +267,9 @@ export function EditFeedDialog({
                   },
                 });
                 onClose();
-              } catch {}
+              } catch {
+                // Error handled by toast.promise
+              }
 
               setIsDeletingFeed(false);
             }}
@@ -286,7 +290,9 @@ export function EditFeedDialog({
                 });
                 toast.success("Feed updated!");
                 onClose();
-              } catch {}
+              } catch {
+                // Error handled by toast
+              }
 
               setIsUpdatingFeed(false);
             }}

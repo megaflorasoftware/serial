@@ -44,13 +44,13 @@ export function useCreateFeedsFromSubscriptionImportMutation() {
 
   return useMutation(
     orpc.feed.createFromSubscriptionImport.mutationOptions({
-      onSuccess: async () => {
+      onSuccess: () => {
         // Reset and refetch feeds
         setFeeds([]);
-        fetchFeeds();
-        refetchFeedItems();
-        fetchFeedCategories();
-        fetchContentCategories();
+        void fetchFeeds();
+        void refetchFeedItems();
+        void fetchFeedCategories();
+        void fetchContentCategories();
       },
     }),
   );
@@ -155,8 +155,8 @@ export function useBulkDeleteFeedsMutation() {
         setFeedItemsDict(updatedFeedItemsDict);
 
         // Refetch feeds to update the list
-        fetchFeeds();
-        fetchFeedCategories();
+        void fetchFeeds();
+        void fetchFeedCategories();
       },
     }),
   );

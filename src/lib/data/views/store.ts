@@ -93,7 +93,8 @@ const vanillaViewsStore = createStore<ViewsStore>()((set, get) => ({
   },
 
   remove: (id) => {
-    const { [id]: _, ...rest } = get().viewsDict;
+    const { [id]: _removed, ...rest } = get().viewsDict;
+    void _removed;
     const newViews = get().views.filter((v) => v.id !== id);
 
     set({

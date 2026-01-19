@@ -12,7 +12,7 @@ export function Header() {
 
   useShortcut("h", () => {
     if (location.pathname === "/") return;
-    router.navigate({
+    void router.navigate({
       to: "/",
     });
   });

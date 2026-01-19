@@ -12,7 +12,7 @@ export function useFeedsQuery() {
 
   useEffect(() => {
     if (fetchStatus === "idle") {
-      fetchFeeds();
+      void fetchFeeds();
     }
   }, [fetchStatus, fetchFeeds]);
 

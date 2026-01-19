@@ -1,4 +1,3 @@
-import { notFound } from "@tanstack/react-router";
 // @ts-expect-error this is fine
 import { allReleases, type Release } from "content-collections";
 
@@ -19,7 +18,7 @@ export function getReleaseWithSlug(slug: string) {
     .find((p) => p.slug === slug);
 
   if (!release) {
-    throw notFound();
+    throw new Error("Release not found");
   }
 
   return release;

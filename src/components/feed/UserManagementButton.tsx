@@ -104,10 +104,10 @@ export function UserManagementNavItem() {
                     onRequest: () => {
                       setIsSigningOut(true);
                     },
-                    onSuccess: async () => {
+                    onSuccess: () => {
                       queryClient.clear();
                       clearAllUserData();
-                      router.navigate({ to: "/auth/sign-in" });
+                      void router.navigate({ to: "/auth/sign-in" });
                     },
                   },
                 });

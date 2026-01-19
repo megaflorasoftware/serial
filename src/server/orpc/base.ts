@@ -29,7 +29,7 @@ const timingMiddleware = o.middleware(async ({ next, path }) => {
   try {
     return await next();
   } finally {
-    console.log(`[oRPC] ${path} took ${Date.now() - start}ms to execute`);
+    console.log(`[oRPC] ${String(path)} took ${Date.now() - start}ms to execute`);
   }
 });
 

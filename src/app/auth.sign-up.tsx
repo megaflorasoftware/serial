@@ -97,8 +97,8 @@ function SignUp() {
                 onError: (ctx) => {
                   toast.error(ctx.error.message ?? "Something went wrong.");
                 },
-                onSuccess: async () => {
-                  router.navigate({
+                onSuccess: () => {
+                  void router.navigate({
                     to: AUTH_SIGNED_IN_URL,
                     reloadDocument: true,
                   });
