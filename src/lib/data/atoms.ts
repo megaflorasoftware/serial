@@ -13,12 +13,7 @@ export const hasSetInitialViewAtom = atom(false);
 export const viewsAtom = atom<ApplicationView[]>([]);
 
 export const dateFilterAtom = atom<number>(9999999);
-export const visibilityFilterSchema = z.enum([
-  "unread",
-  "later",
-  "videos",
-  "shorts",
-]);
+export const visibilityFilterSchema = z.enum(["unread", "read", "later"]);
 export type VisibilityFilter = z.infer<typeof visibilityFilterSchema>;
 export const visibilityFilterAtom = atom<VisibilityFilter>("unread");
 export const categoryFilterAtom = atom<number>(-1);

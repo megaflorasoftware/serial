@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ClientDatetime } from "~/components/feed/ClientDatetime";
-import { DateFilterSelect } from "~/components/feed/DateFilterChips";
-import { ItemVisibilitySelect } from "~/components/feed/ItemVisibilityChips";
+import { ItemVisibilityChips } from "~/components/feed/ItemVisibilityChips";
 import { TodayItems } from "~/components/feed/TodayItems";
 import { ViewFilterChips } from "~/components/feed/ViewFilterChips";
 
@@ -18,7 +17,7 @@ function Home() {
           <ClientDatetime />
         </p>
         <div className="flex w-max gap-1 pt-1">
-          <ItemVisibilitySelect />
+          <ItemVisibilityChips />
         </div>
         <div className="w-max pt-3">
           <ViewFilterChips />

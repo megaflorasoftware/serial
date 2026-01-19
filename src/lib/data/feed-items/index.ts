@@ -32,16 +32,19 @@ export function doesFeedItemPassFilters(
   if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
     return false;
   }
+  if (visibilityFilter === "read" && (!item.isWatched || item.isWatchLater)) {
+    return false;
+  }
   if (visibilityFilter === "later" && !item.isWatchLater) {
     return false;
   }
 
-  if (visibilityFilter === "shorts" && item.orientation !== "vertical") {
-    return false;
-  }
-  if (visibilityFilter !== "shorts" && item.orientation === "vertical") {
-    return false;
-  }
+  // if (visibilityFilter === "shorts" && item.orientation !== "vertical") {
+  //   return false;
+  // }
+  // if (visibilityFilter !== "shorts" && item.orientation === "vertical") {
+  //   return false;
+  // }
 
   // Category filter
   const feedIdsInCategory = feedCategories
