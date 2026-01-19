@@ -47,61 +47,79 @@ export function VideoDisplay({
   const isVertical = item.orientation === "vertical";
   const showNavButtons = isVertical && view === "windowed";
 
+  if (view === "windowed") {
+    return (
+      <>
+        <div className="relative z-10 h-fit w-full">
+          <div className="flex items-center justify-center gap-4">
+            {showNavButtons && (
+              <ButtonWithShortcut
+                shortcut="["
+                variant="ghost"
+                onClick={goToPreviousVideo}
+                disabled={!canGoToPrevious}
+                className={clsx({
+                  invisible: !canGoToPrevious,
+                })}
+              >
+                <ChevronLeftIcon />
+              </ButtonWithShortcut>
+            )}
+            <div className="relative w-full">
+              <div
+                className={clsx(
+                  "bg-muted absolute top-0 w-full animate-pulse overflow-hidden transition-opacity",
+                  {
+                    "aspect-video rounded": !isVertical,
+                    "aspect-9/16 rounded": isVertical,
+                  },
+                )}
+              />
+              <div
+                className={clsx("w-full overflow-hidden transition-opacity", {
+                  "aspect-video rounded": !isVertical,
+                  "aspect-9/16 rounded": isVertical,
+                  "opacity-0": !showVideo,
+                  "opacity-100": showVideo,
+                })}
+              >
+                <ResponsiveVideo
+                  videoID={item.contentId}
+                  feedItemId={id}
+                  isInactive={isInactive}
+                />
+              </div>
+            </div>
+            {showNavButtons && (
+              <ButtonWithShortcut
+                shortcut="]"
+                variant="ghost"
+                onClick={goToNextVideo}
+                disabled={!canGoToNext}
+                className={clsx({
+                  invisible: !canGoToNext,
+                })}
+              >
+                <ChevronRightIcon />
+              </ButtonWithShortcut>
+            )}
+          </div>
+        </div>
+        <ContentActions contentID={id} />
+      </>
+    );
+  }
+
   return (
     <>
-      <div
-        className={clsx("relative z-10 w-full", {
-          "h-fit": view === "windowed",
-          "h-full": view === "fullscreen",
-        })}
-      >
-        <div className="flex items-center justify-center gap-4">
-          {showNavButtons && (
-            <ButtonWithShortcut
-              shortcut="["
-              variant="ghost"
-              onClick={goToPreviousVideo}
-              disabled={!canGoToPrevious}
-            >
-              <ChevronLeftIcon />
-            </ButtonWithShortcut>
-          )}
-          <div className="relative w-full">
-            <div
-              className={clsx(
-                "bg-muted absolute top-0 w-full animate-pulse overflow-hidden transition-opacity",
-                {
-                  "aspect-video rounded": view === "windowed" && !isVertical,
-                  "aspect-9/16 rounded": view === "windowed" && isVertical,
-                  "h-full": view === "fullscreen",
-                },
-              )}
-            />
-            <div
-              className={clsx("w-full overflow-hidden transition-opacity", {
-                "aspect-video rounded": view === "windowed" && !isVertical,
-                "aspect-9/16 rounded": view === "windowed" && isVertical,
-                "h-full": view === "fullscreen",
-                "opacity-0": !showVideo,
-                "opacity-100": showVideo,
-              })}
-            >
-              <ResponsiveVideo
-                videoID={item.contentId}
-                isInactive={isInactive}
-              />
-            </div>
-          </div>
-          {showNavButtons && (
-            <ButtonWithShortcut
-              shortcut="]"
-              variant="ghost"
-              onClick={goToNextVideo}
-              disabled={!canGoToNext}
-            >
-              <ChevronRightIcon />
-            </ButtonWithShortcut>
-          )}
+      <div className="relative z-10 h-full w-full">
+        <div className="bg-muted absolute top-0 aspect-video h-full w-full animate-pulse overflow-hidden transition-opacity" />
+        <div className="h-full w-full overflow-hidden transition-opacity">
+          <ResponsiveVideo
+            videoID={item.contentId}
+            feedItemId={id}
+            isInactive={isInactive}
+          />
         </div>
       </div>
       <ContentActions contentID={id} />
