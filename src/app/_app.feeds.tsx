@@ -4,6 +4,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   GlobeIcon,
   PlayCircleIcon,
+  PlusIcon,
   Trash2Icon,
   YoutubeIcon,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import type { FeedPlatform } from "~/server/db/schema";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
+import { useDialogStore } from "~/components/feed/dialogStore";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
@@ -141,6 +143,7 @@ function ManageFeedsPage() {
   const { feeds } = useFeeds();
   const { feedCategories } = useFeedCategories();
   const { contentCategories } = useContentCategories();
+  const launchDialog = useDialogStore((store) => store.launchDialog);
 
   const [selectedFeedIds, setSelectedFeedIds] = useState<Set<number>>(
     new Set(),
@@ -354,7 +357,16 @@ function ManageFeedsPage() {
   if (!feeds.length) {
     return (
       <div className="mx-auto max-w-2xl p-6">
-        <h2 className="font-mono text-lg">Manage Feeds</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-mono text-lg">Manage Feeds</h2>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => launchDialog("add-feed")}
+          >
+            <PlusIcon size={16} />
+          </Button>
+        </div>
         <p className="text-muted-foreground mt-4">
           You don&apos;t have any feeds yet.
         </p>
@@ -368,9 +380,18 @@ function ManageFeedsPage() {
   return (
     <div>
       <div className="mx-auto max-w-2xl px-6 pt-6">
-        <h2 ref={headerRef} className="font-mono text-lg">
-          Manage Feeds
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 ref={headerRef} className="font-mono text-lg">
+            Manage Feeds
+          </h2>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => launchDialog("add-feed")}
+          >
+            <PlusIcon size={16} />
+          </Button>
+        </div>
       </div>
 
       <div
@@ -388,7 +409,6 @@ function ManageFeedsPage() {
           <div className="flex gap-2">
             <ButtonWithShortcut
               variant="outline"
-              size="sm"
               onClick={selectAll}
               disabled={allSelected}
               shortcut="s"
@@ -397,7 +417,6 @@ function ManageFeedsPage() {
             </ButtonWithShortcut>
             <ButtonWithShortcut
               variant="outline"
-              size="sm"
               onClick={deselectAll}
               disabled={selectedCount === 0}
               shortcut="esc"

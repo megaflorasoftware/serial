@@ -260,11 +260,11 @@
   }
 
   .prose ul {
-    @apply text-foreground/80 list-disc pl-4;
+    @apply text-foreground/80 my-1 list-disc pl-5;
   }
 
   .prose ol {
-    @apply text-foreground/80 list-decimal pl-4;
+    @apply text-foreground/80 my-1 list-decimal pl-5;
   }
 
   .prose p {
