@@ -176,11 +176,16 @@ export const getByView = protectedProcedure.handler(async function* ({ context }
     return;
   }
 
+  // Collect all category IDs used by custom views (for Inbox exclusion)
+  const customViewCategoryIds = new Set(
+    customViews.flatMap((v) => v.categoryIds),
+  );
+
   // Build combined filter for the first view
   const filterConditions = [
     inArray(feedItems.feedId, feedIds),
     buildVisibilityFilter("unread"),
-    buildViewCategoryFilter(firstView, userFeedCategories, feedIds),
+    buildViewCategoryFilter(firstView, userFeedCategories, feedIds, customViewCategoryIds),
     buildContentTypeFilter(firstView.contentType, applicationFeeds),
     buildTimeWindowFilter(firstView.daysWindow),
   ].filter((f): f is NonNullable<typeof f> => f !== undefined);

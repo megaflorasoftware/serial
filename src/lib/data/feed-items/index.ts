@@ -1,9 +1,11 @@
 import { useAtomValue } from "jotai";
+import { useMemo } from "react";
 import {
   categoryFilterAtom,
   dateFilterAtom,
   feedFilterAtom,
   viewFilterAtom,
+  viewsAtom,
   visibilityFilterAtom,
 } from "../atoms";
 import { feedItemsStore } from "../store";
@@ -32,6 +34,7 @@ export function doesFeedItemPassFilters(
   feedFilter: number,
   feeds: DatabaseFeed[],
   viewFilter: ApplicationView | null,
+  customViewCategoryIds?: Set<number>,
 ) {
   // Visibility filter
   if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
@@ -72,8 +75,19 @@ export function doesFeedItemPassFilters(
   const doesFeedHaveAnyCategories = feedCategories.some(
     (category) => category.feedId === item.feedId,
   );
-  if (viewFilter?.id === INBOX_VIEW_ID && !doesFeedHaveAnyCategories) {
-    return true;
+
+  // For Inbox view, exclude feeds that are in any custom view category
+  if (viewFilter?.id === INBOX_VIEW_ID) {
+    const isFeedInCustomViewCategory = feedCategories.some(
+      (fc) => fc.feedId === item.feedId && customViewCategoryIds?.has(fc.categoryId),
+    );
+    if (isFeedInCustomViewCategory) {
+      return false;
+    }
+    // Include uncategorized feeds in Inbox
+    if (!doesFeedHaveAnyCategories) {
+      return true;
+    }
   }
 
   if (
@@ -130,6 +144,13 @@ export const useFilteredFeedItemsOrder = () => {
   const feedFilter = useAtomValue(feedFilterAtom);
   const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
+  const views = useAtomValue(viewsAtom);
+
+  // Compute custom view category IDs (categories assigned to non-Inbox views)
+  const customViewCategoryIds = useMemo(() => {
+    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [views]);
 
   return feedItemsOrder.filter((id) => {
     return (
@@ -143,6 +164,7 @@ export const useFilteredFeedItemsOrder = () => {
         feedFilter,
         feeds,
         viewFilter,
+        customViewCategoryIds,
       )
     );
   });
@@ -156,6 +178,13 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const feedFilter = useAtomValue(feedFilterAtom);
   const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
+  const views = useAtomValue(viewsAtom);
+
+  // Compute custom view category IDs (categories assigned to non-Inbox views)
+  const customViewCategoryIds = useMemo(() => {
+    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [views]);
 
   return doesFeedItemPassFilters(
     item,
@@ -166,5 +195,6 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
     feedFilter,
     feeds,
     viewFilter,
+    customViewCategoryIds,
   );
 }

@@ -8,7 +8,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
 import type { ApplicationFeed } from "~/server/db/schema";
@@ -32,6 +32,7 @@ import {
   dateFilterAtom,
   feedFilterAtom,
   viewFilterAtom,
+  viewsAtom,
   visibilityFilterAtom,
 } from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
@@ -44,7 +45,7 @@ import {
   useFetchFeedItemsLastFetchedAt,
   useFetchFeedItemsStatus,
 } from "~/lib/data/store";
-import { useDeselectViewFilter } from "~/lib/data/views";
+import { INBOX_VIEW_ID, useDeselectViewFilter } from "~/lib/data/views";
 
 function useCheckFilteredFeedItemsForFeed() {
   const feedItemsOrder = useFeedItemsOrder();
@@ -56,6 +57,13 @@ function useCheckFilteredFeedItemsForFeed() {
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
+  const views = useAtomValue(viewsAtom);
+
+  // Compute custom view category IDs (categories assigned to non-Inbox views)
+  const customViewCategoryIds = useMemo(() => {
+    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [views]);
 
   return useCallback(
     (feed: number) => {
@@ -71,6 +79,7 @@ function useCheckFilteredFeedItemsForFeed() {
             feed,
             feeds,
             viewFilter,
+            customViewCategoryIds,
           ),
       );
     },
@@ -83,6 +92,7 @@ function useCheckFilteredFeedItemsForFeed() {
       feedCategories,
       feeds,
       viewFilter,
+      customViewCategoryIds,
     ],
   );
 }

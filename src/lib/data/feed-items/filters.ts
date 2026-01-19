@@ -86,7 +86,8 @@ export function buildFeedFilter(feedFilter: number): SQL | undefined {
  * Build a Drizzle filter condition for view category filtering
  *
  * For the Inbox view: includes feeds that either match the view's categories
- * OR have no categories at all (uncategorized feeds).
+ * OR have no categories at all (uncategorized feeds), but EXCLUDES any feeds
+ * that belong to categories assigned to custom views.
  *
  * For regular views: includes only feeds that match the view's categories.
  */
@@ -94,6 +95,7 @@ export function buildViewCategoryFilter(
   viewFilter: ApplicationView | null,
   feedCategories: DatabaseFeedCategory[],
   allFeedIds: number[],
+  customViewCategoryIds?: Set<number>,
 ): SQL | undefined {
   if (!viewFilter || viewFilter.categoryIds.length === 0) {
     return undefined;
@@ -104,16 +106,23 @@ export function buildViewCategoryFilter(
     .filter((fc) => viewFilter.categoryIds.includes(fc.categoryId))
     .map((fc) => fc.feedId);
 
-  // For Inbox view, also include uncategorized feeds
+  // For Inbox view, also include uncategorized feeds, but exclude feeds in custom views
   if (viewFilter.id === INBOX_VIEW_ID) {
     const categorizedFeedIds = new Set(feedCategories.map((fc) => fc.feedId));
     const uncategorizedFeedIds = allFeedIds.filter(
       (id) => !categorizedFeedIds.has(id),
     );
 
+    // Exclude feeds that belong to any category assigned to a custom view
+    const feedsInCustomViews = new Set(
+      feedCategories
+        .filter((fc) => customViewCategoryIds?.has(fc.categoryId))
+        .map((fc) => fc.feedId),
+    );
+
     const allIncludedFeedIds = [
       ...new Set([...feedsForView, ...uncategorizedFeedIds]),
-    ];
+    ].filter((id) => !feedsInCustomViews.has(id));
 
     if (allIncludedFeedIds.length === 0) {
       return eq(feedItems.feedId, -1);
@@ -214,6 +223,7 @@ export interface BuildFeedItemFiltersParams {
   viewFilter: ApplicationView | null;
   feedCategories: DatabaseFeedCategory[];
   feeds: DatabaseFeed[];
+  customViewCategoryIds?: Set<number>;
 }
 
 /**
@@ -232,6 +242,7 @@ export function buildFeedItemFilters(
     viewFilter,
     feedCategories,
     feeds,
+    customViewCategoryIds,
   } = params;
 
   const allFeedIds = feeds.map((feed) => feed.id);
@@ -241,7 +252,7 @@ export function buildFeedItemFilters(
     buildVisibilityFilter(visibilityFilter),
     buildCategoryFilter(categoryFilter, feedCategories),
     buildFeedFilter(feedFilter),
-    buildViewCategoryFilter(viewFilter, feedCategories, allFeedIds),
+    buildViewCategoryFilter(viewFilter, feedCategories, allFeedIds, customViewCategoryIds),
     buildContentTypeFilter(viewFilter?.contentType, feeds),
     buildTimeWindowFilter(viewFilter?.daysWindow),
   ];

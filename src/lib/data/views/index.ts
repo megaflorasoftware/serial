@@ -1,5 +1,5 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
   categoryFilterAtom,
   dateFilterAtom,
@@ -58,6 +58,12 @@ export function useCheckFilteredFeedItemsForView() {
   const { feeds } = useFeeds();
   const { views } = useViews();
 
+  // Compute custom view category IDs (categories assigned to non-Inbox views)
+  const customViewCategoryIds = useMemo(() => {
+    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [views]);
+
   return useCallback(
     (viewId: number) => {
       const viewFilter = views.find((view) => view.id === viewId) || null;
@@ -74,10 +80,11 @@ export function useCheckFilteredFeedItemsForView() {
             -1,
             feeds,
             viewFilter,
+            customViewCategoryIds,
           ),
       );
     },
-    [feedItemsOrder, feedItemsDict, feedCategories, feeds, views],
+    [feedItemsOrder, feedItemsDict, feedCategories, feeds, views, customViewCategoryIds],
   );
 }
 
