@@ -12,6 +12,7 @@ import { feedItemsStore } from "../store";
 import { useFeedCategories } from "../feed-categories/store";
 import { useFeeds } from "../feeds/store";
 import { INBOX_VIEW_ID } from "../views";
+import { isFeedCompatibleWithContentType } from "./filters";
 import type { VisibilityFilter } from "../atoms";
 import type {
   ApplicationFeedItem,
@@ -35,6 +36,7 @@ export function doesFeedItemPassFilters(
   feeds: DatabaseFeed[],
   viewFilter: ApplicationView | null,
   customViewCategoryIds?: Set<number>,
+  customViews?: ApplicationView[],
 ) {
   // Visibility filter
   if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
@@ -76,12 +78,29 @@ export function doesFeedItemPassFilters(
     (category) => category.feedId === item.feedId,
   );
 
-  // For Inbox view, exclude feeds that are in any custom view category
+  // For Inbox view, exclude feeds that are in a custom view category
+  // AND whose platform is compatible with that view's content type
   if (viewFilter?.id === INBOX_VIEW_ID) {
-    const isFeedInCustomViewCategory = feedCategories.some(
+    const feedCategoriesForItem = feedCategories.filter(
       (fc) => fc.feedId === item.feedId && customViewCategoryIds?.has(fc.categoryId),
     );
-    if (isFeedInCustomViewCategory) {
+
+    // Check if this feed would appear in any custom view
+    const wouldAppearInCustomView = feedCategoriesForItem.some((fc) => {
+      if (!customViews) return true; // Fallback to old behavior if no views provided
+
+      // Find views that include this category
+      const viewsWithCategory = customViews.filter((v) =>
+        v.categoryIds.includes(fc.categoryId),
+      );
+
+      // Check if any of those views would show this feed's content type
+      return viewsWithCategory.some((v) =>
+        isFeedCompatibleWithContentType(item.platform, v.contentType),
+      );
+    });
+
+    if (wouldAppearInCustomView) {
       return false;
     }
     // Include uncategorized feeds in Inbox
@@ -146,11 +165,14 @@ export const useFilteredFeedItemsOrder = () => {
   const viewFilter = useAtomValue(viewFilterAtom);
   const views = useAtomValue(viewsAtom);
 
-  // Compute custom view category IDs (categories assigned to non-Inbox views)
-  const customViewCategoryIds = useMemo(() => {
-    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
-    return new Set(customViews.flatMap((v) => v.categoryIds));
+  // Compute custom views (non-Inbox views) and their category IDs
+  const customViews = useMemo(() => {
+    return views.filter((v) => v.id !== INBOX_VIEW_ID);
   }, [views]);
+
+  const customViewCategoryIds = useMemo(() => {
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [customViews]);
 
   return feedItemsOrder.filter((id) => {
     return (
@@ -165,6 +187,7 @@ export const useFilteredFeedItemsOrder = () => {
         feeds,
         viewFilter,
         customViewCategoryIds,
+        customViews,
       )
     );
   });
@@ -180,11 +203,14 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const viewFilter = useAtomValue(viewFilterAtom);
   const views = useAtomValue(viewsAtom);
 
-  // Compute custom view category IDs (categories assigned to non-Inbox views)
-  const customViewCategoryIds = useMemo(() => {
-    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
-    return new Set(customViews.flatMap((v) => v.categoryIds));
+  // Compute custom views (non-Inbox views) and their category IDs
+  const customViews = useMemo(() => {
+    return views.filter((v) => v.id !== INBOX_VIEW_ID);
   }, [views]);
+
+  const customViewCategoryIds = useMemo(() => {
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [customViews]);
 
   return doesFeedItemPassFilters(
     item,
@@ -196,5 +222,6 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
     feeds,
     viewFilter,
     customViewCategoryIds,
+    customViews,
   );
 }

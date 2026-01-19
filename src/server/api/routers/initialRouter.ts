@@ -190,7 +190,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({ contex
   const filterConditions = [
     inArray(feedItems.feedId, feedIds),
     buildVisibilityFilter("unread"),
-    buildViewCategoryFilter(firstView, userFeedCategories, feedIds, customViewCategoryIds),
+    buildViewCategoryFilter(firstView, userFeedCategories, feedIds, customViewCategoryIds, customViews, applicationFeeds),
     buildContentTypeFilter(firstView.contentType, applicationFeeds),
     buildTimeWindowFilter(firstView.daysWindow),
   ].filter((f): f is NonNullable<typeof f> => f !== undefined);
@@ -349,7 +349,7 @@ export const revalidateView = protectedProcedure
       const filterConditions = [
         inArray(feedItems.feedId, feedIds),
         buildVisibilityFilter("unread"),
-        buildViewCategoryFilter(view, userFeedCategories, feedIds, customViewCategoryIds),
+        buildViewCategoryFilter(view, userFeedCategories, feedIds, customViewCategoryIds, customViews, applicationFeeds),
         buildContentTypeFilter(view.contentType, applicationFeeds),
         buildTimeWindowFilter(view.daysWindow),
       ].filter((f): f is NonNullable<typeof f> => f !== undefined);

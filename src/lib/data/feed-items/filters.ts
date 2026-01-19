@@ -11,7 +11,30 @@ import type {
 import { feedItems } from "~/server/db/schema";
 
 /** Video platforms that support orientation filtering */
-const VIDEO_PLATFORMS = ["youtube", "peertube", "nebula"] as const;
+export const VIDEO_PLATFORMS = ["youtube", "peertube", "nebula"] as const;
+
+/**
+ * Check if a feed's platform is compatible with a view's content type.
+ *
+ * A feed is compatible if its items could potentially appear in the view:
+ * - "all" or "longform": all platforms are compatible
+ * - "horizontal-video" or "vertical-video": only video platforms are compatible
+ */
+export function isFeedCompatibleWithContentType(
+  feedPlatform: string,
+  viewContentType: string | undefined,
+): boolean {
+  if (!viewContentType || viewContentType === "all" || viewContentType === "longform") {
+    return true;
+  }
+
+  // For video-specific content types, only video platforms are compatible
+  if (viewContentType === "horizontal-video" || viewContentType === "vertical-video") {
+    return VIDEO_PLATFORMS.includes(feedPlatform as (typeof VIDEO_PLATFORMS)[number]);
+  }
+
+  return true;
+}
 
 /**
  * Build a Drizzle filter condition for visibility (unread/read/later)
@@ -87,7 +110,8 @@ export function buildFeedFilter(feedFilter: number): SQL | undefined {
  *
  * For the Inbox view: includes feeds that either match the view's categories
  * OR have no categories at all (uncategorized feeds), but EXCLUDES any feeds
- * that belong to categories assigned to custom views.
+ * that belong to categories assigned to custom views AND whose platform is
+ * compatible with that view's content type.
  *
  * For regular views: includes only feeds that match the view's categories.
  */
@@ -96,6 +120,8 @@ export function buildViewCategoryFilter(
   feedCategories: DatabaseFeedCategory[],
   allFeedIds: number[],
   customViewCategoryIds?: Set<number>,
+  customViews?: ApplicationView[],
+  feeds?: DatabaseFeed[],
 ): SQL | undefined {
   if (!viewFilter || viewFilter.categoryIds.length === 0) {
     return undefined;
@@ -113,12 +139,34 @@ export function buildViewCategoryFilter(
       (id) => !categorizedFeedIds.has(id),
     );
 
-    // Exclude feeds that belong to any category assigned to a custom view
-    const feedsInCustomViews = new Set(
-      feedCategories
-        .filter((fc) => customViewCategoryIds?.has(fc.categoryId))
-        .map((fc) => fc.feedId),
-    );
+    // Build a map of feedId -> feed for quick lookup
+    const feedsById = new Map(feeds?.map((f) => [f.id, f]) ?? []);
+
+    // Exclude feeds that belong to a category assigned to a custom view
+    // AND whose platform is compatible with that view's content type
+    const feedsInCustomViews = new Set<number>();
+
+    if (customViews && customViewCategoryIds) {
+      for (const fc of feedCategories) {
+        if (!customViewCategoryIds.has(fc.categoryId)) continue;
+
+        const feed = feedsById.get(fc.feedId);
+        if (!feed) continue;
+
+        // Check if any custom view with this category would show this feed
+        const viewsWithCategory = customViews.filter((v) =>
+          v.categoryIds.includes(fc.categoryId),
+        );
+
+        const wouldAppearInAnyView = viewsWithCategory.some((v) =>
+          isFeedCompatibleWithContentType(feed.platform, v.contentType),
+        );
+
+        if (wouldAppearInAnyView) {
+          feedsInCustomViews.add(fc.feedId);
+        }
+      }
+    }
 
     const allIncludedFeedIds = [
       ...new Set([...feedsForView, ...uncategorizedFeedIds]),
