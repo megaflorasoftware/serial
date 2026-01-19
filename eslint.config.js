@@ -1,40 +1,30 @@
 import eslint from "@eslint/js";
+import { tanstackConfig } from "@tanstack/eslint-config";
+import reactPlugin from "eslint-plugin-react";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
+import jsxA11yPlugin from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
+
+const reactConfigs = [
+  reactPlugin.configs.flat.recommended,
+  reactPlugin.configs.flat["jsx-runtime"],
+  reactHooksPlugin.configs.flat["recommended-latest"],
+].filter(Boolean);
 
 export default tseslint.config(
   eslint.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
+  ...tanstackConfig,
+  ...reactConfigs,
+  jsxA11yPlugin.flatConfigs.recommended,
   {
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
+    settings: {
+      react: {
+        version: "detect",
       },
     },
     rules: {
-      "@typescript-eslint/array-type": "off",
-      "@typescript-eslint/consistent-type-definitions": "off",
-      "@typescript-eslint/prefer-nullish-coalescing": "off",
-      "@typescript-eslint/consistent-type-imports": [
-        "warn",
-        {
-          prefer: "type-imports",
-          fixStyle: "inline-type-imports",
-        },
-      ],
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
-      "@typescript-eslint/require-await": "off",
-      "@typescript-eslint/no-misused-promises": [
-        "error",
-        {
-          checksVoidReturn: { attributes: false },
-        },
-      ],
       // TanStack Router's redirect() and notFound() are designed to be thrown
       "@typescript-eslint/only-throw-error": "off",
-      "no-empty-function": "off",
-      "@typescript-eslint/no-empty-function": "off",
     },
   },
   {
