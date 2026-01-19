@@ -28,3 +28,4 @@ export const viewContentTypeSchema = z.enum([
   VIEW_CONTENT_TYPE.HORIZONTAL_VIDEO,
   VIEW_CONTENT_TYPE.VERTICAL_VIDEO,
 ]);
+export type ViewContentType = z.infer<typeof viewContentTypeSchema>;

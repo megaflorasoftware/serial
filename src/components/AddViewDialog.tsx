@@ -9,6 +9,7 @@ import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import type React from "react";
+import type { ViewContentType } from "~/server/db/constants";
 import { VIEW_CONTENT_TYPE, VIEW_READ_STATUS } from "~/server/db/constants";
 import {
   useCreateViewMutation,
@@ -120,12 +121,19 @@ function ViewTimeInput({
 //   );
 // }
 
+const CONTENT_TYPE_HELPER_TEXT = {
+  longform: "Shows articles and longform videos",
+  "horizontal-video": "Shows longform videos",
+  "vertical-video": "Shows shortform videos",
+  all: "Shows all content",
+} as const satisfies Record<ViewContentType, string>;
+
 function ViewContentTypeInput({
   contentType,
   setContentType,
 }: {
-  contentType: string;
-  setContentType: (contentType: string) => void;
+  contentType: ViewContentType;
+  setContentType: (contentType: ViewContentType) => void;
 }) {
   return (
     <div className="grid gap-2">
@@ -134,8 +142,7 @@ function ViewContentTypeInput({
         id="content-type"
         type="single"
         value={contentType}
-        onValueChange={(value) => {
-          if (!value) return;
+        onValueChange={(value: ViewContentType) => {
           setContentType(value);
         }}
         size="sm"
@@ -152,6 +159,9 @@ function ViewContentTypeInput({
         </AddViewToggleItem>
         <AddViewToggleItem value={VIEW_CONTENT_TYPE.ALL}>All</AddViewToggleItem>
       </ToggleGroup>
+      <p className="text-muted-foreground text-sm">
+        {CONTENT_TYPE_HELPER_TEXT[contentType]}
+      </p>
     </div>
   );
 }
@@ -207,7 +217,7 @@ export function AddViewDialog() {
   const [name, setName] = useState<string>("");
   const [daysTimeWindow, setDaysTimeWindow] = useState<number>(0);
   const [readStatus, setReadStatus] = useState<number>(VIEW_READ_STATUS.UNREAD);
-  const [contentType, setContentType] = useState<string>(
+  const [contentType, setContentType] = useState<ViewContentType>(
     VIEW_CONTENT_TYPE.LONGFORM,
   );
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -264,11 +274,7 @@ export function AddViewDialog() {
                 name,
                 daysWindow: daysTimeWindow,
                 readStatus,
-                contentType: contentType as
-                  | "all"
-                  | "longform"
-                  | "horizontal-video"
-                  | "vertical-video",
+                contentType: contentType,
                 categoryIds: selectedCategories,
               });
               toast.promise(addViewPromise, {
@@ -311,7 +317,7 @@ export function EditViewDialog({
   const [name, setName] = useState<string>("");
   const [daysTimeWindow, setDaysTimeWindow] = useState<number>(0);
   const [readStatus, setReadStatus] = useState<number>(VIEW_READ_STATUS.UNREAD);
-  const [contentType, setContentType] = useState<string>(
+  const [contentType, setContentType] = useState<ViewContentType>(
     VIEW_CONTENT_TYPE.LONGFORM,
   );
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -401,11 +407,7 @@ export function EditViewDialog({
                   id: selectedViewId,
                   daysWindow: daysTimeWindow,
                   readStatus,
-                  contentType: contentType as
-                    | "all"
-                    | "longform"
-                    | "horizontal-video"
-                    | "vertical-video",
+                  contentType: contentType,
                   categoryIds: selectedCategories,
                 });
                 toast.promise(editViewPromise, {

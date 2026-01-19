@@ -18,6 +18,11 @@ import type {
   DatabaseFeedCategory,
 } from "~/server/db/schema";
 
+function isVideoContent(item: ApplicationFeedItem): boolean {
+  const videoPlatforms = ["youtube", "peertube", "nebula"];
+  return videoPlatforms.includes(item.platform);
+}
+
 export function doesFeedItemPassFilters(
   item: ApplicationFeedItem,
   dateFilter: number,
@@ -85,11 +90,17 @@ export function doesFeedItemPassFilters(
     if (ct === "longform" && item.orientation === "vertical") {
       return false;
     }
-    if (ct === "horizontal-video" && item.orientation !== "horizontal") {
-      return false;
+    if (ct === "horizontal-video") {
+      // Must be video content AND horizontal orientation
+      if (!isVideoContent(item) || item.orientation !== "horizontal") {
+        return false;
+      }
     }
-    if (ct === "vertical-video" && item.orientation !== "vertical") {
-      return false;
+    if (ct === "vertical-video") {
+      // Must be video content AND vertical orientation
+      if (!isVideoContent(item) || item.orientation !== "vertical") {
+        return false;
+      }
     }
     // "all" passes through
   }
