@@ -248,15 +248,19 @@ export function SidebarFeeds() {
       />
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
         <SidebarGroupLabel className="pr-0 pb-2">
-          <span className="inline-block flex-1">Feeds</span>
-          <div className="flex w-fit items-center justify-end">
-            <SidebarMenuButton asChild>
+          <span className="inline-block">Feeds</span>
+          <div className="flex flex-1 items-center justify-end">
+            <SidebarMenuButton size="default-icon" asChild>
               <Link to="/feeds">
                 <SettingsIcon size={16} />
               </Link>
             </SidebarMenuButton>
-            <SidebarMenuButton asChild onClick={() => launchDialog("add-feed")}>
-              <ButtonWithShortcut shortcut="a" variant="ghost">
+            <SidebarMenuButton
+              size="default-icon"
+              asChild
+              onClick={() => launchDialog("add-feed")}
+            >
+              <ButtonWithShortcut size="icon" shortcut="a" variant="ghost">
                 <PlusIcon />
               </ButtonWithShortcut>
             </SidebarMenuButton>
