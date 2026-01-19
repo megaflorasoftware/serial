@@ -28,17 +28,6 @@ export function doesFeedItemPassFilters(
   feeds: DatabaseFeed[],
   viewFilter: ApplicationView | null,
 ) {
-  const date = new Date(item.postedAt);
-  const now = new Date();
-  const sevenDaysAgo = new Date(
-    now.setDate(now.getDate() - (Number.isNaN(dateFilter) ? 1 : dateFilter)),
-  );
-
-  // Date filter
-  if (date <= sevenDaysAgo) {
-    return false;
-  }
-
   // Visibility filter
   if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
     return false;

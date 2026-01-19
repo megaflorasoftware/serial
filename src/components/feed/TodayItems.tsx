@@ -2,7 +2,6 @@
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import clsx from "clsx";
-import dayjs from "dayjs";
 import {
   CheckIcon,
   ClockIcon,
@@ -26,6 +25,7 @@ import {
 
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
+import { timeAgo } from "~/lib/utils";
 import {
   useFeedItemsSetWatchedValueMutation,
   useFeedItemsSetWatchLaterValueMutation,
@@ -41,24 +41,6 @@ import {
   useFetchFeedItemsLastFetchedAt,
 } from "~/lib/data/store";
 import { useViews } from "~/lib/data/views";
-
-function timeAgo(date: string | Date) {
-  const diff = dayjs().diff(date);
-
-  if (diff < 1000 * 60) {
-    return "Just now";
-  }
-
-  if (diff < 1000 * 60 * 60) {
-    return `${Math.floor(diff / (1000 * 60))} minutes ago`;
-  }
-
-  if (diff < 1000 * 60 * 60 * 24) {
-    return `${Math.floor(diff / (1000 * 60 * 60))} hours ago`;
-  }
-
-  return `${Math.floor(diff / (1000 * 60 * 60 * 24))} days ago`;
-}
 
 function TodayItemsEmptyState() {
   return (

@@ -18,7 +18,6 @@ function Home() {
           <ClientDatetime />
         </p>
         <div className="flex w-max gap-1 pt-1">
-          <DateFilterSelect />
           <ItemVisibilitySelect />
         </div>
         <div className="w-max pt-3">
