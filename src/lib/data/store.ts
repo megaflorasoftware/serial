@@ -9,7 +9,7 @@ import { contentCategoriesStore } from "./content-categories/store";
 import { feedCategoriesStore } from "./feed-categories/store";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
-import type { GetByViewChunk } from "~/server/api/routers/initialRouter";
+import type { GetByViewChunk, RevalidateViewChunk } from "~/server/api/routers/initialRouter";
 
 export type ApplicationStore = {
   reset: () => void;
@@ -22,6 +22,7 @@ export type ApplicationStore = {
   fetchFeedItems: () => Promise<void>;
   fetchFeedItemsForFeed: (feedId: number) => Promise<void>;
   fetchByView: () => Promise<void>;
+  revalidateView: (viewId: number) => Promise<void>;
   fetchFeedItemsLastFetchedAt: number | null;
   fetchFeedItemsStatus: "idle" | "fetching" | "success";
   currentViewId: number | null;
@@ -181,7 +182,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       let lastUpdateTime = 0;
       const DEBOUNCE_TIME = 1000;
 
-      for await (const incomingChunk of (await orpcRouterClient.initial.getByView()) as AsyncIterable<GetByViewChunk>) {
+      for await (const incomingChunk of (await orpcRouterClient.initial.getAllByView()) as AsyncIterable<GetByViewChunk>) {
         const timeSinceLastUpdate = Date.now() - lastUpdateTime;
         const timeToWait = DEBOUNCE_TIME - timeSinceLastUpdate;
         const shouldWaitToRender = timeToWait > 0;
@@ -278,6 +279,41 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         feedStatusDict: { ...get().feedStatusDict },
       });
     },
+
+    revalidateView: async (viewId: number) => {
+      for await (const chunk of (await orpcRouterClient.initial.revalidateView({ viewId })) as AsyncIterable<RevalidateViewChunk>) {
+        switch (chunk.type) {
+          case "views":
+            // Update views in views store
+            viewsStore.getState().set(chunk.views);
+            break;
+
+          case "feed-items": {
+            // Merge into feedItemsDict and feedItemsOrder (no reset)
+            const feedItemsDict = { ...get().feedItemsDict };
+            const feedItemsOrder = [...get().feedItemsOrder];
+
+            const incomingFeedItems = chunk.feedItems;
+
+            incomingFeedItems.forEach((item) => {
+              feedItemsDict[item.id] = item;
+
+              if (!feedItemsOrder.find((id) => id === item.id)) {
+                feedItemsOrder.push(item.id);
+              }
+            });
+
+            set({
+              feedItemsDict,
+              feedItemsOrder: feedItemsOrder.sort(
+                sortFeedItemsOrderByDate(get().feedItemsDict),
+              ),
+            });
+            break;
+          }
+        }
+      }
+    },
   }),
   //   {
   //     name: "serial", // name of the item in the storage (must be unique)
@@ -302,6 +338,7 @@ export const {
   useFetchFeedItems,
   useFetchFeedItemsForFeed,
   useFetchByView,
+  useRevalidateView,
   useCurrentViewId,
   useReset: useResetFeedItems,
 } = feedItemsStore;

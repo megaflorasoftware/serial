@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type {
   ApplicationFeed,
@@ -46,6 +47,10 @@ export type GetByViewChunk =
   | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] }
   | { type: "feed-status"; feedId: number; status: FetchFeedsStatus };
 
+export type RevalidateViewChunk =
+  | { type: "views"; views: ApplicationView[] }
+  | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] };
+
 /**
  * Build the Inbox view server-side
  * Replicates client-side logic from src/lib/data/views/index.ts
@@ -86,7 +91,7 @@ function buildInboxView(
 
 const GET_BY_VIEW_CHUNK_SIZE = 100;
 
-export const getByView = protectedProcedure.handler(async function* ({ context }) {
+export const getAllByView = protectedProcedure.handler(async function* ({ context }) {
   // Step 1: Fetch all prerequisite data in parallel
   const [viewsList, feedsList, contentCategoriesList, feedCategoriesList] =
     await Promise.all([
@@ -244,3 +249,146 @@ export const getByView = protectedProcedure.handler(async function* ({ context }
 
   return;
 });
+
+const REVALIDATE_VIEW_CHUNK_SIZE = 100;
+
+export const revalidateView = protectedProcedure
+  .input(z.object({ viewId: z.number() }))
+  .handler(async function* ({ context, input }) {
+    // Step 1: Fetch all prerequisite data in parallel
+    const [viewsList, feedsList, contentCategoriesList, feedCategoriesList] =
+      await Promise.all([
+        // Views
+        context.db
+          .select()
+          .from(views)
+          .where(eq(views.userId, context.user.id))
+          .orderBy(asc(views.placement)),
+
+        // Feeds
+        context.db.query.feeds.findMany({
+          where: eq(feeds.userId, context.user.id),
+        }),
+
+        // Content categories
+        context.db
+          .select()
+          .from(contentCategories)
+          .where(eq(contentCategories.userId, context.user.id))
+          .orderBy(asc(contentCategories.name)),
+
+        // Feed categories
+        context.db.select().from(feedCategories),
+      ]);
+
+    // Get view categories
+    const viewCategoriesList = await context.db.select().from(viewCategories);
+
+    // Transform views to ApplicationView with categoryIds
+    const customViews: ApplicationView[] = viewsList.map((view) => ({
+      ...view,
+      isDefault: false,
+      categoryIds: viewCategoriesList
+        .filter((vc) => vc.viewId === view.id)
+        .map((vc) => vc.categoryId)
+        .filter((id): id is number => id !== null),
+    }));
+
+    // Build inbox view
+    const inboxView = buildInboxView(
+      context.user.id,
+      contentCategoriesList,
+      customViews,
+    );
+
+    // All views including inbox, sorted by placement
+    const allViews = sortViewsByPlacement([...customViews, inboxView]);
+
+    // Parse feeds to ApplicationFeed
+    const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
+
+    // Filter feed categories to only those belonging to user's content categories
+    const userContentCategoryIds = new Set(
+      contentCategoriesList.map((cc) => cc.id),
+    );
+    const userFeedCategories = feedCategoriesList.filter((fc) =>
+      userContentCategoryIds.has(fc.categoryId),
+    );
+
+    // Step 2: Yield views
+    yield {
+      type: "views",
+      views: allViews,
+    } as RevalidateViewChunk;
+
+    const feedIds = feedsList.map((feed) => feed.id);
+
+    if (feedIds.length === 0) {
+      return;
+    }
+
+    // Collect all category IDs used by custom views (for Inbox exclusion)
+    const customViewCategoryIds = new Set(
+      customViews.flatMap((v) => v.categoryIds),
+    );
+
+    // Step 3: Find target view
+    const targetView =
+      input.viewId === INBOX_VIEW_ID
+        ? inboxView
+        : allViews.find((v) => v.id === input.viewId);
+
+    if (!targetView) {
+      return;
+    }
+
+    // Helper function to query and yield feed items for a view
+    async function* queryAndYieldFeedItemsForView(
+      view: ApplicationView,
+    ): AsyncGenerator<RevalidateViewChunk> {
+      const filterConditions = [
+        inArray(feedItems.feedId, feedIds),
+        buildVisibilityFilter("unread"),
+        buildViewCategoryFilter(view, userFeedCategories, feedIds, customViewCategoryIds),
+        buildContentTypeFilter(view.contentType, applicationFeeds),
+        buildTimeWindowFilter(view.daysWindow),
+      ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+      const filter = filterConditions.length > 0 ? and(...filterConditions) : undefined;
+
+      const itemsData = await context.db.query.feedItems.findMany({
+        where: filter,
+        orderBy: desc(feedItems.postedAt),
+      });
+
+      const applicationFeedItems = itemsData.map((item) => {
+        const itemFeed = feedsList.find((f) => f.id === item.feedId);
+
+        return {
+          ...item,
+          platform: itemFeed?.platform ?? "youtube",
+        } as ApplicationFeedItem;
+      });
+
+      for (const chunk of prepareArrayChunks(
+        applicationFeedItems,
+        REVALIDATE_VIEW_CHUNK_SIZE,
+      )) {
+        yield {
+          type: "feed-items",
+          viewId: view.id,
+          feedItems: chunk,
+        } as RevalidateViewChunk;
+      }
+    }
+
+    // Step 4: Query feed items for target view
+    yield* queryAndYieldFeedItemsForView(targetView);
+
+    // Step 5: If target is not Inbox, also query feed items for Inbox
+    if (targetView.id !== INBOX_VIEW_ID) {
+      yield* queryAndYieldFeedItemsForView(inboxView);
+    }
+
+    return;
+  });
