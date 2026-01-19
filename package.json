@@ -9,9 +9,10 @@
     "dev:atomic": "vite dev",
     "dev": "concurrently --kill-others \"pnpm dev:db\" \"pnpm dev:migrate && pnpm dev:atomic\"",
     "dev:email": "email dev --dir ./src/emails --port 4000",
-    "build": "pnpm typecheck && vite build && pnpm schema:migrate && node --import=tsx ./src/server/scripts/addIdsToFeedItems.ts",
-    "build:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm build\"",
+    "prebuild": "pnpm typecheck && pnpm format && pnpm lint",
     "build:atomic": "vite build",
+    "build": "pnpm prebuild && pnpm build:atomic && pnpm schema:migrate && node --import=tsx ./src/server/scripts/addIdsToFeedItems.ts",
+    "build:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm build\"",
     "schema:generate": "drizzle-kit generate",
     "schema:migrate": "node --experimental-specifier-resolution=node --loader ts-node/esm src/server/db/migrate",
     "schema:update": "pnpm schema:generate && pnpm schema:migrate",
@@ -22,7 +23,8 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "lint": "eslint .",
-    "lint:fix": "eslint --fix ."
+    "lint:fix": "eslint --fix .",
+    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix"
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",

@@ -36,9 +36,7 @@ export const ButtonWithShortcut = ({
     <ResponsiveButton variant={variant} {...props}>
       {children}
       {showShortcuts && (
-        <kbd className={kbdVariants({ variant, size: props.size })}>
-          {shortcut}
-        </kbd>
+        <kbd className={kbdVariants({ variant })}>{shortcut}</kbd>
       )}
     </ResponsiveButton>
   );

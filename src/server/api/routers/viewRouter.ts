@@ -61,7 +61,7 @@ export const update = protectedProcedure
 
       const view = viewsResult[0];
 
-      if (input.categoryIds.length === 0) return;
+      if (input.categoryIds.length === 0 || !view) return;
 
       await tx
         .delete(viewCategories)

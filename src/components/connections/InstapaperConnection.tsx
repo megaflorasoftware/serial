@@ -89,6 +89,12 @@ export function InstapaperConnectionListItem({
     orpc.instapaper.getConnectionStatus.queryOptions(),
   );
 
+  const computedStatus = status ?? {
+    isConnected: false,
+    username: null,
+    isConfigured: false,
+  };
+
   const unlinkMutation = useMutation(
     orpc.instapaper.unlinkAccount.mutationOptions({
       onSuccess: async () => {
@@ -129,11 +135,11 @@ export function InstapaperConnectionListItem({
         <span className="font-medium">Instapaper</span>
         {isLoading ? (
           <span className="text-muted-foreground text-sm">Loading...</span>
-        ) : !status.isConfigured ? (
+        ) : !computedStatus.isConfigured ? (
           <span className="text-muted-foreground text-sm">Not available</span>
-        ) : status.isConnected ? (
+        ) : computedStatus.isConnected ? (
           <span className="text-muted-foreground text-sm">
-            {status.username}
+            {computedStatus.username}
           </span>
         ) : (
           <span className="text-muted-foreground text-sm">Not connected</span>
@@ -141,7 +147,7 @@ export function InstapaperConnectionListItem({
       </div>
       {isLoading ? (
         <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
-      ) : !status.isConfigured ? null : status.isConnected ? (
+      ) : !computedStatus.isConfigured ? null : computedStatus.isConnected ? (
         <Button
           variant="outline"
           size="sm"
