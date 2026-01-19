@@ -47,5 +47,5 @@ export const useClearAllUserData = () => {
 
 export const viewAtom = atom<"windowed" | "fullscreen">("windowed");
 export const longformVideoZoomAtom = atom<number>(3);
-export const shortformVideoZoomAtom = atom<number>(5);
+export const shortformVideoZoomAtom = atom<number>(2);
 export const articleZoomAtom = atom<number>(1);

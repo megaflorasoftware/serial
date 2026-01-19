@@ -2,7 +2,7 @@
 
 import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FeedPlatform } from "~/server/db/schema";
 import {
   articleZoomAtom,
@@ -13,6 +13,9 @@ import { useFeedItemValue } from "~/lib/data/store";
 
 export const MIN_ZOOM = 0;
 export const MAX_ZOOM = 6;
+
+export const MIN_ZOOM_VERTICAL = 0;
+export const MAX_ZOOM_VERTICAL = 3;
 
 const VIDEO_PLATFORMS: FeedPlatform[] = ["youtube", "peertube"];
 const ARTICLE_PLATFORMS: FeedPlatform[] = ["website"];
@@ -28,6 +31,15 @@ export function useZoom() {
 
   const platform = feedItem?.platform ?? "";
   const isVertical = feedItem?.orientation === "vertical";
+
+  const minZoom = useMemo(
+    () => (isVertical ? MIN_ZOOM_VERTICAL : MIN_ZOOM),
+    [isVertical],
+  );
+  const maxZoom = useMemo(
+    () => (isVertical ? MAX_ZOOM_VERTICAL : MAX_ZOOM),
+    [isVertical],
+  );
 
   const [longformVideoZoom, setLongformVideoZoom] = useAtom(
     longformVideoZoomAtom,
@@ -69,7 +81,7 @@ export function useZoom() {
         ? setShortformVideoZoom
         : setLongformVideoZoom;
       setVideoZoom((z) => {
-        if (z >= MAX_ZOOM) {
+        if (z >= maxZoom) {
           return z;
         }
         return z + 1;
@@ -89,6 +101,7 @@ export function useZoom() {
     isVertical,
     setShortformVideoZoom,
     setLongformVideoZoom,
+    maxZoom,
     isArticlePlatform,
     setArticleZoom,
   ]);
@@ -99,7 +112,7 @@ export function useZoom() {
         ? setShortformVideoZoom
         : setLongformVideoZoom;
       setVideoZoom((z) => {
-        if (z <= MIN_ZOOM) {
+        if (z <= minZoom) {
           return z;
         }
         return z - 1;
@@ -119,6 +132,7 @@ export function useZoom() {
     isVertical,
     setShortformVideoZoom,
     setLongformVideoZoom,
+    minZoom,
     isArticlePlatform,
     setArticleZoom,
   ]);
@@ -127,5 +141,8 @@ export function useZoom() {
     zoom,
     zoomIn,
     zoomOut,
+    isVertical,
+    minZoom,
+    maxZoom,
   };
 }

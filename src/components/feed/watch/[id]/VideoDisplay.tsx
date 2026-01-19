@@ -72,7 +72,7 @@ export function VideoDisplay({
                 "bg-muted absolute top-0 w-full animate-pulse overflow-hidden transition-opacity",
                 {
                   "aspect-video rounded": view === "windowed" && !isVertical,
-                  "aspect-[9/16] rounded": view === "windowed" && isVertical,
+                  "aspect-9/16 rounded": view === "windowed" && isVertical,
                   "h-full": view === "fullscreen",
                 },
               )}
@@ -80,7 +80,7 @@ export function VideoDisplay({
             <div
               className={clsx("w-full overflow-hidden transition-opacity", {
                 "aspect-video rounded": view === "windowed" && !isVertical,
-                "aspect-[9/16] rounded": view === "windowed" && isVertical,
+                "aspect-9/16 rounded": view === "windowed" && isVertical,
                 "h-full": view === "fullscreen",
                 "opacity-0": !showVideo,
                 "opacity-100": showVideo,
