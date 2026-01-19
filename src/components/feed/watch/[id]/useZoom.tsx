@@ -38,6 +38,10 @@ export function useZoom() {
       if (isArticlePlatform) {
         return articleZoom;
       }
+
+      // This value should default to MIN_ZOOM, but when naviating
+      // this value is used by the UI before the new UI has rendered.
+      // Therefore, we want to maintain the previously applied value
       return prevZoom;
     });
   }, [isVideoPlatform, videoZoom, isArticlePlatform, articleZoom]);
