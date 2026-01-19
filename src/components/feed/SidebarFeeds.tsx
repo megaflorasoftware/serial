@@ -193,21 +193,21 @@ export function SidebarFeeds() {
         const lowercaseName = feedOption.name.toLowerCase();
 
         if (lowercaseName.includes(lowercaseQuery)) {
-          preferredFeedOptions.push(feedOption);
-          preferredFeedOptions.sort(sortFeedOptions);
+          acc.preferredFeedOptions.push(feedOption);
+          acc.preferredFeedOptions.sort(sortFeedOptions);
           return acc;
         }
       } else {
         if (feedOption.hasEntries) {
-          preferredFeedOptions.push(feedOption);
-          preferredFeedOptions.sort(sortFeedOptions);
+          acc.preferredFeedOptions.push(feedOption);
+          acc.preferredFeedOptions.sort(sortFeedOptions);
           return acc;
         }
       }
 
       if (feedOption.id === feedFilter) {
-        preferredFeedOptions.push(feedOption);
-        preferredFeedOptions.sort(sortFeedOptions);
+        acc.preferredFeedOptions.push(feedOption);
+        acc.preferredFeedOptions.sort(sortFeedOptions);
         return acc;
       }
 
@@ -218,14 +218,14 @@ export function SidebarFeeds() {
           : "empty";
 
       if (feedStatus === "success") {
-        feedOptionsWithContent.push(feedOption);
-        feedOptionsWithContent.sort(sortFeedOptions);
+        acc.feedOptionsWithContent.push(feedOption);
+        acc.feedOptionsWithContent.sort(sortFeedOptions);
       } else if (feedStatus === "empty") {
-        emptyFeedOptions.push(feedOption);
-        emptyFeedOptions.sort(sortFeedOptions);
+        acc.emptyFeedOptions.push(feedOption);
+        acc.emptyFeedOptions.sort(sortFeedOptions);
       } else if (feedStatus === "error") {
-        errorFeedOptions.push(feedOption);
-        errorFeedOptions.sort(sortFeedOptions);
+        acc.errorFeedOptions.push(feedOption);
+        acc.errorFeedOptions.sort(sortFeedOptions);
       }
 
       return acc;
