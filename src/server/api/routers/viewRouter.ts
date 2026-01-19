@@ -1,16 +1,60 @@
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
-import type { ApplicationView } from "~/server/db/schema";
+import type { ApplicationView, DatabaseContentCategory } from "~/server/db/schema";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
+import {
+  INBOX_VIEW_ID,
+  INBOX_VIEW_PLACEMENT,
+} from "~/lib/data/views/constants";
+import {
+  FEED_ITEM_ORIENTATION,
+  VIEW_CONTENT_TYPE,
+  VIEW_READ_STATUS,
+} from "~/server/db/constants";
 
 import { protectedProcedure } from "~/server/orpc/base";
 import {
+  contentCategories,
   createViewSchema,
   deleteViewSchema,
   updateViewSchema,
   viewCategories,
   views,
 } from "~/server/db/schema";
+
+function buildInboxView(
+  userId: string,
+  contentCategoriesList: DatabaseContentCategory[],
+  customViews: ApplicationView[],
+): ApplicationView {
+  const allCategoryIdsSet = new Set(
+    contentCategoriesList.map((category) => category.id),
+  );
+  const customViewCategoryIdsSet = new Set(
+    customViews.flatMap((view) => view.categoryIds),
+  );
+
+  const inboxCategoryIds = [...allCategoryIdsSet].filter(
+    (id) => !customViewCategoryIdsSet.has(id),
+  );
+
+  const now = new Date();
+
+  return {
+    id: INBOX_VIEW_ID,
+    name: "Inbox",
+    daysWindow: 30,
+    orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
+    contentType: VIEW_CONTENT_TYPE.LONGFORM,
+    readStatus: VIEW_READ_STATUS.UNREAD,
+    placement: INBOX_VIEW_PLACEMENT,
+    userId,
+    createdAt: now,
+    updatedAt: now,
+    categoryIds: inboxCategoryIds,
+    isDefault: true,
+  };
+}
 
 export const create = protectedProcedure
   .input(createViewSchema)
@@ -131,26 +175,34 @@ export const deleteView = protectedProcedure
   });
 
 export const getAll = protectedProcedure.handler(async ({ context }) => {
-  const viewsList = await context.db
-    .select()
-    .from(views)
-    .where(eq(views.userId, context.user.id))
-    .orderBy(asc(views.placement));
+  const [viewsList, viewCategoriesList, contentCategoriesList] =
+    await Promise.all([
+      context.db
+        .select()
+        .from(views)
+        .where(eq(views.userId, context.user.id))
+        .orderBy(asc(views.placement)),
+      context.db.select().from(viewCategories),
+      context.db
+        .select()
+        .from(contentCategories)
+        .where(eq(contentCategories.userId, context.user.id)),
+    ]);
 
-  const viewCategoriesList = await context.db.select().from(viewCategories);
+  const customViews: ApplicationView[] = viewsList.map((view) => ({
+    ...view,
+    isDefault: false,
+    categoryIds: viewCategoriesList
+      .filter((category) => category.viewId === view.id)
+      .map((category) => category.categoryId)
+      .filter((id) => id !== null),
+  }));
 
-  const zippedViews = viewsList.map((view) => {
-    const applicationView: ApplicationView = {
-      ...view,
-      isDefault: false,
-      categoryIds: viewCategoriesList
-        .filter((category) => category.viewId === view.id)
-        .map((category) => category.categoryId)
-        .filter((id) => id !== null),
-    };
+  const inboxView = buildInboxView(
+    context.user.id,
+    contentCategoriesList,
+    customViews,
+  );
 
-    return applicationView;
-  });
-
-  return sortViewsByPlacement(zippedViews);
+  return sortViewsByPlacement([...customViews, inboxView]);
 });
