@@ -5,11 +5,12 @@ import {
   EyeOffIcon,
   SendIcon,
 } from "lucide-react";
+import { useView } from "./useView";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
 import {
-  useFeedItemsSetWatchedValueMutation,
   useFeedItemsSetWatchLaterValueMutation,
+  useFeedItemsSetWatchedValueMutation,
 } from "~/lib/data/feed-items/mutations";
 import {
   useInstapaperConnectionStatus,
@@ -18,7 +19,6 @@ import {
 import { useFeedItemValue } from "~/lib/data/store";
 import { useMediaQuery } from "~/lib/hooks/use-media-query";
 import { useShortcut } from "~/lib/hooks/useShortcut";
-import { useView } from "./useView";
 
 export function ContentActions({ contentID }: { contentID: string }) {
   const { view } = useView();

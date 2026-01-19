@@ -1,8 +1,8 @@
 import { createStore } from "zustand";
-import type { ApplicationView } from "~/server/db/schema";
-import { orpcRouterClient } from "~/lib/orpc";
 import { createSelectorHooks } from "../createSelectorHooks";
 import { sortViewsByPlacement } from "./utils";
+import type { ApplicationView } from "~/server/db/schema";
+import { orpcRouterClient } from "~/lib/orpc";
 
 export type ViewsStore = {
   reset: () => void;

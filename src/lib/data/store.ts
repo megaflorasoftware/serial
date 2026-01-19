@@ -1,10 +1,10 @@
 import { createStore, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { type ApplicationFeedItem } from "~/server/db/schema";
 import { orpcRouterClient } from "../orpc";
-import { createSelectorHooks } from "./createSelectorHooks";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
-import { type FetchFeedsStatus } from "~/server/rss/fetchFeeds";
+import { createSelectorHooks } from "./createSelectorHooks";
+import type {ApplicationFeedItem} from "~/server/db/schema";
+import type {FetchFeedsStatus} from "~/server/rss/fetchFeeds";
 
 export type ApplicationStore = {
   reset: () => void;

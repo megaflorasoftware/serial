@@ -2,17 +2,7 @@ import { ToggleGroup } from "@radix-ui/react-toggle-group";
 import { ImportIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useFeedCategories } from "~/lib/data/feed-categories";
-import { useFeeds } from "~/lib/data/feeds";
-import {
-  useCreateFeedMutation,
-  useDeleteFeedMutation,
-  useEditFeedMutation,
-} from "~/lib/data/feeds/mutations";
-import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
-import { useShortcut } from "~/lib/hooks/useShortcut";
-import type { FeedOpenLocation, FeedPlatform } from "~/server/db/schema";
-import { getAssumedFeedPlatform } from "~/server/rss/validateFeedUrl";
+import { Link } from "@tanstack/react-router";
 import { ViewCategoriesInput } from "./AddViewDialog";
 import {
   FeedDiscoveryInput,
@@ -25,8 +15,18 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroupItem } from "./ui/toggle-group";
+import type { FeedOpenLocation, FeedPlatform } from "~/server/db/schema";
+import { useFeedCategories } from "~/lib/data/feed-categories";
+import { useFeeds } from "~/lib/data/feeds";
+import {
+  useCreateFeedMutation,
+  useDeleteFeedMutation,
+  useEditFeedMutation,
+} from "~/lib/data/feeds/mutations";
+import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
+import { useShortcut } from "~/lib/hooks/useShortcut";
+import { getAssumedFeedPlatform } from "~/server/rss/validateFeedUrl";
 import { useDialogStore } from "~/components/feed/dialogStore";
-import { Link } from "@tanstack/react-router";
 
 export function AddFeedDialog() {
   const [isAddingFeed, setIsAddingFeed] = useState(false);

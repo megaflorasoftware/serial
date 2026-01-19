@@ -15,11 +15,11 @@ export type MarkdownHeading = {
 
 export type MarkdownResult = {
   markup: string;
-  headings: Array<MarkdownHeading>;
+  headings: MarkdownHeading[];
 };
 
 export async function renderMarkdown(content: string): Promise<MarkdownResult> {
-  const headings: Array<MarkdownHeading> = [];
+  const headings: MarkdownHeading[] = [];
 
   const result = await unified()
     .use(remarkParse) // Parse markdown

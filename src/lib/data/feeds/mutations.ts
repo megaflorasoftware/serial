@@ -1,5 +1,4 @@
 import { useMutation } from "@tanstack/react-query";
-import { orpc } from "~/lib/orpc";
 import { useFetchContentCategories } from "../content-categories/store";
 import { useFetchFeedCategories } from "../feed-categories/store";
 import {
@@ -16,6 +15,7 @@ import {
   useSetFeeds,
   useUpdateFeed,
 } from "./store";
+import { orpc } from "~/lib/orpc";
 
 export function useCreateFeedMutation() {
   const fetchFeedItemsForFeed = useFetchFeedItemsForFeed();

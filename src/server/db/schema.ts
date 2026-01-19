@@ -18,8 +18,8 @@ import {
 import { z } from "zod";
 import {
   FEED_ITEM_ORIENTATION,
-  feedItemOrientationSchema,
   VIEW_READ_STATUS,
+  feedItemOrientationSchema,
   viewReadStatusSchema,
 } from "./constants";
 

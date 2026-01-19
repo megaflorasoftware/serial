@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useDialogStore } from "~/components/feed/dialogStore";
 import {
   InstapaperConnectionForm,
   InstapaperConnectionListItem,
 } from "./connections/InstapaperConnection";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
+import { useDialogStore } from "~/components/feed/dialogStore";
 
 type ConnectionView = "list" | "instapaper";
 

@@ -1,13 +1,10 @@
 // src/components/Markdown.tsx
 import { Link } from "@tanstack/react-router";
-import parse, {
-  type HTMLReactParserOptions,
-  type DOMNode,
-  domToReact,
-  Element,
-} from "html-react-parser";
+import parse, { Element, domToReact } from "html-react-parser";
 import { useEffect, useState } from "react";
-import { type MarkdownResult, renderMarkdown } from "~/lib/markdown";
+import type { DOMNode, HTMLReactParserOptions } from "html-react-parser";
+import type { MarkdownResult } from "~/lib/markdown";
+import { renderMarkdown } from "~/lib/markdown";
 
 type MarkdownProps = {
   content: string;

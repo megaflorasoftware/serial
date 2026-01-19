@@ -1,9 +1,10 @@
 "use client";
 
-import { type ElementRef, useEffect, useRef } from "react";
+import {  useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { useRouter } from "@tanstack/react-router";
+import type {ElementRef} from "react";
 
 export function UnstyledDialog({
   children,

@@ -1,8 +1,8 @@
 import { ORPCError, os } from "@orpc/server";
 
+import { getRequest } from "@tanstack/react-start/server";
 import { db } from "~/server/db";
 import { auth } from "~/server/auth";
-import { getRequest } from "@tanstack/react-start/server";
 
 export async function createRPCContext(opts: { headers: Headers }) {
   const { headers } = getRequest();

@@ -9,6 +9,9 @@ import {
   SettingsIcon,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { Skeleton } from "../ui/skeleton";
+import { useDialogStore } from "./dialogStore";
+import type { ApplicationFeed } from "~/server/db/schema";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Input } from "~/components/ui/input";
@@ -42,9 +45,6 @@ import {
   useFetchFeedItemsStatus,
 } from "~/lib/data/store";
 import { useDeselectViewFilter } from "~/lib/data/views";
-import type { ApplicationFeed } from "~/server/db/schema";
-import { useDialogStore } from "./dialogStore";
-import { Skeleton } from "../ui/skeleton";
 
 function useCheckFilteredFeedItemsForFeed() {
   const feedItemsOrder = useFeedItemsOrder();

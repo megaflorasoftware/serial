@@ -1,9 +1,9 @@
-import { eq, asc, inArray, and } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
+import { verifyFeedsOwnedByUser } from "./feed-router/utils";
 import { protectedProcedure } from "~/server/orpc/base";
 import { contentCategories, feedCategories } from "~/server/db/schema";
-import { verifyFeedsOwnedByUser } from "./feed-router/utils";
 
 export const getAll = protectedProcedure.handler(async ({ context }) => {
   const contentCategoriesList = await context.db

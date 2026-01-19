@@ -1,7 +1,7 @@
 import { createStore } from "zustand";
+import { createSelectorHooks } from "../createSelectorHooks";
 import type { ApplicationFeed } from "~/server/db/schema";
 import { orpcRouterClient } from "~/lib/orpc";
-import { createSelectorHooks } from "../createSelectorHooks";
 import { assembleIteratorResult } from "~/lib/iterators";
 
 export type FeedsStore = {

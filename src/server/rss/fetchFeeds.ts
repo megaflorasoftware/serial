@@ -1,7 +1,6 @@
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
-import { type ApplicationFeedItem, type DatabaseFeed, feedItems } from "../db/schema";
+import {   feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
-import { type ORPCContext } from "../orpc/base";
 import { fetchNebulaFeedData, fetchNebulaFeedDetails } from "./parsers/nebula";
 import { fetchPeerTubeFeedData } from "./parsers/peertube";
 import { fetchUnknownRssFeed } from "./parsers/unknown";
@@ -10,7 +9,9 @@ import {
   fetchYouTubeFeedData,
   fetchYouTubeFeedDetails,
 } from "./parsers/youtube";
-import { type NewFeedDetails, type RSSFeed } from "./types";
+import type {ORPCContext} from "../orpc/base";
+import type {ApplicationFeedItem, DatabaseFeed} from "../db/schema";
+import type {NewFeedDetails, RSSFeed} from "./types";
 
 export type FetchFeedsStatus = "success" | "empty" | "error";
 
@@ -97,7 +98,7 @@ export async function* fetchAndInsertFeedData(
         };
       }
 
-      const feedItemList: (typeof feedItems.$inferInsert)[] =
+      const feedItemList: Array<typeof feedItems.$inferInsert> =
         feedData.items.map((item) => {
           return {
             feedId: feed.id,

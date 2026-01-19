@@ -1,13 +1,10 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
-import { useSession } from "~/lib/auth-client";
-import { FEED_ITEM_ORIENTATION, VIEW_READ_STATUS } from "~/server/db/constants";
-import { type ApplicationView } from "~/server/db/schema";
 import {
+  UNSELECTED_VIEW_ID,
   categoryFilterAtom,
   dateFilterAtom,
   feedFilterAtom,
-  UNSELECTED_VIEW_ID,
   viewFilterIdAtom,
   viewsAtom,
 } from "../atoms";
@@ -15,14 +12,17 @@ import { useContentCategories } from "../content-categories";
 import { useFeedCategories } from "../feed-categories";
 import { doesFeedItemPassFilters } from "../feed-items";
 import { useFeeds } from "../feeds";
-import { sortViewsByPlacement } from "./utils";
 import { useFeedItemsDict, useFeedItemsOrder } from "../store";
+import { sortViewsByPlacement } from "./utils";
 import {
-  useViews as useViewsStore,
-  useViewsFetchStatus,
   useFetchViews,
   useSetViews,
+  useViewsFetchStatus,
+  useViews as useViewsStore,
 } from "./store";
+import type {ApplicationView} from "~/server/db/schema";
+import { FEED_ITEM_ORIENTATION, VIEW_READ_STATUS } from "~/server/db/constants";
+import { useSession } from "~/lib/auth-client";
 
 export const INBOX_VIEW_ID = -1;
 export const INBOX_VIEW_PLACEMENT = -1;

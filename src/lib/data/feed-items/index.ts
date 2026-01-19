@@ -1,22 +1,23 @@
 import { useAtomValue } from "jotai";
+import {
+  
+  categoryFilterAtom,
+  dateFilterAtom,
+  feedFilterAtom,
+  viewFilterAtom,
+  visibilityFilterAtom
+} from "../atoms";
+import { feedItemsStore } from "../store";
+import { useFeedCategories } from "../feed-categories/store";
+import { useFeeds } from "../feeds/store";
+import { INBOX_VIEW_ID } from "../views";
+import type {VisibilityFilter} from "../atoms";
 import type {
   ApplicationFeedItem,
   ApplicationView,
   DatabaseFeed,
   DatabaseFeedCategory,
 } from "~/server/db/schema";
-import {
-  categoryFilterAtom,
-  dateFilterAtom,
-  feedFilterAtom,
-  viewFilterAtom,
-  type VisibilityFilter,
-  visibilityFilterAtom,
-} from "../atoms";
-import { feedItemsStore } from "../store";
-import { useFeedCategories } from "../feed-categories/store";
-import { useFeeds } from "../feeds/store";
-import { INBOX_VIEW_ID } from "../views";
 
 export function doesFeedItemPassFilters(
   item: ApplicationFeedItem,

@@ -1,18 +1,18 @@
-import { ThemeProvider } from "~/components/ThemeProvider";
-import { Toaster } from "~/components/ui/sonner";
-import { QueryProvider } from "~/lib/query-provider";
-
 import {
-  createRootRoute,
   HeadContent,
   Link,
   Outlet,
   Scripts,
+  createRootRoute,
 } from "@tanstack/react-router";
+import { SproutIcon } from "lucide-react";
+import { ThemeProvider } from "~/components/ThemeProvider";
+import { Toaster } from "~/components/ui/sonner";
+import { QueryProvider } from "~/lib/query-provider";
+
 import { ApplyColorThemeOnServerMount } from "~/components/color-theme/ApplyColorThemeOnMount";
 import { orpcRouterClient } from "~/lib/orpc";
 import appCss from "~/styles/globals.css?url";
-import { SproutIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { AUTH_SIGNED_IN_URL } from "~/server/auth/constants";
 
@@ -124,7 +124,7 @@ export function RootLayout() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
-        {/*{process.env.NODE_ENV !== "production" && (
+        {/* {process.env.NODE_ENV !== "production" && (
           <>
             <script
               crossOrigin="anonymous"
@@ -160,7 +160,7 @@ export function RootLayout() {
             disableTransitionOnChange
           >
             <Outlet />
-            {/*TODO: what is happening here*/}
+            {/* TODO: what is happening here */}
             <Scripts />
             <Toaster />
           </ThemeProvider>

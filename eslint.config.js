@@ -25,6 +25,7 @@ export default tseslint.config(
     rules: {
       // TanStack Router's redirect() and notFound() are designed to be thrown
       "@typescript-eslint/only-throw-error": "off",
+      "@typescript-eslint/array-type": ["error", { default: "array-simple" }],
     },
   },
   {
@@ -40,5 +41,5 @@ export default tseslint.config(
       "public/sw.js",
       "public/workbox-*.js",
     ],
-  }
+  },
 );

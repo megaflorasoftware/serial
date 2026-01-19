@@ -2,8 +2,10 @@
 
 import { Link, useSearch } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
-import { type PropsWithChildren, useState } from "react";
+import {  useState } from "react";
 import { toast } from "sonner";
+import { AuthHeader } from "../AuthHeader";
+import type {PropsWithChildren} from "react";
 import { Button } from "~/components/ui/button";
 import { CardContent, CardFooter } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -13,7 +15,6 @@ import {
   AUTH_PAGE_URL,
   AUTH_RESET_PASSWORD_URL,
 } from "~/server/auth/constants";
-import { AuthHeader } from "../AuthHeader";
 
 function AlertPane({
   title,

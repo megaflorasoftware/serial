@@ -1,6 +1,6 @@
 "use client";
 
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   GlobeIcon,
   PlayCircleIcon,
@@ -9,11 +9,23 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { FeedPlatform } from "~/server/db/schema";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Input } from "~/components/ui/input";
+import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
+import { useContentCategories } from "~/lib/data/content-categories";
+import { useFeedCategories } from "~/lib/data/feed-categories";
+import {
+  useBulkAssignFeedCategoryMutation,
+  useBulkRemoveFeedCategoryMutation,
+} from "~/lib/data/feed-categories/mutations";
+import { useFeeds } from "~/lib/data/feeds";
+import { useBulkDeleteFeedsMutation } from "~/lib/data/feeds/mutations";
 
 function useFeedManagementShortcuts({
   onEscape,
@@ -106,18 +118,6 @@ function useFeedManagementShortcuts({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 }
-import { Checkbox } from "~/components/ui/checkbox";
-import { Input } from "~/components/ui/input";
-import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
-import { useContentCategories } from "~/lib/data/content-categories";
-import { useFeedCategories } from "~/lib/data/feed-categories";
-import {
-  useBulkAssignFeedCategoryMutation,
-  useBulkRemoveFeedCategoryMutation,
-} from "~/lib/data/feed-categories/mutations";
-import { useFeeds } from "~/lib/data/feeds";
-import { useBulkDeleteFeedsMutation } from "~/lib/data/feeds/mutations";
-import type { FeedPlatform } from "~/server/db/schema";
 
 export const Route = createFileRoute("/_app/feeds")({
   component: ManageFeedsPage,
@@ -352,7 +352,7 @@ function ManageFeedsPage() {
       (id) => !selectedCategoryIds.includes(id),
     );
 
-    const promises: Promise<void>[] = [];
+    const promises: Array<Promise<void>> = [];
 
     categoriesToAdd.forEach((categoryId) => {
       promises.push(bulkAssignCategory({ feedIds, categoryId }));

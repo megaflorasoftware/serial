@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import {
-  useFeedCategories as useFeedCategoriesStore,
   useFeedCategoriesFetchStatus,
+  useFeedCategories as useFeedCategoriesStore,
   useFetchFeedCategories,
 } from "./store";
 

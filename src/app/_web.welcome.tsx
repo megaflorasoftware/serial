@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { DemoCarousel } from "~/components/welcome/DemoCarousel";
 import { GetStartedButton } from "~/components/welcome/GetStartedButton";
 import { GitHubButton } from "~/components/welcome/GitHubButton";

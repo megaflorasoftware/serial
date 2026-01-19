@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import {
-  useContentCategories as useContentCategoriesStore,
   useContentCategoriesFetchStatus,
+  useContentCategories as useContentCategoriesStore,
   useFetchContentCategories,
 } from "./store";
 

@@ -1,6 +1,6 @@
 import { RssIcon, XIcon } from "lucide-react";
-import { Button } from "~/components/ui/button";
 import type { DiscoveredFeed } from "./FeedDiscoveryResults";
+import { Button } from "~/components/ui/button";
 
 interface SelectedFeedBadgeProps {
   feed: DiscoveredFeed;

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { orpcRouterClient } from "~/lib/orpc";
 import type { DiscoveredFeed } from "./FeedDiscoveryResults";
+import { orpcRouterClient } from "~/lib/orpc";
 
 type DiscoveryState = "input" | "discovering" | "select" | "locked";
 

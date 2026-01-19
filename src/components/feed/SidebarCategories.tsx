@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { CircleSmall, Edit2Icon, PlusIcon } from "lucide-react";
+import { useDialogStore } from "./dialogStore";
 import { EditContentCategoryDialog } from "~/components/AddContentCategoryDialog";
 import {
   SidebarGroup,
@@ -22,7 +23,6 @@ import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { doesFeedItemPassFilters } from "~/lib/data/feed-items";
 import { useDeselectViewFilter } from "~/lib/data/views";
-import { useDialogStore } from "./dialogStore";
 import { useFeedItemsDict, useFeedItemsOrder } from "~/lib/data/store";
 
 function useCheckFilteredFeedItemsForCategory() {

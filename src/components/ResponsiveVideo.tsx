@@ -2,9 +2,9 @@
 
 import clsx from "clsx";
 import { useRef } from "react";
-import { useFlagState } from "~/lib/hooks/useFlagState";
 import { CustomVideoPlayer } from "./CustomVideoPlayer";
 import classes from "./ResponsiveVideo.module.css";
+import { useFlagState } from "~/lib/hooks/useFlagState";
 import { useFeedItemValue } from "~/lib/data/store";
 
 interface IResponsiveVideoProps {

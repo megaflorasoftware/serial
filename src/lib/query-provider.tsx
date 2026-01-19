@@ -1,18 +1,19 @@
 "use client";
 
-import { type QueryClient } from "@tanstack/react-query";
 import {
-  defaultShouldDehydrateQuery,
   QueryClient as TanstackQueryClient,
+  defaultShouldDehydrateQuery,
 } from "@tanstack/react-query";
 import SuperJSON from "superjson";
 import { toast } from "sonner";
 
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import {
-  PersistQueryClientProvider,
-  type Persister,
+  PersistQueryClientProvider
+  
 } from "@tanstack/react-query-persist-client";
+import type {QueryClient} from "@tanstack/react-query";
+import type {Persister} from "@tanstack/react-query-persist-client";
 
 export const createQueryClient = () =>
   new TanstackQueryClient({
@@ -26,7 +27,7 @@ export const createQueryClient = () =>
         onError: (err) => {
           try {
             // @ts-expect-error deal with this later
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+             
             JSON.parse(err.message).forEach((error: { message: string }) => {
                
               toast.error(error.message);

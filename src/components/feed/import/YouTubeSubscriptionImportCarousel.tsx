@@ -64,9 +64,9 @@ const STEPS = [
       </p>
     ),
   },
-] as const satisfies {
+] as const satisfies Array<{
   content: React.ReactNode;
-}[];
+}>;
 
 export function YouTubeSubscriptionImportCarousel() {
   return (

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { env } from "~/env";
 
 const INSTAPAPER_API_BASE = "https://www.instapaper.com";
@@ -43,7 +43,7 @@ function createSignatureBaseString(
   url: string,
   params: OAuthParams | BodyParams,
 ): string {
-  const keys = Object.keys(params) as (keyof typeof params)[];
+  const keys = Object.keys(params) as Array<keyof typeof params>;
   const sortedParams = keys
     .sort()
     .map((key) => `${percentEncode(key)}=${percentEncode(params[key])}`)
@@ -219,7 +219,7 @@ export async function addBookmark(
     throw new Error(`Failed to add bookmark: ${response.status} - ${text}`);
   }
 
-  const data = (await response.json()) as { bookmark_id: number }[];
+  const data = (await response.json()) as Array<{ bookmark_id: number }>;
   if (!data[0]?.bookmark_id) {
     throw new Error(`Couldn't access bookmark`);
   }

@@ -2,10 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon, Loader2Icon, UnplugIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { orpc } from "~/lib/orpc";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { orpc } from "~/lib/orpc";
 
 export function InstapaperConnectionForm({
   onSuccess,

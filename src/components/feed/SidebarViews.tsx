@@ -1,11 +1,43 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import {   useEffect, useState } from "react";
 
 import { DragHandleDots2Icon } from "@radix-ui/react-icons";
 import { useAtom } from "jotai";
 import { CircleSmall, Edit2Icon, PlusIcon } from "lucide-react";
-import { EditViewDialog } from "~/components/AddViewDialog";
+
+import {
+  DndContext,
+  
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors
+} from "@dnd-kit/core";
+import {
+  restrictToParentElement,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useDialogStore } from "./dialogStore";
+import type {DragEndEvent} from "@dnd-kit/core";
+import type {Dispatch, SetStateAction} from "react";
+
+import type { ApplicationView } from "~/server/db/schema";
+import {
+  useCheckFilteredFeedItemsForView,
+  useUpdateViewFilter,
+  useViews,
+} from "~/lib/data/views";
+import { viewFilterIdAtom } from "~/lib/data/atoms";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -13,41 +45,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
-import { viewFilterIdAtom } from "~/lib/data/atoms";
-import {
-  useCheckFilteredFeedItemsForView,
-  useUpdateViewFilter,
-  useViews,
-} from "~/lib/data/views";
-import { useDialogStore } from "./dialogStore";
-
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  restrictToParentElement,
-  restrictToVerticalAxis,
-} from "@dnd-kit/modifiers";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-
+import { EditViewDialog } from "~/components/AddViewDialog";
 import {
   calculateViewsPlacement,
   useUpdateViewsPlacementMutation,
 } from "~/lib/data/views/mutations";
-import type { ApplicationView } from "~/server/db/schema";
 
 type ViewOption = ApplicationView & { hasEntries: boolean };
 
@@ -157,7 +159,7 @@ export function SidebarViews() {
 
         const updatedViews = calculateViewsPlacement(
           updatedOptions.map((option) => {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+             
             const { hasEntries, ...restOfOption } = option;
             return restOfOption;
           }),

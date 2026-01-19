@@ -5,7 +5,6 @@ import clsx from "clsx";
 import { LaptopIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { authClient } from "~/lib/auth-client";
 import { ResponsiveButton } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { ResponsiveDropdown } from "../ui/responsive-dropdown";
@@ -14,6 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { EnableCustomVideoPlayerToggle } from "./EnableCustomVideoPlayerToggle";
 import { ShowShortcutsToggle } from "./ShowShortcutsToggle";
 import { ShowArticleStyleToggle } from "./ShowArticleStyleToggle";
+import { authClient } from "~/lib/auth-client";
 import { orpc } from "~/lib/orpc";
 
 function getCssVariable(name: string) {

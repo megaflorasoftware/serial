@@ -1,10 +1,10 @@
 import Parser from "rss-parser";
 import { z } from "zod";
-import type { DatabaseFeed } from "~/server/db/schema";
 import { isWithinDays } from "../rssUtils";
+import type { DatabaseFeed } from "~/server/db/schema";
 import type { NewFeedDetails, RSSContent, RSSFeed } from "../types";
 
-function getLongestString(...strings: (string | undefined)[]) {
+function getLongestString(...strings: Array<string | undefined>) {
   return strings.reduce((acc: string, cur) => {
     if (!cur) return acc;
     if (cur.length > acc.length) return cur;

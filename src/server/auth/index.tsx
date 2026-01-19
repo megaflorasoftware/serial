@@ -3,11 +3,11 @@ import sendgrid from "@sendgrid/mail";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import ResetPasswordEmail from "~/emails/reset-password";
-import { db } from "../db";
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
+import { db } from "../db";
+import ResetPasswordEmail from "~/emails/reset-password";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {

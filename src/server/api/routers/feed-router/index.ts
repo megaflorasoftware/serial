@@ -1,20 +1,20 @@
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { discoverFeeds as discoverFeedsFromUrl } from "feedscout";
 import { z } from "zod";
+import { findExistingFeedThatMatches } from "./utils";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 import { prepareArrayChunks } from "~/lib/iterators";
 import {
+  PLATFORM_DEFAULT_OPEN_LOCATION,
   contentCategories,
   feedCategories,
   feeds,
   feedsSchema,
   openLocationSchema,
-  PLATFORM_DEFAULT_OPEN_LOCATION,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
-import { findExistingFeedThatMatches } from "./utils";
 
 type BulkImportFromFileSuccess = {
   feedUrl: string;
@@ -366,7 +366,7 @@ export const discoverFeeds = protectedProcedure
       }),
     ]);
 
-    const feeds: { url: string; title?: string; format?: string }[] = [];
+    const feeds: Array<{ url: string; title?: string; format?: string }> = [];
 
     if (youtubeResult.status === "fulfilled" && youtubeResult.value) {
       feeds.push(...youtubeResult.value);

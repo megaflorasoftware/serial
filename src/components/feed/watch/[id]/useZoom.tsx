@@ -3,9 +3,9 @@
 import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
+import type { FeedPlatform } from "~/server/db/schema";
 import { articleZoomAtom, videoZoomAtom } from "~/lib/data/atoms";
 import { useFeedItemValue } from "~/lib/data/store";
-import type { FeedPlatform } from "~/server/db/schema";
 
 export const MIN_ZOOM = 0;
 export const MAX_ZOOM = 6;
