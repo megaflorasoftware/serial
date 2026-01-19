@@ -1,7 +1,7 @@
 import { notFound } from "@tanstack/react-router";
 // @ts-expect-error this is fine
-import {  allReleases } from "content-collections";
-import type {Release} from "content-collections";
+import { allReleases } from "content-collections";
+import type { Release } from "content-collections";
 
 const releases = allReleases as Release[];
 

@@ -1,17 +1,16 @@
 import { useAtomValue } from "jotai";
 import {
-  
   categoryFilterAtom,
   dateFilterAtom,
   feedFilterAtom,
   viewFilterAtom,
-  visibilityFilterAtom
+  visibilityFilterAtom,
 } from "../atoms";
 import { feedItemsStore } from "../store";
 import { useFeedCategories } from "../feed-categories/store";
 import { useFeeds } from "../feeds/store";
 import { INBOX_VIEW_ID } from "../views";
-import type {VisibilityFilter} from "../atoms";
+import type { VisibilityFilter } from "../atoms";
 import type {
   ApplicationFeedItem,
   ApplicationView,

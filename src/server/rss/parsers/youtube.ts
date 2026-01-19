@@ -1,7 +1,7 @@
 import Parser from "rss-parser";
 import { isWithinDays } from "../rssUtils";
-import type {NewFeedDetails, RSSContent, RSSFeed} from "../types";
-import type {feeds} from "~/server/db/schema";
+import type { NewFeedDetails, RSSContent, RSSFeed } from "../types";
+import type { feeds } from "~/server/db/schema";
 
 const parser = new Parser({
   customFields: {

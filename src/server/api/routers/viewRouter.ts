@@ -1,16 +1,15 @@
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
-import type {ApplicationView} from "~/server/db/schema";
+import type { ApplicationView } from "~/server/db/schema";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
 
 import { protectedProcedure } from "~/server/orpc/base";
 import {
-  
   createViewSchema,
   deleteViewSchema,
   updateViewSchema,
   viewCategories,
-  views
+  views,
 } from "~/server/db/schema";
 
 export const create = protectedProcedure

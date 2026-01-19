@@ -20,7 +20,7 @@ import {
   useViewsFetchStatus,
   useViews as useViewsStore,
 } from "./store";
-import type {ApplicationView} from "~/server/db/schema";
+import type { ApplicationView } from "~/server/db/schema";
 import { FEED_ITEM_ORIENTATION, VIEW_READ_STATUS } from "~/server/db/constants";
 import { useSession } from "~/lib/auth-client";
 

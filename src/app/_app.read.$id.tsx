@@ -2,7 +2,6 @@
 
 import clsx from "clsx";
 
-
 import { createFileRoute } from "@tanstack/react-router";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";

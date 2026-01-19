@@ -1,6 +1,6 @@
 "use client";
 
-import {   useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DragHandleDots2Icon } from "@radix-ui/react-icons";
 import { useAtom } from "jotai";
@@ -8,12 +8,11 @@ import { CircleSmall, Edit2Icon, PlusIcon } from "lucide-react";
 
 import {
   DndContext,
-  
   KeyboardSensor,
   PointerSensor,
   closestCenter,
   useSensor,
-  useSensors
+  useSensors,
 } from "@dnd-kit/core";
 import {
   restrictToParentElement,
@@ -28,8 +27,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDialogStore } from "./dialogStore";
-import type {DragEndEvent} from "@dnd-kit/core";
-import type {Dispatch, SetStateAction} from "react";
+import type { DragEndEvent } from "@dnd-kit/core";
+import type { Dispatch, SetStateAction } from "react";
 
 import type { ApplicationView } from "~/server/db/schema";
 import {
@@ -159,7 +158,6 @@ export function SidebarViews() {
 
         const updatedViews = calculateViewsPlacement(
           updatedOptions.map((option) => {
-             
             const { hasEntries, ...restOfOption } = option;
             return restOfOption;
           }),

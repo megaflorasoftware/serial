@@ -1,13 +1,12 @@
 import {
-  
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
-  useState
+  useState,
 } from "react";
 import { doesAnyFormElementHaveFocus } from "../doesAnyFormElementHaveFocus";
-import type {KeyboardEvent} from "react";
+import type { KeyboardEvent } from "react";
 import { useDialogStore } from "~/components/feed/dialogStore";
 
 /**

@@ -2,10 +2,10 @@
 
 import { Link, useSearch } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
-import {  useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { AuthHeader } from "../AuthHeader";
-import type {PropsWithChildren} from "react";
+import type { PropsWithChildren } from "react";
 import { Button } from "~/components/ui/button";
 import { CardContent, CardFooter } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";

@@ -3,8 +3,8 @@ import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
 import { createSelectorHooks } from "./createSelectorHooks";
-import type {ApplicationFeedItem} from "~/server/db/schema";
-import type {FetchFeedsStatus} from "~/server/rss/fetchFeeds";
+import type { ApplicationFeedItem } from "~/server/db/schema";
+import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 
 export type ApplicationStore = {
   reset: () => void;

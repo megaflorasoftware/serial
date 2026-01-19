@@ -1,5 +1,5 @@
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
-import {   feedItems } from "../db/schema";
+import { feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { fetchNebulaFeedData, fetchNebulaFeedDetails } from "./parsers/nebula";
 import { fetchPeerTubeFeedData } from "./parsers/peertube";
@@ -9,9 +9,9 @@ import {
   fetchYouTubeFeedData,
   fetchYouTubeFeedDetails,
 } from "./parsers/youtube";
-import type {ORPCContext} from "../orpc/base";
-import type {ApplicationFeedItem, DatabaseFeed} from "../db/schema";
-import type {NewFeedDetails, RSSFeed} from "./types";
+import type { ORPCContext } from "../orpc/base";
+import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
+import type { NewFeedDetails, RSSFeed } from "./types";
 
 export type FetchFeedsStatus = "success" | "empty" | "error";
 
