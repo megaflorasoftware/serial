@@ -15,9 +15,7 @@ export function getMostRecentRelease() {
 }
 
 export function getReleaseWithSlug(slug: string) {
-  const release = releases
-    .filter((r) => r.public)
-    .find((p) => p.slug === slug);
+  const release = releases.filter((r) => r.public).find((p) => p.slug === slug);
 
   if (!release) {
     throw notFound();

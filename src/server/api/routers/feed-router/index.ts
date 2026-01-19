@@ -367,7 +367,11 @@ export const discoverFeeds = protectedProcedure
       }),
     ]);
 
-    const discoveredFeeds: Array<{ url: string; title?: string; format?: string }> = [];
+    const discoveredFeeds: Array<{
+      url: string;
+      title?: string;
+      format?: string;
+    }> = [];
 
     if (youtubeResult.status === "fulfilled" && youtubeResult.value) {
       discoveredFeeds.push(...youtubeResult.value);

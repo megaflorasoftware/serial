@@ -68,9 +68,7 @@ export function doesFeedItemPassFilters(
   }
 
   const feedsForView = feedCategories
-    .filter((category) =>
-      viewFilter?.categoryIds.includes(category.categoryId),
-    )
+    .filter((category) => viewFilter?.categoryIds.includes(category.categoryId))
     .map((category) => category.feedId);
 
   // View filter

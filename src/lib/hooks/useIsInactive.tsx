@@ -23,7 +23,6 @@ export default function useIsInactive() {
   }, []);
 
   useEffect(() => {
-
     const onInteract = () => {
       // "Rate limit" the number of renders to keep performance high
       const now = dayjs().valueOf();
