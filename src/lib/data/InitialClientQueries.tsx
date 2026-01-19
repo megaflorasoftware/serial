@@ -1,46 +1,52 @@
 "use client";
 
 import { useSetAtom } from "jotai";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { viewsAtom } from "./atoms";
 import { useUpdateViewFilter } from "./views";
-import { useFetchByView, useCurrentViewId, useFetchFeedItemsStatus } from "./store";
-import { useViews as useViewsStore, useViewsFetchStatus } from "./views/store";
+import { useCurrentViewId, useFetchByView, useFetchFeedItemsStatus } from "./store";
+import { useFetchStatus as useViewsFetchStatus, useViews as useViewsStore } from "./views/store";
 import type { PropsWithChildren } from "react";
 
 export function InitialClientQueries({ children }: PropsWithChildren) {
   const fetchByView = useFetchByView();
   const currentViewId = useCurrentViewId();
   const fetchStatus = useFetchFeedItemsStatus();
+  const hasInitialized = useRef(false);
 
   // Sync views store with viewsAtom for compatibility
   const viewsFromStore = useViewsStore();
   const viewsFetchStatus = useViewsFetchStatus();
   const setViewsAtom = useSetAtom(viewsAtom);
+  const updateViewFilter = useUpdateViewFilter();
 
   useEffect(() => {
     void fetchByView();
   }, []);
 
-  // Keep viewsAtom in sync with views from the store (including Inbox)
-  useEffect(() => {
-    if (viewsFetchStatus === "success" && viewsFromStore.length > 0) {
-      setViewsAtom(viewsFromStore);
-    }
-  }, [viewsFetchStatus, viewsFromStore, setViewsAtom]);
-
-  // Set the initial view filter once we have views and feed items
-  const updateViewFilter = useUpdateViewFilter();
-
+  // Sync viewsAtom and set initial view filter when ready
   useEffect(() => {
     if (
+      !hasInitialized.current &&
       fetchStatus === "success" &&
       viewsFetchStatus === "success" &&
+      viewsFromStore.length > 0 &&
       currentViewId !== null
     ) {
-      updateViewFilter(currentViewId);
+      hasInitialized.current = true;
+      // Sync views to atom
+      setViewsAtom(viewsFromStore);
+      // Set initial view filter, passing views directly to avoid timing issues
+      updateViewFilter(currentViewId, viewsFromStore);
     }
-  }, [fetchStatus, viewsFetchStatus, currentViewId, updateViewFilter]);
+  }, [fetchStatus, viewsFetchStatus, viewsFromStore, currentViewId, setViewsAtom, updateViewFilter]);
+
+  // Keep viewsAtom in sync when views change after initialization
+  useEffect(() => {
+    if (hasInitialized.current && viewsFromStore.length > 0) {
+      setViewsAtom(viewsFromStore);
+    }
+  }, [viewsFromStore, setViewsAtom]);
 
   return children;
 }

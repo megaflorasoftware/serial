@@ -20,6 +20,7 @@ import {
   useViewsFetchStatus,
   useViews as useViewsStore,
 } from "./store";
+import { INBOX_VIEW_ID, INBOX_VIEW_PLACEMENT } from "./constants";
 import type { ApplicationView } from "~/server/db/schema";
 import {
   FEED_ITEM_ORIENTATION,
@@ -27,7 +28,6 @@ import {
   VIEW_READ_STATUS,
 } from "~/server/db/constants";
 import { useSession } from "~/lib/auth-client";
-import { INBOX_VIEW_ID, INBOX_VIEW_PLACEMENT } from "./constants";
 
 export { INBOX_VIEW_ID, INBOX_VIEW_PLACEMENT };
 

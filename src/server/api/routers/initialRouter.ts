@@ -84,86 +84,6 @@ function buildInboxView(
   };
 }
 
-/**
- * Check if a feed item passes the view filters (for filtering fresh items)
- */
-function itemPassesViewFilters(
-  item: ApplicationFeedItem,
-  view: ApplicationView,
-  feedCategoriesList: DatabaseFeedCategory[],
-  feedsList: ApplicationFeed[],
-): boolean {
-  // Check visibility (unread)
-  if (item.isWatched || item.isWatchLater) {
-    return false;
-  }
-
-  // Check time window
-  if (view.daysWindow && view.daysWindow > 0) {
-    const now = new Date();
-    const cutoffDate = new Date(now);
-    cutoffDate.setDate(cutoffDate.getDate() - view.daysWindow);
-    if (item.postedAt < cutoffDate) {
-      return false;
-    }
-  }
-
-  // Check content type
-  const feed = feedsList.find((f) => f.id === item.feedId);
-  const VIDEO_PLATFORMS = ["youtube", "peertube", "nebula"];
-
-  if (view.contentType === "longform") {
-    if (item.orientation === "vertical") {
-      return false;
-    }
-  } else if (view.contentType === "horizontal-video") {
-    if (!feed || !VIDEO_PLATFORMS.includes(feed.platform)) {
-      return false;
-    }
-    if (item.orientation !== "horizontal") {
-      return false;
-    }
-  } else if (view.contentType === "vertical-video") {
-    if (!feed || !VIDEO_PLATFORMS.includes(feed.platform)) {
-      return false;
-    }
-    if (item.orientation !== "vertical") {
-      return false;
-    }
-  }
-
-  // Check view categories
-  if (view.categoryIds.length > 0) {
-    const feedIdsInViewCategories = feedCategoriesList
-      .filter((fc) => view.categoryIds.includes(fc.categoryId))
-      .map((fc) => fc.feedId);
-
-    // For Inbox view, also include uncategorized feeds
-    if (view.id === INBOX_VIEW_ID) {
-      const categorizedFeedIds = new Set(feedCategoriesList.map((fc) => fc.feedId));
-      const allFeedIds = feedsList.map((f) => f.id);
-      const uncategorizedFeedIds = allFeedIds.filter(
-        (id) => !categorizedFeedIds.has(id),
-      );
-
-      const allIncludedFeedIds = new Set([
-        ...feedIdsInViewCategories,
-        ...uncategorizedFeedIds,
-      ]);
-
-      if (!allIncludedFeedIds.has(item.feedId)) {
-        return false;
-      }
-    } else {
-      if (!feedIdsInViewCategories.includes(item.feedId)) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
 const GET_BY_VIEW_CHUNK_SIZE = 100;
 
 export const getByView = protectedProcedure.handler(async function* ({ context }) {
@@ -293,7 +213,7 @@ export const getByView = protectedProcedure.handler(async function* ({ context }
     } as GetByViewChunk;
   }
 
-  // Step 5: Run fetch and insert for fresh items, filter before yielding
+  // Step 5: Run fetch and insert for fresh items (client will filter)
   for await (const feedResult of fetchAndInsertFeedData(context, feedsList)) {
     yield {
       type: "feed-status",
@@ -305,13 +225,8 @@ export const getByView = protectedProcedure.handler(async function* ({ context }
       continue;
     }
 
-    // Filter new items through view filters before yielding
-    const filteredNewItems = feedResult.feedItems.filter((item) =>
-      itemPassesViewFilters(item, firstView, userFeedCategories, applicationFeeds),
-    );
-
     for (const chunk of prepareArrayChunks(
-      filteredNewItems,
+      feedResult.feedItems,
       GET_BY_VIEW_CHUNK_SIZE,
     )) {
       yield {
