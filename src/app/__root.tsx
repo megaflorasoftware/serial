@@ -124,7 +124,7 @@ export function RootLayout() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
-        {/* {process.env.NODE_ENV !== "production" && (
+        {/* {import.meta.env.NODE_ENV !== "production" && (
           <>
             <script
               crossOrigin="anonymous"
@@ -132,7 +132,7 @@ export function RootLayout() {
             />
           </>
         )}*/}
-        {process.env.NODE_ENV === "production" && (
+        {import.meta.env.NODE_ENV === "production" && (
           <>
             <script
               async
