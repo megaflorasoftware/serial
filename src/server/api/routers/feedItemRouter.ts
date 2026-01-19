@@ -1,5 +1,4 @@
-import dayjs from "dayjs";
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { verifyFeedsOwnedByUser } from "./feed-router/utils";
 import type { ApplicationFeedItem } from "~/server/db/schema";
@@ -20,11 +19,6 @@ type GetAllItemsChunk =
       feedId: number;
       status: FetchFeedsStatus;
     };
-
-// const isWithinLastMonth = gte(
-//   feedItems.postedAt,
-//   dayjs().subtract(32, "days").toDate(),
-// );
 
 const GET_ALL_ITEMS_YIELD_BUFFER_MS = 100;
 const GET_ALL_CHUNK_SIZE = 100;
