@@ -56,9 +56,10 @@ export function VideoDisplay({
               <ButtonWithShortcut
                 shortcut="["
                 variant="ghost"
+                size="icon"
                 onClick={goToPreviousVideo}
                 disabled={!canGoToPrevious}
-                className={clsx({
+                className={clsx("ml-4 shrink-0", {
                   invisible: !canGoToPrevious,
                 })}
               >
@@ -94,11 +95,13 @@ export function VideoDisplay({
               <ButtonWithShortcut
                 shortcut="]"
                 variant="ghost"
+                size="icon"
                 onClick={goToNextVideo}
                 disabled={!canGoToNext}
-                className={clsx({
+                className={clsx("mr-4 shrink-0", {
                   invisible: !canGoToNext,
                 })}
+                shortcutPosition="left"
               >
                 <ChevronRightIcon />
               </ButtonWithShortcut>
