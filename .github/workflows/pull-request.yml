@@ -25,11 +25,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Check formatting
-        run: pnpm format
-
-      - name: Lint
-        run: pnpm lint
+      - name: Check types, lint, and formatting
+        run: pnpm precommit
 
       - name: Build application
         run: pnpm build:atomic
