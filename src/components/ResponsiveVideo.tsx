@@ -63,6 +63,7 @@ export default function ResponsiveVideo(props: IResponsiveVideoProps) {
   const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
 
   const feedItem = useFeedItemValue(props.videoID ?? "");
+  const isVertical = feedItem?.orientation === "vertical";
 
   const feedItemPlatform = feedItem?.platform ?? "youtube";
 
@@ -79,7 +80,7 @@ export default function ResponsiveVideo(props: IResponsiveVideoProps) {
         className="h-full w-full"
         style={{
           // @ts-expect-error need this
-          "--aspect-ratio": "16/9",
+          "--aspect-ratio": isVertical ? "9/16" : "16/9",
         }}
       >
         {props.videoID && (

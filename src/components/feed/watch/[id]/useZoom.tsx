@@ -4,7 +4,11 @@ import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 import type { FeedPlatform } from "~/server/db/schema";
-import { articleZoomAtom, videoZoomAtom } from "~/lib/data/atoms";
+import {
+  articleZoomAtom,
+  longformVideoZoomAtom,
+  shortformVideoZoomAtom,
+} from "~/lib/data/atoms";
 import { useFeedItemValue } from "~/lib/data/store";
 
 export const MIN_ZOOM = 0;
@@ -23,8 +27,14 @@ export function useZoom() {
   const feedItem = useFeedItemValue(videoId || contentId || "");
 
   const platform = feedItem?.platform ?? "";
+  const isVertical = feedItem?.orientation === "vertical";
 
-  const [videoZoom, setVideoZoom] = useAtom(videoZoomAtom);
+  const [longformVideoZoom, setLongformVideoZoom] = useAtom(
+    longformVideoZoomAtom,
+  );
+  const [shortformVideoZoom, setShortformVideoZoom] = useAtom(
+    shortformVideoZoomAtom,
+  );
   const [articleZoom, setArticleZoom] = useAtom(articleZoomAtom);
 
   const isVideoPlatform = VIDEO_PLATFORMS.includes(platform);
@@ -33,7 +43,7 @@ export function useZoom() {
   useEffect(() => {
     setZoom((prevZoom) => {
       if (isVideoPlatform) {
-        return videoZoom;
+        return isVertical ? shortformVideoZoom : longformVideoZoom;
       }
       if (isArticlePlatform) {
         return articleZoom;
@@ -44,10 +54,20 @@ export function useZoom() {
       // Therefore, we want to maintain the previously applied value
       return prevZoom;
     });
-  }, [isVideoPlatform, videoZoom, isArticlePlatform, articleZoom]);
+  }, [
+    isVideoPlatform,
+    longformVideoZoom,
+    shortformVideoZoom,
+    isVertical,
+    isArticlePlatform,
+    articleZoom,
+  ]);
 
   const zoomIn = useCallback(() => {
     if (isVideoPlatform) {
+      const setVideoZoom = isVertical
+        ? setShortformVideoZoom
+        : setLongformVideoZoom;
       setVideoZoom((z) => {
         if (z >= MAX_ZOOM) {
           return z;
@@ -64,10 +84,20 @@ export function useZoom() {
       });
     }
     return () => {};
-  }, [isVideoPlatform, setVideoZoom, isArticlePlatform, setArticleZoom]);
+  }, [
+    isVideoPlatform,
+    isVertical,
+    setShortformVideoZoom,
+    setLongformVideoZoom,
+    isArticlePlatform,
+    setArticleZoom,
+  ]);
 
   const zoomOut = useCallback(() => {
     if (isVideoPlatform) {
+      const setVideoZoom = isVertical
+        ? setShortformVideoZoom
+        : setLongformVideoZoom;
       setVideoZoom((z) => {
         if (z <= MIN_ZOOM) {
           return z;
@@ -84,7 +114,14 @@ export function useZoom() {
       });
     }
     return () => {};
-  }, [isVideoPlatform, setVideoZoom, isArticlePlatform, setArticleZoom]);
+  }, [
+    isVideoPlatform,
+    isVertical,
+    setShortformVideoZoom,
+    setLongformVideoZoom,
+    isArticlePlatform,
+    setArticleZoom,
+  ]);
 
   return {
     zoom,
