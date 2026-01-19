@@ -1,36 +1,46 @@
 "use client";
 
-import { useAtom } from "jotai";
+import { useSetAtom } from "jotai";
 import { useEffect } from "react";
-import { hasSetInitialViewAtom } from "./atoms";
-import { useContentCategoriesQuery } from "./content-categories";
-import { useFeedsQuery } from "./feeds";
-import { useUpdateViewFilter, useViews } from "./views";
-import { useFetchFeedItems } from "./store";
+import { viewsAtom } from "./atoms";
+import { useUpdateViewFilter } from "./views";
+import { useFetchByView, useCurrentViewId, useFetchFeedItemsStatus } from "./store";
+import { useViews as useViewsStore, useViewsFetchStatus } from "./views/store";
 import type { PropsWithChildren } from "react";
 
 export function InitialClientQueries({ children }: PropsWithChildren) {
-  const fetchFeedItems = useFetchFeedItems();
+  const fetchByView = useFetchByView();
+  const currentViewId = useCurrentViewId();
+  const fetchStatus = useFetchFeedItemsStatus();
+
+  // Sync views store with viewsAtom for compatibility
+  const viewsFromStore = useViewsStore();
+  const viewsFetchStatus = useViewsFetchStatus();
+  const setViewsAtom = useSetAtom(viewsAtom);
 
   useEffect(() => {
-    void fetchFeedItems();
+    void fetchByView();
   }, []);
 
-  useFeedsQuery();
-  useContentCategoriesQuery();
+  // Keep viewsAtom in sync with views from the store (including Inbox)
+  useEffect(() => {
+    if (viewsFetchStatus === "success" && viewsFromStore.length > 0) {
+      setViewsAtom(viewsFromStore);
+    }
+  }, [viewsFetchStatus, viewsFromStore, setViewsAtom]);
 
-  const [hasSetInitialView, setHasSetInitialView] = useAtom(
-    hasSetInitialViewAtom,
-  );
-  const { views } = useViews();
+  // Set the initial view filter once we have views and feed items
   const updateViewFilter = useUpdateViewFilter();
 
   useEffect(() => {
-    if (views.length > 0 && !hasSetInitialView) {
-      setHasSetInitialView(true);
-      updateViewFilter(views[0]!.id);
+    if (
+      fetchStatus === "success" &&
+      viewsFetchStatus === "success" &&
+      currentViewId !== null
+    ) {
+      updateViewFilter(currentViewId);
     }
-  }, [views, hasSetInitialView, setHasSetInitialView, updateViewFilter]);
+  }, [fetchStatus, viewsFetchStatus, currentViewId, updateViewFilter]);
 
   return children;
 }

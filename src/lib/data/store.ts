@@ -3,8 +3,13 @@ import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
 import { createSelectorHooks } from "./createSelectorHooks";
+import { feedsStore } from "./feeds/store";
+import { viewsStore } from "./views/store";
+import { contentCategoriesStore } from "./content-categories/store";
+import { feedCategoriesStore } from "./feed-categories/store";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
+import type { GetByViewChunk } from "~/server/api/routers/initialRouter";
 
 export type ApplicationStore = {
   reset: () => void;
@@ -16,8 +21,10 @@ export type ApplicationStore = {
   setFeedItem: (id: string, item: ApplicationFeedItem) => void;
   fetchFeedItems: () => Promise<void>;
   fetchFeedItemsForFeed: (feedId: number) => Promise<void>;
+  fetchByView: () => Promise<void>;
   fetchFeedItemsLastFetchedAt: number | null;
   fetchFeedItemsStatus: "idle" | "fetching" | "success";
+  currentViewId: number | null;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -30,6 +37,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         feedStatusDict: {},
         fetchFeedItemsLastFetchedAt: null,
         fetchFeedItemsStatus: "idle",
+        currentViewId: null,
       }),
     feedItemsOrder: [],
     setFeedItemsOrder: (itemsOrder) => set({ feedItemsOrder: itemsOrder }),
@@ -45,6 +53,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       }),
     fetchFeedItemsLastFetchedAt: null,
     fetchFeedItemsStatus: "idle",
+    currentViewId: null,
 
     fetchFeedItems: async () => {
       if (get().fetchFeedItemsStatus === "fetching") return;
@@ -160,6 +169,115 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         ),
       });
     },
+
+    fetchByView: async () => {
+      if (get().fetchFeedItemsStatus === "fetching") return;
+
+      set({
+        fetchFeedItemsStatus: "fetching",
+        feedStatusDict: {},
+      });
+
+      let lastUpdateTime = 0;
+      const DEBOUNCE_TIME = 1000;
+
+      for await (const incomingChunk of (await orpcRouterClient.initial.getByView()) as AsyncIterable<GetByViewChunk>) {
+        const timeSinceLastUpdate = Date.now() - lastUpdateTime;
+        const timeToWait = DEBOUNCE_TIME - timeSinceLastUpdate;
+        const shouldWaitToRender = timeToWait > 0;
+
+        // Handle different chunk types
+        switch (incomingChunk.type) {
+          case "views":
+            // Set views in views store (including Inbox)
+            viewsStore.getState().set(incomingChunk.views);
+            break;
+
+          case "feeds":
+            // Set feeds in feeds store
+            feedsStore.getState().set(incomingChunk.feeds);
+            break;
+
+          case "content-categories":
+            // Set content categories in content categories store
+            contentCategoriesStore.getState().set(incomingChunk.contentCategories);
+            break;
+
+          case "feed-categories":
+            // Set feed categories in feed categories store
+            feedCategoriesStore.getState().set(incomingChunk.feedCategories);
+            break;
+
+          case "feed-status": {
+            const feedStatusDict = shouldWaitToRender
+              ? get().feedStatusDict
+              : { ...get().feedStatusDict };
+
+            feedStatusDict[incomingChunk.feedId] = incomingChunk.status;
+
+            set({ feedStatusDict });
+
+            if (!shouldWaitToRender) {
+              lastUpdateTime = Date.now();
+            }
+            break;
+          }
+
+          case "feed-items": {
+            // Track the current view ID from the first feed-items chunk
+            if (get().currentViewId === null) {
+              set({ currentViewId: incomingChunk.viewId });
+            }
+
+            const feedItemsDict = shouldWaitToRender
+              ? get().feedItemsDict
+              : { ...get().feedItemsDict };
+
+            const feedItemsOrder = shouldWaitToRender
+              ? get().feedItemsOrder
+              : [...get().feedItemsOrder];
+
+            const incomingFeedItems = incomingChunk.feedItems;
+
+            incomingFeedItems.forEach((item) => {
+              feedItemsDict[item.id] = item;
+
+              if (!feedItemsOrder.find((id) => id === item.id)) {
+                feedItemsOrder.push(item.id);
+              }
+            });
+
+            set({
+              feedItemsDict,
+              feedItemsOrder: feedItemsOrder.sort(
+                sortFeedItemsOrderByDate(get().feedItemsDict),
+              ),
+            });
+
+            if (!shouldWaitToRender) {
+              lastUpdateTime = Date.now();
+            }
+            break;
+          }
+        }
+      }
+
+      // Mark fetch statuses as success for all stores
+      viewsStore.setState({ fetchStatus: "success" });
+      feedsStore.setState({ fetchStatus: "success" });
+      contentCategoriesStore.setState({ fetchStatus: "success" });
+      feedCategoriesStore.setState({ fetchStatus: "success" });
+
+      set({
+        fetchFeedItemsStatus: "success",
+        fetchFeedItemsLastFetchedAt: Date.now(),
+        feedItemsDict: { ...get().feedItemsDict },
+        feedItemsOrder: [...get().feedItemsOrder].sort(
+          sortFeedItemsOrderByDate(get().feedItemsDict),
+        ),
+        feedStatusDict: { ...get().feedStatusDict },
+      });
+    },
   }),
   //   {
   //     name: "serial", // name of the item in the storage (must be unique)
@@ -183,6 +301,8 @@ export const {
   useFetchFeedItemsStatus,
   useFetchFeedItems,
   useFetchFeedItemsForFeed,
+  useFetchByView,
+  useCurrentViewId,
   useReset: useResetFeedItems,
 } = feedItemsStore;
 

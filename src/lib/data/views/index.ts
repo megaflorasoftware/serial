@@ -27,9 +27,9 @@ import {
   VIEW_READ_STATUS,
 } from "~/server/db/constants";
 import { useSession } from "~/lib/auth-client";
+import { INBOX_VIEW_ID, INBOX_VIEW_PLACEMENT } from "./constants";
 
-export const INBOX_VIEW_ID = -1;
-export const INBOX_VIEW_PLACEMENT = -1;
+export { INBOX_VIEW_ID, INBOX_VIEW_PLACEMENT };
 
 export function useDeselectViewFilter() {
   const setViewFilter = useSetAtom(viewFilterIdAtom);

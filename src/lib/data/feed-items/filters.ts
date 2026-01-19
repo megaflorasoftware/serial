@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, ne } from "drizzle-orm";
 
-import { INBOX_VIEW_ID } from "../views";
+import { INBOX_VIEW_ID } from "../views/constants";
 import type { SQL } from "drizzle-orm";
 import type { VisibilityFilter } from "../atoms";
 import type {
