@@ -36,14 +36,14 @@ export async function fetchNewFeedDetails(
 
   const feedDetailList = (
     await Promise.all(
-      urls.map(async (url) => {
-        if (url.includes("youtube.com")) {
-          return fetchYouTubeFeedDetails(url);
+      urls.map(async (feedUrl) => {
+        if (feedUrl.includes("youtube.com")) {
+          return fetchYouTubeFeedDetails(feedUrl);
         }
-        if (url.includes("nebula.tv") || url.includes("nebula.app")) {
-          return fetchNebulaFeedDetails(url);
+        if (feedUrl.includes("nebula.tv") || feedUrl.includes("nebula.app")) {
+          return fetchNebulaFeedDetails(feedUrl);
         }
-        return fetchUnknownRssFeed(url);
+        return fetchUnknownRssFeed(feedUrl);
       }),
     )
   ).filter(Boolean);
@@ -137,11 +137,11 @@ export async function* fetchAndInsertFeedData(
         .flat();
 
       const applicationFeedItems = feedItemsList.map((item) => {
-        const feed = databaseFeeds.find((feed) => feed.id === item.feedId);
+        const itemFeed = databaseFeeds.find((f) => f.id === item.feedId);
 
         return {
           ...item,
-          platform: feed?.platform ?? "youtube",
+          platform: itemFeed?.platform ?? "youtube",
         } as ApplicationFeedItem;
       });
 

@@ -367,20 +367,20 @@ export const discoverFeeds = protectedProcedure
       }),
     ]);
 
-    const feeds: Array<{ url: string; title?: string; format?: string }> = [];
+    const discoveredFeeds: Array<{ url: string; title?: string; format?: string }> = [];
 
     if (youtubeResult.status === "fulfilled" && youtubeResult.value) {
-      feeds.push(...youtubeResult.value);
+      discoveredFeeds.push(...youtubeResult.value);
     }
 
     if (feedscoutResult.status === "fulfilled") {
       const feedscoutFeeds = feedscoutResult.value.filter((f) => f.isValid);
-      feeds.push(...feedscoutFeeds);
+      discoveredFeeds.push(...feedscoutFeeds);
     }
 
     // Deduplicate by URL and filter out invalid YouTube feeds
     const seen = new Set<string>();
-    return feeds.filter((feed) => {
+    return discoveredFeeds.filter((feed) => {
       if (seen.has(feed.url)) return false;
       seen.add(feed.url);
 

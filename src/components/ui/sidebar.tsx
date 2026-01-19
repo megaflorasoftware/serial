@@ -94,13 +94,13 @@ function SidebarProvider({
   const toggleSidebar = React.useCallback(
     (side: "left" | "right") => {
       if (isMobile && side === "left") {
-        return setOpenLeftMobile((open) => !open);
+        return setOpenLeftMobile((prev) => !prev);
       }
       if (isMobile && side === "right") {
-        return setOpenRightMobile((open) => !open);
+        return setOpenRightMobile((prev) => !prev);
       }
 
-      return setOpen((open) => !open);
+      return setOpen((prev) => !prev);
     },
     [isMobile, setOpen, setOpenLeftMobile],
   );

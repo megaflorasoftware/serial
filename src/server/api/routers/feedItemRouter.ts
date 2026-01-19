@@ -41,11 +41,11 @@ export const getAll = protectedProcedure.handler(async function* ({ context }) {
   });
 
   const existingApplicationFeedItems = itemsData.map((item) => {
-    const feed = feedsList.find((feed) => feed.id === item.feedId);
+    const itemFeed = feedsList.find((f) => f.id === item.feedId);
 
     return {
       ...item,
-      platform: feed?.platform ?? "youtube",
+      platform: itemFeed?.platform ?? "youtube",
     } as ApplicationFeedItem;
   });
 

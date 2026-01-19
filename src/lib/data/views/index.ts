@@ -47,7 +47,7 @@ export function useUpdateViewFilter() {
     updatedViews?: ApplicationView[],
   ) => {
     const _views = updatedViews ?? views;
-    const view = _views.find((view) => view.id === viewId);
+    const view = _views.find((v) => v.id === viewId);
 
     if (!view) return;
 

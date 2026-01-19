@@ -44,29 +44,6 @@ function useFeedManagementShortcuts({
   isDialogOpen: boolean;
   hasSelection: boolean;
 }) {
-  const actionsRef = useRef({
-    onEscape,
-    onSelectAll,
-    onEditCategories,
-    onClearCategories,
-    onDelete,
-  });
-  const stateRef = useRef({ isDialogOpen, hasSelection });
-
-  useEffect(() => {
-    actionsRef.current = {
-      onEscape,
-      onSelectAll,
-      onEditCategories,
-      onClearCategories,
-      onDelete,
-    };
-  }, [onEscape, onSelectAll, onEditCategories, onClearCategories, onDelete]);
-
-  useEffect(() => {
-    stateRef.current = { isDialogOpen, hasSelection };
-  }, [isDialogOpen, hasSelection]);
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
@@ -75,15 +52,6 @@ function useFeedManagementShortcuts({
       // Check if event originated from within a dialog
       const target = event.target as HTMLElement;
       const isInDialog = target.closest('[role="dialog"]') !== null;
-
-      const { isDialogOpen, hasSelection } = stateRef.current;
-      const {
-        onEscape,
-        onSelectAll,
-        onEditCategories,
-        onClearCategories,
-        onDelete,
-      } = actionsRef.current;
 
       switch (event.key) {
         case "Escape":
@@ -116,7 +84,15 @@ function useFeedManagementShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [
+    hasSelection,
+    isDialogOpen,
+    onClearCategories,
+    onDelete,
+    onEditCategories,
+    onEscape,
+    onSelectAll,
+  ]);
 }
 
 export const Route = createFileRoute("/_app/feeds")({
