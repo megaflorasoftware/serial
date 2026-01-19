@@ -63,7 +63,9 @@ export function AddFeedDialog() {
     >
       <div className="grid gap-6">
         <div className="grid gap-2">
-          <Label htmlFor="url">Website, Channel, or RSS Feed URL</Label>
+          <Label htmlFor="url" className="pb-1">
+            Website, Channel, or RSS Feed URL
+          </Label>
           {discovery.isLocked && discovery.selectedFeed ? (
             <SelectedFeedBadge
               feed={discovery.selectedFeed}
@@ -126,19 +128,21 @@ export function AddFeedDialog() {
         {!discovery.isLocked && (
           <>
             <hr />
-            <Label>Have a lot of feeds to add?</Label>
-            <Link to="/import">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  onOpenChange(false);
-                }}
-              >
-                <ImportIcon size={16} />
-                <span className="pl-1.5">Bulk Import</span>
-              </Button>
-            </Link>
+            <div>
+              <Label className="block pb-3">Have a lot of feeds to add?</Label>
+              <Link to="/import">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    onOpenChange(false);
+                  }}
+                >
+                  <ImportIcon size={16} />
+                  <span className="pl-1.5">Bulk Import</span>
+                </Button>
+              </Link>
+            </div>
           </>
         )}
       </div>

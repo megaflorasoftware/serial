@@ -384,13 +384,14 @@ function ManageFeedsPage() {
           <h2 ref={headerRef} className="font-mono text-lg">
             Manage Feeds
           </h2>
-          <Button
+          <ButtonWithShortcut
             variant="outline"
             size="icon"
             onClick={() => launchDialog("add-feed")}
+            shortcut="a"
           >
             <PlusIcon size={16} />
-          </Button>
+          </ButtonWithShortcut>
         </div>
       </div>
 

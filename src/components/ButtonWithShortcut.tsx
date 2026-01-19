@@ -5,7 +5,7 @@ import { ResponsiveButton } from "./ui/button";
 import type { ButtonProps } from "./ui/button";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 
-const kbdVariants = cva("hidden rounded px-1 md:inline-block", {
+const kbdVariants = cva("hidden rounded px-1 md:ml-1.5 md:inline-block", {
   variants: {
     variant: {
       default: "bg-muted",
@@ -15,17 +15,9 @@ const kbdVariants = cva("hidden rounded px-1 md:inline-block", {
       ghost: "bg-muted",
       link: "bg-muted",
     },
-    size: {
-      icon: "md:ml-0",
-      default: "md:ml-1.5",
-      sm: "md:ml-1.5",
-      lg: "md:ml-1.5",
-      "icon md:default": "md:ml-1.5",
-    },
   },
   defaultVariants: {
     variant: "default",
-    size: "default",
   },
 });
 

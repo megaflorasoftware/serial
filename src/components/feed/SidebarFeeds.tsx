@@ -260,9 +260,7 @@ export function SidebarFeeds() {
               asChild
               onClick={() => launchDialog("add-feed")}
             >
-              <ButtonWithShortcut size="icon" shortcut="a" variant="ghost">
-                <PlusIcon />
-              </ButtonWithShortcut>
+              <PlusIcon />
             </SidebarMenuButton>
           </div>
         </SidebarGroupLabel>
