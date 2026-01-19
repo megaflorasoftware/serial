@@ -20,12 +20,10 @@ services:
       context: .
       args:
         DATABASE_URL: http://libsql:8080
-        DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN}
         BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
     environment:
       NODE_ENV: production
       DATABASE_URL: http://libsql:8080
-      DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
       INSTAPAPER_OAUTH_ID: ${INSTAPAPER_OAUTH_ID}
