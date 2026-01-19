@@ -10,7 +10,11 @@ import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import type React from "react";
 import type { ViewContentType } from "~/server/db/constants";
-import { VIEW_CONTENT_TYPE, VIEW_READ_STATUS } from "~/server/db/constants";
+import {
+  VIEW_CONTENT_TYPE,
+  VIEW_READ_STATUS,
+  viewContentTypeSchema,
+} from "~/server/db/constants";
 import {
   useCreateViewMutation,
   useDeleteViewMutation,
@@ -334,7 +338,12 @@ export function EditViewDialog({
     setName(view.name);
     setDaysTimeWindow(view.daysWindow);
     setReadStatus(view.readStatus);
-    setContentType(view.contentType);
+    const parsedContentType = viewContentTypeSchema.safeParse(view.contentType);
+    setContentType(
+      parsedContentType.success
+        ? parsedContentType.data
+        : VIEW_CONTENT_TYPE.LONGFORM,
+    );
     setSelectedCategories(view.categoryIds);
   }, [views, selectedViewId]);
 
