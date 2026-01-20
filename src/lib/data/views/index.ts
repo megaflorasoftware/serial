@@ -7,6 +7,7 @@ import {
   UNSELECTED_VIEW_ID,
   viewFilterIdAtom,
   viewsAtom,
+  visibilityFilterAtom,
 } from "../atoms";
 import { useFeedCategories } from "../feed-categories";
 import { doesFeedItemPassFilters } from "../feed-items";
@@ -57,6 +58,7 @@ export function useCheckFilteredFeedItemsForView() {
   const { feedCategories } = useFeedCategories();
   const { feeds } = useFeeds();
   const { views } = useViews();
+  const visibilityFilter = useAtomValue(visibilityFilterAtom);
 
   // Compute custom view category IDs (categories assigned to non-Uncategorized views)
   const customViewCategoryIds = useMemo(() => {
@@ -74,7 +76,7 @@ export function useCheckFilteredFeedItemsForView() {
           doesFeedItemPassFilters(
             feedItemsDict[item],
             viewFilter?.daysWindow ?? 1,
-            "unread",
+            visibilityFilter,
             -1,
             feedCategories,
             -1,
@@ -84,7 +86,7 @@ export function useCheckFilteredFeedItemsForView() {
           ),
       );
     },
-    [feedItemsOrder, feedItemsDict, feedCategories, feeds, views, customViewCategoryIds],
+    [feedItemsOrder, feedItemsDict, feedCategories, feeds, views, customViewCategoryIds, visibilityFilter],
   );
 }
 
