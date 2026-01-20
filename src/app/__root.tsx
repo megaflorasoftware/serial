@@ -112,9 +112,7 @@ export const Route = createRootRoute({
         Oops! We couldn&apos;t find what you&apos;re looking for.
       </div>
       <Button asChild>
-        <Link to={BASE_SIGNED_OUT_URL}>
-          Back to Home
-        </Link>
+        <Link to={BASE_SIGNED_OUT_URL}>Back to Home</Link>
       </Button>
     </div>
   ),
