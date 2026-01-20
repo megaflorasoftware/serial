@@ -77,25 +77,37 @@ export function ItemDisplay({
       >
         {isLarge ? (
           <>
-            {item.thumbnail ? (
-              <div className="relative h-28 w-44 flex-shrink-0">
-                <img
-                  src={item.thumbnail}
-                  alt={item.title}
-                  className="h-full w-full rounded object-cover"
-                />
-              </div>
-            ) : feed?.imageUrl ? (
-              <div className="bg-muted grid h-28 w-44 flex-shrink-0 place-items-center rounded">
-                <img
-                  src={feed.imageUrl}
-                  alt={feed.name}
-                  className="h-10 w-10 rounded object-contain"
-                />
-              </div>
-            ) : (
-              <div className="bg-muted h-28 w-44 flex-shrink-0 rounded" />
-            )}
+            <div className="relative h-28 w-44 flex-shrink-0">
+              {item.thumbnail ? (
+                <>
+                  <img
+                    src={item.thumbnail}
+                    alt={item.title}
+                    className="h-full w-full rounded object-cover"
+                  />
+                  {item.platform === "website" && (
+                    <div className="absolute inset-0 rounded bg-foreground/30 dark:bg-background/30" />
+                  )}
+                  {feed?.imageUrl && (
+                    <img
+                      src={feed.imageUrl}
+                      alt={feed.name}
+                      className="bg-background dark:bg-foreground absolute top-2 left-2 z-10 h-10 aspect-square rounded object-contain p-1 shadow-md"
+                    />
+                  )}
+                </>
+              ) : feed?.imageUrl ? (
+                <div className="bg-muted grid h-full w-full place-items-center rounded">
+                  <img
+                    src={feed.imageUrl}
+                    alt={feed.name}
+                    className="h-10 w-10 rounded object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="bg-muted h-full w-full rounded" />
+              )}
+            </div>
             <div className="flex h-full flex-1 flex-col justify-center pr-2">
               <h3 className="line-clamp-2 w-full text-xs font-semibold md:text-sm">
                 {item.title}
