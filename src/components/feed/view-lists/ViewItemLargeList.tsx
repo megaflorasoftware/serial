@@ -45,7 +45,6 @@ export function ViewItemLargeList({ items }: ViewItemLargeListProps) {
     Math.floor(items.length - (INITIAL_ITEMS_PER_VIEW - 10)),
     10,
   );
-  console.log(sentinelIndex);
 
   return (
     <div className="w-full transition-all md:pt-4 md:pr-6 md:pl-4" ref={parent}>

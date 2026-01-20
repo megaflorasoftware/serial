@@ -45,7 +45,6 @@ export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
     Math.floor(items.length - (INITIAL_ITEMS_PER_VIEW - 10)),
     10,
   );
-  console.log(sentinelIndex);
 
   return (
     <div className="w-full">
