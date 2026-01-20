@@ -21,6 +21,8 @@ import type {
   DatabaseFeedCategory,
 } from "~/server/db/schema";
 
+export { isFeedCompatibleWithContentType } from "./filters";
+
 function isVideoContent(item: ApplicationFeedItem): boolean {
   const videoPlatforms = ["youtube", "peertube", "nebula"];
   return videoPlatforms.includes(item.platform);

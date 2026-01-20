@@ -26,6 +26,8 @@ export type ApplicationStore = {
   fetchFeedItemsLastFetchedAt: number | null;
   fetchFeedItemsStatus: "idle" | "fetching" | "success";
   currentViewId: number | null;
+  viewFeedIds: Record<number, number[]>;
+  setViewFeedIds: (viewId: number, feedIds: number[]) => void;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -39,6 +41,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         fetchFeedItemsLastFetchedAt: null,
         fetchFeedItemsStatus: "idle",
         currentViewId: null,
+        viewFeedIds: {},
       }),
     feedItemsOrder: [],
     setFeedItemsOrder: (itemsOrder) => set({ feedItemsOrder: itemsOrder }),
@@ -55,6 +58,14 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
     fetchFeedItemsLastFetchedAt: null,
     fetchFeedItemsStatus: "idle",
     currentViewId: null,
+    viewFeedIds: {},
+    setViewFeedIds: (viewId, feedIds) =>
+      set({
+        viewFeedIds: {
+          ...get().viewFeedIds,
+          [viewId]: feedIds,
+        },
+      }),
 
     fetchFeedItems: async () => {
       if (get().fetchFeedItemsStatus === "fetching") return;
@@ -209,6 +220,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             feedCategoriesStore.getState().set(incomingChunk.feedCategories);
             break;
 
+          case "view-feeds":
+            // Store the feed IDs for this view
+            get().setViewFeedIds(incomingChunk.viewId, incomingChunk.feedIds);
+            break;
+
           case "feed-status": {
             const feedStatusDict = shouldWaitToRender
               ? get().feedStatusDict
@@ -288,6 +304,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             viewsStore.getState().set(chunk.views);
             break;
 
+          case "view-feeds":
+            // Store the feed IDs for this view
+            get().setViewFeedIds(chunk.viewId, chunk.feedIds);
+            break;
+
           case "feed-items": {
             // Merge into feedItemsDict and feedItemsOrder (no reset)
             const feedItemsDict = { ...get().feedItemsDict };
@@ -340,6 +361,7 @@ export const {
   useFetchByView,
   useRevalidateView,
   useCurrentViewId,
+  useViewFeedIds,
   useReset: useResetFeedItems,
 } = feedItemsStore;
 

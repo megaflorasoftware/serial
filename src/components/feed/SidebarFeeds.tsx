@@ -44,6 +44,7 @@ import {
   useFeedStatusDict,
   useFetchFeedItemsLastFetchedAt,
   useFetchFeedItemsStatus,
+  useViewFeedIds,
 } from "~/lib/data/store";
 import { INBOX_VIEW_ID, useDeselectViewFilter } from "~/lib/data/views";
 
@@ -59,11 +60,14 @@ function useCheckFilteredFeedItemsForFeed() {
   const viewFilter = useAtomValue(viewFilterAtom);
   const views = useAtomValue(viewsAtom);
 
-  // Compute custom view category IDs (categories assigned to non-Inbox views)
-  const customViewCategoryIds = useMemo(() => {
-    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
-    return new Set(customViews.flatMap((v) => v.categoryIds));
+  // Compute custom views (non-Inbox views) and their category IDs
+  const customViews = useMemo(() => {
+    return views.filter((v) => v.id !== INBOX_VIEW_ID);
   }, [views]);
+
+  const customViewCategoryIds = useMemo(() => {
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [customViews]);
 
   return useCallback(
     (feed: number) => {
@@ -80,6 +84,7 @@ function useCheckFilteredFeedItemsForFeed() {
             feeds,
             viewFilter,
             customViewCategoryIds,
+            customViews,
           ),
       );
     },
@@ -93,6 +98,7 @@ function useCheckFilteredFeedItemsForFeed() {
       feeds,
       viewFilter,
       customViewCategoryIds,
+      customViews,
     ],
   );
 }
@@ -146,6 +152,12 @@ export function SidebarFeeds() {
   const fetchFeedItemsLastFetchedAt = useFetchFeedItemsLastFetchedAt();
 
   const checkFilteredFeedItemsForFeed = useCheckFilteredFeedItemsForFeed();
+  const viewFeedIds = useViewFeedIds();
+  const feedsInCurrentView = viewFilter ? (viewFeedIds[viewFilter.id] ?? []) : [];
+
+  console.log(`[SidebarFeeds] viewFilter: ${viewFilter?.name} (id: ${viewFilter?.id}, contentType: ${viewFilter?.contentType})`);
+  console.log(`[SidebarFeeds] viewFeedIds keys:`, Object.keys(viewFeedIds));
+  console.log(`[SidebarFeeds] feedsInCurrentView:`, feedsInCurrentView);
 
   if (fetchFeedItemsStatus === "fetching" && !fetchFeedItemsLastFetchedAt) {
     return (
@@ -192,7 +204,8 @@ export function SidebarFeeds() {
   }));
 
   const {
-    preferredFeedOptions,
+    preferredFeedOptionsWithEntries,
+    preferredFeedOptionsWithoutEntries,
     feedOptionsWithContent,
     emptyFeedOptions,
     errorFeedOptions,
@@ -203,21 +216,30 @@ export function SidebarFeeds() {
         const lowercaseName = feedOption.name.toLowerCase();
 
         if (lowercaseName.includes(lowercaseQuery)) {
-          acc.preferredFeedOptions.push(feedOption);
-          acc.preferredFeedOptions.sort(sortFeedOptions);
+          acc.preferredFeedOptionsWithEntries.push(feedOption);
+          acc.preferredFeedOptionsWithEntries.sort(sortFeedOptions);
           return acc;
         }
       } else {
+        // Show in preferred section if feed has visible entries
         if (feedOption.hasEntries) {
-          acc.preferredFeedOptions.push(feedOption);
-          acc.preferredFeedOptions.sort(sortFeedOptions);
+          acc.preferredFeedOptionsWithEntries.push(feedOption);
+          acc.preferredFeedOptionsWithEntries.sort(sortFeedOptions);
+          return acc;
+        }
+
+        // Show at bottom of preferred section if feed belongs to the current view
+        // but has no visible entries (e.g., outside time window or all read)
+        if (feedsInCurrentView.includes(feedOption.id)) {
+          acc.preferredFeedOptionsWithoutEntries.push(feedOption);
+          acc.preferredFeedOptionsWithoutEntries.sort(sortFeedOptions);
           return acc;
         }
       }
 
       if (feedOption.id === feedFilter) {
-        acc.preferredFeedOptions.push(feedOption);
-        acc.preferredFeedOptions.sort(sortFeedOptions);
+        acc.preferredFeedOptionsWithEntries.push(feedOption);
+        acc.preferredFeedOptionsWithEntries.sort(sortFeedOptions);
         return acc;
       }
 
@@ -241,12 +263,19 @@ export function SidebarFeeds() {
       return acc;
     },
     {
-      preferredFeedOptions: [] as typeof feedOptions,
+      preferredFeedOptionsWithEntries: [] as typeof feedOptions,
+      preferredFeedOptionsWithoutEntries: [] as typeof feedOptions,
       feedOptionsWithContent: [] as typeof feedOptions,
       emptyFeedOptions: [] as typeof feedOptions,
       errorFeedOptions: [] as typeof feedOptions,
     },
   );
+
+  // Combine preferred options: feeds with entries first, then feeds matching view but without entries
+  const preferredFeedOptions = [
+    ...preferredFeedOptionsWithEntries,
+    ...preferredFeedOptionsWithoutEntries,
+  ];
 
   const hasAnyItems = !!checkFilteredFeedItemsForFeed(-1).length;
 

@@ -18,6 +18,7 @@ import {
   buildTimeWindowFilter,
   buildViewCategoryFilter,
   buildVisibilityFilter,
+  isFeedCompatibleWithContentType,
 } from "~/lib/data/feed-items/filters";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
 
@@ -45,11 +46,13 @@ export type GetByViewChunk =
   | { type: "feed-categories"; feedCategories: DatabaseFeedCategory[] }
   | { type: "content-categories"; contentCategories: DatabaseContentCategory[] }
   | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] }
-  | { type: "feed-status"; feedId: number; status: FetchFeedsStatus };
+  | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
+  | { type: "view-feeds"; viewId: number; feedIds: number[] };
 
 export type RevalidateViewChunk =
   | { type: "views"; views: ApplicationView[] }
-  | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] };
+  | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] }
+  | { type: "view-feeds"; viewId: number; feedIds: number[] };
 
 /**
  * Build the Inbox view server-side
@@ -87,6 +90,84 @@ function buildInboxView(
     categoryIds: inboxCategoryIds,
     isDefault: true,
   };
+}
+
+/**
+ * Compute which feeds belong to a view based on categories and content type.
+ * This replicates client-side logic from useCheckFeedBelongsToView.
+ */
+function computeFeedsForView(
+  view: ApplicationView,
+  allFeeds: ApplicationFeed[],
+  allFeedCategories: DatabaseFeedCategory[],
+  customViews: ApplicationView[],
+  customViewCategoryIds: Set<number>,
+): number[] {
+  const feedIds: number[] = [];
+
+  console.log(`[computeFeedsForView] Processing view: ${view.name} (id: ${view.id}, contentType: ${view.contentType})`);
+
+  for (const feed of allFeeds) {
+    // Check if feed's content type is compatible with the view
+    const isCompatible = isFeedCompatibleWithContentType(feed.platform, view.contentType);
+    if (!isCompatible) {
+      console.log(`[computeFeedsForView] Feed ${feed.name} (platform: ${feed.platform}) NOT compatible with view contentType: ${view.contentType}`);
+      continue;
+    }
+
+    // Get categories this feed belongs to
+    const feedCategoryIds = allFeedCategories
+      .filter((fc) => fc.feedId === feed.id)
+      .map((fc) => fc.categoryId);
+
+    // For Inbox view, include feeds that are NOT in any custom view category
+    // or feeds that are in the Inbox's category list
+    if (view.id === INBOX_VIEW_ID) {
+      // Check if feed has any category that's in a custom view with compatible content type
+      const wouldAppearInCustomView = feedCategoryIds.some((categoryId) => {
+        if (!customViewCategoryIds.has(categoryId)) return false;
+
+        const viewsWithCategory = customViews.filter((v) =>
+          v.categoryIds.includes(categoryId),
+        );
+
+        return viewsWithCategory.some((v) =>
+          isFeedCompatibleWithContentType(feed.platform, v.contentType),
+        );
+      });
+
+      // Feed belongs to Inbox if it wouldn't appear in any custom view
+      // OR if it has no categories at all
+      if (!wouldAppearInCustomView) {
+        feedIds.push(feed.id);
+        continue;
+      }
+
+      // Also check if feed's categories overlap with Inbox's categoryIds
+      if (feedCategoryIds.some((categoryId) => view.categoryIds.includes(categoryId))) {
+        feedIds.push(feed.id);
+        continue;
+      }
+    } else {
+      // Empty categoryIds means "all categories" (no category filter)
+      if (view.categoryIds.length === 0) {
+        console.log(`[computeFeedsForView] Feed ${feed.name} ADDED to view ${view.name} (view includes all categories)`);
+        feedIds.push(feed.id);
+      } else {
+        // For views with specific categories, check if any of the feed's categories are in the view
+        const categoryMatch = feedCategoryIds.some((categoryId) => view.categoryIds.includes(categoryId));
+        if (categoryMatch) {
+          console.log(`[computeFeedsForView] Feed ${feed.name} ADDED to view ${view.name} (category match)`);
+          feedIds.push(feed.id);
+        } else {
+          console.log(`[computeFeedsForView] Feed ${feed.name} NOT added to view ${view.name} (no category match). Feed categories: [${feedCategoryIds.join(', ')}], View categories: [${view.categoryIds.join(', ')}]`);
+        }
+      }
+    }
+  }
+
+  console.log(`[computeFeedsForView] View ${view.name} final feedIds: [${feedIds.join(', ')}]`);
+  return feedIds;
 }
 
 const GET_BY_VIEW_CHUNK_SIZE = 100;
@@ -168,23 +249,40 @@ export const getAllByView = protectedProcedure.handler(async function* ({ contex
     userContentCategoryIds.has(fc.categoryId),
   );
 
+  // Collect all category IDs used by custom views (for Inbox exclusion)
+  const customViewCategoryIds = new Set(
+    customViews.flatMap((v) => v.categoryIds),
+  );
+
   yield {
     type: "feed-categories",
     feedCategories: userFeedCategories,
   } as GetByViewChunk;
 
-  // Step 3: Query feed items with filters for the first view
+  // Step 3: Yield view-feeds chunks for each view
+  for (const view of allViews) {
+    const feedIdsForView = computeFeedsForView(
+      view,
+      applicationFeeds,
+      userFeedCategories,
+      customViews,
+      customViewCategoryIds,
+    );
+
+    yield {
+      type: "view-feeds",
+      viewId: view.id,
+      feedIds: feedIdsForView,
+    } as GetByViewChunk;
+  }
+
+  // Step 4: Query feed items with filters for the first view
   const firstView = allViews[0];
   const feedIds = feedsList.map((feed) => feed.id);
 
   if (feedIds.length === 0 || !firstView) {
     return;
   }
-
-  // Collect all category IDs used by custom views (for Inbox exclusion)
-  const customViewCategoryIds = new Set(
-    customViews.flatMap((v) => v.categoryIds),
-  );
 
   // Build combined filter for the first view
   const filterConditions = [
@@ -315,22 +413,39 @@ export const revalidateView = protectedProcedure
       userContentCategoryIds.has(fc.categoryId),
     );
 
+    // Collect all category IDs used by custom views (for Inbox exclusion)
+    const customViewCategoryIds = new Set(
+      customViews.flatMap((v) => v.categoryIds),
+    );
+
     // Step 2: Yield views
     yield {
       type: "views",
       views: allViews,
     } as RevalidateViewChunk;
 
+    // Step 3: Yield view-feeds chunks for each view
+    for (const view of allViews) {
+      const feedIdsForView = computeFeedsForView(
+        view,
+        applicationFeeds,
+        userFeedCategories,
+        customViews,
+        customViewCategoryIds,
+      );
+
+      yield {
+        type: "view-feeds",
+        viewId: view.id,
+        feedIds: feedIdsForView,
+      } as RevalidateViewChunk;
+    }
+
     const feedIds = feedsList.map((feed) => feed.id);
 
     if (feedIds.length === 0) {
       return;
     }
-
-    // Collect all category IDs used by custom views (for Inbox exclusion)
-    const customViewCategoryIds = new Set(
-      customViews.flatMap((v) => v.categoryIds),
-    );
 
     // Step 3: Find target view
     const targetView =

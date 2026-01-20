@@ -13,6 +13,8 @@ import { feedItems } from "~/server/db/schema";
 /** Video platforms that support orientation filtering */
 export const VIDEO_PLATFORMS = ["youtube", "peertube", "nebula"] as const;
 
+export type VideoPlatform = (typeof VIDEO_PLATFORMS)[number];
+
 /**
  * Check if a feed's platform is compatible with a view's content type.
  *
