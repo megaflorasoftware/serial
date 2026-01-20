@@ -53,6 +53,8 @@ export type ApplicationStore = {
     viewId: number,
     visibilityFilter: VisibilityFilter,
   ) => Promise<void>;
+  // Fetch items for ALL views with a specific visibility filter
+  fetchItemsForAllViews: (visibilityFilter: VisibilityFilter) => Promise<void>;
   // Fetch more items with cursor (pagination)
   fetchMoreItems: (
     viewId: number,
@@ -213,6 +215,103 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             },
           },
         });
+      }
+    },
+
+    fetchItemsForAllViews: async (visibilityFilter) => {
+      const allViews = viewsStore.getState().views;
+      const state = get();
+
+      // Check if all views already have this visibility filter fetched
+      const viewsNeedingFetch = allViews.filter((view) => {
+        const fetchedFilters = state.fetchedVisibilityFilters[view.id];
+        return !fetchedFilters?.has(visibilityFilter);
+      });
+
+      if (viewsNeedingFetch.length === 0) {
+        return;
+      }
+
+      // Set fetching state for all views that need it
+      const updatedPaginationState = { ...state.viewPaginationState };
+      for (const view of viewsNeedingFetch) {
+        updatedPaginationState[view.id] = {
+          ...updatedPaginationState[view.id],
+          [visibilityFilter]: {
+            cursor: null,
+            hasMore: true,
+            isFetching: true,
+          },
+        };
+      }
+      set({ viewPaginationState: updatedPaginationState });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getAllByView({
+          visibilityFilter,
+        })) as AsyncIterable<GetByViewChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching items for all views:", chunk.message);
+            continue;
+          }
+
+          if (chunk.type === "feed-items") {
+            const feedItemsDict = { ...get().feedItemsDict };
+            const feedItemsOrder = [...get().feedItemsOrder];
+            const existingIds = new Set(feedItemsOrder);
+
+            chunk.feedItems.forEach((item) => {
+              feedItemsDict[item.id] = item;
+              if (!existingIds.has(item.id)) {
+                feedItemsOrder.push(item.id);
+                existingIds.add(item.id);
+              }
+            });
+
+            set({
+              feedItemsDict,
+              feedItemsOrder: feedItemsOrder.sort(
+                sortFeedItemsOrderByDate(get().feedItemsDict),
+              ),
+              viewPaginationState: {
+                ...get().viewPaginationState,
+                [chunk.viewId]: {
+                  ...get().viewPaginationState[chunk.viewId],
+                  [visibilityFilter]: {
+                    cursor: chunk.nextCursor ?? null,
+                    hasMore: chunk.hasMore ?? false,
+                    isFetching: false,
+                  },
+                },
+              },
+            });
+          }
+        }
+
+        // Mark visibility filter as fetched for all views
+        const fetchedFilters = { ...get().fetchedVisibilityFilters };
+        for (const view of allViews) {
+          fetchedFilters[view.id] = new Set([
+            ...(fetchedFilters[view.id] ?? []),
+            visibilityFilter,
+          ]);
+        }
+        set({ fetchedVisibilityFilters: fetchedFilters });
+      } catch (error) {
+        console.error("Error fetching items for all views:", error);
+        // Reset fetching state on error for all views
+        const updatedState = { ...get().viewPaginationState };
+        for (const view of viewsNeedingFetch) {
+          updatedState[view.id] = {
+            ...updatedState[view.id],
+            [visibilityFilter]: {
+              cursor: null,
+              hasMore: false,
+              isFetching: false,
+            },
+          };
+        }
+        set({ viewPaginationState: updatedState });
       }
     },
 
@@ -649,6 +748,7 @@ export const {
   useViewPaginationState,
   useFetchedVisibilityFilters,
   useFetchItemsForVisibility,
+  useFetchItemsForAllViews,
   useFetchMoreItems,
   useGetPaginationState,
   useReset: useResetFeedItems,
@@ -671,4 +771,26 @@ export const useFeedItemState = (id: string) => {
   const setValue = useSetFeedItemValue(id);
 
   return [value, setValue] as const;
+};
+
+/**
+ * Returns true if any fetching is happening (initial load or pagination)
+ */
+export const useIsAnyFetching = () => {
+  return useStore(
+    feedItemsStore,
+    useShallow((store) => {
+      // Check initial/refresh fetch status
+      if (store.fetchFeedItemsStatus === "fetching") return true;
+
+      // Check if any pagination is fetching
+      for (const viewState of Object.values(store.viewPaginationState)) {
+        for (const paginationState of Object.values(viewState)) {
+          if (paginationState?.isFetching) return true;
+        }
+      }
+
+      return false;
+    }),
+  );
 };

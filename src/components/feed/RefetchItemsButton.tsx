@@ -6,7 +6,7 @@ import clsx from "clsx";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback } from "react";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
-import { useFetchByView, useFetchFeedItemsStatus } from "~/lib/data/store";
+import { useFetchByView, useIsAnyFetching } from "~/lib/data/store";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function RefetchItemsButton() {
@@ -14,7 +14,7 @@ export function RefetchItemsButton() {
 
   const queryClient = useQueryClient();
 
-  const fetchStatus = useFetchFeedItemsStatus();
+  const isLoading = useIsAnyFetching();
   const fetchByView = useFetchByView();
 
   const onClick = useCallback(() => {
@@ -25,8 +25,6 @@ export function RefetchItemsButton() {
   useShortcut("r", onClick);
 
   if (location.pathname !== "/") return null;
-
-  const isLoading = fetchStatus === "fetching";
 
   return (
     <ButtonWithShortcut

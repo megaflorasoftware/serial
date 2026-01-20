@@ -147,12 +147,14 @@ function computeFeedsForView(
   return feedIds;
 }
 
-const GET_BY_VIEW_CHUNK_SIZE = 100;
-const INITIAL_ITEMS_PER_VIEW = 100;
+const GET_BY_VIEW_CHUNK_SIZE = 30;
+const INITIAL_ITEMS_PER_VIEW = 30;
 
-export const getAllByView = protectedProcedure.handler(async function* ({
-  context,
-}) {
+export const getAllByView = protectedProcedure
+  .input(z.object({ visibilityFilter: visibilityFilterSchema }).optional())
+  .handler(async function* ({ context, input }) {
+  const visibilityFilter = input?.visibilityFilter;
+  const isVisibilityFilterFetch = !!visibilityFilter;
   // Step 1: Fetch all prerequisite data in parallel
   let initialData;
 
@@ -233,54 +235,58 @@ export const getAllByView = protectedProcedure.handler(async function* ({
   // Pre-build a Map for O(1) feed lookups by ID
   const feedsById = new Map(feedsList.map((f) => [f.id, f]));
 
-  // Step 2: Yield prerequisite data chunks
-  yield {
-    type: "views",
-    views: allViews,
-  } as GetByViewChunk;
-
-  yield {
-    type: "feeds",
-    feeds: applicationFeeds,
-  } as GetByViewChunk;
-
-  yield {
-    type: "content-categories",
-    contentCategories: contentCategoriesList,
-  } as GetByViewChunk;
-
   // Collect all category IDs used by custom views (for Uncategorized view exclusion)
   const customViewCategoryIds = new Set(
     customViews.flatMap((v) => v.categoryIds),
   );
 
-  yield {
-    type: "feed-categories",
-    feedCategories: feedCategoriesList,
-  } as GetByViewChunk;
-
-  // Step 3: Yield view-feeds chunks for each view
-  for (const view of allViews) {
-    const feedIdsForView = computeFeedsForView(
-      view,
-      applicationFeeds,
-      feedCategoriesList,
-      customViews,
-      customViewCategoryIds,
-    );
+  // Step 2: Yield prerequisite data chunks (skip when fetching for visibility filter)
+  if (!isVisibilityFilterFetch) {
+    yield {
+      type: "views",
+      views: allViews,
+    } as GetByViewChunk;
 
     yield {
-      type: "view-feeds",
-      viewId: view.id,
-      feedIds: feedIdsForView,
+      type: "feeds",
+      feeds: applicationFeeds,
     } as GetByViewChunk;
+
+    yield {
+      type: "content-categories",
+      contentCategories: contentCategoriesList,
+    } as GetByViewChunk;
+
+    yield {
+      type: "feed-categories",
+      feedCategories: feedCategoriesList,
+    } as GetByViewChunk;
+
+    // Step 3: Yield view-feeds chunks for each view
+    for (const view of allViews) {
+      const feedIdsForView = computeFeedsForView(
+        view,
+        applicationFeeds,
+        feedCategoriesList,
+        customViews,
+        customViewCategoryIds,
+      );
+
+      yield {
+        type: "view-feeds",
+        viewId: view.id,
+        feedIds: feedIdsForView,
+      } as GetByViewChunk;
+    }
   }
 
   const firstView = allViews[0];
   const feedIds = feedsList.map((feed) => feed.id);
 
   if (feedIds.length === 0 || !firstView) {
-    yield { type: "initial-data-complete" } as GetByViewChunk;
+    if (!isVisibilityFilterFetch) {
+      yield { type: "initial-data-complete" } as GetByViewChunk;
+    }
     return;
   }
 
@@ -289,7 +295,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({
     try {
       const filterConditions = [
         inArray(feedItems.feedId, feedIds),
-        buildVisibilityFilter("unread"),
+        buildVisibilityFilter(visibilityFilter ?? "unread"),
         buildViewCategoryFilter(
           view,
           feedCategoriesList,
@@ -324,6 +330,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({
           type: "feed-items",
           viewId: view.id,
           feedItems: applicationItems,
+          visibilityFilter: visibilityFilter ?? "unread",
         } as GetByViewChunk;
       }
     } catch (error) {
@@ -339,25 +346,28 @@ export const getAllByView = protectedProcedure.handler(async function* ({
     }
   }
 
-  // Signal that initial data is complete - client can hide loading screen
-  yield { type: "initial-data-complete" } as GetByViewChunk;
+  // Skip initial-data-complete and RSS fetch when fetching for visibility filter
+  if (!isVisibilityFilterFetch) {
+    // Signal that initial data is complete - client can hide loading screen
+    yield { type: "initial-data-complete" } as GetByViewChunk;
 
-  // Step 5: Run fetch and insert for fresh RSS items in background
-  // Items are inserted to DB by fetchAndInsertFeedData - don't yield them here
-  // Fresh items will be available via pagination (getItemsByVisibility)
-  for await (const feedResult of fetchAndInsertFeedData(context, feedsList)) {
-    yield {
-      type: "feed-status",
-      status: feedResult.status,
-      feedId: feedResult.id,
-    } as GetByViewChunk;
-    // Items already inserted to DB - they'll be included in pagination queries
+    // Step 5: Run fetch and insert for fresh RSS items in background
+    // Items are inserted to DB by fetchAndInsertFeedData - don't yield them here
+    // Fresh items will be available via pagination (getItemsByVisibility)
+    for await (const feedResult of fetchAndInsertFeedData(context, feedsList)) {
+      yield {
+        type: "feed-status",
+        status: feedResult.status,
+        feedId: feedResult.id,
+      } as GetByViewChunk;
+      // Items already inserted to DB - they'll be included in pagination queries
+    }
   }
 
   return;
 });
 
-const REVALIDATE_VIEW_CHUNK_SIZE = 100;
+const REVALIDATE_VIEW_CHUNK_SIZE = 30;
 
 export const revalidateView = protectedProcedure
   .input(z.object({ viewId: z.number() }))
@@ -557,7 +567,7 @@ export const revalidateView = protectedProcedure
     return;
   });
 
-const ITEMS_PER_PAGE = 100;
+const ITEMS_PER_PAGE = 30;
 
 /**
  * Cursor schema for pagination

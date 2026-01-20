@@ -2,7 +2,6 @@
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useAtomValue } from "jotai";
-import { Loader2 } from "lucide-react";
 import { GridItemDisplay } from "./ItemDisplay";
 import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
@@ -51,11 +50,6 @@ export function ViewItemGrid({ items }: ViewItemGridProps) {
           </div>
         ))}
       </div>
-      {paginationState?.isFetching && (
-        <div className="flex justify-center py-4">
-          <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
-        </div>
-      )}
     </div>
   );
 }
