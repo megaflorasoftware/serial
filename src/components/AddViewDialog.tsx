@@ -93,40 +93,6 @@ function ViewTimeInput({
   );
 }
 
-// function ViewReadStatusInput({
-//   readStatus,
-//   setReadStatus,
-// }: {
-//   readStatus: number;
-//   setReadStatus: (status: number) => void;
-// }) {
-//   return (
-//     <div className="grid gap-2">
-//       <Label htmlFor="name">Read Status</Label>
-//       <ToggleGroup
-//         type="single"
-//         value={readStatus.toString()}
-//         onValueChange={(value) => {
-//           if (!value) return;
-//           setReadStatus(parseInt(value));
-//         }}
-//         size="sm"
-//         className="w-fit"
-//       >
-//         <AddViewToggleItem value={VIEW_READ_STATUS.UNREAD.toString()}>
-//           Unread
-//         </AddViewToggleItem>
-//         <AddViewToggleItem value={VIEW_READ_STATUS.READ.toString()}>
-//           Watched
-//         </AddViewToggleItem>
-//         <AddViewToggleItem value={VIEW_READ_STATUS.ANY.toString()}>
-//           Any
-//         </AddViewToggleItem>
-//       </ToggleGroup>
-//     </div>
-//   );
-// }
-
 const CONTENT_TYPE_HELPER_TEXT = {
   longform: "Shows articles and longform videos",
   "horizontal-video": "Shows longform videos",
@@ -156,10 +122,10 @@ function ViewLayoutInput({
         className="w-fit"
       >
         <AddViewToggleItem value={VIEW_LAYOUT.LIST}>List</AddViewToggleItem>
+        <AddViewToggleItem value={VIEW_LAYOUT.GRID}>Grid</AddViewToggleItem>
         <AddViewToggleItem value={VIEW_LAYOUT.LARGE_LIST}>
           Large List
         </AddViewToggleItem>
-        <AddViewToggleItem value={VIEW_LAYOUT.GRID}>Grid</AddViewToggleItem>
         <AddViewToggleItem value={VIEW_LAYOUT.LARGE_GRID}>
           Large Grid
         </AddViewToggleItem>
@@ -305,6 +271,10 @@ export function AddViewDialog() {
     >
       <div className="grid gap-6">
         <ViewNameInput name={name} setName={setName} />
+        <ViewCategoriesInput
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+        />
         <ViewTimeInput
           daysWindow={daysTimeWindow}
           setDaysWindow={setDaysTimeWindow}
@@ -314,15 +284,6 @@ export function AddViewDialog() {
           setContentType={setContentType}
         />
         <ViewLayoutInput layout={layout} setLayout={setLayout} />
-        {/* TODO: Implement read status */}
-        {/* <ViewReadStatusInput
-            readStatus={readStatus}
-            setReadStatus={setReadStatus}
-          /> */}
-        <ViewCategoriesInput
-          selectedCategories={selectedCategories}
-          setSelectedCategories={setSelectedCategories}
-        />
         <Button
           disabled={isDisabled}
           onClick={async () => {
@@ -414,6 +375,10 @@ export function EditViewDialog({
     >
       <div className="grid gap-6">
         <ViewNameInput name={name} setName={setName} />
+        <ViewCategoriesInput
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+        />
         <ViewTimeInput
           daysWindow={daysTimeWindow}
           setDaysWindow={setDaysTimeWindow}
@@ -423,15 +388,6 @@ export function EditViewDialog({
           setContentType={setContentType}
         />
         <ViewLayoutInput layout={layout} setLayout={setLayout} />
-        {/* TODO: Implement read status */}
-        {/* <ViewReadStatusInput
-            readStatus={readStatus}
-            setReadStatus={setReadStatus}
-          /> */}
-        <ViewCategoriesInput
-          selectedCategories={selectedCategories}
-          setSelectedCategories={setSelectedCategories}
-        />
         <div className="flex gap-2">
           <Button
             disabled={isDeletingView}
