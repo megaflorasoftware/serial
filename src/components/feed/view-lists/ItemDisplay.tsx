@@ -18,6 +18,254 @@ import { timeAgo } from "~/lib/utils";
 
 export type ItemSize = "standard" | "large";
 
+// Typography components for consistent styling across layouts
+
+interface ItemTitleProps {
+  title: string;
+  lineClamp?: 1 | 2;
+}
+
+function ItemTitle({ title, lineClamp = 2 }: ItemTitleProps) {
+  return (
+    <h3
+      className={clsx(
+        "w-full text-xs font-semibold md:text-sm",
+        lineClamp === 1 ? "line-clamp-1" : "line-clamp-2",
+      )}
+    >
+      {title}
+    </h3>
+  );
+}
+
+interface ItemContentSnippetProps {
+  snippet: string | undefined;
+}
+
+function ItemContentSnippet({ snippet }: ItemContentSnippetProps) {
+  if (!snippet) return null;
+
+  return (
+    <p className="line-clamp-2 w-full pt-1 text-xs opacity-60 md:text-sm">
+      {snippet}
+    </p>
+  );
+}
+
+interface ItemMetaProps {
+  author: string | undefined;
+  feedName: string | undefined;
+  postedAt: Date;
+  className?: string;
+}
+
+function ItemMeta({ author, feedName, postedAt, className }: ItemMetaProps) {
+  return (
+    <p className={clsx("w-full text-xs opacity-80 md:text-sm", className)}>
+      {author || feedName} • {timeAgo(postedAt)}
+    </p>
+  );
+}
+
+// Thumbnail components for consistent styling across layouts
+
+type ThumbnailType =
+  | "horizontal-video"
+  | "vertical-video"
+  | "article"
+  | "icon"
+  | "none";
+
+function getThumbnailType(
+  item: {
+    thumbnail?: string;
+    platform: string;
+    orientation?: string;
+  },
+  feed?: { imageUrl?: string },
+  layout?: ThumbnailLayout,
+): ThumbnailType {
+  if (item.thumbnail) {
+    // Standard list uses icon style for non-video content
+    if (item.platform === "website") {
+      return layout === "list" ? (feed?.imageUrl ? "icon" : "none") : "article";
+    }
+    if (item.orientation === "vertical") return "vertical-video";
+    return "horizontal-video";
+  }
+  if (feed?.imageUrl) return "icon";
+  return "none";
+}
+
+type ThumbnailLayout = "list" | "large-list" | "grid" | "large-grid";
+
+interface ThumbnailContainerProps {
+  layout: ThumbnailLayout;
+  thumbnailType: ThumbnailType;
+  children: React.ReactNode;
+}
+
+function ThumbnailContainer({
+  layout,
+  thumbnailType,
+  children,
+}: ThumbnailContainerProps) {
+  const isVideo =
+    thumbnailType === "horizontal-video" || thumbnailType === "vertical-video";
+
+  return (
+    <div
+      className={clsx("relative flex-shrink-0 overflow-hidden rounded", {
+        // List layout: videos use natural aspect ratio, others use square
+        "h-9 w-16": layout === "list" && thumbnailType === "horizontal-video",
+        "h-16 w-9": layout === "list" && thumbnailType === "vertical-video",
+        "size-16": layout === "list" && thumbnailType === "icon",
+        "size-16 bg-muted": layout === "list" && thumbnailType === "none",
+        // Large list layout
+        "aspect-video w-44":
+          layout === "large-list" && thumbnailType === "horizontal-video",
+        "aspect-[9/16] w-44":
+          layout === "large-list" && thumbnailType === "vertical-video",
+        "aspect-[3/2] w-44": layout === "large-list" && !isVideo,
+        // Grid layouts
+        "aspect-video w-full":
+          (layout === "grid" || layout === "large-grid") &&
+          thumbnailType === "horizontal-video",
+        "aspect-[9/16] w-full":
+          (layout === "grid" || layout === "large-grid") &&
+          thumbnailType === "vertical-video",
+        "aspect-[3/2] w-full":
+          (layout === "grid" || layout === "large-grid") && !isVideo,
+      })}
+    >
+      {children}
+    </div>
+  );
+}
+
+interface ThumbnailProps {
+  thumbnail: string;
+  title: string;
+}
+
+function VideoThumbnail({ thumbnail, title }: ThumbnailProps) {
+  return (
+    <img
+      src={thumbnail}
+      alt={title}
+      className="absolute inset-0 h-full w-full object-cover"
+    />
+  );
+}
+
+function ShortsThumbnail({ thumbnail, title }: ThumbnailProps) {
+  return (
+    <img
+      src={thumbnail}
+      alt={title}
+      className="absolute inset-0 h-full w-full object-cover"
+    />
+  );
+}
+
+interface ArticleThumbnailProps {
+  thumbnail: string;
+  title: string;
+  feedImageUrl?: string;
+  feedName?: string;
+}
+
+function ArticleThumbnail({
+  thumbnail,
+  title,
+  feedImageUrl,
+  feedName,
+}: ArticleThumbnailProps) {
+  return (
+    <>
+      <img
+        src={thumbnail}
+        alt={title}
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="absolute inset-0 bg-foreground/30 dark:bg-background/30" />
+      {feedImageUrl && (
+        <img
+          src={feedImageUrl}
+          alt={feedName}
+          className="absolute top-2 left-2 z-10 h-8 w-8 rounded bg-background object-contain p-1 shadow-md dark:bg-foreground"
+        />
+      )}
+    </>
+  );
+}
+
+interface IconThumbnailProps {
+  feedImageUrl: string;
+  feedName?: string;
+}
+
+function IconThumbnail({ feedImageUrl, feedName }: IconThumbnailProps) {
+  return (
+    <div className="absolute inset-0 grid place-items-center">
+      <img
+        src={feedImageUrl}
+        alt={feedName}
+        className="h-8 w-8 rounded object-contain"
+      />
+    </div>
+  );
+}
+
+function EmptyThumbnail() {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-muted">
+      <div className="h-8 w-8 rounded bg-muted-foreground/20" />
+    </div>
+  );
+}
+
+interface ItemThumbnailProps {
+  layout: ThumbnailLayout;
+  item: {
+    thumbnail?: string;
+    title: string;
+    platform: string;
+    orientation?: string;
+  };
+  feed?: {
+    imageUrl?: string;
+    name?: string;
+  };
+}
+
+function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
+  const thumbnailType = getThumbnailType(item, feed, layout);
+
+  return (
+    <ThumbnailContainer layout={layout} thumbnailType={thumbnailType}>
+      {thumbnailType === "horizontal-video" && (
+        <VideoThumbnail thumbnail={item.thumbnail!} title={item.title} />
+      )}
+      {thumbnailType === "vertical-video" && (
+        <ShortsThumbnail thumbnail={item.thumbnail!} title={item.title} />
+      )}
+      {thumbnailType === "article" && (
+        <ArticleThumbnail
+          thumbnail={item.thumbnail!}
+          title={item.title}
+          feedImageUrl={feed?.imageUrl}
+          feedName={feed?.name}
+        />
+      )}
+      {thumbnailType === "icon" && (
+        <IconThumbnail feedImageUrl={feed!.imageUrl!} feedName={feed?.name} />
+      )}
+      {thumbnailType === "none" && <EmptyThumbnail />}
+    </ThumbnailContainer>
+  );
+}
+
 interface ItemDisplayProps {
   contentId: string;
   size?: ItemSize;
@@ -77,69 +325,28 @@ export function ItemDisplay({
       >
         {isLarge ? (
           <>
-            <div className="relative h-28 w-44 flex-shrink-0">
-              {item.thumbnail ? (
-                <>
-                  <img
-                    src={item.thumbnail}
-                    alt={item.title}
-                    className="h-full w-full rounded object-cover"
-                  />
-                  {item.platform === "website" && (
-                    <div className="absolute inset-0 rounded bg-foreground/30 dark:bg-background/30" />
-                  )}
-                  {feed?.imageUrl && (
-                    <img
-                      src={feed.imageUrl}
-                      alt={feed.name}
-                      className="bg-background dark:bg-foreground absolute top-2 left-2 z-10 h-10 aspect-square rounded object-contain p-1 shadow-md"
-                    />
-                  )}
-                </>
-              ) : feed?.imageUrl ? (
-                <div className="bg-muted grid h-full w-full place-items-center rounded">
-                  <img
-                    src={feed.imageUrl}
-                    alt={feed.name}
-                    className="h-10 w-10 rounded object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="bg-muted h-full w-full rounded" />
-              )}
-            </div>
+            <ItemThumbnail layout="large-list" item={item} feed={feed} />
             <div className="flex h-full flex-1 flex-col justify-center pr-2">
-              <h3 className="line-clamp-2 w-full text-xs font-semibold md:text-sm">
-                {item.title}
-              </h3>
-              <p className="line-clamp-2 w-full pt-1 text-xs opacity-60 md:text-sm">
-                {item.contentSnippet}
-              </p>
-              <p className="w-full pt-1 text-xs opacity-80 md:text-sm">
-                {item.author || feed?.name} • {timeAgo(item.postedAt)}
-              </p>
+              <ItemTitle title={item.title} lineClamp={2} />
+              <ItemContentSnippet snippet={item.contentSnippet} />
+              <ItemMeta
+                author={item.author}
+                feedName={feed?.name}
+                postedAt={item.postedAt}
+                className="pt-1"
+              />
             </div>
           </>
         ) : (
           <>
-            <div className="grid size-16 place-items-center">
-              {feed?.imageUrl ? (
-                <img
-                  src={feed.imageUrl}
-                  alt={feed.name}
-                  className="h-8 aspect-square rounded object-contain"
-                />
-              ) : (
-                <div className="bg-muted h-8 aspect-square rounded" />
-              )}
-            </div>
+            <ItemThumbnail layout="list" item={item} feed={feed} />
             <div className="flex h-full flex-1 flex-col justify-center">
-              <h3 className="line-clamp-1 w-full text-xs font-semibold md:text-sm">
-                {item.title}
-              </h3>
-              <p className="w-full text-xs opacity-80 md:text-sm">
-                {item.author || feed?.name} • {timeAgo(item.postedAt)}
-              </p>
+              <ItemTitle title={item.title} lineClamp={1} />
+              <ItemMeta
+                author={item.author}
+                feedName={feed?.name}
+                postedAt={item.postedAt}
+              />
             </div>
           </>
         )}
@@ -251,64 +458,20 @@ export function GridItemDisplay({
         preload={shouldOpenInSerial ? "viewport" : undefined}
         className="sm:hover:bg-muted flex w-full flex-col rounded p-2 text-left transition-colors"
       >
-        <div
-          className={clsx(
-            "relative w-full rounded",
-            item.thumbnail
-              ? item.orientation === "vertical"
-                ? "aspect-[9/16]"
-                : "aspect-video"
-              : "bg-muted grid aspect-square place-items-center",
-          )}
-        >
-          {item.thumbnail && (
-            <img
-              src={item.thumbnail}
-              alt={item.title}
-              className="absolute inset-0 h-full w-full rounded object-cover"
-            />
-          )}
-          {item.thumbnail && item.platform === "website" && (
-            <div className="absolute inset-0 rounded bg-foreground/30 dark:bg-background/30" />
-          )}
-          {feed?.imageUrl && (
-            <img
-              src={feed.imageUrl}
-              alt={feed.name}
-              className={clsx(
-                "aspect-square rounded object-contain",
-                item.thumbnail
-                  ? "bg-background dark:bg-foreground absolute top-2 right-2 z-10 h-10 p-1 shadow-md"
-                  : "w-1/2",
-              )}
-            />
-          )}
-        </div>
+        <ItemThumbnail
+          layout={isLarge ? "large-grid" : "grid"}
+          item={item}
+          feed={feed}
+        />
         <div className="flex flex-1 flex-col justify-center pt-2">
-          {isLarge ? (
-            <>
-              <h3 className="line-clamp-1 w-full text-sm font-semibold">
-                {item.title}
-              </h3>
-              {item.contentSnippet && (
-                <p className="line-clamp-2 w-full pt-1 text-xs opacity-60">
-                  {item.contentSnippet}
-                </p>
-              )}
-              <p className="w-full pt-0.5 text-sm opacity-80">
-                {item.author || feed?.name} • {timeAgo(item.postedAt)}
-              </p>
-            </>
-          ) : (
-            <>
-              <h3 className="line-clamp-2 w-full text-xs font-semibold md:text-sm">
-                {item.title}
-              </h3>
-              <p className="w-full pt-0.5 text-xs opacity-80 md:text-sm">
-                {item.author || feed?.name} • {timeAgo(item.postedAt)}
-              </p>
-            </>
-          )}
+          <ItemTitle title={item.title} lineClamp={isLarge ? 1 : 2} />
+          {isLarge && <ItemContentSnippet snippet={item.contentSnippet} />}
+          <ItemMeta
+            author={item.author}
+            feedName={feed?.name}
+            postedAt={item.postedAt}
+            className="pt-0.5"
+          />
         </div>
       </Link>
       <div className="flex flex-row items-center justify-start gap-1 px-2 pb-2">
