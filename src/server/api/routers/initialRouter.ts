@@ -317,28 +317,26 @@ export const getAllByView = protectedProcedure
       `[Initial] Loaded ${contentCategoriesList.length} content categories`,
     );
 
-    // Fetch feed categories filtered by user's content categories
+    // Fetch feed categories and view categories in parallel
     const userContentCategoryIds = contentCategoriesList.map((cc) => cc.id);
-    const feedCategoriesList =
+    const userViewIds = viewsList.map((v) => v.id);
+
+    const [feedCategoriesList, viewCategoriesList] = await Promise.all([
       userContentCategoryIds.length > 0
-        ? await context.db
+        ? context.db
             .select()
             .from(feedCategories)
             .where(inArray(feedCategories.categoryId, userContentCategoryIds))
-        : [];
-
-    logMessage(`[Initial] Loaded ${feedCategoriesList.length} feed categories`);
-
-    // Get view categories filtered by user's views
-    const userViewIds = viewsList.map((v) => v.id);
-    const viewCategoriesList =
+        : Promise.resolve([]),
       userViewIds.length > 0
-        ? await context.db
+        ? context.db
             .select()
             .from(viewCategories)
             .where(inArray(viewCategories.viewId, userViewIds))
-        : [];
+        : Promise.resolve([]),
+    ]);
 
+    logMessage(`[Initial] Loaded ${feedCategoriesList.length} feed categories`);
     logMessage(`[Initial] Loaded ${viewCategoriesList.length} view categories`);
 
     // Transform views to ApplicationView with categoryIds
@@ -800,25 +798,24 @@ export const getItemsByVisibility = protectedProcedure
 
     const [viewsList, feedsList, contentCategoriesList] = initialData;
 
-    // Fetch feed categories
+    // Fetch feed categories and view categories in parallel
     const userContentCategoryIds = contentCategoriesList.map((cc) => cc.id);
-    const feedCategoriesList =
+    const userViewIds = viewsList.map((v) => v.id);
+
+    const [feedCategoriesList, viewCategoriesList] = await Promise.all([
       userContentCategoryIds.length > 0
-        ? await context.db
+        ? context.db
             .select()
             .from(feedCategories)
             .where(inArray(feedCategories.categoryId, userContentCategoryIds))
-        : [];
-
-    // Get view categories
-    const userViewIds = viewsList.map((v) => v.id);
-    const viewCategoriesList =
+        : Promise.resolve([]),
       userViewIds.length > 0
-        ? await context.db
+        ? context.db
             .select()
             .from(viewCategories)
             .where(inArray(viewCategories.viewId, userViewIds))
-        : [];
+        : Promise.resolve([]),
+    ]);
 
     // Build application views
     const customViews: ApplicationView[] = viewsList.map((view) => ({
