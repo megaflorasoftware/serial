@@ -136,7 +136,7 @@ function ThumbnailContainer({
           (layout === "grid" || layout === "large-grid") &&
           thumbnailType === "vertical-video",
         // Non-video grid layouts
-        "aspect-[3/2] w-full":
+        "bg-muted aspect-[3/2] w-full":
           (layout === "grid" || layout === "large-grid") && !isVideo,
       })}
     >
