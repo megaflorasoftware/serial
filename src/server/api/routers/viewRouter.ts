@@ -1,6 +1,9 @@
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
-import type { ApplicationView, DatabaseContentCategory } from "~/server/db/schema";
+import type {
+  ApplicationView,
+  DatabaseContentCategory,
+} from "~/server/db/schema";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
 import {
   INBOX_VIEW_ID,
@@ -43,7 +46,7 @@ function buildUncategorizedView(
   return {
     id: INBOX_VIEW_ID,
     name: "Uncategorized",
-    daysWindow: 30,
+    daysWindow: 0,
     orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
     contentType: VIEW_CONTENT_TYPE.LONGFORM,
     readStatus: VIEW_READ_STATUS.UNREAD,

@@ -79,7 +79,7 @@ function buildUncategorizedView(
   return {
     id: INBOX_VIEW_ID,
     name: "Uncategorized",
-    daysWindow: 30,
+    daysWindow: 0,
     orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
     contentType: VIEW_CONTENT_TYPE.LONGFORM,
     readStatus: VIEW_READ_STATUS.UNREAD,
@@ -105,13 +105,13 @@ function computeFeedsForView(
 ): number[] {
   const feedIds: number[] = [];
 
-  console.log(`[computeFeedsForView] Processing view: ${view.name} (id: ${view.id}, contentType: ${view.contentType})`);
-
   for (const feed of allFeeds) {
     // Check if feed's content type is compatible with the view
-    const isCompatible = isFeedCompatibleWithContentType(feed.platform, view.contentType);
+    const isCompatible = isFeedCompatibleWithContentType(
+      feed.platform,
+      view.contentType,
+    );
     if (!isCompatible) {
-      console.log(`[computeFeedsForView] Feed ${feed.name} (platform: ${feed.platform}) NOT compatible with view contentType: ${view.contentType}`);
       continue;
     }
 
@@ -144,35 +144,39 @@ function computeFeedsForView(
       }
 
       // Also check if feed's categories overlap with Uncategorized view's categoryIds
-      if (feedCategoryIds.some((categoryId) => view.categoryIds.includes(categoryId))) {
+      if (
+        feedCategoryIds.some((categoryId) =>
+          view.categoryIds.includes(categoryId),
+        )
+      ) {
         feedIds.push(feed.id);
         continue;
       }
     } else {
       // Empty categoryIds means "all categories" (no category filter)
       if (view.categoryIds.length === 0) {
-        console.log(`[computeFeedsForView] Feed ${feed.name} ADDED to view ${view.name} (view includes all categories)`);
         feedIds.push(feed.id);
       } else {
         // For views with specific categories, check if any of the feed's categories are in the view
-        const categoryMatch = feedCategoryIds.some((categoryId) => view.categoryIds.includes(categoryId));
+        const categoryMatch = feedCategoryIds.some((categoryId) =>
+          view.categoryIds.includes(categoryId),
+        );
+
         if (categoryMatch) {
-          console.log(`[computeFeedsForView] Feed ${feed.name} ADDED to view ${view.name} (category match)`);
           feedIds.push(feed.id);
-        } else {
-          console.log(`[computeFeedsForView] Feed ${feed.name} NOT added to view ${view.name} (no category match). Feed categories: [${feedCategoryIds.join(', ')}], View categories: [${view.categoryIds.join(', ')}]`);
         }
       }
     }
   }
 
-  console.log(`[computeFeedsForView] View ${view.name} final feedIds: [${feedIds.join(', ')}]`);
   return feedIds;
 }
 
 const GET_BY_VIEW_CHUNK_SIZE = 100;
 
-export const getAllByView = protectedProcedure.handler(async function* ({ context }) {
+export const getAllByView = protectedProcedure.handler(async function* ({
+  context,
+}) {
   // Step 1: Fetch all prerequisite data in parallel
   const [viewsList, feedsList, contentCategoriesList, feedCategoriesList] =
     await Promise.all([
@@ -288,12 +292,20 @@ export const getAllByView = protectedProcedure.handler(async function* ({ contex
   const filterConditions = [
     inArray(feedItems.feedId, feedIds),
     buildVisibilityFilter("unread"),
-    buildViewCategoryFilter(firstView, userFeedCategories, feedIds, customViewCategoryIds, customViews, applicationFeeds),
+    buildViewCategoryFilter(
+      firstView,
+      userFeedCategories,
+      feedIds,
+      customViewCategoryIds,
+      customViews,
+      applicationFeeds,
+    ),
     buildContentTypeFilter(firstView.contentType, applicationFeeds),
     buildTimeWindowFilter(firstView.daysWindow),
   ].filter((f): f is NonNullable<typeof f> => f !== undefined);
 
-  const filter = filterConditions.length > 0 ? and(...filterConditions) : undefined;
+  const filter =
+    filterConditions.length > 0 ? and(...filterConditions) : undefined;
 
   const itemsData = await context.db.query.feedItems.findMany({
     where: filter,
@@ -464,12 +476,20 @@ export const revalidateView = protectedProcedure
       const filterConditions = [
         inArray(feedItems.feedId, feedIds),
         buildVisibilityFilter("unread"),
-        buildViewCategoryFilter(view, userFeedCategories, feedIds, customViewCategoryIds, customViews, applicationFeeds),
+        buildViewCategoryFilter(
+          view,
+          userFeedCategories,
+          feedIds,
+          customViewCategoryIds,
+          customViews,
+          applicationFeeds,
+        ),
         buildContentTypeFilter(view.contentType, applicationFeeds),
         buildTimeWindowFilter(view.daysWindow),
       ].filter((f): f is NonNullable<typeof f> => f !== undefined);
 
-      const filter = filterConditions.length > 0 ? and(...filterConditions) : undefined;
+      const filter =
+        filterConditions.length > 0 ? and(...filterConditions) : undefined;
 
       const itemsData = await context.db.query.feedItems.findMany({
         where: filter,

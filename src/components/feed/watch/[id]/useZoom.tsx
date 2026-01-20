@@ -54,8 +54,11 @@ export function useZoom() {
 
   useEffect(() => {
     setZoom((prevZoom) => {
-      if (isVideoPlatform) {
-        return isVertical ? shortformVideoZoom : longformVideoZoom;
+      if (isVideoPlatform && isVertical) {
+        return shortformVideoZoom;
+      }
+      if (isVideoPlatform && !isVertical) {
+        return longformVideoZoom;
       }
       if (isArticlePlatform) {
         return articleZoom;
