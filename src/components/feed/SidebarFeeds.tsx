@@ -151,11 +151,9 @@ export function SidebarFeeds() {
 
   const checkFilteredFeedItemsForFeed = useCheckFilteredFeedItemsForFeed();
   const viewFeedIds = useViewFeedIds();
-  const feedsInCurrentView = viewFilter ? (viewFeedIds[viewFilter.id] ?? []) : [];
-
-  console.log(`[SidebarFeeds] viewFilter: ${viewFilter?.name} (id: ${viewFilter?.id}, contentType: ${viewFilter?.contentType})`);
-  console.log(`[SidebarFeeds] viewFeedIds keys:`, Object.keys(viewFeedIds));
-  console.log(`[SidebarFeeds] feedsInCurrentView:`, feedsInCurrentView);
+  const feedsInCurrentView = viewFilter
+    ? (viewFeedIds[viewFilter.id] ?? [])
+    : [];
 
   if (fetchFeedItemsStatus === "fetching" && !fetchFeedItemsLastFetchedAt) {
     return (
