@@ -127,15 +127,9 @@ export const updatePlacement = protectedProcedure
 export const deleteView = protectedProcedure
   .input(deleteViewSchema)
   .handler(async ({ context, input }) => {
-    await context.db.transaction(async (tx) => {
-      await tx
-        .delete(viewCategories)
-        .where(eq(viewCategories.viewId, input.id));
-
-      return await tx
-        .delete(views)
-        .where(and(eq(views.id, input.id), eq(views.userId, context.user.id)));
-    });
+    return await context.db
+      .delete(views)
+      .where(and(eq(views.id, input.id), eq(views.userId, context.user.id)));
   });
 
 export const getAll = protectedProcedure.handler(async ({ context }) => {
