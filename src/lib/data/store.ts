@@ -201,7 +201,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         // Handle different chunk types
         switch (incomingChunk.type) {
           case "views":
-            // Set views in views store (including Inbox)
+            // Set views in views store (including Uncategorized)
             viewsStore.getState().set(incomingChunk.views);
             break;
 

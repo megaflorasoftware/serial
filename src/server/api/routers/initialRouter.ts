@@ -55,10 +55,10 @@ export type RevalidateViewChunk =
   | { type: "view-feeds"; viewId: number; feedIds: number[] };
 
 /**
- * Build the Inbox view server-side
+ * Build the Uncategorized view server-side
  * Replicates client-side logic from src/lib/data/views/index.ts
  */
-function buildInboxView(
+function buildUncategorizedView(
   userId: string,
   contentCategoriesList: DatabaseContentCategory[],
   customViews: ApplicationView[],
@@ -78,7 +78,7 @@ function buildInboxView(
 
   return {
     id: INBOX_VIEW_ID,
-    name: "Inbox",
+    name: "Uncategorized",
     daysWindow: 30,
     orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
     contentType: VIEW_CONTENT_TYPE.LONGFORM,
@@ -120,8 +120,8 @@ function computeFeedsForView(
       .filter((fc) => fc.feedId === feed.id)
       .map((fc) => fc.categoryId);
 
-    // For Inbox view, include feeds that are NOT in any custom view category
-    // or feeds that are in the Inbox's category list
+    // For Uncategorized view, include feeds that are NOT in any custom view category
+    // or feeds that are in the Uncategorized view's category list
     if (view.id === INBOX_VIEW_ID) {
       // Check if feed has any category that's in a custom view with compatible content type
       const wouldAppearInCustomView = feedCategoryIds.some((categoryId) => {
@@ -136,14 +136,14 @@ function computeFeedsForView(
         );
       });
 
-      // Feed belongs to Inbox if it wouldn't appear in any custom view
+      // Feed belongs to Uncategorized if it wouldn't appear in any custom view
       // OR if it has no categories at all
       if (!wouldAppearInCustomView) {
         feedIds.push(feed.id);
         continue;
       }
 
-      // Also check if feed's categories overlap with Inbox's categoryIds
+      // Also check if feed's categories overlap with Uncategorized view's categoryIds
       if (feedCategoryIds.some((categoryId) => view.categoryIds.includes(categoryId))) {
         feedIds.push(feed.id);
         continue;
@@ -213,14 +213,14 @@ export const getAllByView = protectedProcedure.handler(async function* ({ contex
   }));
 
   // Build inbox view
-  const inboxView = buildInboxView(
+  const uncategorizedView = buildUncategorizedView(
     context.user.id,
     contentCategoriesList,
     customViews,
   );
 
   // All views including inbox, sorted by placement
-  const allViews = sortViewsByPlacement([...customViews, inboxView]);
+  const allViews = sortViewsByPlacement([...customViews, uncategorizedView]);
 
   // Parse feeds to ApplicationFeed
   const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
@@ -249,7 +249,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({ contex
     userContentCategoryIds.has(fc.categoryId),
   );
 
-  // Collect all category IDs used by custom views (for Inbox exclusion)
+  // Collect all category IDs used by custom views (for Uncategorized view exclusion)
   const customViewCategoryIds = new Set(
     customViews.flatMap((v) => v.categoryIds),
   );
@@ -393,14 +393,14 @@ export const revalidateView = protectedProcedure
     }));
 
     // Build inbox view
-    const inboxView = buildInboxView(
+    const uncategorizedView = buildUncategorizedView(
       context.user.id,
       contentCategoriesList,
       customViews,
     );
 
     // All views including inbox, sorted by placement
-    const allViews = sortViewsByPlacement([...customViews, inboxView]);
+    const allViews = sortViewsByPlacement([...customViews, uncategorizedView]);
 
     // Parse feeds to ApplicationFeed
     const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
@@ -413,7 +413,7 @@ export const revalidateView = protectedProcedure
       userContentCategoryIds.has(fc.categoryId),
     );
 
-    // Collect all category IDs used by custom views (for Inbox exclusion)
+    // Collect all category IDs used by custom views (for Uncategorized view exclusion)
     const customViewCategoryIds = new Set(
       customViews.flatMap((v) => v.categoryIds),
     );
@@ -450,7 +450,7 @@ export const revalidateView = protectedProcedure
     // Step 3: Find target view
     const targetView =
       input.viewId === INBOX_VIEW_ID
-        ? inboxView
+        ? uncategorizedView
         : allViews.find((v) => v.id === input.viewId);
 
     if (!targetView) {
@@ -500,9 +500,9 @@ export const revalidateView = protectedProcedure
     // Step 4: Query feed items for target view
     yield* queryAndYieldFeedItemsForView(targetView);
 
-    // Step 5: If target is not Inbox, also query feed items for Inbox
+    // Step 5: If target is not Uncategorized, also query feed items for Uncategorized
     if (targetView.id !== INBOX_VIEW_ID) {
-      yield* queryAndYieldFeedItemsForView(inboxView);
+      yield* queryAndYieldFeedItemsForView(uncategorizedView);
     }
 
     return;

@@ -22,7 +22,7 @@ import {
   views,
 } from "~/server/db/schema";
 
-function buildInboxView(
+function buildUncategorizedView(
   userId: string,
   contentCategoriesList: DatabaseContentCategory[],
   customViews: ApplicationView[],
@@ -34,7 +34,7 @@ function buildInboxView(
     customViews.flatMap((view) => view.categoryIds),
   );
 
-  const inboxCategoryIds = [...allCategoryIdsSet].filter(
+  const uncategorizedCategoryIds = [...allCategoryIdsSet].filter(
     (id) => !customViewCategoryIdsSet.has(id),
   );
 
@@ -42,7 +42,7 @@ function buildInboxView(
 
   return {
     id: INBOX_VIEW_ID,
-    name: "Inbox",
+    name: "Uncategorized",
     daysWindow: 30,
     orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
     contentType: VIEW_CONTENT_TYPE.LONGFORM,
@@ -51,7 +51,7 @@ function buildInboxView(
     userId,
     createdAt: now,
     updatedAt: now,
-    categoryIds: inboxCategoryIds,
+    categoryIds: uncategorizedCategoryIds,
     isDefault: true,
   };
 }
@@ -198,7 +198,7 @@ export const getAll = protectedProcedure.handler(async ({ context }) => {
       .filter((id) => id !== null),
   }));
 
-  const inboxView = buildInboxView(
+  const inboxView = buildUncategorizedView(
     context.user.id,
     contentCategoriesList,
     customViews,

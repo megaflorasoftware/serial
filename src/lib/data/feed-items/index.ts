@@ -80,7 +80,7 @@ export function doesFeedItemPassFilters(
     (category) => category.feedId === item.feedId,
   );
 
-  // For Inbox view, exclude feeds that are in a custom view category
+  // For Uncategorized view, exclude feeds that are in a custom view category
   // AND whose platform is compatible with that view's content type
   if (viewFilter?.id === INBOX_VIEW_ID) {
     const feedCategoriesForItem = feedCategories.filter(
@@ -105,7 +105,7 @@ export function doesFeedItemPassFilters(
     if (wouldAppearInCustomView) {
       return false;
     }
-    // Include uncategorized feeds in Inbox
+    // Include uncategorized feeds in Uncategorized view
     if (!doesFeedHaveAnyCategories) {
       return true;
     }
@@ -167,7 +167,7 @@ export const useFilteredFeedItemsOrder = () => {
   const viewFilter = useAtomValue(viewFilterAtom);
   const views = useAtomValue(viewsAtom);
 
-  // Compute custom views (non-Inbox views) and their category IDs
+  // Compute custom views (non-Uncategorized views) and their category IDs
   const customViews = useMemo(() => {
     return views.filter((v) => v.id !== INBOX_VIEW_ID);
   }, [views]);
@@ -205,7 +205,7 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const viewFilter = useAtomValue(viewFilterAtom);
   const views = useAtomValue(viewsAtom);
 
-  // Compute custom views (non-Inbox views) and their category IDs
+  // Compute custom views (non-Uncategorized views) and their category IDs
   const customViews = useMemo(() => {
     return views.filter((v) => v.id !== INBOX_VIEW_ID);
   }, [views]);

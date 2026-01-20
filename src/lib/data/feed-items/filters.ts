@@ -110,7 +110,7 @@ export function buildFeedFilter(feedFilter: number): SQL | undefined {
 /**
  * Build a Drizzle filter condition for view category filtering
  *
- * For the Inbox view: includes feeds that either match the view's categories
+ * For the Uncategorized view: includes feeds that either match the view's categories
  * OR have no categories at all (uncategorized feeds), but EXCLUDES any feeds
  * that belong to categories assigned to custom views AND whose platform is
  * compatible with that view's content type.
@@ -134,7 +134,7 @@ export function buildViewCategoryFilter(
     .filter((fc) => viewFilter.categoryIds.includes(fc.categoryId))
     .map((fc) => fc.feedId);
 
-  // For Inbox view, also include uncategorized feeds, but exclude feeds in custom views
+  // For Uncategorized view, also include uncategorized feeds, but exclude feeds in custom views
   if (viewFilter.id === INBOX_VIEW_ID) {
     const categorizedFeedIds = new Set(feedCategories.map((fc) => fc.feedId));
     const uncategorizedFeedIds = allFeedIds.filter(

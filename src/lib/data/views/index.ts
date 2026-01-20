@@ -58,7 +58,7 @@ export function useCheckFilteredFeedItemsForView() {
   const { feeds } = useFeeds();
   const { views } = useViews();
 
-  // Compute custom view category IDs (categories assigned to non-Inbox views)
+  // Compute custom view category IDs (categories assigned to non-Uncategorized views)
   const customViewCategoryIds = useMemo(() => {
     const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
     return new Set(customViews.flatMap((v) => v.categoryIds));

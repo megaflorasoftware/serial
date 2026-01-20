@@ -60,7 +60,7 @@ function useCheckFilteredFeedItemsForFeed() {
   const viewFilter = useAtomValue(viewFilterAtom);
   const views = useAtomValue(viewsAtom);
 
-  // Compute custom views (non-Inbox views) and their category IDs
+  // Compute custom views (non-Uncategorized views) and their category IDs
   const customViews = useMemo(() => {
     return views.filter((v) => v.id !== INBOX_VIEW_ID);
   }, [views]);
