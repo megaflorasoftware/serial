@@ -46,7 +46,7 @@ import {
   useFetchFeedItemsStatus,
   useViewFeedIds,
 } from "~/lib/data/store";
-import { INBOX_VIEW_ID, useDeselectViewFilter } from "~/lib/data/views";
+import { INBOX_VIEW_ID } from "~/lib/data/views";
 
 function useCheckFilteredFeedItemsForFeed() {
   const feedItemsOrder = useFeedItemsOrder();
@@ -145,8 +145,6 @@ export function SidebarFeeds() {
   const [feedFilter, setFeedFilter] = useAtom(feedFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
-  const deselectViewFilter = useDeselectViewFilter();
-
   const feedStatusDict = useFeedStatusDict();
   const fetchFeedItemsStatus = useFetchFeedItemsStatus();
   const fetchFeedItemsLastFetchedAt = useFetchFeedItemsLastFetchedAt();
@@ -349,12 +347,7 @@ export function SidebarFeeds() {
               <SidebarMenuItem key={feed.id} className="group flex gap-1">
                 <SidebarMenuButton
                   variant={feed.id === feedFilter ? "outline" : "default"}
-                  onClick={() => {
-                    setFeedFilter(feed.id);
-                    if (!feed.hasEntries) {
-                      deselectViewFilter();
-                    }
-                  }}
+                  onClick={() => setFeedFilter(feed.id)}
                 >
                   {feedStatus === "error" && (
                     <Tooltip>
@@ -409,12 +402,7 @@ export function SidebarFeeds() {
               <SidebarMenuItem key={feed.id} className="group flex gap-1">
                 <SidebarMenuButton
                   variant={feed.id === feedFilter ? "outline" : "default"}
-                  onClick={() => {
-                    setFeedFilter(feed.id);
-                    if (!feed.hasEntries) {
-                      deselectViewFilter();
-                    }
-                  }}
+                  onClick={() => setFeedFilter(feed.id)}
                 >
                   {!feed.hasEntries && (
                     <CircleSmall size={16} className="text-sidebar-accent" />
@@ -444,12 +432,7 @@ export function SidebarFeeds() {
               <SidebarMenuItem key={feed.id} className="group flex gap-1">
                 <SidebarMenuButton
                   variant={feed.id === feedFilter ? "outline" : "default"}
-                  onClick={() => {
-                    setFeedFilter(feed.id);
-                    if (!feed.hasEntries) {
-                      deselectViewFilter();
-                    }
-                  }}
+                  onClick={() => setFeedFilter(feed.id)}
                 >
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -479,12 +462,7 @@ export function SidebarFeeds() {
               <SidebarMenuItem key={feed.id} className="group flex gap-1">
                 <SidebarMenuButton
                   variant={feed.id === feedFilter ? "outline" : "default"}
-                  onClick={() => {
-                    setFeedFilter(feed.id);
-                    if (!feed.hasEntries) {
-                      deselectViewFilter();
-                    }
-                  }}
+                  onClick={() => setFeedFilter(feed.id)}
                 >
                   <Tooltip>
                     <TooltipTrigger asChild>
