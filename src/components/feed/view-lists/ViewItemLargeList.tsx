@@ -3,6 +3,8 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useAtomValue } from "jotai";
 import { ItemDisplay } from "./ItemDisplay";
+import { PaginationLoader } from "./PaginationLoader";
+import { PaginationEnd } from "./PaginationEnd";
 import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
@@ -56,6 +58,8 @@ export function ViewItemLargeList({ items }: ViewItemLargeListProps) {
           )}
         </div>
       ))}
+      {paginationState?.isFetching && <PaginationLoader />}
+      {!paginationState?.hasMore && <PaginationEnd />}
     </div>
   );
 }

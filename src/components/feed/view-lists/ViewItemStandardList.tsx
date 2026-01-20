@@ -3,11 +3,13 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useAtomValue } from "jotai";
 import { ItemDisplay } from "./ItemDisplay";
+import { PaginationLoader } from "./PaginationLoader";
+import { PaginationEnd } from "./PaginationEnd";
 import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
-import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
+import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
 interface ViewItemStandardListProps {
@@ -56,6 +58,8 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
           )}
         </div>
       ))}
+      {paginationState?.isFetching && <PaginationLoader />}
+      {!paginationState?.hasMore && <PaginationEnd />}
     </div>
   );
 }
