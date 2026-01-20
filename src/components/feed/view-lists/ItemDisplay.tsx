@@ -47,7 +47,7 @@ function ItemContentSnippet({ snippet }: ItemContentSnippetProps) {
 
   return (
     <p className="line-clamp-2 w-full pt-1 text-xs opacity-60 md:text-sm">
-      {snippet}
+      {snippet.slice(0, 150)}
     </p>
   );
 }
