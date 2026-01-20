@@ -685,6 +685,7 @@ export const revalidateView = protectedProcedure
   });
 
 const ITEMS_PER_PAGE = 30;
+const ITEMS_BY_VISIBILITY_CHUNK_SIZE = 10;
 
 /**
  * Cursor schema for pagination
@@ -923,7 +924,7 @@ export const getItemsByVisibility = protectedProcedure
       // Yield items in chunks for large result sets
       for (const chunk of prepareArrayChunks(
         applicationFeedItems,
-        GET_BY_VIEW_CHUNK_SIZE,
+        ITEMS_BY_VISIBILITY_CHUNK_SIZE,
       )) {
         yield {
           type: "feed-items",

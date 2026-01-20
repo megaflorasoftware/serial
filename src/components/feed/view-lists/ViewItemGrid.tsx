@@ -40,22 +40,19 @@ export function ViewItemGrid({ items }: ViewItemGridProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
-  // Calculate position for sentinel (at 70% of items)
-  const sentinelPosition = Math.floor(items.length * 0.7);
-
   return (
     <div className="w-full">
       <div
         ref={parent}
         className="grid w-full grid-cols-2 gap-y-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
       >
-        {items.map((contentId, index) => (
+        {items.map((contentId) => (
           <div key={contentId}>
             <GridItemDisplay contentId={contentId} size="standard" />
-            {index === sentinelPosition && <div ref={sentinelRef} />}
           </div>
         ))}
       </div>
+      <div ref={sentinelRef} />
     </div>
   );
 }

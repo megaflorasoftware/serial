@@ -40,17 +40,14 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
-  // Calculate position for sentinel (at 70% of items)
-  const sentinelPosition = Math.floor(items.length * 0.7);
-
   return (
     <div className="w-full transition-all md:pt-4 md:pr-6 md:pl-4" ref={parent}>
-      {items.map((contentId, index) => (
+      {items.map((contentId) => (
         <div key={contentId}>
           <ItemDisplay contentId={contentId} size="standard" />
-          {index === sentinelPosition && <div ref={sentinelRef} />}
         </div>
       ))}
+      <div ref={sentinelRef} />
     </div>
   );
 }
