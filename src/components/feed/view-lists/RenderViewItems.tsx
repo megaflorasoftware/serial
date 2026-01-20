@@ -17,6 +17,7 @@ import {
 } from "~/lib/data/store";
 import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
 import { VIEW_LAYOUT, viewLayoutSchema } from "~/server/db/constants";
+import { useLazyVisibilityFilter } from "~/lib/hooks/useLazyVisibilityFilter";
 
 export function RenderViewItems() {
   const { feeds, hasFetchedFeeds } = useFeeds();
@@ -26,6 +27,9 @@ export function RenderViewItems() {
   const hasInitialData = useHasInitialData();
 
   const filteredFeedItemsOrder = useFilteredFeedItemsOrder();
+
+  // Lazy load items when visibility filter changes
+  useLazyVisibilityFilter();
 
   const currentView = useAtomValue(viewFilterAtom);
   const isUncategorized = currentView?.id === INBOX_VIEW_ID;

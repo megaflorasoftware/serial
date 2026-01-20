@@ -11,8 +11,17 @@ import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type {
   GetByViewChunk,
+  GetItemsByVisibilityChunk,
+  PaginationCursor,
   RevalidateViewChunk,
 } from "~/server/api/routers/initialRouter";
+import type { VisibilityFilter } from "./atoms";
+
+export type PaginationState = {
+  cursor: PaginationCursor;
+  hasMore: boolean;
+  isFetching: boolean;
+};
 
 export type ApplicationStore = {
   reset: () => void;
@@ -32,6 +41,28 @@ export type ApplicationStore = {
   currentViewId: number | null;
   viewFeedIds: Record<number, number[]>;
   setViewFeedIds: (viewId: number, feedIds: number[]) => void;
+  // Pagination state per view and visibility filter
+  viewPaginationState: Record<
+    number,
+    Partial<Record<VisibilityFilter, PaginationState>>
+  >;
+  // Track which visibility filters have been fetched for each view
+  fetchedVisibilityFilters: Record<number, Set<VisibilityFilter>>;
+  // Fetch items for a specific visibility filter (lazy loading)
+  fetchItemsForVisibility: (
+    viewId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => Promise<void>;
+  // Fetch more items with cursor (pagination)
+  fetchMoreItems: (
+    viewId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => Promise<void>;
+  // Get pagination state for a view and visibility filter
+  getPaginationState: (
+    viewId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => PaginationState | undefined;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -47,6 +78,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         hasInitialData: false,
         currentViewId: null,
         viewFeedIds: {},
+        viewPaginationState: {},
+        fetchedVisibilityFilters: {},
       }),
     feedItemsOrder: [],
     setFeedItemsOrder: (itemsOrder) => set({ feedItemsOrder: itemsOrder }),
@@ -72,6 +105,202 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           [viewId]: feedIds,
         },
       }),
+    viewPaginationState: {},
+    fetchedVisibilityFilters: {},
+
+    getPaginationState: (viewId, visibilityFilter) => {
+      return get().viewPaginationState[viewId]?.[visibilityFilter];
+    },
+
+    fetchItemsForVisibility: async (viewId, visibilityFilter) => {
+      const state = get();
+
+      // Check if already fetched for this view/filter
+      const fetchedFilters = state.fetchedVisibilityFilters[viewId];
+      if (fetchedFilters?.has(visibilityFilter)) {
+        return;
+      }
+
+      // Check if already fetching
+      const paginationState =
+        state.viewPaginationState[viewId]?.[visibilityFilter];
+      if (paginationState?.isFetching) {
+        return;
+      }
+
+      // Set fetching state
+      set({
+        viewPaginationState: {
+          ...state.viewPaginationState,
+          [viewId]: {
+            ...state.viewPaginationState[viewId],
+            [visibilityFilter]: {
+              cursor: null,
+              hasMore: true,
+              isFetching: true,
+            },
+          },
+        },
+      });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByVisibility(
+          {
+            viewId,
+            visibilityFilter,
+          },
+        )) as AsyncIterable<GetItemsByVisibilityChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching items:", chunk.message);
+            continue;
+          }
+
+          // chunk.type is "feed-items" at this point
+          const feedItemsDict = { ...get().feedItemsDict };
+          const feedItemsOrder = [...get().feedItemsOrder];
+          const existingIds = new Set(feedItemsOrder);
+
+          chunk.feedItems.forEach((item) => {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          });
+
+          set({
+            feedItemsDict,
+            feedItemsOrder: feedItemsOrder.sort(
+              sortFeedItemsOrderByDate(get().feedItemsDict),
+            ),
+            viewPaginationState: {
+              ...get().viewPaginationState,
+              [viewId]: {
+                ...get().viewPaginationState[viewId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+          });
+        }
+
+        // Mark visibility filter as fetched
+        set({
+          fetchedVisibilityFilters: {
+            ...get().fetchedVisibilityFilters,
+            [viewId]: new Set([
+              ...(get().fetchedVisibilityFilters[viewId] ?? []),
+              visibilityFilter,
+            ]),
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching items for visibility:", error);
+        // Reset fetching state on error
+        set({
+          viewPaginationState: {
+            ...get().viewPaginationState,
+            [viewId]: {
+              ...get().viewPaginationState[viewId],
+              [visibilityFilter]: {
+                cursor: null,
+                hasMore: false,
+                isFetching: false,
+              },
+            },
+          },
+        });
+      }
+    },
+
+    fetchMoreItems: async (viewId, visibilityFilter) => {
+      const state = get();
+      const paginationState =
+        state.viewPaginationState[viewId]?.[visibilityFilter];
+
+      // Don't fetch if no more items or already fetching
+      if (!paginationState?.hasMore || paginationState.isFetching) {
+        return;
+      }
+
+      // Set fetching state
+      set({
+        viewPaginationState: {
+          ...state.viewPaginationState,
+          [viewId]: {
+            ...state.viewPaginationState[viewId],
+            [visibilityFilter]: {
+              ...paginationState,
+              isFetching: true,
+            },
+          },
+        },
+      });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByVisibility(
+          {
+            viewId,
+            visibilityFilter,
+            cursor: paginationState.cursor,
+          },
+        )) as AsyncIterable<GetItemsByVisibilityChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching more items:", chunk.message);
+            continue;
+          }
+
+          // chunk.type is "feed-items" at this point
+          const feedItemsDict = { ...get().feedItemsDict };
+          const feedItemsOrder = [...get().feedItemsOrder];
+          const existingIds = new Set(feedItemsOrder);
+
+          chunk.feedItems.forEach((item) => {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          });
+
+          set({
+            feedItemsDict,
+            feedItemsOrder: feedItemsOrder.sort(
+              sortFeedItemsOrderByDate(get().feedItemsDict),
+            ),
+            viewPaginationState: {
+              ...get().viewPaginationState,
+              [viewId]: {
+                ...get().viewPaginationState[viewId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching more items:", error);
+        // Reset fetching state on error but keep cursor
+        set({
+          viewPaginationState: {
+            ...get().viewPaginationState,
+            [viewId]: {
+              ...get().viewPaginationState[viewId],
+              [visibilityFilter]: {
+                ...get().viewPaginationState[viewId]?.[visibilityFilter],
+                isFetching: false,
+              } as PaginationState,
+            },
+          },
+        });
+      }
+    },
 
     fetchFeedItems: async () => {
       if (get().fetchFeedItemsStatus === "fetching") return;
@@ -252,14 +481,41 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             break;
           }
 
-          case "initial-data-complete":
+          case "initial-data-complete": {
             // Initial data is ready - mark all stores as ready and hide loading screen
             viewsStore.setState({ fetchStatus: "success" });
             feedsStore.setState({ fetchStatus: "success" });
             contentCategoriesStore.setState({ fetchStatus: "success" });
             feedCategoriesStore.setState({ fetchStatus: "success" });
-            set({ hasInitialData: true });
+
+            // Mark "unread" visibility filter as fetched for all views
+            const allViews = viewsStore.getState().views;
+            const fetchedFilters: Record<number, Set<VisibilityFilter>> = {};
+            const paginationState: Record<
+              number,
+              Partial<Record<VisibilityFilter, PaginationState>>
+            > = {};
+
+            for (const view of allViews) {
+              fetchedFilters[view.id] = new Set([
+                "unread",
+              ] as VisibilityFilter[]);
+              paginationState[view.id] = {
+                unread: {
+                  cursor: null,
+                  hasMore: true, // Will be updated if we implement unread pagination
+                  isFetching: false,
+                },
+              };
+            }
+
+            set({
+              hasInitialData: true,
+              fetchedVisibilityFilters: fetchedFilters,
+              viewPaginationState: paginationState,
+            });
             break;
+          }
 
           case "feed-items": {
             // Track the current view ID from the first feed-items chunk
@@ -390,6 +646,11 @@ export const {
   useRevalidateView,
   useCurrentViewId,
   useViewFeedIds,
+  useViewPaginationState,
+  useFetchedVisibilityFilters,
+  useFetchItemsForVisibility,
+  useFetchMoreItems,
+  useGetPaginationState,
   useReset: useResetFeedItems,
 } = feedItemsStore;
 
