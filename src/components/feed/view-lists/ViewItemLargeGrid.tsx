@@ -13,7 +13,7 @@ export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
   return (
     <div
       ref={parent}
-      className="grid w-full px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(120px,_1fr))] md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))] md:gap-2"
+      className="grid w-full gap-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]"
     >
       {items.map((contentId) => (
         <GridItemDisplay contentId={contentId} key={contentId} size="large" />

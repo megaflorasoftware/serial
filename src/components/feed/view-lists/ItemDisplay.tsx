@@ -58,8 +58,8 @@ export function ItemDisplay({
   return (
     <article
       className={clsx(
-        "group relative flex w-full flex-1 items-center justify-stretch gap-2",
-        !isLarge && "md:h-20",
+        "group relative flex w-full flex-1 justify-stretch gap-2",
+        isLarge ? "flex-col md:flex-row md:items-center" : "items-center md:h-20",
         {
           "opacity-50": item.isWatched,
         },
@@ -71,8 +71,8 @@ export function ItemDisplay({
         rel={rel}
         preload={shouldOpenInSerial ? "viewport" : undefined}
         className={clsx(
-          "sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 py-4 pr-4 pl-6 text-left transition-colors md:flex-row md:items-center md:rounded md:pr-0",
-          !isLarge && "md:h-20 md:py-0",
+          "sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 pt-4 pr-4 pl-6 text-left transition-colors md:flex-row md:items-center md:rounded md:py-4 md:pr-0",
+          isLarge ? "pb-1 md:pb-4" : "pb-4 md:h-20 md:py-0",
         )}
       >
         {isLarge ? (
@@ -144,7 +144,14 @@ export function ItemDisplay({
           </>
         )}
       </Link>
-      <div className="flex h-full flex-row flex-wrap items-center justify-center pr-6 md:pr-0">
+      <div
+        className={clsx(
+          "flex flex-row flex-wrap items-center",
+          isLarge
+            ? "justify-start pl-6 pb-2 md:h-full md:justify-center md:pl-0 md:pb-0 md:pr-0"
+            : "h-full justify-center pr-6 md:pr-0",
+        )}
+      >
         {instapaperStatus?.isConfigured &&
           instapaperStatus.isConnected &&
           item.platform === "website" && (
