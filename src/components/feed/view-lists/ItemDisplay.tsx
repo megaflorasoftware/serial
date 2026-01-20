@@ -354,8 +354,8 @@ function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
           feedName={feed?.name}
         />
       )}
-      {thumbnailType === "icon" && (
-        <IconThumbnail feedImageUrl={feed!.imageUrl!} feedName={feed?.name} />
+      {thumbnailType === "icon" && feed?.imageUrl && (
+        <IconThumbnail feedImageUrl={feed.imageUrl} feedName={feed.name} />
       )}
       {thumbnailType === "none" && <EmptyThumbnail />}
     </ThumbnailContainer>

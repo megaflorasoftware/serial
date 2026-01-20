@@ -111,12 +111,14 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           feedStatusDict[incomingChunk.feedId] = incomingChunk.status;
         } else {
           const incomingFeedItems = incomingChunk.feedItems;
+          const existingIds = new Set(feedItemsOrder);
 
           incomingFeedItems.forEach((item) => {
             feedItemsDict[item.id] = item;
 
-            if (!feedItemsOrder.find((id) => id === item.id)) {
+            if (!existingIds.has(item.id)) {
               feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
             }
           });
         }
@@ -161,12 +163,14 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           feedStatusDict[incomingChunk.feedId] = incomingChunk.status;
         } else {
           const incomingFeedItems = incomingChunk.feedItems;
+          const existingIds = new Set(feedItemsOrder);
 
           incomingFeedItems.forEach((item) => {
             feedItemsDict[item.id] = item;
 
-            if (!feedItemsOrder.find((id) => id === item.id)) {
+            if (!existingIds.has(item.id)) {
               feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
             }
           });
         }
@@ -272,12 +276,14 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               : [...get().feedItemsOrder];
 
             const incomingFeedItems = incomingChunk.feedItems;
+            const existingIds = new Set(feedItemsOrder);
 
             incomingFeedItems.forEach((item) => {
               feedItemsDict[item.id] = item;
 
-              if (!feedItemsOrder.find((id) => id === item.id)) {
+              if (!existingIds.has(item.id)) {
                 feedItemsOrder.push(item.id);
+                existingIds.add(item.id);
               }
             });
 
@@ -334,12 +340,14 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             const feedItemsOrder = [...get().feedItemsOrder];
 
             const incomingFeedItems = chunk.feedItems;
+            const existingIds = new Set(feedItemsOrder);
 
             incomingFeedItems.forEach((item) => {
               feedItemsDict[item.id] = item;
 
-              if (!feedItemsOrder.find((id) => id === item.id)) {
+              if (!existingIds.has(item.id)) {
                 feedItemsOrder.push(item.id);
+                existingIds.add(item.id);
               }
             });
 

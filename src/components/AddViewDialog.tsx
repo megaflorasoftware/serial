@@ -238,7 +238,6 @@ export function AddViewDialog() {
 
   const [name, setName] = useState<string>("");
   const [daysTimeWindow, setDaysTimeWindow] = useState<number>(0);
-  const [readStatus, setReadStatus] = useState<number>(VIEW_READ_STATUS.UNREAD);
   const [contentType, setContentType] = useState<ViewContentType>(
     VIEW_CONTENT_TYPE.LONGFORM,
   );
@@ -256,7 +255,6 @@ export function AddViewDialog() {
     if (!value) {
       setName("");
       setDaysTimeWindow(0);
-      setReadStatus(VIEW_READ_STATUS.UNREAD);
       setContentType(VIEW_CONTENT_TYPE.LONGFORM);
       setLayout(VIEW_LAYOUT.LIST);
       setSelectedCategories([]);
@@ -293,7 +291,7 @@ export function AddViewDialog() {
               const addViewPromise = createView({
                 name,
                 daysWindow: daysTimeWindow,
-                readStatus,
+                readStatus: VIEW_READ_STATUS.UNREAD,
                 contentType: contentType,
                 layout: layout,
                 categoryIds: selectedCategories,
@@ -337,7 +335,6 @@ export function EditViewDialog({
 
   const [name, setName] = useState<string>("");
   const [daysTimeWindow, setDaysTimeWindow] = useState<number>(0);
-  const [readStatus, setReadStatus] = useState<number>(VIEW_READ_STATUS.UNREAD);
   const [contentType, setContentType] = useState<ViewContentType>(
     VIEW_CONTENT_TYPE.LONGFORM,
   );
@@ -355,7 +352,6 @@ export function EditViewDialog({
 
     setName(view.name);
     setDaysTimeWindow(view.daysWindow);
-    setReadStatus(view.readStatus);
     const parsedContentType = viewContentTypeSchema.safeParse(view.contentType);
     setContentType(
       parsedContentType.success
@@ -431,7 +427,7 @@ export function EditViewDialog({
                   name,
                   id: selectedViewId,
                   daysWindow: daysTimeWindow,
-                  readStatus,
+                  readStatus: VIEW_READ_STATUS.UNREAD,
                   contentType: contentType,
                   layout: layout,
                   categoryIds: selectedCategories,
