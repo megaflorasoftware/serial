@@ -62,7 +62,7 @@ function buildUncategorizedView(
 export const create = protectedProcedure
   .input(createViewSchema)
   .handler(async ({ context, input }) => {
-    await context.db.transaction(async (tx) => {
+    return await context.db.transaction(async (tx) => {
       const viewsResult = await tx
         .insert(views)
         .values({
@@ -78,16 +78,20 @@ export const create = protectedProcedure
 
       const view = viewsResult[0];
 
-      if (!input.categoryIds || !view) return;
+      if (!view) return null;
 
-      return await Promise.all(
-        input.categoryIds.map(async (categoryId) => {
-          await tx.insert(viewCategories).values({
-            viewId: view.id,
-            categoryId,
-          });
-        }),
-      );
+      if (input.categoryIds) {
+        await Promise.all(
+          input.categoryIds.map(async (categoryId) => {
+            await tx.insert(viewCategories).values({
+              viewId: view.id,
+              categoryId,
+            });
+          }),
+        );
+      }
+
+      return view;
     });
   });
 
