@@ -159,6 +159,7 @@ export async function fetchWebsiteFeedData(
           item.content,
           item.description,
         ),
+        contentSnippet: item.contentSnippet,
       } satisfies RSSContent;
     });
 

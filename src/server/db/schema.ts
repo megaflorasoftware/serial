@@ -155,6 +155,7 @@ export const feedItems = sqliteTable(
     url: text("url", { length: 512 }).notNull(),
     thumbnail: text("thumbnail", { length: 512 }).notNull().default(""),
     content: text("content").notNull().default(""),
+    contentSnippet: text("content_snippet").notNull().default(""),
     isWatched: integer("is_watched", { mode: "boolean" })
       .notNull()
       .default(false),

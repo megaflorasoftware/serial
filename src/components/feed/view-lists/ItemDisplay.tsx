@@ -59,7 +59,7 @@ export function ItemDisplay({
     <article
       className={clsx(
         "group relative flex w-full flex-1 items-center justify-stretch gap-2",
-        isLarge ? "md:h-28" : "md:h-20",
+        !isLarge && "md:h-20",
         {
           "opacity-50": item.isWatched,
         },
@@ -71,52 +71,66 @@ export function ItemDisplay({
         rel={rel}
         preload={shouldOpenInSerial ? "viewport" : undefined}
         className={clsx(
-          "sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 py-4 pr-4 pl-6 text-left transition-colors md:flex-row md:items-center md:rounded md:py-0 md:pr-0",
-          isLarge ? "md:h-28" : "md:h-20",
+          "sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 py-4 pr-4 pl-6 text-left transition-colors md:flex-row md:items-center md:rounded md:pr-0",
+          !isLarge && "md:h-20 md:py-0",
         )}
       >
-        <div
-          className={clsx(
-            "grid place-items-center",
-            isLarge ? "size-24" : "size-16",
-          )}
-        >
-          {feed?.imageUrl ? (
-            <img
-              src={feed.imageUrl}
-              alt={feed.name}
-              className={clsx(
-                "aspect-square rounded object-contain",
-                isLarge ? "h-12" : "h-8",
-              )}
-            />
-          ) : (
-            <div
-              className={clsx(
-                "bg-muted aspect-square rounded",
-                isLarge ? "h-12" : "h-8",
-              )}
-            />
-          )}
-        </div>
-        <div className="flex h-full flex-1 flex-col justify-center">
-          <h3
-            className={clsx(
-              "line-clamp-1 w-full font-semibold",
-              isLarge ? "text-sm md:text-base" : "text-xs md:text-sm",
+        {isLarge ? (
+          <>
+            {item.thumbnail ? (
+              <div className="relative h-28 w-44 flex-shrink-0">
+                <img
+                  src={item.thumbnail}
+                  alt={item.title}
+                  className="h-full w-full rounded object-cover"
+                />
+              </div>
+            ) : feed?.imageUrl ? (
+              <div className="bg-muted grid h-28 w-44 flex-shrink-0 place-items-center rounded">
+                <img
+                  src={feed.imageUrl}
+                  alt={feed.name}
+                  className="h-10 w-10 rounded object-contain"
+                />
+              </div>
+            ) : (
+              <div className="bg-muted h-28 w-44 flex-shrink-0 rounded" />
             )}
-          >
-            {item.title}
-          </h3>
-          <p
-            className={clsx(
-              "w-full opacity-80",
-              isLarge ? "text-sm" : "text-xs md:text-sm",
-            )}
-          >
-            {item.author || feed?.name} • {timeAgo(item.postedAt)}
-          </p>
-        </div>
+            <div className="flex h-full flex-1 flex-col justify-center pr-2">
+              <h3 className="line-clamp-2 w-full text-xs font-semibold md:text-sm">
+                {item.title}
+              </h3>
+              <p className="line-clamp-2 w-full pt-1 text-xs opacity-60 md:text-sm">
+                {item.contentSnippet}
+              </p>
+              <p className="w-full pt-1 text-xs opacity-80 md:text-sm">
+                {item.author || feed?.name} • {timeAgo(item.postedAt)}
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid size-16 place-items-center">
+              {feed?.imageUrl ? (
+                <img
+                  src={feed.imageUrl}
+                  alt={feed.name}
+                  className="h-8 aspect-square rounded object-contain"
+                />
+              ) : (
+                <div className="bg-muted h-8 aspect-square rounded" />
+              )}
+            </div>
+            <div className="flex h-full flex-1 flex-col justify-center">
+              <h3 className="line-clamp-1 w-full text-xs font-semibold md:text-sm">
+                {item.title}
+              </h3>
+              <p className="w-full text-xs opacity-80 md:text-sm">
+                {item.author || feed?.name} • {timeAgo(item.postedAt)}
+              </p>
+            </div>
+          </>
+        )}
       </Link>
       <div className="flex h-full flex-row flex-wrap items-center justify-center pr-6 md:pr-0">
         {instapaperStatus?.isConfigured &&
