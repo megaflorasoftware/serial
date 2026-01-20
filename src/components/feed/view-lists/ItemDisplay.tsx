@@ -125,7 +125,7 @@ function ThumbnailContainer({
         // Large list layout
         "aspect-video w-44":
           layout === "large-list" && thumbnailType === "horizontal-video",
-        "aspect-[9/16] w-44":
+        "aspect-[9/16] w-20":
           layout === "large-list" && thumbnailType === "vertical-video",
         "bg-muted aspect-[3/2] w-44": layout === "large-list" && !isVideo,
         // Grid layout (standard)
@@ -195,7 +195,7 @@ function ArticleThumbnail({
         <img
           src={feedImageUrl}
           alt={feedName}
-          className="bg-background dark:bg-foreground absolute top-2 left-2 z-10 h-8 w-8 rounded object-contain p-1 shadow-md"
+          className="bg-background dark:bg-foreground absolute top-2 left-2 z-10 h-10 w-10 rounded object-contain p-1 shadow-md"
         />
       )}
     </>
@@ -213,7 +213,7 @@ function IconThumbnail({ feedImageUrl, feedName }: IconThumbnailProps) {
       <img
         src={feedImageUrl}
         alt={feedName}
-        className="h-8 w-8 rounded object-contain"
+        className="h-10 w-10 rounded object-contain"
       />
     </div>
   );
@@ -222,7 +222,7 @@ function IconThumbnail({ feedImageUrl, feedName }: IconThumbnailProps) {
 function EmptyThumbnail() {
   return (
     <div className="absolute inset-0 grid place-items-center bg-transparent">
-      <div className="bg-muted-foreground/20 h-8 w-8 rounded" />
+      <div className="bg-muted-foreground/20 h-10 w-10 rounded" />
     </div>
   );
 }
@@ -329,7 +329,9 @@ export function ItemDisplay({
       >
         {isLarge ? (
           <>
-            <ItemThumbnail layout="large-list" item={item} feed={feed} />
+            <div className="grid w-44 place-items-center">
+              <ItemThumbnail layout="large-list" item={item} feed={feed} />
+            </div>
             <div className="flex h-full flex-1 flex-col justify-center pr-2">
               <ItemTitle title={item.title} lineClamp={2} />
               <ItemContentSnippet snippet={item.contentSnippet} />
@@ -343,7 +345,9 @@ export function ItemDisplay({
           </>
         ) : (
           <>
-            <ItemThumbnail layout="list" item={item} feed={feed} />
+            <div className="grid w-16 place-items-center">
+              <ItemThumbnail layout="list" item={item} feed={feed} />
+            </div>
             <div className="flex h-full flex-1 flex-col justify-center">
               <ItemTitle title={item.title} lineClamp={1} />
               <ItemMeta
