@@ -604,6 +604,28 @@ export type GetItemsByVisibilityChunk =
     }
   | { type: "error"; message: string; phase: string };
 
+export type GetItemsByFeedChunk =
+  | {
+      type: "feed-items";
+      feedId: number;
+      feedItems: ApplicationFeedItem[];
+      visibilityFilter: string;
+      hasMore: boolean;
+      nextCursor: PaginationCursor;
+    }
+  | { type: "error"; message: string; phase: string };
+
+export type GetItemsByCategoryIdChunk =
+  | {
+      type: "feed-items";
+      categoryId: number;
+      feedItems: ApplicationFeedItem[];
+      visibilityFilter: string;
+      hasMore: boolean;
+      nextCursor: PaginationCursor;
+    }
+  | { type: "error"; message: string; phase: string };
+
 /**
  * Fetch items for a specific visibility filter with cursor-based pagination.
  * Used for lazy loading "read" and "later" visibility filters,
@@ -817,5 +839,245 @@ export const getItemsByVisibility = protectedProcedure
             : `Failed to fetch items for view ${input.viewId}`,
         phase: "feed-items",
       } as GetItemsByVisibilityChunk;
+    }
+  });
+
+/**
+ * Fetch items for a specific feed with cursor-based pagination.
+ * Used for lazy loading when a feed is selected in the sidebar.
+ */
+export const getItemsByFeed = protectedProcedure
+  .input(
+    z.object({
+      feedId: z.number(),
+      visibilityFilter: visibilityFilterSchema,
+      cursor: cursorSchema.optional(),
+      limit: z.number().min(1).max(500).optional(),
+    }),
+  )
+  .handler(async function* ({ context, input }) {
+    const limit = input.limit ?? ITEMS_PER_PAGE;
+
+    // Verify feed belongs to user
+    const feed = await context.db.query.feeds.findFirst({
+      where: and(eq(feeds.id, input.feedId), eq(feeds.userId, context.user.id)),
+    });
+
+    if (!feed) {
+      yield {
+        type: "error",
+        message: `Feed with ID ${input.feedId} not found or does not belong to user`,
+        phase: "verify-feed",
+      } as GetItemsByFeedChunk;
+      return;
+    }
+
+    try {
+      // Build filter conditions
+      const filterConditions = [
+        eq(feedItems.feedId, input.feedId),
+        buildVisibilityFilter(input.visibilityFilter),
+        buildCursorCondition(input.cursor ?? null),
+      ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+      const filter =
+        filterConditions.length > 0 ? and(...filterConditions) : undefined;
+
+      // Query limit + 1 to determine if there are more items
+      const itemsData = await context.db.query.feedItems.findMany({
+        where: filter,
+        orderBy: desc(feedItems.postedAt),
+        limit: limit + 1,
+      });
+
+      // Determine if there are more items
+      const hasMore = itemsData.length > limit;
+      const itemsToReturn = hasMore ? itemsData.slice(0, limit) : itemsData;
+
+      // Compute next cursor from the last item
+      const lastItem = itemsToReturn[itemsToReturn.length - 1];
+      const nextCursor: PaginationCursor =
+        hasMore && lastItem
+          ? { postedAt: lastItem.postedAt, id: lastItem.id }
+          : null;
+
+      const applicationFeedItems = itemsToReturn.map((item) => ({
+        ...item,
+        platform: feed.platform,
+      })) as ApplicationFeedItem[];
+
+      // Yield items in chunks for large result sets
+      for (const chunk of prepareArrayChunks(
+        applicationFeedItems,
+        GET_BY_VIEW_CHUNK_SIZE,
+      )) {
+        yield {
+          type: "feed-items",
+          feedId: input.feedId,
+          feedItems: chunk,
+          visibilityFilter: input.visibilityFilter,
+          hasMore,
+          nextCursor,
+        } as GetItemsByFeedChunk;
+      }
+
+      // If no items, still yield an empty response
+      if (applicationFeedItems.length === 0) {
+        yield {
+          type: "feed-items",
+          feedId: input.feedId,
+          feedItems: [],
+          visibilityFilter: input.visibilityFilter,
+          hasMore: false,
+          nextCursor: null,
+        } as GetItemsByFeedChunk;
+      }
+    } catch (error) {
+      yield {
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : `Failed to fetch items for feed ${input.feedId}`,
+        phase: "feed-items",
+      } as GetItemsByFeedChunk;
+    }
+  });
+
+/**
+ * Fetch items for feeds in a specific category with cursor-based pagination.
+ * Used for lazy loading when a category is selected in the sidebar.
+ */
+export const getItemsByCategoryId = protectedProcedure
+  .input(
+    z.object({
+      categoryId: z.number(),
+      visibilityFilter: visibilityFilterSchema,
+      cursor: cursorSchema.optional(),
+      limit: z.number().min(1).max(500).optional(),
+    }),
+  )
+  .handler(async function* ({ context, input }) {
+    const limit = input.limit ?? ITEMS_PER_PAGE;
+
+    // Verify category belongs to user
+    const category = await context.db.query.contentCategories.findFirst({
+      where: and(
+        eq(contentCategories.id, input.categoryId),
+        eq(contentCategories.userId, context.user.id),
+      ),
+    });
+
+    if (!category) {
+      yield {
+        type: "error",
+        message: `Category with ID ${input.categoryId} not found or does not belong to user`,
+        phase: "verify-category",
+      } as GetItemsByCategoryIdChunk;
+      return;
+    }
+
+    // Get feed IDs in this category
+    const categoryFeedLinks = await context.db
+      .select()
+      .from(feedCategories)
+      .where(eq(feedCategories.categoryId, input.categoryId));
+
+    const feedIdsInCategory = categoryFeedLinks.map((fc) => fc.feedId);
+
+    if (feedIdsInCategory.length === 0) {
+      yield {
+        type: "feed-items",
+        categoryId: input.categoryId,
+        feedItems: [],
+        visibilityFilter: input.visibilityFilter,
+        hasMore: false,
+        nextCursor: null,
+      } as GetItemsByCategoryIdChunk;
+      return;
+    }
+
+    // Fetch feeds for platform lookup
+    const feedsList = await context.db.query.feeds.findMany({
+      where: and(
+        inArray(feeds.id, feedIdsInCategory),
+        eq(feeds.userId, context.user.id),
+      ),
+    });
+
+    const feedsById = new Map(feedsList.map((f) => [f.id, f]));
+
+    try {
+      // Build filter conditions
+      const filterConditions = [
+        inArray(feedItems.feedId, feedIdsInCategory),
+        buildVisibilityFilter(input.visibilityFilter),
+        buildCursorCondition(input.cursor ?? null),
+      ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+      const filter =
+        filterConditions.length > 0 ? and(...filterConditions) : undefined;
+
+      // Query limit + 1 to determine if there are more items
+      const itemsData = await context.db.query.feedItems.findMany({
+        where: filter,
+        orderBy: desc(feedItems.postedAt),
+        limit: limit + 1,
+      });
+
+      // Determine if there are more items
+      const hasMore = itemsData.length > limit;
+      const itemsToReturn = hasMore ? itemsData.slice(0, limit) : itemsData;
+
+      // Compute next cursor from the last item
+      const lastItem = itemsToReturn[itemsToReturn.length - 1];
+      const nextCursor: PaginationCursor =
+        hasMore && lastItem
+          ? { postedAt: lastItem.postedAt, id: lastItem.id }
+          : null;
+
+      const applicationFeedItems = itemsToReturn.map((item) => {
+        const itemFeed = feedsById.get(item.feedId);
+        return {
+          ...item,
+          platform: itemFeed?.platform ?? "youtube",
+        } as ApplicationFeedItem;
+      });
+
+      // Yield items in chunks for large result sets
+      for (const chunk of prepareArrayChunks(
+        applicationFeedItems,
+        GET_BY_VIEW_CHUNK_SIZE,
+      )) {
+        yield {
+          type: "feed-items",
+          categoryId: input.categoryId,
+          feedItems: chunk,
+          visibilityFilter: input.visibilityFilter,
+          hasMore,
+          nextCursor,
+        } as GetItemsByCategoryIdChunk;
+      }
+
+      // If no items, still yield an empty response
+      if (applicationFeedItems.length === 0) {
+        yield {
+          type: "feed-items",
+          categoryId: input.categoryId,
+          feedItems: [],
+          visibilityFilter: input.visibilityFilter,
+          hasMore: false,
+          nextCursor: null,
+        } as GetItemsByCategoryIdChunk;
+      }
+    } catch (error) {
+      yield {
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : `Failed to fetch items for category ${input.categoryId}`,
+        phase: "feed-items",
+      } as GetItemsByCategoryIdChunk;
     }
   });

@@ -6,6 +6,8 @@ import { GridItemDisplay } from "./ItemDisplay";
 import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
+import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
+import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
 
 interface ViewItemLargeGridProps {
   items: string[];
@@ -13,6 +15,10 @@ interface ViewItemLargeGridProps {
 
 export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
   const [parent] = useAutoAnimate();
+
+  // Lazy load items when feed or category filter changes
+  useLazyFeedFilter();
+  useLazyCategoryFilter();
 
   const currentView = useAtomValue(viewFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);

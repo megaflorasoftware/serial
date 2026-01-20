@@ -12,6 +12,8 @@ import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type {
   GetByViewChunk,
   GetItemsByVisibilityChunk,
+  GetItemsByFeedChunk,
+  GetItemsByCategoryIdChunk,
   PaginationCursor,
   RevalidateViewChunk,
 } from "~/server/api/routers/initialRouter";
@@ -65,6 +67,40 @@ export type ApplicationStore = {
     viewId: number,
     visibilityFilter: VisibilityFilter,
   ) => PaginationState | undefined;
+  // Feed-specific pagination state
+  feedPaginationState: Record<
+    number,
+    Partial<Record<VisibilityFilter, PaginationState>>
+  >;
+  // Category-specific pagination state
+  categoryPaginationState: Record<
+    number,
+    Partial<Record<VisibilityFilter, PaginationState>>
+  >;
+  // Track which visibility filters have been fetched for each feed
+  fetchedFeedFilters: Record<number, Set<VisibilityFilter>>;
+  // Track which visibility filters have been fetched for each category
+  fetchedCategoryFilters: Record<number, Set<VisibilityFilter>>;
+  // Fetch items for a specific feed (lazy loading)
+  fetchItemsForFeed: (
+    feedId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => Promise<void>;
+  // Fetch items for a specific category (lazy loading)
+  fetchItemsForCategory: (
+    categoryId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => Promise<void>;
+  // Fetch more items for a feed (pagination)
+  fetchMoreItemsForFeed: (
+    feedId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => Promise<void>;
+  // Fetch more items for a category (pagination)
+  fetchMoreItemsForCategory: (
+    categoryId: number,
+    visibilityFilter: VisibilityFilter,
+  ) => Promise<void>;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -82,6 +118,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         viewFeedIds: {},
         viewPaginationState: {},
         fetchedVisibilityFilters: {},
+        feedPaginationState: {},
+        categoryPaginationState: {},
+        fetchedFeedFilters: {},
+        fetchedCategoryFilters: {},
       }),
     feedItemsOrder: [],
     setFeedItemsOrder: (itemsOrder) => set({ feedItemsOrder: itemsOrder }),
@@ -109,6 +149,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       }),
     viewPaginationState: {},
     fetchedVisibilityFilters: {},
+    feedPaginationState: {},
+    categoryPaginationState: {},
+    fetchedFeedFilters: {},
+    fetchedCategoryFilters: {},
 
     getPaginationState: (viewId, visibilityFilter) => {
       return get().viewPaginationState[viewId]?.[visibilityFilter];
@@ -393,6 +437,370 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               ...get().viewPaginationState[viewId],
               [visibilityFilter]: {
                 ...get().viewPaginationState[viewId]?.[visibilityFilter],
+                isFetching: false,
+              } as PaginationState,
+            },
+          },
+        });
+      }
+    },
+
+    fetchItemsForFeed: async (feedId, visibilityFilter) => {
+      const state = get();
+
+      // Check if already fetched for this feed/filter
+      const fetchedFilters = state.fetchedFeedFilters[feedId];
+      if (fetchedFilters?.has(visibilityFilter)) {
+        return;
+      }
+
+      // Check if already fetching
+      const paginationState =
+        state.feedPaginationState[feedId]?.[visibilityFilter];
+      if (paginationState?.isFetching) {
+        return;
+      }
+
+      // Set fetching state
+      set({
+        feedPaginationState: {
+          ...state.feedPaginationState,
+          [feedId]: {
+            ...state.feedPaginationState[feedId],
+            [visibilityFilter]: {
+              cursor: null,
+              hasMore: true,
+              isFetching: true,
+            },
+          },
+        },
+      });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed({
+          feedId,
+          visibilityFilter,
+        })) as AsyncIterable<GetItemsByFeedChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching items for feed:", chunk.message);
+            continue;
+          }
+
+          const feedItemsDict = { ...get().feedItemsDict };
+          const feedItemsOrder = [...get().feedItemsOrder];
+          const existingIds = new Set(feedItemsOrder);
+
+          chunk.feedItems.forEach((item) => {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          });
+
+          set({
+            feedItemsDict,
+            feedItemsOrder: feedItemsOrder.sort(
+              sortFeedItemsOrderByDate(get().feedItemsDict),
+            ),
+            feedPaginationState: {
+              ...get().feedPaginationState,
+              [feedId]: {
+                ...get().feedPaginationState[feedId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+          });
+        }
+
+        // Mark filter as fetched
+        set({
+          fetchedFeedFilters: {
+            ...get().fetchedFeedFilters,
+            [feedId]: new Set([
+              ...(get().fetchedFeedFilters[feedId] ?? []),
+              visibilityFilter,
+            ]),
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching items for feed:", error);
+        set({
+          feedPaginationState: {
+            ...get().feedPaginationState,
+            [feedId]: {
+              ...get().feedPaginationState[feedId],
+              [visibilityFilter]: {
+                cursor: null,
+                hasMore: false,
+                isFetching: false,
+              },
+            },
+          },
+        });
+      }
+    },
+
+    fetchItemsForCategory: async (categoryId, visibilityFilter) => {
+      const state = get();
+
+      // Check if already fetched for this category/filter
+      const fetchedFilters = state.fetchedCategoryFilters[categoryId];
+      if (fetchedFilters?.has(visibilityFilter)) {
+        return;
+      }
+
+      // Check if already fetching
+      const paginationState =
+        state.categoryPaginationState[categoryId]?.[visibilityFilter];
+      if (paginationState?.isFetching) {
+        return;
+      }
+
+      // Set fetching state
+      set({
+        categoryPaginationState: {
+          ...state.categoryPaginationState,
+          [categoryId]: {
+            ...state.categoryPaginationState[categoryId],
+            [visibilityFilter]: {
+              cursor: null,
+              hasMore: true,
+              isFetching: true,
+            },
+          },
+        },
+      });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId({
+          categoryId,
+          visibilityFilter,
+        })) as AsyncIterable<GetItemsByCategoryIdChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching items for category:", chunk.message);
+            continue;
+          }
+
+          const feedItemsDict = { ...get().feedItemsDict };
+          const feedItemsOrder = [...get().feedItemsOrder];
+          const existingIds = new Set(feedItemsOrder);
+
+          chunk.feedItems.forEach((item) => {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          });
+
+          set({
+            feedItemsDict,
+            feedItemsOrder: feedItemsOrder.sort(
+              sortFeedItemsOrderByDate(get().feedItemsDict),
+            ),
+            categoryPaginationState: {
+              ...get().categoryPaginationState,
+              [categoryId]: {
+                ...get().categoryPaginationState[categoryId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+          });
+        }
+
+        // Mark filter as fetched
+        set({
+          fetchedCategoryFilters: {
+            ...get().fetchedCategoryFilters,
+            [categoryId]: new Set([
+              ...(get().fetchedCategoryFilters[categoryId] ?? []),
+              visibilityFilter,
+            ]),
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching items for category:", error);
+        set({
+          categoryPaginationState: {
+            ...get().categoryPaginationState,
+            [categoryId]: {
+              ...get().categoryPaginationState[categoryId],
+              [visibilityFilter]: {
+                cursor: null,
+                hasMore: false,
+                isFetching: false,
+              },
+            },
+          },
+        });
+      }
+    },
+
+    fetchMoreItemsForFeed: async (feedId, visibilityFilter) => {
+      const state = get();
+      const paginationState =
+        state.feedPaginationState[feedId]?.[visibilityFilter];
+
+      // Don't fetch if no more items or already fetching
+      if (!paginationState?.hasMore || paginationState.isFetching) {
+        return;
+      }
+
+      // Set fetching state
+      set({
+        feedPaginationState: {
+          ...state.feedPaginationState,
+          [feedId]: {
+            ...state.feedPaginationState[feedId],
+            [visibilityFilter]: {
+              ...paginationState,
+              isFetching: true,
+            },
+          },
+        },
+      });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed({
+          feedId,
+          visibilityFilter,
+          cursor: paginationState.cursor,
+        })) as AsyncIterable<GetItemsByFeedChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching more items for feed:", chunk.message);
+            continue;
+          }
+
+          const feedItemsDict = { ...get().feedItemsDict };
+          const feedItemsOrder = [...get().feedItemsOrder];
+          const existingIds = new Set(feedItemsOrder);
+
+          chunk.feedItems.forEach((item) => {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          });
+
+          set({
+            feedItemsDict,
+            feedItemsOrder: feedItemsOrder.sort(
+              sortFeedItemsOrderByDate(get().feedItemsDict),
+            ),
+            feedPaginationState: {
+              ...get().feedPaginationState,
+              [feedId]: {
+                ...get().feedPaginationState[feedId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching more items for feed:", error);
+        set({
+          feedPaginationState: {
+            ...get().feedPaginationState,
+            [feedId]: {
+              ...get().feedPaginationState[feedId],
+              [visibilityFilter]: {
+                ...get().feedPaginationState[feedId]?.[visibilityFilter],
+                isFetching: false,
+              } as PaginationState,
+            },
+          },
+        });
+      }
+    },
+
+    fetchMoreItemsForCategory: async (categoryId, visibilityFilter) => {
+      const state = get();
+      const paginationState =
+        state.categoryPaginationState[categoryId]?.[visibilityFilter];
+
+      // Don't fetch if no more items or already fetching
+      if (!paginationState?.hasMore || paginationState.isFetching) {
+        return;
+      }
+
+      // Set fetching state
+      set({
+        categoryPaginationState: {
+          ...state.categoryPaginationState,
+          [categoryId]: {
+            ...state.categoryPaginationState[categoryId],
+            [visibilityFilter]: {
+              ...paginationState,
+              isFetching: true,
+            },
+          },
+        },
+      });
+
+      try {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId({
+          categoryId,
+          visibilityFilter,
+          cursor: paginationState.cursor,
+        })) as AsyncIterable<GetItemsByCategoryIdChunk>) {
+          if (chunk.type === "error") {
+            console.error("Error fetching more items for category:", chunk.message);
+            continue;
+          }
+
+          const feedItemsDict = { ...get().feedItemsDict };
+          const feedItemsOrder = [...get().feedItemsOrder];
+          const existingIds = new Set(feedItemsOrder);
+
+          chunk.feedItems.forEach((item) => {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          });
+
+          set({
+            feedItemsDict,
+            feedItemsOrder: feedItemsOrder.sort(
+              sortFeedItemsOrderByDate(get().feedItemsDict),
+            ),
+            categoryPaginationState: {
+              ...get().categoryPaginationState,
+              [categoryId]: {
+                ...get().categoryPaginationState[categoryId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching more items for category:", error);
+        set({
+          categoryPaginationState: {
+            ...get().categoryPaginationState,
+            [categoryId]: {
+              ...get().categoryPaginationState[categoryId],
+              [visibilityFilter]: {
+                ...get().categoryPaginationState[categoryId]?.[visibilityFilter],
                 isFetching: false,
               } as PaginationState,
             },
@@ -751,6 +1159,14 @@ export const {
   useFetchItemsForAllViews,
   useFetchMoreItems,
   useGetPaginationState,
+  useFeedPaginationState,
+  useCategoryPaginationState,
+  useFetchedFeedFilters,
+  useFetchedCategoryFilters,
+  useFetchItemsForFeed,
+  useFetchItemsForCategory,
+  useFetchMoreItemsForFeed,
+  useFetchMoreItemsForCategory,
   useReset: useResetFeedItems,
 } = feedItemsStore;
 
