@@ -2,22 +2,22 @@ import { createStore, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
+import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
+import { feedCategoriesStore } from "./feed-categories/store";
 import { feedsStore } from "./feeds/store";
 import { viewsStore } from "./views/store";
-import { contentCategoriesStore } from "./content-categories/store";
-import { feedCategoriesStore } from "./feed-categories/store";
-import type { ApplicationFeedItem } from "~/server/db/schema";
+import type { VisibilityFilter } from "./atoms";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
+import type { ApplicationFeedItem } from "~/server/db/schema";
 import type {
   GetByViewChunk,
-  GetItemsByVisibilityChunk,
-  GetItemsByFeedChunk,
   GetItemsByCategoryIdChunk,
+  GetItemsByFeedChunk,
+  GetItemsByVisibilityChunk,
   PaginationCursor,
   RevalidateViewChunk,
 } from "~/server/api/routers/initialRouter";
-import type { VisibilityFilter } from "./atoms";
 
 export type PaginationState = {
   cursor: PaginationCursor;
@@ -477,10 +477,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       });
 
       try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed({
-          feedId,
-          visibilityFilter,
-        })) as AsyncIterable<GetItemsByFeedChunk>) {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed(
+          {
+            feedId,
+            visibilityFilter,
+          },
+        )) as AsyncIterable<GetItemsByFeedChunk>) {
           if (chunk.type === "error") {
             console.error("Error fetching items for feed:", chunk.message);
             continue;
@@ -577,10 +579,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       });
 
       try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId({
-          categoryId,
-          visibilityFilter,
-        })) as AsyncIterable<GetItemsByCategoryIdChunk>) {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId(
+          {
+            categoryId,
+            visibilityFilter,
+          },
+        )) as AsyncIterable<GetItemsByCategoryIdChunk>) {
           if (chunk.type === "error") {
             console.error("Error fetching items for category:", chunk.message);
             continue;
@@ -670,11 +674,13 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       });
 
       try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed({
-          feedId,
-          visibilityFilter,
-          cursor: paginationState.cursor,
-        })) as AsyncIterable<GetItemsByFeedChunk>) {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed(
+          {
+            feedId,
+            visibilityFilter,
+            cursor: paginationState.cursor,
+          },
+        )) as AsyncIterable<GetItemsByFeedChunk>) {
           if (chunk.type === "error") {
             console.error("Error fetching more items for feed:", chunk.message);
             continue;
@@ -752,13 +758,18 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       });
 
       try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId({
-          categoryId,
-          visibilityFilter,
-          cursor: paginationState.cursor,
-        })) as AsyncIterable<GetItemsByCategoryIdChunk>) {
+        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId(
+          {
+            categoryId,
+            visibilityFilter,
+            cursor: paginationState.cursor,
+          },
+        )) as AsyncIterable<GetItemsByCategoryIdChunk>) {
           if (chunk.type === "error") {
-            console.error("Error fetching more items for category:", chunk.message);
+            console.error(
+              "Error fetching more items for category:",
+              chunk.message,
+            );
             continue;
           }
 
@@ -800,7 +811,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             [categoryId]: {
               ...get().categoryPaginationState[categoryId],
               [visibilityFilter]: {
-                ...get().categoryPaginationState[categoryId]?.[visibilityFilter],
+                ...get().categoryPaginationState[categoryId]?.[
+                  visibilityFilter
+                ],
                 isFetching: false,
               } as PaginationState,
             },
@@ -1187,26 +1200,4 @@ export const useFeedItemState = (id: string) => {
   const setValue = useSetFeedItemValue(id);
 
   return [value, setValue] as const;
-};
-
-/**
- * Returns true if any fetching is happening (initial load or pagination)
- */
-export const useIsAnyFetching = () => {
-  return useStore(
-    feedItemsStore,
-    useShallow((store) => {
-      // Check initial/refresh fetch status
-      if (store.fetchFeedItemsStatus === "fetching") return true;
-
-      // Check if any pagination is fetching
-      for (const viewState of Object.values(store.viewPaginationState)) {
-        for (const paginationState of Object.values(viewState)) {
-          if (paginationState?.isFetching) return true;
-        }
-      }
-
-      return false;
-    }),
-  );
 };
