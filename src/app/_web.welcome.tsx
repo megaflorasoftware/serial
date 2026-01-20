@@ -9,7 +9,6 @@ import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 
 export const Route = createFileRoute("/_web/welcome")({
   beforeLoad: () => {
-    console.log(IS_MAIN_INSTANCE);
     if (!IS_MAIN_INSTANCE) {
       throw redirect({ to: BASE_SIGNED_OUT_URL });
     }
