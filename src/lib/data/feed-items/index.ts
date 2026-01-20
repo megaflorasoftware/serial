@@ -1,17 +1,15 @@
 import { useAtomValue } from "jotai";
-import { useMemo } from "react";
 import {
   categoryFilterAtom,
   dateFilterAtom,
   feedFilterAtom,
   viewFilterAtom,
-  viewsAtom,
   visibilityFilterAtom,
 } from "../atoms";
 import { feedItemsStore } from "../store";
 import { useFeedCategories } from "../feed-categories/store";
 import { useFeeds } from "../feeds/store";
-import { INBOX_VIEW_ID } from "../views";
+import { INBOX_VIEW_ID, useCustomViewsData } from "../views";
 import { isFeedCompatibleWithContentType } from "./filters";
 import type { VisibilityFilter } from "../atoms";
 import type {
@@ -50,13 +48,6 @@ export function doesFeedItemPassFilters(
   if (visibilityFilter === "later" && !item.isWatchLater) {
     return false;
   }
-
-  // if (visibilityFilter === "shorts" && item.orientation !== "vertical") {
-  //   return false;
-  // }
-  // if (visibilityFilter !== "shorts" && item.orientation === "vertical") {
-  //   return false;
-  // }
 
   // Category filter
   const feedIdsInCategory = feedCategories
@@ -166,16 +157,7 @@ export const useFilteredFeedItemsOrder = () => {
   const feedFilter = useAtomValue(feedFilterAtom);
   const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
-  const views = useAtomValue(viewsAtom);
-
-  // Compute custom views (non-Uncategorized views) and their category IDs
-  const customViews = useMemo(() => {
-    return views.filter((v) => v.id !== INBOX_VIEW_ID);
-  }, [views]);
-
-  const customViewCategoryIds = useMemo(() => {
-    return new Set(customViews.flatMap((v) => v.categoryIds));
-  }, [customViews]);
+  const { customViews, customViewCategoryIds } = useCustomViewsData();
 
   return feedItemsOrder.filter((id) => {
     return (
@@ -204,16 +186,7 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const feedFilter = useAtomValue(feedFilterAtom);
   const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
-  const views = useAtomValue(viewsAtom);
-
-  // Compute custom views (non-Uncategorized views) and their category IDs
-  const customViews = useMemo(() => {
-    return views.filter((v) => v.id !== INBOX_VIEW_ID);
-  }, [views]);
-
-  const customViewCategoryIds = useMemo(() => {
-    return new Set(customViews.flatMap((v) => v.categoryIds));
-  }, [customViews]);
+  const { customViews, customViewCategoryIds } = useCustomViewsData();
 
   return doesFeedItemPassFilters(
     item,

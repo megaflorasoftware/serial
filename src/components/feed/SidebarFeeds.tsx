@@ -8,7 +8,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
 import type { ApplicationFeed } from "~/server/db/schema";
@@ -32,7 +32,6 @@ import {
   dateFilterAtom,
   feedFilterAtom,
   viewFilterAtom,
-  viewsAtom,
   visibilityFilterAtom,
 } from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
@@ -46,7 +45,7 @@ import {
   useHasInitialData,
   useViewFeedIds,
 } from "~/lib/data/store";
-import { INBOX_VIEW_ID } from "~/lib/data/views";
+import { useCustomViewsData } from "~/lib/data/views";
 
 function useCheckFilteredFeedItemsForFeed() {
   const feedItemsOrder = useFeedItemsOrder();
@@ -58,16 +57,7 @@ function useCheckFilteredFeedItemsForFeed() {
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
-  const views = useAtomValue(viewsAtom);
-
-  // Compute custom views (non-Uncategorized views) and their category IDs
-  const customViews = useMemo(() => {
-    return views.filter((v) => v.id !== INBOX_VIEW_ID);
-  }, [views]);
-
-  const customViewCategoryIds = useMemo(() => {
-    return new Set(customViews.flatMap((v) => v.categoryIds));
-  }, [customViews]);
+  const { customViews, customViewCategoryIds } = useCustomViewsData();
 
   return useCallback(
     (feed: number) => {

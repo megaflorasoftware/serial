@@ -12,7 +12,8 @@ export const feedItemsOrderAtom = atom<string[]>([]);
 export const hasSetInitialViewAtom = atom(false);
 export const viewsAtom = atom<ApplicationView[]>([]);
 
-export const dateFilterAtom = atom<number>(9999999);
+const ALL_TIME_DATE_FILTER = 0;
+export const dateFilterAtom = atom<number>(ALL_TIME_DATE_FILTER);
 export const visibilityFilterSchema = z.enum(["unread", "read", "later"]);
 export type VisibilityFilter = z.infer<typeof visibilityFilterSchema>;
 export const visibilityFilterAtom = atom<VisibilityFilter>("unread");

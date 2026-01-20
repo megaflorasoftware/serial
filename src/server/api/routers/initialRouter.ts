@@ -9,10 +9,7 @@ import type {
 } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import { prepareArrayChunks } from "~/lib/iterators";
-import {
-  INBOX_VIEW_ID,
-  INBOX_VIEW_PLACEMENT,
-} from "~/lib/data/views/constants";
+import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
 import {
   buildContentTypeFilter,
   buildTimeWindowFilter,
@@ -21,6 +18,7 @@ import {
   isFeedCompatibleWithContentType,
 } from "~/lib/data/feed-items/filters";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
+import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
 
 import {
   contentCategories,
@@ -31,12 +29,6 @@ import {
   viewCategories,
   views,
 } from "~/server/db/schema";
-import {
-  FEED_ITEM_ORIENTATION,
-  VIEW_CONTENT_TYPE,
-  VIEW_LAYOUT,
-  VIEW_READ_STATUS,
-} from "~/server/db/constants";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
@@ -55,45 +47,6 @@ export type RevalidateViewChunk =
   | { type: "views"; views: ApplicationView[] }
   | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] }
   | { type: "view-feeds"; viewId: number; feedIds: number[] };
-
-/**
- * Build the Uncategorized view server-side
- * Replicates client-side logic from src/lib/data/views/index.ts
- */
-function buildUncategorizedView(
-  userId: string,
-  contentCategoriesList: DatabaseContentCategory[],
-  customViews: ApplicationView[],
-): ApplicationView {
-  const allCategoryIdsSet = new Set(
-    contentCategoriesList.map((category) => category.id),
-  );
-  const customViewCategoryIdsSet = new Set(
-    customViews.flatMap((view) => view.categoryIds),
-  );
-
-  const inboxCategoryIds = [...allCategoryIdsSet].filter(
-    (id) => !customViewCategoryIdsSet.has(id),
-  );
-
-  const now = new Date();
-
-  return {
-    id: INBOX_VIEW_ID,
-    name: "Uncategorized",
-    daysWindow: 0,
-    orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
-    contentType: VIEW_CONTENT_TYPE.LONGFORM,
-    layout: VIEW_LAYOUT.LIST,
-    readStatus: VIEW_READ_STATUS.UNREAD,
-    placement: INBOX_VIEW_PLACEMENT,
-    userId,
-    createdAt: now,
-    updatedAt: now,
-    categoryIds: inboxCategoryIds,
-    isDefault: true,
-  };
-}
 
 /**
  * Compute which feeds belong to a view based on categories and content type.
@@ -246,6 +199,9 @@ export const getAllByView = protectedProcedure.handler(async function* ({
   // Parse feeds to ApplicationFeed
   const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
 
+  // Pre-build a Map for O(1) feed lookups by ID
+  const feedsById = new Map(feedsList.map((f) => [f.id, f]));
+
   // Step 2: Yield prerequisite data chunks
   yield {
     type: "views",
@@ -326,7 +282,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({
 
     if (initialItems.length > 0) {
       const applicationItems = initialItems.map((item) => {
-        const itemFeed = feedsList.find((f) => f.id === item.feedId);
+        const itemFeed = feedsById.get(item.feedId);
         return {
           ...item,
           platform: itemFeed?.platform ?? "youtube",
@@ -369,7 +325,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({
   });
 
   const existingApplicationFeedItems = itemsData.map((item) => {
-    const itemFeed = feedsList.find((f) => f.id === item.feedId);
+    const itemFeed = feedsById.get(item.feedId);
 
     return {
       ...item,
@@ -486,6 +442,9 @@ export const revalidateView = protectedProcedure
     // Parse feeds to ApplicationFeed
     const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
 
+    // Pre-build a Map for O(1) feed lookups by ID
+    const feedsById = new Map(feedsList.map((f) => [f.id, f]));
+
     // Collect all category IDs used by custom views (for Uncategorized view exclusion)
     const customViewCategoryIds = new Set(
       customViews.flatMap((v) => v.categoryIds),
@@ -558,7 +517,7 @@ export const revalidateView = protectedProcedure
       });
 
       const applicationFeedItems = itemsData.map((item) => {
-        const itemFeed = feedsList.find((f) => f.id === item.feedId);
+        const itemFeed = feedsById.get(item.feedId);
 
         return {
           ...item,

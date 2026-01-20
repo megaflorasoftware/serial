@@ -340,15 +340,15 @@ function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
 
   return (
     <ThumbnailContainer layout={layout} thumbnailType={thumbnailType}>
-      {thumbnailType === "horizontal-video" && (
-        <VideoThumbnail thumbnail={item.thumbnail!} title={item.title} />
+      {thumbnailType === "horizontal-video" && item.thumbnail && (
+        <VideoThumbnail thumbnail={item.thumbnail} title={item.title} />
       )}
-      {thumbnailType === "vertical-video" && (
-        <ShortsThumbnail thumbnail={item.thumbnail!} title={item.title} />
+      {thumbnailType === "vertical-video" && item.thumbnail && (
+        <ShortsThumbnail thumbnail={item.thumbnail} title={item.title} />
       )}
-      {thumbnailType === "article" && (
+      {thumbnailType === "article" && item.thumbnail && (
         <ArticleThumbnail
-          thumbnail={item.thumbnail!}
+          thumbnail={item.thumbnail}
           title={item.title}
           feedImageUrl={feed?.imageUrl}
           feedName={feed?.name}

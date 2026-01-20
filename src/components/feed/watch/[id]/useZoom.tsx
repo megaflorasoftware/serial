@@ -2,7 +2,7 @@
 
 import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FeedPlatform } from "~/server/db/schema";
 import {
   articleZoomAtom,
@@ -32,14 +32,8 @@ export function useZoom() {
   const platform = feedItem?.platform ?? "";
   const isVertical = feedItem?.orientation === "vertical";
 
-  const minZoom = useMemo(
-    () => (isVertical ? MIN_ZOOM_VERTICAL : MIN_ZOOM),
-    [isVertical],
-  );
-  const maxZoom = useMemo(
-    () => (isVertical ? MAX_ZOOM_VERTICAL : MAX_ZOOM),
-    [isVertical],
-  );
+  const minZoom = isVertical ? MIN_ZOOM_VERTICAL : MIN_ZOOM;
+  const maxZoom = isVertical ? MAX_ZOOM_VERTICAL : MAX_ZOOM;
 
   const [longformVideoZoom, setLongformVideoZoom] = useAtom(
     longformVideoZoomAtom,

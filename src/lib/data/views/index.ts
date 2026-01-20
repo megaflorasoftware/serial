@@ -59,12 +59,7 @@ export function useCheckFilteredFeedItemsForView() {
   const { feeds } = useFeeds();
   const { views } = useViews();
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
-
-  // Compute custom view category IDs (categories assigned to non-Uncategorized views)
-  const customViewCategoryIds = useMemo(() => {
-    const customViews = views.filter((v) => v.id !== INBOX_VIEW_ID);
-    return new Set(customViews.flatMap((v) => v.categoryIds));
-  }, [views]);
+  const { customViewCategoryIds } = useCustomViewsData();
 
   return useCallback(
     (viewId: number) => {
@@ -106,4 +101,22 @@ export function useViews() {
     views,
     hasFetchedViews: fetchStatus === "success",
   };
+}
+
+/**
+ * Hook to compute custom views (non-Uncategorized) and their category IDs.
+ * Use this to avoid duplicating this computation across multiple hooks.
+ */
+export function useCustomViewsData() {
+  const views = useAtomValue(viewsAtom);
+
+  const customViews = useMemo(() => {
+    return views.filter((v) => v.id !== INBOX_VIEW_ID);
+  }, [views]);
+
+  const customViewCategoryIds = useMemo(() => {
+    return new Set(customViews.flatMap((v) => v.categoryIds));
+  }, [customViews]);
+
+  return { customViews, customViewCategoryIds };
 }
