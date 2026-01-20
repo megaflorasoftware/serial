@@ -119,21 +119,23 @@ function ThumbnailContainer({
         // List layout: videos use natural aspect ratio, others use square
         "h-9 w-16": layout === "list" && thumbnailType === "horizontal-video",
         "h-16 w-9": layout === "list" && thumbnailType === "vertical-video",
-        "size-16": layout === "list" && thumbnailType === "icon",
-        "size-16 bg-muted": layout === "list" && thumbnailType === "none",
+        "size-16":
+          layout === "list" &&
+          (thumbnailType === "icon" || thumbnailType === "none"),
         // Large list layout
         "aspect-video w-44":
           layout === "large-list" && thumbnailType === "horizontal-video",
         "aspect-[9/16] w-44":
           layout === "large-list" && thumbnailType === "vertical-video",
-        "aspect-[3/2] w-44": layout === "large-list" && !isVideo,
-        // Grid layouts
+        "bg-muted aspect-[3/2] w-44": layout === "large-list" && !isVideo,
+        // Grid layout (standard)
         "aspect-video w-full":
           (layout === "grid" || layout === "large-grid") &&
           thumbnailType === "horizontal-video",
         "aspect-[9/16] w-full":
           (layout === "grid" || layout === "large-grid") &&
           thumbnailType === "vertical-video",
+        // Non-video grid layouts
         "aspect-[3/2] w-full":
           (layout === "grid" || layout === "large-grid") && !isVideo,
       })}
@@ -188,12 +190,12 @@ function ArticleThumbnail({
         alt={title}
         className="absolute inset-0 h-full w-full object-cover"
       />
-      <div className="absolute inset-0 bg-foreground/30 dark:bg-background/30" />
+      <div className="bg-foreground/30 dark:bg-background/30 absolute inset-0" />
       {feedImageUrl && (
         <img
           src={feedImageUrl}
           alt={feedName}
-          className="absolute top-2 left-2 z-10 h-8 w-8 rounded bg-background object-contain p-1 shadow-md dark:bg-foreground"
+          className="bg-background dark:bg-foreground absolute top-2 left-2 z-10 h-8 w-8 rounded object-contain p-1 shadow-md"
         />
       )}
     </>
@@ -219,8 +221,8 @@ function IconThumbnail({ feedImageUrl, feedName }: IconThumbnailProps) {
 
 function EmptyThumbnail() {
   return (
-    <div className="absolute inset-0 grid place-items-center bg-muted">
-      <div className="h-8 w-8 rounded bg-muted-foreground/20" />
+    <div className="absolute inset-0 grid place-items-center bg-transparent">
+      <div className="bg-muted-foreground/20 h-8 w-8 rounded" />
     </div>
   );
 }
@@ -307,7 +309,9 @@ export function ItemDisplay({
     <article
       className={clsx(
         "group relative flex w-full flex-1 justify-stretch gap-2",
-        isLarge ? "flex-col md:flex-row md:items-center" : "items-center md:h-20",
+        isLarge
+          ? "flex-col md:flex-row md:items-center"
+          : "items-center md:h-20",
         {
           "opacity-50": item.isWatched,
         },
@@ -355,7 +359,7 @@ export function ItemDisplay({
         className={clsx(
           "flex flex-row flex-wrap items-center",
           isLarge
-            ? "justify-start pl-6 pb-2 md:h-full md:justify-center md:pl-0 md:pb-0 md:pr-0"
+            ? "justify-start pb-2 pl-6 md:h-full md:justify-center md:pr-0 md:pb-0 md:pl-0"
             : "h-full justify-center pr-6 md:pr-0",
         )}
       >
@@ -456,7 +460,13 @@ export function GridItemDisplay({
         target={target}
         rel={rel}
         preload={shouldOpenInSerial ? "viewport" : undefined}
-        className="sm:hover:bg-muted flex w-full flex-col rounded p-2 text-left transition-colors"
+        className={clsx(
+          "sm:hover:bg-muted flex flex-col rounded p-2 text-left transition-colors",
+          {
+            "w-full": !isLarge,
+            "w-[calc(100vw-3rem)] md:w-full": isLarge,
+          },
+        )}
       >
         <ItemThumbnail
           layout={isLarge ? "large-grid" : "grid"}
