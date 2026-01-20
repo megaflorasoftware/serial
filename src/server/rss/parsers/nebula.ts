@@ -131,6 +131,7 @@ export async function fetchNebulaFeedData(
             author: item["dc:creator"] ?? item.creator ?? data.title,
             thumbnail: extractThumbnailFromContent(item.content),
             content: item.contentSnippet,
+            contentSnippet: item.contentSnippet,
           } satisfies RSSContent;
         })
         .filter(Boolean),

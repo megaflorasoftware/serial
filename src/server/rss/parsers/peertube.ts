@@ -96,6 +96,7 @@ export async function fetchPeerTubeFeedData(
             author: item.creator,
             thumbnail: item["media:thumbnail"].$.url,
             content: item["media:description"],
+            contentSnippet: item["media:description"],
           } satisfies RSSContent;
         })
         .filter(Boolean),
