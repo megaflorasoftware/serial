@@ -86,7 +86,15 @@ export function useCheckFilteredFeedItemsForView() {
           ),
       );
     },
-    [feedItemsOrder, feedItemsDict, feedCategories, feeds, views, customViewCategoryIds, visibilityFilter],
+    [
+      feedItemsOrder,
+      feedItemsDict,
+      feedCategories,
+      feeds,
+      views,
+      customViewCategoryIds,
+      visibilityFilter,
+    ],
   );
 }
 

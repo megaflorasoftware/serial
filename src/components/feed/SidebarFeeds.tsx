@@ -42,7 +42,6 @@ import {
   useFeedItemsDict,
   useFeedItemsOrder,
   useFeedStatusDict,
-  useFetchFeedItemsLastFetchedAt,
   useFetchFeedItemsStatus,
   useHasInitialData,
   useViewFeedIds,
@@ -148,7 +147,6 @@ export function SidebarFeeds() {
   const viewFilter = useAtomValue(viewFilterAtom);
   const feedStatusDict = useFeedStatusDict();
   const fetchFeedItemsStatus = useFetchFeedItemsStatus();
-  const fetchFeedItemsLastFetchedAt = useFetchFeedItemsLastFetchedAt();
   const hasInitialData = useHasInitialData();
 
   const checkFilteredFeedItemsForFeed = useCheckFilteredFeedItemsForFeed();

@@ -84,7 +84,8 @@ export function doesFeedItemPassFilters(
   // AND whose platform is compatible with that view's content type
   if (viewFilter?.id === INBOX_VIEW_ID) {
     const feedCategoriesForItem = feedCategories.filter(
-      (fc) => fc.feedId === item.feedId && customViewCategoryIds?.has(fc.categoryId),
+      (fc) =>
+        fc.feedId === item.feedId && customViewCategoryIds?.has(fc.categoryId),
     );
 
     // Check if this feed would appear in any custom view

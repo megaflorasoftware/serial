@@ -180,45 +180,46 @@ export const getAllByView = protectedProcedure.handler(async function* ({
   context,
 }) {
   // Step 1: Fetch all prerequisite data in parallel
-  const [viewsList, feedsList, contentCategoriesList] =
-    await Promise.all([
-      // Views
-      context.db
-        .select()
-        .from(views)
-        .where(eq(views.userId, context.user.id))
-        .orderBy(asc(views.placement)),
+  const [viewsList, feedsList, contentCategoriesList] = await Promise.all([
+    // Views
+    context.db
+      .select()
+      .from(views)
+      .where(eq(views.userId, context.user.id))
+      .orderBy(asc(views.placement)),
 
-      // Feeds
-      context.db.query.feeds.findMany({
-        where: eq(feeds.userId, context.user.id),
-      }),
+    // Feeds
+    context.db.query.feeds.findMany({
+      where: eq(feeds.userId, context.user.id),
+    }),
 
-      // Content categories
-      context.db
-        .select()
-        .from(contentCategories)
-        .where(eq(contentCategories.userId, context.user.id))
-        .orderBy(asc(contentCategories.name)),
-    ]);
+    // Content categories
+    context.db
+      .select()
+      .from(contentCategories)
+      .where(eq(contentCategories.userId, context.user.id))
+      .orderBy(asc(contentCategories.name)),
+  ]);
 
   // Fetch feed categories filtered by user's content categories
   const userContentCategoryIds = contentCategoriesList.map((cc) => cc.id);
-  const feedCategoriesList = userContentCategoryIds.length > 0
-    ? await context.db
-        .select()
-        .from(feedCategories)
-        .where(inArray(feedCategories.categoryId, userContentCategoryIds))
-    : [];
+  const feedCategoriesList =
+    userContentCategoryIds.length > 0
+      ? await context.db
+          .select()
+          .from(feedCategories)
+          .where(inArray(feedCategories.categoryId, userContentCategoryIds))
+      : [];
 
   // Get view categories filtered by user's views
   const userViewIds = viewsList.map((v) => v.id);
-  const viewCategoriesList = userViewIds.length > 0
-    ? await context.db
-        .select()
-        .from(viewCategories)
-        .where(inArray(viewCategories.viewId, userViewIds))
-    : [];
+  const viewCategoriesList =
+    userViewIds.length > 0
+      ? await context.db
+          .select()
+          .from(viewCategories)
+          .where(inArray(viewCategories.viewId, userViewIds))
+      : [];
 
   // Transform views to ApplicationView with categoryIds
   const customViews: ApplicationView[] = viewsList.map((view) => ({
@@ -419,45 +420,46 @@ export const revalidateView = protectedProcedure
   .input(z.object({ viewId: z.number() }))
   .handler(async function* ({ context, input }) {
     // Step 1: Fetch all prerequisite data in parallel
-    const [viewsList, feedsList, contentCategoriesList] =
-      await Promise.all([
-        // Views
-        context.db
-          .select()
-          .from(views)
-          .where(eq(views.userId, context.user.id))
-          .orderBy(asc(views.placement)),
+    const [viewsList, feedsList, contentCategoriesList] = await Promise.all([
+      // Views
+      context.db
+        .select()
+        .from(views)
+        .where(eq(views.userId, context.user.id))
+        .orderBy(asc(views.placement)),
 
-        // Feeds
-        context.db.query.feeds.findMany({
-          where: eq(feeds.userId, context.user.id),
-        }),
+      // Feeds
+      context.db.query.feeds.findMany({
+        where: eq(feeds.userId, context.user.id),
+      }),
 
-        // Content categories
-        context.db
-          .select()
-          .from(contentCategories)
-          .where(eq(contentCategories.userId, context.user.id))
-          .orderBy(asc(contentCategories.name)),
-      ]);
+      // Content categories
+      context.db
+        .select()
+        .from(contentCategories)
+        .where(eq(contentCategories.userId, context.user.id))
+        .orderBy(asc(contentCategories.name)),
+    ]);
 
     // Fetch feed categories filtered by user's content categories
     const userContentCategoryIds = contentCategoriesList.map((cc) => cc.id);
-    const feedCategoriesList = userContentCategoryIds.length > 0
-      ? await context.db
-          .select()
-          .from(feedCategories)
-          .where(inArray(feedCategories.categoryId, userContentCategoryIds))
-      : [];
+    const feedCategoriesList =
+      userContentCategoryIds.length > 0
+        ? await context.db
+            .select()
+            .from(feedCategories)
+            .where(inArray(feedCategories.categoryId, userContentCategoryIds))
+        : [];
 
     // Get view categories filtered by user's views
     const userViewIds = viewsList.map((v) => v.id);
-    const viewCategoriesList = userViewIds.length > 0
-      ? await context.db
-          .select()
-          .from(viewCategories)
-          .where(inArray(viewCategories.viewId, userViewIds))
-      : [];
+    const viewCategoriesList =
+      userViewIds.length > 0
+        ? await context.db
+            .select()
+            .from(viewCategories)
+            .where(inArray(viewCategories.viewId, userViewIds))
+        : [];
 
     // Transform views to ApplicationView with categoryIds
     const customViews: ApplicationView[] = viewsList.map((view) => ({

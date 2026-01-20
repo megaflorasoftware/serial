@@ -43,7 +43,13 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
       hasSetInitialView.current = true;
       updateViewFilter(currentViewId, viewsFromStore);
     }
-  }, [hasInitialData, viewsFetchStatus, viewsFromStore, currentViewId, updateViewFilter]);
+  }, [
+    hasInitialData,
+    viewsFetchStatus,
+    viewsFromStore,
+    currentViewId,
+    updateViewFilter,
+  ]);
 
   return children;
 }

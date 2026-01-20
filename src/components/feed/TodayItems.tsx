@@ -1,6 +1,7 @@
 "use client";
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import {
   CheckIcon,
@@ -11,7 +12,6 @@ import {
   SendIcon,
   SproutIcon,
 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
 import { useDialogStore } from "./dialogStore";
 import FeedLoading from "~/components/loading";
 import { Button } from "~/components/ui/button";
@@ -25,7 +25,6 @@ import {
 
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
-import { timeAgo } from "~/lib/utils";
 import {
   useFeedItemsSetWatchedValueMutation,
   useFeedItemsSetWatchLaterValueMutation,
@@ -41,7 +40,7 @@ import {
   useFetchFeedItemsLastFetchedAt,
   useHasInitialData,
 } from "~/lib/data/store";
-import { useViews } from "~/lib/data/views";
+import { timeAgo } from "~/lib/utils";
 
 function TodayItemsEmptyState() {
   return (
@@ -248,7 +247,7 @@ function ItemDisplay({ contentId }: { contentId: string }) {
 export function TodayItems() {
   const { feeds, hasFetchedFeeds } = useFeeds();
   const { hasFetchedFeedCategories } = useFeedCategories();
-  const { views } = useViews();
+
   const feedItemsLastFetchedAt = useFetchFeedItemsLastFetchedAt();
   const hasInitialData = useHasInitialData();
 

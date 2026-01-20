@@ -26,13 +26,22 @@ export function isFeedCompatibleWithContentType(
   feedPlatform: string,
   viewContentType: string | undefined,
 ): boolean {
-  if (!viewContentType || viewContentType === "all" || viewContentType === "longform") {
+  if (
+    !viewContentType ||
+    viewContentType === "all" ||
+    viewContentType === "longform"
+  ) {
     return true;
   }
 
   // For video-specific content types, only video platforms are compatible
-  if (viewContentType === "horizontal-video" || viewContentType === "vertical-video") {
-    return VIDEO_PLATFORMS.includes(feedPlatform as (typeof VIDEO_PLATFORMS)[number]);
+  if (
+    viewContentType === "horizontal-video" ||
+    viewContentType === "vertical-video"
+  ) {
+    return VIDEO_PLATFORMS.includes(
+      feedPlatform as (typeof VIDEO_PLATFORMS)[number],
+    );
   }
 
   return true;
@@ -209,7 +218,9 @@ export function buildContentTypeFilter(
   // Get IDs of feeds that are video platforms
   const videoFeedIds = feeds
     .filter((feed) =>
-      VIDEO_PLATFORMS.includes(feed.platform as (typeof VIDEO_PLATFORMS)[number]),
+      VIDEO_PLATFORMS.includes(
+        feed.platform as (typeof VIDEO_PLATFORMS)[number],
+      ),
     )
     .map((feed) => feed.id);
 
@@ -302,7 +313,12 @@ export function buildFeedItemFilters(
     buildVisibilityFilter(visibilityFilter),
     buildCategoryFilter(categoryFilter, feedCategories),
     buildFeedFilter(feedFilter),
-    buildViewCategoryFilter(viewFilter, feedCategories, allFeedIds, customViewCategoryIds),
+    buildViewCategoryFilter(
+      viewFilter,
+      feedCategories,
+      allFeedIds,
+      customViewCategoryIds,
+    ),
     buildContentTypeFilter(viewFilter?.contentType, feeds),
     buildTimeWindowFilter(viewFilter?.daysWindow),
   ];

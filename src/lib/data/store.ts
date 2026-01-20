@@ -9,7 +9,10 @@ import { contentCategoriesStore } from "./content-categories/store";
 import { feedCategoriesStore } from "./feed-categories/store";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
-import type { GetByViewChunk, RevalidateViewChunk } from "~/server/api/routers/initialRouter";
+import type {
+  GetByViewChunk,
+  RevalidateViewChunk,
+} from "~/server/api/routers/initialRouter";
 
 export type ApplicationStore = {
   reset: () => void;
@@ -215,7 +218,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
           case "content-categories":
             // Set content categories in content categories store
-            contentCategoriesStore.getState().set(incomingChunk.contentCategories);
+            contentCategoriesStore
+              .getState()
+              .set(incomingChunk.contentCategories);
             break;
 
           case "feed-categories":
@@ -309,7 +314,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
     },
 
     revalidateView: async (viewId: number) => {
-      for await (const chunk of (await orpcRouterClient.initial.revalidateView({ viewId })) as AsyncIterable<RevalidateViewChunk>) {
+      for await (const chunk of (await orpcRouterClient.initial.revalidateView({
+        viewId,
+      })) as AsyncIterable<RevalidateViewChunk>) {
         switch (chunk.type) {
           case "views":
             // Update views in views store
