@@ -160,11 +160,18 @@ function ItemDisplay({ contentId }: { contentId: string }) {
         className="sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 py-4 pr-4 pl-6 text-left transition-colors md:h-20 md:flex-row md:items-center md:rounded md:py-0 md:pr-0"
       >
         {item.thumbnail ? (
-          <img
-            src={item.thumbnail}
-            alt={item.title}
-            className="aspect-video w-16 rounded object-cover"
-          />
+          <div className="flex w-16 items-center justify-center">
+            <img
+              src={item.thumbnail}
+              alt={item.title}
+              className={clsx(
+                "rounded object-cover",
+                item.orientation === "vertical"
+                  ? "aspect-[9/16] h-14"
+                  : "aspect-video w-full",
+              )}
+            />
+          </div>
         ) : feed?.imageUrl ? (
           <div className="grid size-16 place-items-center rounded object-contain p-3">
             <img
