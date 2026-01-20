@@ -1,4 +1,4 @@
-import { and, asc, eq, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import type { ApplicationView } from "~/server/db/schema";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
@@ -139,19 +139,27 @@ export const deleteView = protectedProcedure
   });
 
 export const getAll = protectedProcedure.handler(async ({ context }) => {
-  const [viewsList, viewCategoriesList, contentCategoriesList] =
-    await Promise.all([
-      context.db
-        .select()
-        .from(views)
-        .where(eq(views.userId, context.user.id))
-        .orderBy(asc(views.placement)),
-      context.db.select().from(viewCategories),
-      context.db
-        .select()
-        .from(contentCategories)
-        .where(eq(contentCategories.userId, context.user.id)),
-    ]);
+  const [viewsList, contentCategoriesList] = await Promise.all([
+    context.db
+      .select()
+      .from(views)
+      .where(eq(views.userId, context.user.id))
+      .orderBy(asc(views.placement)),
+    context.db
+      .select()
+      .from(contentCategories)
+      .where(eq(contentCategories.userId, context.user.id)),
+  ]);
+
+  // Fetch view categories filtered by user's views
+  const userViewIds = viewsList.map((v) => v.id);
+  const viewCategoriesList =
+    userViewIds.length > 0
+      ? await context.db
+          .select()
+          .from(viewCategories)
+          .where(inArray(viewCategories.viewId, userViewIds))
+      : [];
 
   const customViews: ApplicationView[] = viewsList.map((view) => ({
     ...view,
