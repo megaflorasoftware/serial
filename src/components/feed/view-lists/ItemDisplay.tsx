@@ -227,6 +227,100 @@ function EmptyThumbnail() {
   );
 }
 
+type ItemActionsLayout = "list" | "large-list" | "grid";
+
+interface ItemActionsProps {
+  contentId: string;
+  item: {
+    id: string;
+    feedId: number;
+    platform: string;
+    isWatchLater: boolean;
+    isWatched: boolean;
+  };
+  layout: ItemActionsLayout;
+}
+
+function ItemActions({ contentId, item, layout }: ItemActionsProps) {
+  const { mutateAsync: setWatchedValue } =
+    useFeedItemsSetWatchedValueMutation(contentId);
+  const { mutateAsync: setWatchLaterValue } =
+    useFeedItemsSetWatchLaterValueMutation(contentId);
+
+  const { data: instapaperStatus } = useInstapaperConnectionStatus();
+  const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
+    useSaveToInstapaperMutation(contentId);
+
+  const isStandardList = layout === "list";
+  const isLargeList = layout === "large-list";
+  const isGrid = layout === "grid";
+
+  const handleSaveToInstapaper = () => {
+    void saveToInstapaper({ feedItemId: item.id });
+  };
+
+  const handleToggleWatchLater = () => {
+    void setWatchLaterValue({
+      id: item.id,
+      feedId: item.feedId,
+      isWatchLater: !item.isWatchLater,
+    });
+  };
+
+  const handleToggleWatched = () => {
+    void setWatchedValue({
+      id: item.id,
+      feedId: item.feedId,
+      isWatched: !item.isWatched,
+    });
+  };
+
+  return (
+    <div
+      className={clsx("flex flex-row items-center", {
+        "h-full justify-center pr-6 md:pr-0": isStandardList,
+        "-ml-2 justify-start gap-1 px-2 pb-2": isGrid,
+        "-ml-2 justify-start pb-2 pl-6 md:ml-0 md:h-full md:justify-center md:pr-0 md:pb-0 md:pl-0":
+          isLargeList,
+      })}
+    >
+      {instapaperStatus?.isConfigured &&
+        instapaperStatus.isConnected &&
+        item.platform === "website" && (
+          <Button
+            size={isGrid ? "sm" : "icon"}
+            variant="ghost"
+            disabled={isSavingToInstapaper}
+            onClick={handleSaveToInstapaper}
+            className={clsx({ "h-8 w-8 p-0": isGrid })}
+          >
+            <SendIcon size={isGrid ? 14 : 16} />
+          </Button>
+        )}
+      <Button
+        size={isGrid ? "sm" : "icon"}
+        variant="ghost"
+        onClick={handleToggleWatchLater}
+        className={clsx({ "h-8 w-8 p-0": isGrid })}
+      >
+        {item.isWatchLater ? (
+          <CheckIcon size={isGrid ? 14 : 16} />
+        ) : (
+          <ClockIcon size={isGrid ? 14 : 16} />
+        )}
+      </Button>
+      <Button
+        size={isGrid ? "sm" : "icon"}
+        variant="ghost"
+        onClick={handleToggleWatched}
+        className={clsx({ "h-8 w-8 p-0": isGrid })}
+      >
+        <EyeIcon size={isGrid ? 14 : 16} />
+      </Button>
+    </div>
+  );
+}
+
 interface ItemThumbnailProps {
   layout: ThumbnailLayout;
   item: {
@@ -279,15 +373,6 @@ export function ItemDisplay({
 }: ItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
-
-  const { mutateAsync: setWatchedValue } =
-    useFeedItemsSetWatchedValueMutation(contentId);
-  const { mutateAsync: setWatchLaterValue } =
-    useFeedItemsSetWatchLaterValueMutation(contentId);
-
-  const { data: instapaperStatus } = useInstapaperConnectionStatus();
-  const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
-    useSaveToInstapaperMutation(contentId);
 
   if (!item) return null;
 
@@ -359,59 +444,11 @@ export function ItemDisplay({
           </>
         )}
       </Link>
-      <div
-        className={clsx(
-          "flex flex-row flex-wrap items-center",
-          isLarge
-            ? "justify-start pb-2 pl-6 md:h-full md:justify-center md:pr-0 md:pb-0 md:pl-0"
-            : "h-full justify-center pr-6 md:pr-0",
-        )}
-      >
-        {instapaperStatus?.isConfigured &&
-          instapaperStatus.isConnected &&
-          item.platform === "website" && (
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={isSavingToInstapaper}
-              onClick={() => {
-                void saveToInstapaper({ feedItemId: item.id });
-              }}
-            >
-              <SendIcon size={16} />
-            </Button>
-          )}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => {
-            void setWatchLaterValue({
-              id: item.id,
-              feedId: item.feedId,
-              isWatchLater: !item.isWatchLater,
-            });
-          }}
-        >
-          {item.isWatchLater ? (
-            <CheckIcon size={16} />
-          ) : (
-            <ClockIcon size={16} />
-          )}
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => {
-            void setWatchedValue({
-              id: item.id,
-              feedId: item.feedId,
-              isWatched: !item.isWatched,
-            });
-          }}
-        >
-          <EyeIcon size={16} />
-        </Button>
-      </div>
+      <ItemActions
+        contentId={contentId}
+        item={item}
+        layout={isLarge ? "large-list" : "list"}
+      />
     </article>
   );
 }
@@ -427,15 +464,6 @@ export function GridItemDisplay({
 }: GridItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
-
-  const { mutateAsync: setWatchedValue } =
-    useFeedItemsSetWatchedValueMutation(contentId);
-  const { mutateAsync: setWatchLaterValue } =
-    useFeedItemsSetWatchLaterValueMutation(contentId);
-
-  const { data: instapaperStatus } = useInstapaperConnectionStatus();
-  const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
-    useSaveToInstapaperMutation(contentId);
 
   if (!item) return null;
 
@@ -488,55 +516,7 @@ export function GridItemDisplay({
           />
         </div>
       </Link>
-      <div className="flex flex-row items-center justify-start gap-1 px-2 pb-2">
-        {instapaperStatus?.isConfigured &&
-          instapaperStatus.isConnected &&
-          item.platform === "website" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={isSavingToInstapaper}
-              onClick={() => {
-                void saveToInstapaper({ feedItemId: item.id });
-              }}
-              className="h-8 w-8 p-0"
-            >
-              <SendIcon size={14} />
-            </Button>
-          )}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            void setWatchLaterValue({
-              id: item.id,
-              feedId: item.feedId,
-              isWatchLater: !item.isWatchLater,
-            });
-          }}
-          className="h-8 w-8 p-0"
-        >
-          {item.isWatchLater ? (
-            <CheckIcon size={14} />
-          ) : (
-            <ClockIcon size={14} />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            void setWatchedValue({
-              id: item.id,
-              feedId: item.feedId,
-              isWatched: !item.isWatched,
-            });
-          }}
-          className="h-8 w-8 p-0"
-        >
-          <EyeIcon size={14} />
-        </Button>
-      </div>
+      <ItemActions contentId={contentId} item={item} layout="grid" />
     </article>
   );
 }
