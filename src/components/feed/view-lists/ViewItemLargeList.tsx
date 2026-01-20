@@ -51,7 +51,9 @@ export function ViewItemLargeList({ items }: ViewItemLargeListProps) {
       {items.map((contentId, index) => (
         <div key={contentId}>
           <ItemDisplay contentId={contentId} size="large" />
-          {index === sentinelIndex && <div ref={sentinelRef} />}
+          {index === sentinelIndex && (
+            <div ref={sentinelRef} key={sentinelIndex} />
+          )}
         </div>
       ))}
     </div>

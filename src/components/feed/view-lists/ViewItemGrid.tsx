@@ -55,7 +55,9 @@ export function ViewItemGrid({ items }: ViewItemGridProps) {
         {items.map((contentId, index) => (
           <div key={contentId}>
             <GridItemDisplay contentId={contentId} size="standard" />
-            {index === sentinelIndex && <div ref={sentinelRef} />}
+            {index === sentinelIndex && (
+              <div ref={sentinelRef} key={sentinelIndex} />
+            )}
           </div>
         ))}
       </div>

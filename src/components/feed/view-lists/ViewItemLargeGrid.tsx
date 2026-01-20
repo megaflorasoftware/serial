@@ -55,7 +55,9 @@ export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
         {items.map((contentId, index) => (
           <div key={contentId}>
             <GridItemDisplay contentId={contentId} size="large" />
-            {index === sentinelIndex && <div ref={sentinelRef} />}
+            {index === sentinelIndex && (
+              <div ref={sentinelRef} key={sentinelIndex} />
+            )}
           </div>
         ))}
       </div>
