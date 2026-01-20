@@ -8,7 +8,7 @@ import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
-import { INITIAL_ITEMS_PER_VIEW } from "~/server/api/constants";
+import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
 interface ViewItemLargeListProps {
   items: string[];
@@ -42,7 +42,7 @@ export function ViewItemLargeList({ items }: ViewItemLargeListProps) {
   });
 
   const sentinelIndex = Math.max(
-    Math.floor(items.length - (INITIAL_ITEMS_PER_VIEW - 10)),
+    Math.floor(items.length - ITEMS_PER_PAGE / 2),
     10,
   );
 

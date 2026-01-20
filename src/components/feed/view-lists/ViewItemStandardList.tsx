@@ -8,7 +8,7 @@ import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
-import { INITIAL_ITEMS_PER_VIEW } from "~/server/api/constants";
+import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
 interface ViewItemStandardListProps {
   items: string[];
@@ -42,7 +42,7 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
   });
 
   const sentinelIndex = Math.max(
-    Math.floor(items.length - (INITIAL_ITEMS_PER_VIEW - 10)),
+    Math.floor(items.length - ITEMS_PER_PAGE / 2),
     10,
   );
 
@@ -52,11 +52,7 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
         <div key={contentId}>
           <ItemDisplay contentId={contentId} size="standard" />
           {index === sentinelIndex && (
-            <div
-              className="h-10 bg-red-500"
-              ref={sentinelRef}
-              key={sentinelIndex}
-            />
+            <div ref={sentinelRef} key={sentinelIndex} />
           )}
         </div>
       ))}

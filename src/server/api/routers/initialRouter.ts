@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
-import { GET_BY_VIEW_CHUNK_SIZE, INITIAL_ITEMS_PER_VIEW } from "../constants";
+import {
+  GET_BY_VIEW_CHUNK_SIZE,
+  INITIAL_ITEMS_PER_VIEW,
+  ITEMS_BY_VISIBILITY_CHUNK_SIZE,
+  ITEMS_PER_PAGE,
+} from "../constants";
 import type {
   ApplicationFeed,
   ApplicationFeedItem,
@@ -681,9 +686,6 @@ export const revalidateView = protectedProcedure
 
     return;
   });
-
-const ITEMS_PER_PAGE = 30;
-const ITEMS_BY_VISIBILITY_CHUNK_SIZE = 10;
 
 /**
  * Cursor schema for pagination
