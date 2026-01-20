@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ClientDatetime } from "~/components/feed/ClientDatetime";
 import { ItemVisibilityChips } from "~/components/feed/ItemVisibilityChips";
-import { TodayItems } from "~/components/feed/TodayItems";
+import { RenderViewItems } from "~/components/feed/view-lists";
 import { ViewFilterChips } from "~/components/feed/ViewFilterChips";
 
 export const Route = createFileRoute("/_app/")({
@@ -23,7 +23,7 @@ function Home() {
           <ViewFilterChips />
         </div>
       </div>
-      <TodayItems />
+      <RenderViewItems />
     </div>
   );
 }

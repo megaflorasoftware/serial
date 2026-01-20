@@ -9,11 +9,13 @@ import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import type React from "react";
-import type { ViewContentType } from "~/server/db/constants";
+import type { ViewContentType, ViewLayout } from "~/server/db/constants";
 import {
   VIEW_CONTENT_TYPE,
+  VIEW_LAYOUT,
   VIEW_READ_STATUS,
   viewContentTypeSchema,
+  viewLayoutSchema,
 } from "~/server/db/constants";
 import {
   useCreateViewMutation,
@@ -132,6 +134,40 @@ const CONTENT_TYPE_HELPER_TEXT = {
   all: "Shows all content",
 } as const satisfies Record<ViewContentType, string>;
 
+function ViewLayoutInput({
+  layout,
+  setLayout,
+}: {
+  layout: ViewLayout;
+  setLayout: (layout: ViewLayout) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor="layout">Layout</Label>
+      <ToggleGroup
+        id="layout"
+        type="single"
+        value={layout}
+        onValueChange={(value: ViewLayout) => {
+          if (!value) return;
+          setLayout(value);
+        }}
+        size="sm"
+        className="w-fit"
+      >
+        <AddViewToggleItem value={VIEW_LAYOUT.LIST}>List</AddViewToggleItem>
+        <AddViewToggleItem value={VIEW_LAYOUT.LARGE_LIST}>
+          Large List
+        </AddViewToggleItem>
+        <AddViewToggleItem value={VIEW_LAYOUT.GRID}>Grid</AddViewToggleItem>
+        <AddViewToggleItem value={VIEW_LAYOUT.LARGE_GRID}>
+          Large Grid
+        </AddViewToggleItem>
+      </ToggleGroup>
+    </div>
+  );
+}
+
 function ViewContentTypeInput({
   contentType,
   setContentType,
@@ -240,6 +276,7 @@ export function AddViewDialog() {
   const [contentType, setContentType] = useState<ViewContentType>(
     VIEW_CONTENT_TYPE.LONGFORM,
   );
+  const [layout, setLayout] = useState<ViewLayout>(VIEW_LAYOUT.LIST);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
 
   const dialog = useDialogStore((store) => store.dialog);
@@ -255,6 +292,7 @@ export function AddViewDialog() {
       setDaysTimeWindow(0);
       setReadStatus(VIEW_READ_STATUS.UNREAD);
       setContentType(VIEW_CONTENT_TYPE.LONGFORM);
+      setLayout(VIEW_LAYOUT.LIST);
       setSelectedCategories([]);
     }
   };
@@ -275,6 +313,7 @@ export function AddViewDialog() {
           contentType={contentType}
           setContentType={setContentType}
         />
+        <ViewLayoutInput layout={layout} setLayout={setLayout} />
         {/* TODO: Implement read status */}
         {/* <ViewReadStatusInput
             readStatus={readStatus}
@@ -295,6 +334,7 @@ export function AddViewDialog() {
                 daysWindow: daysTimeWindow,
                 readStatus,
                 contentType: contentType,
+                layout: layout,
                 categoryIds: selectedCategories,
               });
               toast.promise(addViewPromise, {
@@ -340,6 +380,7 @@ export function EditViewDialog({
   const [contentType, setContentType] = useState<ViewContentType>(
     VIEW_CONTENT_TYPE.LONGFORM,
   );
+  const [layout, setLayout] = useState<ViewLayout>(VIEW_LAYOUT.LIST);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
 
   const isFormDisabled = !name;
@@ -360,6 +401,8 @@ export function EditViewDialog({
         ? parsedContentType.data
         : VIEW_CONTENT_TYPE.LONGFORM,
     );
+    const parsedLayout = viewLayoutSchema.safeParse(view.layout);
+    setLayout(parsedLayout.success ? parsedLayout.data : VIEW_LAYOUT.LIST);
     setSelectedCategories(view.categoryIds);
   }, [views, selectedViewId]);
 
@@ -379,6 +422,7 @@ export function EditViewDialog({
           contentType={contentType}
           setContentType={setContentType}
         />
+        <ViewLayoutInput layout={layout} setLayout={setLayout} />
         {/* TODO: Implement read status */}
         {/* <ViewReadStatusInput
             readStatus={readStatus}
@@ -433,6 +477,7 @@ export function EditViewDialog({
                   daysWindow: daysTimeWindow,
                   readStatus,
                   contentType: contentType,
+                  layout: layout,
                   categoryIds: selectedCategories,
                 });
                 toast.promise(editViewPromise, {

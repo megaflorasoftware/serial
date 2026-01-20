@@ -12,6 +12,7 @@ import {
 import {
   FEED_ITEM_ORIENTATION,
   VIEW_CONTENT_TYPE,
+  VIEW_LAYOUT,
   VIEW_READ_STATUS,
 } from "~/server/db/constants";
 
@@ -49,6 +50,7 @@ function buildUncategorizedView(
     daysWindow: 0,
     orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
     contentType: VIEW_CONTENT_TYPE.LONGFORM,
+    layout: VIEW_LAYOUT.LIST,
     readStatus: VIEW_READ_STATUS.UNREAD,
     placement: INBOX_VIEW_PLACEMENT,
     userId,
@@ -72,6 +74,7 @@ export const create = protectedProcedure
           readStatus: input.readStatus,
           orientation: input.orientation,
           contentType: input.contentType,
+          layout: input.layout,
           placement: input.placement,
         })
         .returning();
@@ -107,6 +110,7 @@ export const update = protectedProcedure
           readStatus: input.readStatus,
           orientation: input.orientation,
           contentType: input.contentType,
+          layout: input.layout,
           placement: input.placement,
         })
         .where(and(eq(views.userId, context.user.id), eq(views.id, input.id)))

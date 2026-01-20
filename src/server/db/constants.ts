@@ -29,3 +29,17 @@ export const viewContentTypeSchema = z.enum([
   VIEW_CONTENT_TYPE.VERTICAL_VIDEO,
 ]);
 export type ViewContentType = z.infer<typeof viewContentTypeSchema>;
+
+export const VIEW_LAYOUT = {
+  LIST: "list",
+  LARGE_LIST: "large-list",
+  GRID: "grid",
+  LARGE_GRID: "large-grid",
+} as const;
+export const viewLayoutSchema = z.enum([
+  VIEW_LAYOUT.LIST,
+  VIEW_LAYOUT.LARGE_LIST,
+  VIEW_LAYOUT.GRID,
+  VIEW_LAYOUT.LARGE_GRID,
+]);
+export type ViewLayout = z.infer<typeof viewLayoutSchema>;

@@ -34,6 +34,7 @@ import {
 import {
   FEED_ITEM_ORIENTATION,
   VIEW_CONTENT_TYPE,
+  VIEW_LAYOUT,
   VIEW_READ_STATUS,
 } from "~/server/db/constants";
 import { protectedProcedure } from "~/server/orpc/base";
@@ -83,6 +84,7 @@ function buildUncategorizedView(
     daysWindow: 0,
     orientation: FEED_ITEM_ORIENTATION.HORIZONTAL,
     contentType: VIEW_CONTENT_TYPE.LONGFORM,
+    layout: VIEW_LAYOUT.LIST,
     readStatus: VIEW_READ_STATUS.UNREAD,
     placement: INBOX_VIEW_PLACEMENT,
     userId,

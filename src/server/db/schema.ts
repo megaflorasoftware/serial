@@ -20,8 +20,10 @@ import {
   FEED_ITEM_ORIENTATION,
   feedItemOrientationSchema,
   VIEW_CONTENT_TYPE,
+  VIEW_LAYOUT,
   VIEW_READ_STATUS,
   viewContentTypeSchema,
+  viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
 
@@ -258,6 +260,7 @@ export const views = sqliteTable(
     contentType: text("content_type", { length: 32 })
       .notNull()
       .default(VIEW_CONTENT_TYPE.LONGFORM),
+    layout: text("layout", { length: 32 }).notNull().default(VIEW_LAYOUT.LIST),
     placement: integer("placement", { mode: "number" }).notNull().default(-1),
     createdAt: integer("created_at", { mode: "timestamp" })
       .$default(() => new Date())
@@ -303,6 +306,7 @@ export const createViewSchema = createInsertSchema(views)
       readStatus: viewReadStatusSchema.optional(),
       orientation: feedItemOrientationSchema.optional(),
       contentType: viewContentTypeSchema.optional(),
+      layout: viewLayoutSchema.optional(),
       daysWindow: z.number().lte(30).optional(),
       placement: z.number().gte(-1).optional(),
       categoryIds: z.array(z.number()).optional(),
@@ -314,6 +318,7 @@ export const updateViewSchema = createUpdateSchema(views).merge(
     id: z.number(),
     categoryIds: z.array(z.number()),
     contentType: viewContentTypeSchema.optional(),
+    layout: viewLayoutSchema.optional(),
   }),
 );
 
