@@ -278,30 +278,30 @@ export function GridItemDisplay({
           )}
         </div>
         <div className="flex flex-1 flex-col justify-center pt-2">
-          <h3
-            className={clsx(
-              "line-clamp-2 w-full font-semibold",
-              isLarge ? "text-sm" : "text-xs",
-            )}
-          >
-            {item.title}
-          </h3>
-          <p
-            className={clsx(
-              "w-full pt-0.5 opacity-80",
-              isLarge ? "text-sm" : "text-xs",
-            )}
-          >
-            {item.author || feed?.name}
-          </p>
-          <p
-            className={clsx(
-              "w-full opacity-60",
-              isLarge ? "text-xs" : "text-[10px]",
-            )}
-          >
-            {timeAgo(item.postedAt)}
-          </p>
+          {isLarge ? (
+            <>
+              <h3 className="line-clamp-1 w-full text-sm font-semibold">
+                {item.title}
+              </h3>
+              {item.contentSnippet && (
+                <p className="line-clamp-2 w-full pt-1 text-xs opacity-60">
+                  {item.contentSnippet}
+                </p>
+              )}
+              <p className="w-full pt-0.5 text-sm opacity-80">
+                {item.author || feed?.name} • {timeAgo(item.postedAt)}
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 className="line-clamp-2 w-full text-xs font-semibold md:text-sm">
+                {item.title}
+              </h3>
+              <p className="w-full pt-0.5 text-xs opacity-80 md:text-sm">
+                {item.author || feed?.name} • {timeAgo(item.postedAt)}
+              </p>
+            </>
+          )}
         </div>
       </Link>
       <div className="flex flex-row items-center justify-start gap-1 px-2 pb-2">

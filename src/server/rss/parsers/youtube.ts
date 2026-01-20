@@ -68,6 +68,7 @@ export async function fetchYouTubeFeedData(
           author: item.author,
           thumbnail: thumbnail,
           content: description,
+          contentSnippet: description,
         } satisfies RSSContent;
       }),
     };
