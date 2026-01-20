@@ -114,9 +114,9 @@ function ViewLayoutInput({
         id="layout"
         type="single"
         value={layout}
-        onValueChange={(value: ViewLayout) => {
+        onValueChange={(value) => {
           if (!value) return;
-          setLayout(value);
+          setLayout(value as ViewLayout);
         }}
         size="sm"
         className="w-fit"

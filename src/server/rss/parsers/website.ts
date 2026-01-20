@@ -59,14 +59,16 @@ export const websiteItemSchema = z.object({
   enclosure: enclosureSchema,
 });
 
-function extractThumbnail(item: z.infer<typeof websiteItemSchema>): string | undefined {
+function extractThumbnail(
+  item: z.infer<typeof websiteItemSchema>,
+): string | undefined {
   // Try media:thumbnail first
-  if (item.mediaThumbnail?.$?.url) {
+  if (item.mediaThumbnail?.$.url) {
     return item.mediaThumbnail.$.url;
   }
 
   // Try media:content if it's an image
-  if (item.mediaContent?.$?.url) {
+  if (item.mediaContent?.$.url) {
     const type = item.mediaContent.$.type ?? "";
     const medium = item.mediaContent.$.medium ?? "";
     if (type.startsWith("image/") || medium === "image") {
@@ -80,7 +82,8 @@ function extractThumbnail(item: z.infer<typeof websiteItemSchema>): string | und
   }
 
   // Try to extract first image from content:encoded or content
-  const htmlContent = item["content:encoded"] || item.content || item.description || "";
+  const htmlContent =
+    item["content:encoded"] || item.content || item.description || "";
   const imgMatch = htmlContent.match(/<img[^>]+src=["']([^"']+)["']/i);
   if (imgMatch?.[1]) {
     return imgMatch[1];
