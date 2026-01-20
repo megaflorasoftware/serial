@@ -39,6 +39,7 @@ import {
 import {
   useFeedItemValue,
   useFetchFeedItemsLastFetchedAt,
+  useHasInitialData,
 } from "~/lib/data/store";
 import { useViews } from "~/lib/data/views";
 
@@ -249,12 +250,13 @@ export function TodayItems() {
   const { hasFetchedFeedCategories } = useFeedCategories();
   const { views } = useViews();
   const feedItemsLastFetchedAt = useFetchFeedItemsLastFetchedAt();
+  const hasInitialData = useHasInitialData();
 
   const filteredFeedItemsOrder = useFilteredFeedItemsOrder();
 
   const [parent] = useAutoAnimate();
 
-  if (!views.length) {
+  if (!hasInitialData) {
     return <FeedLoading />;
   }
 

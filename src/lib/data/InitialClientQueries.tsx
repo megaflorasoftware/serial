@@ -4,14 +4,14 @@ import { useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import { viewsAtom } from "./atoms";
 import { useUpdateViewFilter } from "./views";
-import { useCurrentViewId, useFetchByView, useFetchFeedItemsStatus } from "./store";
+import { useCurrentViewId, useFetchByView, useHasInitialData } from "./store";
 import { useViewsFetchStatus, useViews as useViewsStore } from "./views/store";
 import type { PropsWithChildren } from "react";
 
 export function InitialClientQueries({ children }: PropsWithChildren) {
   const fetchByView = useFetchByView();
   const currentViewId = useCurrentViewId();
-  const fetchStatus = useFetchFeedItemsStatus();
+  const hasInitialData = useHasInitialData();
   const hasSetInitialView = useRef(false);
 
   // Sync views store with viewsAtom for compatibility
@@ -31,11 +31,11 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
     }
   }, [viewsFetchStatus, viewsFromStore, setViewsAtom]);
 
-  // Set initial view filter once when ready
+  // Set initial view filter once when initial data is ready
   useEffect(() => {
     if (
       !hasSetInitialView.current &&
-      fetchStatus === "success" &&
+      hasInitialData &&
       viewsFetchStatus === "success" &&
       viewsFromStore.length > 0 &&
       currentViewId !== null
@@ -43,7 +43,7 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
       hasSetInitialView.current = true;
       updateViewFilter(currentViewId, viewsFromStore);
     }
-  }, [fetchStatus, viewsFetchStatus, viewsFromStore, currentViewId, updateViewFilter]);
+  }, [hasInitialData, viewsFetchStatus, viewsFromStore, currentViewId, updateViewFilter]);
 
   return children;
 }

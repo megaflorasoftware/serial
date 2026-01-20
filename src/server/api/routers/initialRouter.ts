@@ -47,7 +47,8 @@ export type GetByViewChunk =
   | { type: "content-categories"; contentCategories: DatabaseContentCategory[] }
   | { type: "feed-items"; viewId: number; feedItems: ApplicationFeedItem[] }
   | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
-  | { type: "view-feeds"; viewId: number; feedIds: number[] };
+  | { type: "view-feeds"; viewId: number; feedIds: number[] }
+  | { type: "initial-data-complete" };
 
 export type RevalidateViewChunk =
   | { type: "views"; views: ApplicationView[] }
@@ -173,6 +174,7 @@ function computeFeedsForView(
 }
 
 const GET_BY_VIEW_CHUNK_SIZE = 100;
+const INITIAL_ITEMS_PER_VIEW = 20;
 
 export const getAllByView = protectedProcedure.handler(async function* ({
   context,
@@ -280,15 +282,62 @@ export const getAllByView = protectedProcedure.handler(async function* ({
     } as GetByViewChunk;
   }
 
-  // Step 4: Query feed items with filters for the first view
   const firstView = allViews[0];
   const feedIds = feedsList.map((feed) => feed.id);
 
   if (feedIds.length === 0 || !firstView) {
+    yield { type: "initial-data-complete" } as GetByViewChunk;
     return;
   }
 
-  // Build combined filter for the first view
+  // Step 4: Query and yield initial items (first 20) for EACH view
+  // This allows the client to render immediately without showing the loading screen
+  for (const view of allViews) {
+    const filterConditions = [
+      inArray(feedItems.feedId, feedIds),
+      buildVisibilityFilter("unread"),
+      buildViewCategoryFilter(
+        view,
+        userFeedCategories,
+        feedIds,
+        customViewCategoryIds,
+        customViews,
+        applicationFeeds,
+      ),
+      buildContentTypeFilter(view.contentType, applicationFeeds),
+      buildTimeWindowFilter(view.daysWindow),
+    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+    const filter =
+      filterConditions.length > 0 ? and(...filterConditions) : undefined;
+
+    const initialItems = await context.db.query.feedItems.findMany({
+      where: filter,
+      orderBy: desc(feedItems.postedAt),
+      limit: INITIAL_ITEMS_PER_VIEW,
+    });
+
+    if (initialItems.length > 0) {
+      const applicationItems = initialItems.map((item) => {
+        const itemFeed = feedsList.find((f) => f.id === item.feedId);
+        return {
+          ...item,
+          platform: itemFeed?.platform ?? "youtube",
+        } as ApplicationFeedItem;
+      });
+
+      yield {
+        type: "feed-items",
+        viewId: view.id,
+        feedItems: applicationItems,
+      } as GetByViewChunk;
+    }
+  }
+
+  // Signal that initial data is complete - client can hide loading screen
+  yield { type: "initial-data-complete" } as GetByViewChunk;
+
+  // Step 5: Query remaining feed items for the first view
   const filterConditions = [
     inArray(feedItems.feedId, feedIds),
     buildVisibilityFilter("unread"),
@@ -321,7 +370,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({
     } as ApplicationFeedItem;
   });
 
-  // Step 4: Yield filtered feed items in chunks
+  // Yield remaining feed items in chunks (client will deduplicate)
   for (const chunk of prepareArrayChunks(
     existingApplicationFeedItems,
     GET_BY_VIEW_CHUNK_SIZE,
@@ -333,7 +382,7 @@ export const getAllByView = protectedProcedure.handler(async function* ({
     } as GetByViewChunk;
   }
 
-  // Step 5: Run fetch and insert for fresh items (client will filter)
+  // Step 6: Run fetch and insert for fresh items (client will filter)
   for await (const feedResult of fetchAndInsertFeedData(context, feedsList)) {
     yield {
       type: "feed-status",

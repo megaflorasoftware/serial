@@ -25,6 +25,7 @@ export type ApplicationStore = {
   revalidateView: (viewId: number) => Promise<void>;
   fetchFeedItemsLastFetchedAt: number | null;
   fetchFeedItemsStatus: "idle" | "fetching" | "success";
+  hasInitialData: boolean;
   currentViewId: number | null;
   viewFeedIds: Record<number, number[]>;
   setViewFeedIds: (viewId: number, feedIds: number[]) => void;
@@ -40,6 +41,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         feedStatusDict: {},
         fetchFeedItemsLastFetchedAt: null,
         fetchFeedItemsStatus: "idle",
+        hasInitialData: false,
         currentViewId: null,
         viewFeedIds: {},
       }),
@@ -57,6 +59,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       }),
     fetchFeedItemsLastFetchedAt: null,
     fetchFeedItemsStatus: "idle",
+    hasInitialData: false,
     currentViewId: null,
     viewFeedIds: {},
     setViewFeedIds: (viewId, feedIds) =>
@@ -240,6 +243,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             break;
           }
 
+          case "initial-data-complete":
+            // Initial data is ready - mark all stores as ready and hide loading screen
+            viewsStore.setState({ fetchStatus: "success" });
+            feedsStore.setState({ fetchStatus: "success" });
+            contentCategoriesStore.setState({ fetchStatus: "success" });
+            feedCategoriesStore.setState({ fetchStatus: "success" });
+            set({ hasInitialData: true });
+            break;
+
           case "feed-items": {
             // Track the current view ID from the first feed-items chunk
             if (get().currentViewId === null) {
@@ -356,6 +368,7 @@ export const {
   useFeedStatusDict,
   useFetchFeedItemsLastFetchedAt,
   useFetchFeedItemsStatus,
+  useHasInitialData,
   useFetchFeedItems,
   useFetchFeedItemsForFeed,
   useFetchByView,
