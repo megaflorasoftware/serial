@@ -8,6 +8,7 @@ import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
+import { INITIAL_ITEMS_PER_VIEW } from "~/server/api/constants";
 
 interface ViewItemLargeGridProps {
   items: string[];
@@ -40,8 +41,11 @@ export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
-  // Place sentinel at 50% of items to trigger fetch earlier
-  const sentinelIndex = Math.floor(items.length / 2);
+  const sentinelIndex = Math.max(
+    Math.floor(items.length - (INITIAL_ITEMS_PER_VIEW - 10)),
+    10,
+  );
+  console.log(sentinelIndex);
 
   return (
     <div className="w-full">

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { GET_BY_VIEW_CHUNK_SIZE, INITIAL_ITEMS_PER_VIEW } from "../constants";
 import type {
   ApplicationFeed,
   ApplicationFeedItem,
@@ -152,9 +153,6 @@ function computeFeedsForView(
 
   return feedIds;
 }
-
-const GET_BY_VIEW_CHUNK_SIZE = 30;
-const INITIAL_ITEMS_PER_VIEW = 30;
 
 interface FetchContentForViewParams {
   feedIds: number[];

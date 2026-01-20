@@ -8,6 +8,7 @@ import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
+import { INITIAL_ITEMS_PER_VIEW } from "~/server/api/constants";
 
 interface ViewItemStandardListProps {
   items: string[];
@@ -40,15 +41,24 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
-  // Place sentinel at 50% of items to trigger fetch earlier
-  const sentinelIndex = Math.floor(items.length / 2);
+  const sentinelIndex = Math.max(
+    Math.floor(items.length - (INITIAL_ITEMS_PER_VIEW - 10)),
+    10,
+  );
+  console.log(sentinelIndex);
 
   return (
     <div className="w-full transition-all md:pt-4 md:pr-6 md:pl-4" ref={parent}>
       {items.map((contentId, index) => (
         <div key={contentId}>
           <ItemDisplay contentId={contentId} size="standard" />
-          {index === sentinelIndex && <div ref={sentinelRef} />}
+          {index === sentinelIndex && (
+            <div
+              className="h-10 bg-red-500"
+              ref={sentinelRef}
+              key={sentinelIndex}
+            />
+          )}
         </div>
       ))}
     </div>
