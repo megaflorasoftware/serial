@@ -19,6 +19,8 @@ export function useLazyCategoryFilter() {
     // categoryFilter < 0 means no category is selected
     if (categoryFilter < 0) return;
 
-    feedItemsStore.getState().fetchItemsForCategory(categoryFilter, visibilityFilter);
+    feedItemsStore
+      .getState()
+      .fetchItemsForCategory(categoryFilter, visibilityFilter);
   }, [categoryFilter, visibilityFilter]);
 }
