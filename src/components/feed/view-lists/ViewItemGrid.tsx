@@ -1,16 +1,10 @@
 "use client";
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { useAtomValue } from "jotai";
 import { GridItemDisplay } from "./ItemDisplay";
-import { PaginationLoader } from "./PaginationLoader";
 import { PaginationEnd } from "./PaginationEnd";
-import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
-import { useFetchMoreItems, useViewPaginationState } from "~/lib/data/store";
-import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
-import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
-import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
-import { ITEMS_PER_PAGE } from "~/server/api/constants";
+import { PaginationLoader } from "./PaginationLoader";
+import { useViewListScroll } from "./useViewListScroll";
 
 interface ViewItemGridProps {
   items: string[];
@@ -19,34 +13,8 @@ interface ViewItemGridProps {
 export function ViewItemGrid({ items }: ViewItemGridProps) {
   const [parent] = useAutoAnimate();
 
-  // Lazy load items when feed or category filter changes
-  useLazyFeedFilter();
-  useLazyCategoryFilter();
-
-  const currentView = useAtomValue(viewFilterAtom);
-  const visibilityFilter = useAtomValue(visibilityFilterAtom);
-  const viewPaginationState = useViewPaginationState();
-  const fetchMoreItems = useFetchMoreItems();
-
-  const viewId = currentView?.id;
-  const paginationState = viewId
-    ? viewPaginationState[viewId]?.[visibilityFilter]
-    : undefined;
-
-  const { sentinelRef } = useInfiniteScroll({
-    onLoadMore: () => {
-      if (viewId) {
-        fetchMoreItems(viewId, visibilityFilter);
-      }
-    },
-    hasMore: paginationState?.hasMore ?? false,
-    isLoading: paginationState?.isFetching ?? false,
-  });
-
-  const sentinelIndex = Math.max(
-    Math.floor(items.length - (ITEMS_PER_PAGE - 10)),
-    10,
-  );
+  const { sentinelRef, sentinelIndex, paginationState } =
+    useViewListScroll(items);
 
   return (
     <div className="w-full">
