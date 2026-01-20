@@ -40,19 +40,22 @@ export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
+  // Place sentinel at 50% of items to trigger fetch earlier
+  const sentinelIndex = Math.floor(items.length / 2);
+
   return (
     <div className="w-full">
       <div
         ref={parent}
         className="grid w-full gap-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]"
       >
-        {items.map((contentId) => (
+        {items.map((contentId, index) => (
           <div key={contentId}>
             <GridItemDisplay contentId={contentId} size="large" />
+            {index === sentinelIndex && <div ref={sentinelRef} />}
           </div>
         ))}
       </div>
-      <div ref={sentinelRef} />
     </div>
   );
 }

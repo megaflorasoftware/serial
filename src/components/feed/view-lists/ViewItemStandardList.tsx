@@ -40,14 +40,17 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
+  // Place sentinel at 50% of items to trigger fetch earlier
+  const sentinelIndex = Math.floor(items.length / 2);
+
   return (
     <div className="w-full transition-all md:pt-4 md:pr-6 md:pl-4" ref={parent}>
-      {items.map((contentId) => (
+      {items.map((contentId, index) => (
         <div key={contentId}>
           <ItemDisplay contentId={contentId} size="standard" />
+          {index === sentinelIndex && <div ref={sentinelRef} />}
         </div>
       ))}
-      <div ref={sentinelRef} />
     </div>
   );
 }

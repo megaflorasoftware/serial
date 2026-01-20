@@ -40,19 +40,22 @@ export function ViewItemGrid({ items }: ViewItemGridProps) {
     isLoading: paginationState?.isFetching ?? false,
   });
 
+  // Place sentinel at 50% of items to trigger fetch earlier
+  const sentinelIndex = Math.floor(items.length / 2);
+
   return (
     <div className="w-full">
       <div
         ref={parent}
         className="grid w-full grid-cols-2 gap-y-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
       >
-        {items.map((contentId) => (
+        {items.map((contentId, index) => (
           <div key={contentId}>
             <GridItemDisplay contentId={contentId} size="standard" />
+            {index === sentinelIndex && <div ref={sentinelRef} />}
           </div>
         ))}
       </div>
-      <div ref={sentinelRef} />
     </div>
   );
 }
