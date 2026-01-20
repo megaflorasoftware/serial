@@ -6,7 +6,7 @@ import clsx from "clsx";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback } from "react";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
-import { useFetchFeedItems, useFetchFeedItemsStatus } from "~/lib/data/store";
+import { useFetchByView, useFetchFeedItemsStatus } from "~/lib/data/store";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function RefetchItemsButton() {
@@ -15,12 +15,12 @@ export function RefetchItemsButton() {
   const queryClient = useQueryClient();
 
   const fetchStatus = useFetchFeedItemsStatus();
-  const fetchFeedItems = useFetchFeedItems();
+  const fetchByView = useFetchByView();
 
   const onClick = useCallback(() => {
-    void fetchFeedItems();
     void queryClient.invalidateQueries();
-  }, [fetchFeedItems, queryClient]);
+    void fetchByView();
+  }, [fetchByView, queryClient]);
 
   useShortcut("r", onClick);
 
