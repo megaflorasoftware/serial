@@ -1232,6 +1232,22 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 }
               }
               set({ _lastItemByView: lastItemByView });
+
+              // Track fetched visibility filter for this view (when fetching non-unread filters)
+              if (
+                initialChunk.visibilityFilter &&
+                initialChunk.visibilityFilter !== "unread"
+              ) {
+                set({
+                  fetchedVisibilityFilters: {
+                    ...get().fetchedVisibilityFilters,
+                    [viewId]: new Set([
+                      ...(get().fetchedVisibilityFilters[viewId] ?? []),
+                      initialChunk.visibilityFilter as VisibilityFilter,
+                    ]),
+                  },
+                });
+              }
               break;
             }
 

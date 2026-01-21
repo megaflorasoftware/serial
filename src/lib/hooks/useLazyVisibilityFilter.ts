@@ -11,6 +11,7 @@ import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
  * Hook that triggers lazy loading of items when visibility filter changes.
  * Fetches items for ALL views when switching to "read" or "later" filters.
  *
+ * Uses a single requestInitialData call instead of per-view requests for efficiency.
  * Should be called in a component that renders the feed items list.
  */
 export function useLazyVisibilityFilter() {
@@ -20,20 +21,18 @@ export function useLazyVisibilityFilter() {
     // "unread" is already fetched for all views on initial load
     if (visibilityFilter === "unread") return;
 
-    // Check which views need fetching for this visibility filter
+    // Check if ANY view needs fetching for this visibility filter
     const allViews = viewsStore.getState().views;
     const fetchedFilters = feedItemsStore.getState().fetchedVisibilityFilters;
 
-    // Request items for each view that hasn't been fetched yet
-    for (const view of allViews) {
+    const needsFetch = allViews.some((view) => {
       const viewFetchedFilters = fetchedFilters[view.id];
-      if (!viewFetchedFilters?.has(visibilityFilter)) {
-        // Request items via the publisher pattern
-        void dataSubscriptionActions.requestItemsByVisibility(
-          view.id,
-          visibilityFilter,
-        );
-      }
+      return !viewFetchedFilters?.has(visibilityFilter);
+    });
+
+    if (needsFetch) {
+      // Single request fetches items for all views with this visibility filter
+      void dataSubscriptionActions.requestInitialData(visibilityFilter);
     }
   }, [visibilityFilter]);
 }

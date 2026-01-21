@@ -91,10 +91,6 @@ export function useDataSubscription() {
     [],
   );
 
-  const requestRevalidateView = useCallback((viewId: number) => {
-    return orpcRouterClient.initial.requestRevalidateView({ viewId });
-  }, []);
-
   const requestItemsByVisibility = useCallback(
     (
       viewId: number,
@@ -148,7 +144,6 @@ export function useDataSubscription() {
 
   return {
     requestInitialData,
-    requestRevalidateView,
     requestItemsByVisibility,
     requestItemsByFeed,
     requestItemsByCategoryId,
@@ -165,8 +160,6 @@ export const dataSubscriptionActions = {
     orpcRouterClient.initial.requestInitialData(
       visibilityFilter ? { visibilityFilter } : undefined,
     ),
-  requestRevalidateView: (viewId: number) =>
-    orpcRouterClient.initial.requestRevalidateView({ viewId }),
   requestItemsByVisibility: (
     viewId: number,
     visibilityFilter: VisibilityFilter,
