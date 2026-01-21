@@ -675,51 +675,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         },
       });
 
+      // Use publisher pattern - chunks will be processed via processChunk
       try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed(
-          {
-            feedId,
-            visibilityFilter,
-            cursor: paginationState.cursor,
-          },
-        )) as AsyncIterable<GetItemsByFeedChunk>) {
-          if (chunk.type === "error") {
-            console.error("Error fetching more items for feed:", chunk.message);
-            continue;
-          }
-
-          const feedItemsDict = { ...get().feedItemsDict };
-          const feedItemsOrder = [...get().feedItemsOrder];
-          const existingIds = new Set(feedItemsOrder);
-
-          chunk.feedItems.forEach((item) => {
-            feedItemsDict[item.id] = item;
-            if (!existingIds.has(item.id)) {
-              feedItemsOrder.push(item.id);
-              existingIds.add(item.id);
-            }
-          });
-
-          set({
-            feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(get().feedItemsDict),
-            ),
-            feedPaginationState: {
-              ...get().feedPaginationState,
-              [feedId]: {
-                ...get().feedPaginationState[feedId],
-                [visibilityFilter]: {
-                  cursor: chunk.nextCursor,
-                  hasMore: chunk.hasMore,
-                  isFetching: false,
-                },
-              },
-            },
-          });
-        }
+        await orpcRouterClient.initial.requestItemsByFeed({
+          feedId,
+          visibilityFilter,
+          cursor: paginationState.cursor,
+        });
       } catch (error) {
-        console.error("Error fetching more items for feed:", error);
+        console.error("Error requesting more items for feed:", error);
         set({
           feedPaginationState: {
             ...get().feedPaginationState,
@@ -759,63 +723,22 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         },
       });
 
+      // Use publisher pattern - chunks will be processed via processChunk
       try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId(
-          {
-            categoryId,
-            visibilityFilter,
-            cursor: paginationState.cursor,
-          },
-        )) as AsyncIterable<GetItemsByCategoryIdChunk>) {
-          if (chunk.type === "error") {
-            console.error(
-              "Error fetching more items for category:",
-              chunk.message,
-            );
-            continue;
-          }
-
-          const feedItemsDict = { ...get().feedItemsDict };
-          const feedItemsOrder = [...get().feedItemsOrder];
-          const existingIds = new Set(feedItemsOrder);
-
-          chunk.feedItems.forEach((item) => {
-            feedItemsDict[item.id] = item;
-            if (!existingIds.has(item.id)) {
-              feedItemsOrder.push(item.id);
-              existingIds.add(item.id);
-            }
-          });
-
-          set({
-            feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(get().feedItemsDict),
-            ),
-            categoryPaginationState: {
-              ...get().categoryPaginationState,
-              [categoryId]: {
-                ...get().categoryPaginationState[categoryId],
-                [visibilityFilter]: {
-                  cursor: chunk.nextCursor,
-                  hasMore: chunk.hasMore,
-                  isFetching: false,
-                },
-              },
-            },
-          });
-        }
+        await orpcRouterClient.initial.requestItemsByCategoryId({
+          categoryId,
+          visibilityFilter,
+          cursor: paginationState.cursor,
+        });
       } catch (error) {
-        console.error("Error fetching more items for category:", error);
+        console.error("Error requesting more items for category:", error);
         set({
           categoryPaginationState: {
             ...get().categoryPaginationState,
             [categoryId]: {
               ...get().categoryPaginationState[categoryId],
               [visibilityFilter]: {
-                ...get().categoryPaginationState[categoryId]?.[
-                  visibilityFilter
-                ],
+                ...get().categoryPaginationState[categoryId]?.[visibilityFilter],
                 isFetching: false,
               } as PaginationState,
             },
@@ -1193,7 +1116,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
       switch (source) {
         case "initial": {
-          const initialChunk = chunk as GetByViewChunk;
+          const initialChunk = chunk;
 
           switch (initialChunk.type) {
             case "views":

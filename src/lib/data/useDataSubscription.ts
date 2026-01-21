@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { orpcRouterClient } from "../orpc";
 import { feedItemsStore } from "./store";
 import type { PublishedChunk } from "~/server/api/publisher";
