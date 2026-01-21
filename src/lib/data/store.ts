@@ -11,9 +11,6 @@ import type { VisibilityFilter } from "./atoms";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type {
-  GetByViewChunk,
-  GetItemsByCategoryIdChunk,
-  GetItemsByFeedChunk,
   GetItemsByVisibilityChunk,
   PaginationCursor,
 } from "~/server/api/routers/initialRouter";
@@ -55,8 +52,6 @@ export type ApplicationStore = {
     viewId: number,
     visibilityFilter: VisibilityFilter,
   ) => Promise<void>;
-  // Fetch items for ALL views with a specific visibility filter
-  fetchItemsForAllViews: (visibilityFilter: VisibilityFilter) => Promise<void>;
   // Fetch more items with cursor (pagination)
   fetchMoreItems: (
     viewId: number,
@@ -81,16 +76,6 @@ export type ApplicationStore = {
   fetchedFeedFilters: Record<number, Set<VisibilityFilter>>;
   // Track which visibility filters have been fetched for each category
   fetchedCategoryFilters: Record<number, Set<VisibilityFilter>>;
-  // Fetch items for a specific feed (lazy loading)
-  fetchItemsForFeed: (
-    feedId: number,
-    visibilityFilter: VisibilityFilter,
-  ) => Promise<void>;
-  // Fetch items for a specific category (lazy loading)
-  fetchItemsForCategory: (
-    categoryId: number,
-    visibilityFilter: VisibilityFilter,
-  ) => Promise<void>;
   // Fetch more items for a feed (pagination)
   fetchMoreItemsForFeed: (
     feedId: number,
@@ -268,103 +253,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       }
     },
 
-    fetchItemsForAllViews: async (visibilityFilter) => {
-      const allViews = viewsStore.getState().views;
-      const state = get();
-
-      // Check if all views already have this visibility filter fetched
-      const viewsNeedingFetch = allViews.filter((view) => {
-        const fetchedFilters = state.fetchedVisibilityFilters[view.id];
-        return !fetchedFilters?.has(visibilityFilter);
-      });
-
-      if (viewsNeedingFetch.length === 0) {
-        return;
-      }
-
-      // Set fetching state for all views that need it
-      const updatedPaginationState = { ...state.viewPaginationState };
-      for (const view of viewsNeedingFetch) {
-        updatedPaginationState[view.id] = {
-          ...updatedPaginationState[view.id],
-          [visibilityFilter]: {
-            cursor: null,
-            hasMore: true,
-            isFetching: true,
-          },
-        };
-      }
-      set({ viewPaginationState: updatedPaginationState });
-
-      try {
-        for await (const chunk of (await orpcRouterClient.initial.getAllByView({
-          visibilityFilter,
-        })) as AsyncIterable<GetByViewChunk>) {
-          if (chunk.type === "error") {
-            console.error("Error fetching items for all views:", chunk.message);
-            continue;
-          }
-
-          if (chunk.type === "feed-items") {
-            const feedItemsDict = { ...get().feedItemsDict };
-            const feedItemsOrder = [...get().feedItemsOrder];
-            const existingIds = new Set(feedItemsOrder);
-
-            chunk.feedItems.forEach((item) => {
-              feedItemsDict[item.id] = item;
-              if (!existingIds.has(item.id)) {
-                feedItemsOrder.push(item.id);
-                existingIds.add(item.id);
-              }
-            });
-
-            set({
-              feedItemsDict,
-              feedItemsOrder: feedItemsOrder.sort(
-                sortFeedItemsOrderByDate(get().feedItemsDict),
-              ),
-              viewPaginationState: {
-                ...get().viewPaginationState,
-                [chunk.viewId]: {
-                  ...get().viewPaginationState[chunk.viewId],
-                  [visibilityFilter]: {
-                    cursor: chunk.nextCursor ?? null,
-                    hasMore: chunk.hasMore ?? false,
-                    isFetching: false,
-                  },
-                },
-              },
-            });
-          }
-        }
-
-        // Mark visibility filter as fetched for all views
-        const fetchedFilters = { ...get().fetchedVisibilityFilters };
-        for (const view of allViews) {
-          fetchedFilters[view.id] = new Set([
-            ...(fetchedFilters[view.id] ?? []),
-            visibilityFilter,
-          ]);
-        }
-        set({ fetchedVisibilityFilters: fetchedFilters });
-      } catch (error) {
-        console.error("Error fetching items for all views:", error);
-        // Reset fetching state on error for all views
-        const updatedState = { ...get().viewPaginationState };
-        for (const view of viewsNeedingFetch) {
-          updatedState[view.id] = {
-            ...updatedState[view.id],
-            [visibilityFilter]: {
-              cursor: null,
-              hasMore: false,
-              isFetching: false,
-            },
-          };
-        }
-        set({ viewPaginationState: updatedState });
-      }
-    },
-
     fetchMoreItems: async (viewId, visibilityFilter) => {
       const state = get();
       const paginationState =
@@ -445,210 +333,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 ...get().viewPaginationState[viewId]?.[visibilityFilter],
                 isFetching: false,
               } as PaginationState,
-            },
-          },
-        });
-      }
-    },
-
-    fetchItemsForFeed: async (feedId, visibilityFilter) => {
-      const state = get();
-
-      // Check if already fetched for this feed/filter
-      const fetchedFilters = state.fetchedFeedFilters[feedId];
-      if (fetchedFilters?.has(visibilityFilter)) {
-        return;
-      }
-
-      // Check if already fetching
-      const paginationState =
-        state.feedPaginationState[feedId]?.[visibilityFilter];
-      if (paginationState?.isFetching) {
-        return;
-      }
-
-      // Set fetching state
-      set({
-        feedPaginationState: {
-          ...state.feedPaginationState,
-          [feedId]: {
-            ...state.feedPaginationState[feedId],
-            [visibilityFilter]: {
-              cursor: null,
-              hasMore: true,
-              isFetching: true,
-            },
-          },
-        },
-      });
-
-      try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByFeed(
-          {
-            feedId,
-            visibilityFilter,
-          },
-        )) as AsyncIterable<GetItemsByFeedChunk>) {
-          if (chunk.type === "error") {
-            console.error("Error fetching items for feed:", chunk.message);
-            continue;
-          }
-
-          const feedItemsDict = { ...get().feedItemsDict };
-          const feedItemsOrder = [...get().feedItemsOrder];
-          const existingIds = new Set(feedItemsOrder);
-
-          chunk.feedItems.forEach((item) => {
-            feedItemsDict[item.id] = item;
-            if (!existingIds.has(item.id)) {
-              feedItemsOrder.push(item.id);
-              existingIds.add(item.id);
-            }
-          });
-
-          set({
-            feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(get().feedItemsDict),
-            ),
-            feedPaginationState: {
-              ...get().feedPaginationState,
-              [feedId]: {
-                ...get().feedPaginationState[feedId],
-                [visibilityFilter]: {
-                  cursor: chunk.nextCursor,
-                  hasMore: chunk.hasMore,
-                  isFetching: false,
-                },
-              },
-            },
-          });
-        }
-
-        // Mark filter as fetched
-        set({
-          fetchedFeedFilters: {
-            ...get().fetchedFeedFilters,
-            [feedId]: new Set([
-              ...(get().fetchedFeedFilters[feedId] ?? []),
-              visibilityFilter,
-            ]),
-          },
-        });
-      } catch (error) {
-        console.error("Error fetching items for feed:", error);
-        set({
-          feedPaginationState: {
-            ...get().feedPaginationState,
-            [feedId]: {
-              ...get().feedPaginationState[feedId],
-              [visibilityFilter]: {
-                cursor: null,
-                hasMore: false,
-                isFetching: false,
-              },
-            },
-          },
-        });
-      }
-    },
-
-    fetchItemsForCategory: async (categoryId, visibilityFilter) => {
-      const state = get();
-
-      // Check if already fetched for this category/filter
-      const fetchedFilters = state.fetchedCategoryFilters[categoryId];
-      if (fetchedFilters?.has(visibilityFilter)) {
-        return;
-      }
-
-      // Check if already fetching
-      const paginationState =
-        state.categoryPaginationState[categoryId]?.[visibilityFilter];
-      if (paginationState?.isFetching) {
-        return;
-      }
-
-      // Set fetching state
-      set({
-        categoryPaginationState: {
-          ...state.categoryPaginationState,
-          [categoryId]: {
-            ...state.categoryPaginationState[categoryId],
-            [visibilityFilter]: {
-              cursor: null,
-              hasMore: true,
-              isFetching: true,
-            },
-          },
-        },
-      });
-
-      try {
-        for await (const chunk of (await orpcRouterClient.initial.getItemsByCategoryId(
-          {
-            categoryId,
-            visibilityFilter,
-          },
-        )) as AsyncIterable<GetItemsByCategoryIdChunk>) {
-          if (chunk.type === "error") {
-            console.error("Error fetching items for category:", chunk.message);
-            continue;
-          }
-
-          const feedItemsDict = { ...get().feedItemsDict };
-          const feedItemsOrder = [...get().feedItemsOrder];
-          const existingIds = new Set(feedItemsOrder);
-
-          chunk.feedItems.forEach((item) => {
-            feedItemsDict[item.id] = item;
-            if (!existingIds.has(item.id)) {
-              feedItemsOrder.push(item.id);
-              existingIds.add(item.id);
-            }
-          });
-
-          set({
-            feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(get().feedItemsDict),
-            ),
-            categoryPaginationState: {
-              ...get().categoryPaginationState,
-              [categoryId]: {
-                ...get().categoryPaginationState[categoryId],
-                [visibilityFilter]: {
-                  cursor: chunk.nextCursor,
-                  hasMore: chunk.hasMore,
-                  isFetching: false,
-                },
-              },
-            },
-          });
-        }
-
-        // Mark filter as fetched
-        set({
-          fetchedCategoryFilters: {
-            ...get().fetchedCategoryFilters,
-            [categoryId]: new Set([
-              ...(get().fetchedCategoryFilters[categoryId] ?? []),
-              visibilityFilter,
-            ]),
-          },
-        });
-      } catch (error) {
-        console.error("Error fetching items for category:", error);
-        set({
-          categoryPaginationState: {
-            ...get().categoryPaginationState,
-            [categoryId]: {
-              ...get().categoryPaginationState[categoryId],
-              [visibilityFilter]: {
-                cursor: null,
-                hasMore: false,
-                isFetching: false,
-              },
             },
           },
         });
@@ -1411,20 +1095,11 @@ export const {
   useCurrentViewId,
   useViewFeedIds,
   useViewPaginationState,
-  useFetchedVisibilityFilters,
-  useFetchItemsForVisibility,
-  useFetchItemsForAllViews,
   useFetchMoreItems,
-  useGetPaginationState,
   useFeedPaginationState,
   useCategoryPaginationState,
-  useFetchedFeedFilters,
-  useFetchedCategoryFilters,
-  useFetchItemsForFeed,
-  useFetchItemsForCategory,
   useFetchMoreItemsForFeed,
   useFetchMoreItemsForCategory,
-  useProcessChunk,
   useReset: useResetFeedItems,
 } = feedItemsStore;
 
