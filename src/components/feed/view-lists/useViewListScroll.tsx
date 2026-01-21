@@ -1,18 +1,18 @@
 import { useAtomValue } from "jotai";
-import { useMemo, useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
+  categoryFilterAtom,
+  feedFilterAtom,
   viewFilterAtom,
   visibilityFilterAtom,
-  feedFilterAtom,
-  categoryFilterAtom,
 } from "~/lib/data/atoms";
 import {
-  useFetchMoreItems,
-  useFetchMoreItemsForFeed,
-  useFetchMoreItemsForCategory,
-  useViewPaginationState,
-  useFeedPaginationState,
   useCategoryPaginationState,
+  useFeedPaginationState,
+  useFetchMoreItems,
+  useFetchMoreItemsForCategory,
+  useFetchMoreItemsForFeed,
+  useViewPaginationState,
 } from "~/lib/data/store";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";

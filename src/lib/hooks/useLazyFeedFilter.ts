@@ -21,12 +21,16 @@ export function useLazyFeedFilter() {
     if (feedFilter < 0) return;
 
     // Check if already fetched for this feed/filter
-    const fetchedFilters = feedItemsStore.getState().fetchedFeedFilters[feedFilter];
+    const fetchedFilters =
+      feedItemsStore.getState().fetchedFeedFilters[feedFilter];
     if (fetchedFilters?.has(visibilityFilter)) {
       return;
     }
 
     // Request items via the publisher pattern
-    void dataSubscriptionActions.requestItemsByFeed(feedFilter, visibilityFilter);
+    void dataSubscriptionActions.requestItemsByFeed(
+      feedFilter,
+      visibilityFilter,
+    );
   }, [feedFilter, visibilityFilter]);
 }

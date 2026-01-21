@@ -742,7 +742,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             [categoryId]: {
               ...get().categoryPaginationState[categoryId],
               [visibilityFilter]: {
-                ...get().categoryPaginationState[categoryId]?.[visibilityFilter],
+                ...get().categoryPaginationState[categoryId]?.[
+                  visibilityFilter
+                ],
                 isFetching: false,
               } as PaginationState,
             },
@@ -1136,7 +1138,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               break;
 
             case "content-categories":
-              contentCategoriesStore.getState().set(initialChunk.contentCategories);
+              contentCategoriesStore
+                .getState()
+                .set(initialChunk.contentCategories);
               contentCategoriesStore.setState({ fetchStatus: "success" });
               break;
 
@@ -1167,7 +1171,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               > = {};
 
               for (const view of allViews) {
-                fetchedFilters[view.id] = new Set(["unread"] as VisibilityFilter[]);
+                fetchedFilters[view.id] = new Set([
+                  "unread",
+                ] as VisibilityFilter[]);
 
                 // Compute cursor from the oldest item we received for this view
                 const lastItem = lastItemByView[view.id];

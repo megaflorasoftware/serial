@@ -9,7 +9,6 @@ import {
   viewFilterIdAtom,
   viewsAtom,
 } from "./atoms";
-import { INBOX_VIEW_ID } from "./views/constants";
 import { useUpdateViewFilter } from "./views";
 import { useCurrentViewId, useHasInitialData } from "./store";
 import { useViewsFetchStatus, useViews as useViewsStore } from "./views/store";

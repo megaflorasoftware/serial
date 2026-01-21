@@ -199,7 +199,8 @@ export const useFilteredFeedItemsOrder = () => {
       return feedPaginationState[feedFilter]?.[visibilityFilter]?.cursor;
     }
     if (categoryFilter >= 0) {
-      return categoryPaginationState[categoryFilter]?.[visibilityFilter]?.cursor;
+      return categoryPaginationState[categoryFilter]?.[visibilityFilter]
+        ?.cursor;
     }
     if (viewFilter?.id) {
       return viewPaginationState[viewFilter.id]?.[visibilityFilter]?.cursor;
