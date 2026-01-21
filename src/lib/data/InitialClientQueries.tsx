@@ -68,7 +68,7 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
     updateViewFilter,
   ]);
 
-  // Auto-select Uncategorized view when nothing is selected
+  // Auto-select first view when nothing is selected
   useEffect(() => {
     const nothingSelected =
       viewFilterId === UNSELECTED_VIEW_ID &&
