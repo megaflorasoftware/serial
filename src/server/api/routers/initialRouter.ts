@@ -1,11 +1,13 @@
-import { z } from "zod";
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { z } from "zod";
 import {
   GET_BY_VIEW_CHUNK_SIZE,
   INITIAL_ITEMS_PER_VIEW,
   ITEMS_BY_VISIBILITY_CHUNK_SIZE,
   ITEMS_PER_PAGE,
 } from "../constants";
+import { publisher } from "../publisher";
+import type { VisibilityFilter } from "~/lib/data/atoms";
 import type {
   ApplicationFeed,
   ApplicationFeedItem,
@@ -13,11 +15,9 @@ import type {
   DatabaseContentCategory,
   DatabaseFeedCategory,
 } from "~/server/db/schema";
-import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type { ORPCContext } from "~/server/orpc/base";
-import type { VisibilityFilter } from "~/lib/data/atoms";
-import { prepareArrayChunks } from "~/lib/iterators";
-import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
+import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
+import { visibilityFilterSchema } from "~/lib/data/atoms";
 import {
   buildContentTypeFilter,
   buildTimeWindowFilter,
@@ -25,10 +25,12 @@ import {
   buildVisibilityFilter,
   isFeedCompatibleWithContentType,
 } from "~/lib/data/feed-items/filters";
-import { visibilityFilterSchema } from "~/lib/data/atoms";
+import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
+import { prepareArrayChunks } from "~/lib/iterators";
 import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
 
+import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import {
   contentCategories,
   feedCategories,
@@ -38,11 +40,9 @@ import {
   viewCategories,
   views,
 } from "~/server/db/schema";
+import { logMessage } from "~/server/logger";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
-import { parseArrayOfSchema } from "~/lib/schemas/utils";
-import { logMessage } from "~/server/logger";
-import { publisher, type PublishedChunk } from "../publisher";
 
 export type PaginationCursor = { postedAt: Date; id: string } | null;
 
@@ -464,7 +464,11 @@ export const requestInitialData = protectedProcedure
 
         await publisher.publish(channel, {
           source: "initial",
-          chunk: { type: "view-feeds", viewId: view.id, feedIds: feedIdsForView },
+          chunk: {
+            type: "view-feeds",
+            viewId: view.id,
+            feedIds: feedIdsForView,
+          },
         });
 
         logMessage(
@@ -775,39 +779,6 @@ function buildCursorCondition(cursor: { postedAt: Date; id: string } | null) {
     and(eq(feedItems.postedAt, cursor.postedAt), lt(feedItems.id, cursor.id)),
   );
 }
-
-export type GetItemsByVisibilityChunk =
-  | {
-      type: "feed-items";
-      viewId: number;
-      feedItems: ApplicationFeedItem[];
-      visibilityFilter: string;
-      hasMore: boolean;
-      nextCursor: PaginationCursor;
-    }
-  | { type: "error"; message: string; phase: string };
-
-export type GetItemsByFeedChunk =
-  | {
-      type: "feed-items";
-      feedId: number;
-      feedItems: ApplicationFeedItem[];
-      visibilityFilter: string;
-      hasMore: boolean;
-      nextCursor: PaginationCursor;
-    }
-  | { type: "error"; message: string; phase: string };
-
-export type GetItemsByCategoryIdChunk =
-  | {
-      type: "feed-items";
-      categoryId: number;
-      feedItems: ApplicationFeedItem[];
-      visibilityFilter: string;
-      hasMore: boolean;
-      nextCursor: PaginationCursor;
-    }
-  | { type: "error"; message: string; phase: string };
 
 /**
  * Request items for a specific visibility filter with cursor-based pagination.
@@ -1739,6 +1710,44 @@ export const revalidateView = protectedProcedure
     return;
   });
 
+export type GetItemsByVisibilityChunk =
+  | {
+      type: "feed-items";
+      viewId: number;
+      feedItems: ApplicationFeedItem[];
+      visibilityFilter: string;
+      hasMore: boolean;
+      nextCursor: PaginationCursor;
+    }
+  | { type: "error"; message: string; phase: string };
+
+export type GetItemsByFeedChunk =
+  | {
+      type: "feed-items";
+      feedId: number;
+      feedItems: ApplicationFeedItem[];
+      visibilityFilter: string;
+      hasMore: boolean;
+      nextCursor: PaginationCursor;
+    }
+  | { type: "error"; message: string; phase: string };
+
+export type GetItemsByCategoryIdChunk =
+  | {
+      type: "feed-items";
+      categoryId: number;
+      feedItems: ApplicationFeedItem[];
+      visibilityFilter: string;
+      hasMore: boolean;
+      nextCursor: PaginationCursor;
+    }
+  | { type: "error"; message: string; phase: string };
+
+/**
+ * Fetch items for a specific visibility filter with cursor-based pagination.
+ * Used for lazy loading "read" and "later" visibility filters,
+ * and for infinite scroll pagination.
+ */
 export const getItemsByVisibility = protectedProcedure
   .input(
     z.object({
