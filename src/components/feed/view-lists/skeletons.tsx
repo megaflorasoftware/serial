@@ -4,7 +4,7 @@
 
 export function ListItemSkeleton() {
   return (
-    <div className="flex w-full items-center gap-2 pt-4 pr-4 pl-6 pb-4 md:h-20 md:py-4">
+    <div className="flex w-full items-center gap-2 pt-4 pr-4 pb-4 pl-6 md:h-20 md:py-4">
       <div className="grid w-16 place-items-center">
         <div className="bg-muted h-9 w-16 animate-pulse rounded" />
       </div>
@@ -18,7 +18,7 @@ export function ListItemSkeleton() {
 
 export function LargeListItemSkeleton() {
   return (
-    <div className="flex w-full flex-col gap-4 pt-4 pr-4 pl-6 pb-1 md:flex-row md:items-center md:pb-4">
+    <div className="flex w-full flex-col gap-4 pt-4 pr-4 pb-1 pl-6 md:flex-row md:items-center md:pb-4">
       <div className="grid w-44 place-items-center">
         <div className="bg-muted aspect-video w-44 animate-pulse rounded" />
       </div>
