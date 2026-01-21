@@ -17,6 +17,7 @@ import type {
   GetItemsByVisibilityChunk,
   PaginationCursor,
 } from "~/server/api/routers/initialRouter";
+import type { PublishedChunk } from "~/server/api/publisher";
 
 export type PaginationState = {
   cursor: PaginationCursor;
@@ -100,6 +101,8 @@ export type ApplicationStore = {
     categoryId: number,
     visibilityFilter: VisibilityFilter,
   ) => Promise<void>;
+  // Process chunks received from the publisher subscription
+  processChunk: (payload: PublishedChunk) => void;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -1162,6 +1165,243 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         }
       }
     },
+
+    processChunk: (payload: PublishedChunk) => {
+      const { source, chunk } = payload;
+
+      // Helper function to merge feed items into the store
+      const mergeFeedItems = (items: ApplicationFeedItem[]) => {
+        const feedItemsDict = { ...get().feedItemsDict };
+        const feedItemsOrder = [...get().feedItemsOrder];
+        const existingIds = new Set(feedItemsOrder);
+
+        items.forEach((item) => {
+          feedItemsDict[item.id] = item;
+          if (!existingIds.has(item.id)) {
+            feedItemsOrder.push(item.id);
+            existingIds.add(item.id);
+          }
+        });
+
+        set({
+          feedItemsDict,
+          feedItemsOrder: feedItemsOrder.sort(
+            sortFeedItemsOrderByDate(feedItemsDict),
+          ),
+        });
+      };
+
+      switch (source) {
+        case "initial": {
+          const initialChunk = chunk as GetByViewChunk;
+
+          switch (initialChunk.type) {
+            case "views":
+              viewsStore.getState().set(initialChunk.views);
+              viewsStore.setState({ fetchStatus: "success" });
+              // Show UI immediately when views are received
+              set({ hasInitialData: true });
+              break;
+
+            case "feeds":
+              feedsStore.getState().set(initialChunk.feeds);
+              feedsStore.setState({ fetchStatus: "success" });
+              break;
+
+            case "content-categories":
+              contentCategoriesStore.getState().set(initialChunk.contentCategories);
+              contentCategoriesStore.setState({ fetchStatus: "success" });
+              break;
+
+            case "feed-categories":
+              feedCategoriesStore.getState().set(initialChunk.feedCategories);
+              feedCategoriesStore.setState({ fetchStatus: "success" });
+              break;
+
+            case "view-feeds":
+              get().setViewFeedIds(initialChunk.viewId, initialChunk.feedIds);
+              break;
+
+            case "feed-status": {
+              const feedStatusDict = { ...get().feedStatusDict };
+              feedStatusDict[initialChunk.feedId] = initialChunk.status;
+              set({ feedStatusDict });
+              break;
+            }
+
+            case "initial-data-complete": {
+              // Mark "unread" visibility filter as fetched for all views
+              const allViews = viewsStore.getState().views;
+              const fetchedFilters: Record<number, Set<VisibilityFilter>> = {};
+              const paginationState: Record<
+                number,
+                Partial<Record<VisibilityFilter, PaginationState>>
+              > = {};
+
+              for (const view of allViews) {
+                fetchedFilters[view.id] = new Set(["unread"] as VisibilityFilter[]);
+                paginationState[view.id] = {
+                  unread: {
+                    cursor: null,
+                    hasMore: true, // Assume there might be more until proven otherwise
+                    isFetching: false,
+                  },
+                };
+              }
+
+              set({
+                fetchFeedItemsStatus: "success",
+                fetchFeedItemsLastFetchedAt: Date.now(),
+                fetchedVisibilityFilters: fetchedFilters,
+                viewPaginationState: paginationState,
+              });
+              break;
+            }
+
+            case "feed-items": {
+              // Track the current view ID from the first feed-items chunk
+              const firstView = viewsStore.getState().views[0];
+              if (
+                get().currentViewId === null &&
+                initialChunk.viewId === firstView?.id
+              ) {
+                set({ currentViewId: initialChunk.viewId });
+              }
+              mergeFeedItems(initialChunk.feedItems);
+              break;
+            }
+
+            case "error":
+              console.error("Initial data error:", initialChunk.message);
+              break;
+          }
+          break;
+        }
+
+        case "revalidate": {
+          switch (chunk.type) {
+            case "views":
+              viewsStore.getState().set(chunk.views);
+              break;
+
+            case "view-feeds":
+              get().setViewFeedIds(chunk.viewId, chunk.feedIds);
+              break;
+
+            case "feed-items":
+              mergeFeedItems(chunk.feedItems);
+              break;
+
+            case "error":
+              console.error("Revalidate error:", chunk.message);
+              break;
+          }
+          break;
+        }
+
+        case "visibility": {
+          if (chunk.type === "error") {
+            console.error("Visibility fetch error:", chunk.message);
+            break;
+          }
+
+          // chunk.type is "feed-items"
+          mergeFeedItems(chunk.feedItems);
+
+          // Update pagination state for this view/visibility filter
+          const visibilityFilter = chunk.visibilityFilter as VisibilityFilter;
+          set({
+            viewPaginationState: {
+              ...get().viewPaginationState,
+              [chunk.viewId]: {
+                ...get().viewPaginationState[chunk.viewId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+            fetchedVisibilityFilters: {
+              ...get().fetchedVisibilityFilters,
+              [chunk.viewId]: new Set([
+                ...(get().fetchedVisibilityFilters[chunk.viewId] ?? []),
+                visibilityFilter,
+              ]),
+            },
+          });
+          break;
+        }
+
+        case "feed": {
+          if (chunk.type === "error") {
+            console.error("Feed fetch error:", chunk.message);
+            break;
+          }
+
+          // chunk.type is "feed-items"
+          mergeFeedItems(chunk.feedItems);
+
+          // Update pagination state for this feed/visibility filter
+          const visibilityFilter = chunk.visibilityFilter as VisibilityFilter;
+          set({
+            feedPaginationState: {
+              ...get().feedPaginationState,
+              [chunk.feedId]: {
+                ...get().feedPaginationState[chunk.feedId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+            fetchedFeedFilters: {
+              ...get().fetchedFeedFilters,
+              [chunk.feedId]: new Set([
+                ...(get().fetchedFeedFilters[chunk.feedId] ?? []),
+                visibilityFilter,
+              ]),
+            },
+          });
+          break;
+        }
+
+        case "category": {
+          if (chunk.type === "error") {
+            console.error("Category fetch error:", chunk.message);
+            break;
+          }
+
+          // chunk.type is "feed-items"
+          mergeFeedItems(chunk.feedItems);
+
+          // Update pagination state for this category/visibility filter
+          const visibilityFilter = chunk.visibilityFilter as VisibilityFilter;
+          set({
+            categoryPaginationState: {
+              ...get().categoryPaginationState,
+              [chunk.categoryId]: {
+                ...get().categoryPaginationState[chunk.categoryId],
+                [visibilityFilter]: {
+                  cursor: chunk.nextCursor,
+                  hasMore: chunk.hasMore,
+                  isFetching: false,
+                },
+              },
+            },
+            fetchedCategoryFilters: {
+              ...get().fetchedCategoryFilters,
+              [chunk.categoryId]: new Set([
+                ...(get().fetchedCategoryFilters[chunk.categoryId] ?? []),
+                visibilityFilter,
+              ]),
+            },
+          });
+          break;
+        }
+      }
+    },
   }),
   //   {
   //     name: "serial", // name of the item in the storage (must be unique)
@@ -1204,6 +1444,7 @@ export const {
   useFetchItemsForCategory,
   useFetchMoreItemsForFeed,
   useFetchMoreItemsForCategory,
+  useProcessChunk,
   useReset: useResetFeedItems,
 } = feedItemsStore;
 

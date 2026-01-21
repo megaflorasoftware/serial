@@ -4,15 +4,17 @@ import { useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import { viewsAtom } from "./atoms";
 import { useUpdateViewFilter } from "./views";
-import { useCurrentViewId, useFetchByView, useHasInitialData } from "./store";
+import { useCurrentViewId, useHasInitialData } from "./store";
 import { useViewsFetchStatus, useViews as useViewsStore } from "./views/store";
+import { useDataSubscription } from "./useDataSubscription";
 import type { PropsWithChildren } from "react";
 
 export function InitialClientQueries({ children }: PropsWithChildren) {
-  const fetchByView = useFetchByView();
+  const { requestInitialData } = useDataSubscription();
   const currentViewId = useCurrentViewId();
   const hasInitialData = useHasInitialData();
   const hasSetInitialView = useRef(false);
+  const hasRequestedInitialData = useRef(false);
 
   // Sync views store with viewsAtom for compatibility
   const viewsFromStore = useViewsStore();
@@ -20,9 +22,13 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
   const setViewsAtom = useSetAtom(viewsAtom);
   const updateViewFilter = useUpdateViewFilter();
 
+  // Request initial data once on mount (after subscription is established)
   useEffect(() => {
-    void fetchByView();
-  }, []);
+    if (!hasRequestedInitialData.current) {
+      hasRequestedInitialData.current = true;
+      void requestInitialData();
+    }
+  }, [requestInitialData]);
 
   // Keep viewsAtom always in sync with store
   useEffect(() => {
