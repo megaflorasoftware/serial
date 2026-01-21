@@ -27,28 +27,18 @@ function isVideoContent(item: ApplicationFeedItem): boolean {
   return videoPlatforms.includes(item.platform);
 }
 
-// Helper to check if item is older than cursor
 function isItemOlderThanCursor(
   item: ApplicationFeedItem,
   cursor: PaginationCursor,
 ): boolean {
   if (!cursor) return false;
 
-  // Handle both Date objects and ISO strings from JSON serialization
-  const itemTime =
-    item.postedAt instanceof Date
-      ? item.postedAt.getTime()
-      : new Date(item.postedAt).getTime();
-  const cursorTime =
-    cursor.postedAt instanceof Date
-      ? cursor.postedAt.getTime()
-      : new Date(cursor.postedAt).getTime();
+  const itemTime = item.postedAt.getTime();
+  const cursorTime = cursor.postedAt.getTime();
 
-  // Item is older than cursor
   if (itemTime < cursorTime) {
     return true;
   }
-  // Same timestamp - use ID for stable ordering
   if (itemTime === cursorTime && item.id > cursor.id) {
     return true;
   }
