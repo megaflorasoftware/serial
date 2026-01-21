@@ -103,6 +103,8 @@ export type ApplicationStore = {
   ) => Promise<void>;
   // Process chunks received from the publisher subscription
   processChunk: (payload: PublishedChunk) => void;
+  // Internal: Track oldest item per view during initial data processing for cursor computation
+  _lastItemByView: Record<number, ApplicationFeedItem | null>;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -124,6 +126,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         categoryPaginationState: {},
         fetchedFeedFilters: {},
         fetchedCategoryFilters: {},
+        _lastItemByView: {},
       }),
     feedItemsOrder: [],
     setFeedItemsOrder: (itemsOrder) => set({ feedItemsOrder: itemsOrder }),
@@ -155,6 +158,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
     categoryPaginationState: {},
     fetchedFeedFilters: {},
     fetchedCategoryFilters: {},
+    _lastItemByView: {},
 
     getPaginationState: (viewId, visibilityFilter) => {
       return get().viewPaginationState[viewId]?.[visibilityFilter];
@@ -1155,6 +1159,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             case "initial-data-complete": {
               // Mark "unread" visibility filter as fetched for all views
               const allViews = viewsStore.getState().views;
+              const lastItemByView = get()._lastItemByView;
               const fetchedFilters: Record<number, Set<VisibilityFilter>> = {};
               const paginationState: Record<
                 number,
@@ -1163,10 +1168,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
               for (const view of allViews) {
                 fetchedFilters[view.id] = new Set(["unread"] as VisibilityFilter[]);
+
+                // Compute cursor from the oldest item we received for this view
+                const lastItem = lastItemByView[view.id];
+                const cursor = lastItem
+                  ? { postedAt: lastItem.postedAt, id: lastItem.id }
+                  : null;
+
                 paginationState[view.id] = {
                   unread: {
-                    cursor: null,
-                    hasMore: true, // Assume there might be more until proven otherwise
+                    cursor,
+                    hasMore: lastItem !== undefined, // Only has more if we received items
                     isFetching: false,
                   },
                 };
@@ -1177,6 +1189,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 fetchFeedItemsLastFetchedAt: Date.now(),
                 fetchedVisibilityFilters: fetchedFilters,
                 viewPaginationState: paginationState,
+                _lastItemByView: {}, // Clear after use
               });
               break;
             }
@@ -1191,6 +1204,28 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 set({ currentViewId: initialChunk.viewId });
               }
               mergeFeedItems(initialChunk.feedItems);
+
+              // Track oldest item per view for cursor computation
+              const viewId = initialChunk.viewId;
+              const lastItemByView = { ...get()._lastItemByView };
+              for (const item of initialChunk.feedItems) {
+                const currentOldest = lastItemByView[viewId];
+                const itemTime =
+                  item.postedAt instanceof Date
+                    ? item.postedAt.getTime()
+                    : new Date(item.postedAt).getTime();
+                const currentTime =
+                  currentOldest?.postedAt instanceof Date
+                    ? currentOldest.postedAt.getTime()
+                    : currentOldest
+                      ? new Date(currentOldest.postedAt).getTime()
+                      : Infinity;
+
+                if (!currentOldest || itemTime < currentTime) {
+                  lastItemByView[viewId] = item;
+                }
+              }
+              set({ _lastItemByView: lastItemByView });
               break;
             }
 

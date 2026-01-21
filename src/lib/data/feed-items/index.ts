@@ -34,8 +34,15 @@ function isItemOlderThanCursor(
 ): boolean {
   if (!cursor) return false;
 
-  const itemTime = item.postedAt.getTime();
-  const cursorTime = cursor.postedAt.getTime();
+  // Handle both Date objects and ISO strings from JSON serialization
+  const itemTime =
+    item.postedAt instanceof Date
+      ? item.postedAt.getTime()
+      : new Date(item.postedAt).getTime();
+  const cursorTime =
+    cursor.postedAt instanceof Date
+      ? cursor.postedAt.getTime()
+      : new Date(cursor.postedAt).getTime();
 
   // Item is older than cursor
   if (itemTime < cursorTime) {
