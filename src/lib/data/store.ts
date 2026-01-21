@@ -840,6 +840,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               set({
                 hasInitialData: true,
                 fetchFeedItemsStatus: "fetching",
+                feedStatusDict: {}, // Clear stale entries from previous fetch
                 progressState: {
                   fetchType: "initial",
                   metadataLoaded: false,
@@ -888,7 +889,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             case "feed-status": {
               const feedStatusDict = { ...get().feedStatusDict };
               feedStatusDict[initialChunk.feedId] = initialChunk.status;
-              set({ feedStatusDict });
+
+              // Check if all feeds have reported status
+              const { totalFeeds } = get().progressState;
+              const allFeedsComplete =
+                Object.keys(feedStatusDict).length >= totalFeeds &&
+                totalFeeds > 0;
+
+              set({
+                feedStatusDict,
+                ...(allFeedsComplete && { fetchFeedItemsStatus: "success" }),
+              });
               break;
             }
 
@@ -923,7 +934,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               }
 
               set({
-                fetchFeedItemsStatus: "success",
+                // Note: fetchFeedItemsStatus is set to "success" when all feed-status chunks arrive
                 fetchFeedItemsLastFetchedAt: Date.now(),
                 fetchedVisibilityFilters: fetchedFilters,
                 viewPaginationState: paginationState,
