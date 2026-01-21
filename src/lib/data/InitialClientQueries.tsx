@@ -1,8 +1,15 @@
 "use client";
 
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
-import { viewsAtom } from "./atoms";
+import {
+  categoryFilterAtom,
+  feedFilterAtom,
+  UNSELECTED_VIEW_ID,
+  viewFilterIdAtom,
+  viewsAtom,
+} from "./atoms";
+import { INBOX_VIEW_ID } from "./views/constants";
 import { useUpdateViewFilter } from "./views";
 import { useCurrentViewId, useHasInitialData } from "./store";
 import { useViewsFetchStatus, useViews as useViewsStore } from "./views/store";
@@ -21,6 +28,11 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
   const viewsFetchStatus = useViewsFetchStatus();
   const setViewsAtom = useSetAtom(viewsAtom);
   const updateViewFilter = useUpdateViewFilter();
+
+  // Read filter atoms for auto-selection logic
+  const viewFilterId = useAtomValue(viewFilterIdAtom);
+  const feedFilter = useAtomValue(feedFilterAtom);
+  const categoryFilter = useAtomValue(categoryFilterAtom);
 
   // Request initial data once on mount (after subscription is established)
   useEffect(() => {
@@ -54,6 +66,27 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
     viewsFetchStatus,
     viewsFromStore,
     currentViewId,
+    updateViewFilter,
+  ]);
+
+  // Auto-select Uncategorized view when nothing is selected
+  useEffect(() => {
+    const nothingSelected =
+      viewFilterId === UNSELECTED_VIEW_ID &&
+      feedFilter === -1 &&
+      categoryFilter === -1;
+
+    if (nothingSelected && viewsFromStore.length > 0) {
+      const firstView = viewsFromStore[0];
+      if (firstView) {
+        updateViewFilter(firstView.id, viewsFromStore);
+      }
+    }
+  }, [
+    viewFilterId,
+    feedFilter,
+    categoryFilter,
+    viewsFromStore,
     updateViewFilter,
   ]);
 
