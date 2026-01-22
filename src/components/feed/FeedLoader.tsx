@@ -1,12 +1,19 @@
 import clsx from "clsx";
 import { Progress } from "~/components/ui/progress";
 import { useFetchFeedItemsStatus, useLoadingProgress } from "~/lib/data/store";
+import { useFeeds } from "~/lib/data/feeds/store";
 
 export function FeedLoader() {
   const status = useFetchFeedItemsStatus();
   const progress = useLoadingProgress();
+  const feeds = useFeeds();
 
   const isFetching = status === "fetching";
+  const hasFeeds = feeds.length > 0;
+
+  if (!hasFeeds) {
+    return null;
+  }
 
   return (
     <div

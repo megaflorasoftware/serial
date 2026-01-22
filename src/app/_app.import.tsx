@@ -29,7 +29,8 @@ import {
 import { useFeeds } from "~/lib/data/feeds";
 import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
 import { useResetFeeds } from "~/lib/data/feeds/store";
-import { useFetchByView, useResetFeedItems } from "~/lib/data/store";
+import { useResetFeedItems } from "~/lib/data/store";
+import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   switch (platform) {
@@ -71,7 +72,6 @@ function EditFeedsPage() {
   const { feeds } = useFeeds();
   const resetFeeds = useResetFeeds();
   const resetFeedItems = useResetFeedItems();
-  const fetchByView = useFetchByView();
 
   const onSelectFiles = async () => {
     if (!inputElementRef.current) return;
@@ -105,7 +105,7 @@ function EditFeedsPage() {
     resetFeeds();
     resetFeedItems();
 
-    void fetchByView();
+    void dataSubscriptionActions.requestInitialData("unread");
   };
 
   const onReset = () => {
@@ -165,7 +165,7 @@ function EditFeedsPage() {
         type="file"
         accept="text/csv,.opml"
         className="hidden"
-        multiple={false}
+        multiple
         onChange={onSelectFiles}
       />
       {!!feedsFoundFromFile && (
