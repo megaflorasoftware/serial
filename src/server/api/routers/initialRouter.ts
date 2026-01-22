@@ -44,7 +44,6 @@ import {
   viewCategories,
   views,
 } from "~/server/db/schema";
-import { logMessage } from "~/server/logger";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
@@ -192,8 +191,6 @@ async function fetchContentForView(
   }: FetchContentForViewParams,
 ): Promise<ViewDataChunk> {
   visibilityFilter ??= "unread";
-
-  logMessage(`[Initial] Fetching items for view ${view.id}`);
 
   try {
     const filterConditions = [
@@ -461,14 +458,6 @@ export const requestInitialData = protectedProcedure
       viewCategoriesList,
     } = prerequisiteData;
 
-    logMessage(`[Initial] Loaded ${viewsList.length} views`);
-    logMessage(`[Initial] Loaded ${feedsList.length} feeds`);
-    logMessage(
-      `[Initial] Loaded ${contentCategoriesList.length} content categories`,
-    );
-    logMessage(`[Initial] Loaded ${feedCategoriesList.length} feed categories`);
-    logMessage(`[Initial] Loaded ${viewCategoriesList.length} view categories`);
-
     // Build application views using helper
     const { customViews, allViews, customViewCategoryIds } =
       buildApplicationViews(
@@ -478,15 +467,8 @@ export const requestInitialData = protectedProcedure
         viewCategoriesList,
       );
 
-    logMessage(`[Initial] Formed ${customViews.length} application views`);
-    logMessage(`[Initial] Sorted ${allViews.length} views`);
-
     // Parse feeds to ApplicationFeed
     const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
-
-    logMessage(
-      `[Initial] Parsed ${applicationFeeds.length} / ${feedsList.length} feeds`,
-    );
 
     // Pre-build a Map for O(1) feed lookups by ID
     const feedsById = new Map(feedsList.map((f) => [f.id, f]));
@@ -498,14 +480,10 @@ export const requestInitialData = protectedProcedure
         chunk: { type: "views", views: allViews },
       });
 
-      logMessage(`[Initial] Published views`);
-
       await publisher.publish(channel, {
         source: "initial",
         chunk: { type: "feeds", feeds: applicationFeeds },
       });
-
-      logMessage(`[Initial] Published feeds`);
 
       await publisher.publish(channel, {
         source: "initial",
@@ -515,14 +493,10 @@ export const requestInitialData = protectedProcedure
         },
       });
 
-      logMessage(`[Initial] Published content categories`);
-
       await publisher.publish(channel, {
         source: "initial",
         chunk: { type: "feed-categories", feedCategories: feedCategoriesList },
       });
-
-      logMessage(`[Initial] Published feed categories`);
 
       // Step 3: Publish view-feeds chunks for each view
       for (const view of allViews) {
@@ -542,10 +516,6 @@ export const requestInitialData = protectedProcedure
             feedIds: feedIdsForView,
           },
         });
-
-        logMessage(
-          `[Initial] Published ${feedIdsForView.length} feeds for view ${view.id}`,
-        );
       }
     }
 
@@ -578,9 +548,6 @@ export const requestInitialData = protectedProcedure
       allViews,
       fetchContentForViewParams,
     )) {
-      logMessage(
-        `[Initial] Publishing ${viewResult.type} response for view ${viewResult.viewId}`,
-      );
       await publisher.publish(channel, {
         source: "initial",
         chunk: viewResult,
@@ -656,14 +623,6 @@ export const requestImportedData = protectedProcedure
       viewCategoriesList,
     } = prerequisiteData;
 
-    logMessage(`[Import] Loaded ${viewsList.length} views`);
-    logMessage(`[Import] Loaded ${feedsList.length} feeds`);
-    logMessage(
-      `[Import] Loaded ${contentCategoriesList.length} content categories`,
-    );
-    logMessage(`[Import] Loaded ${feedCategoriesList.length} feed categories`);
-    logMessage(`[Import] Loaded ${viewCategoriesList.length} view categories`);
-
     // Build application views using helper
     const { customViews, allViews, customViewCategoryIds } =
       buildApplicationViews(
@@ -673,15 +632,8 @@ export const requestImportedData = protectedProcedure
         viewCategoriesList,
       );
 
-    logMessage(`[Import] Formed ${customViews.length} application views`);
-    logMessage(`[Import] Sorted ${allViews.length} views`);
-
     // Parse feeds to ApplicationFeed
     const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
-
-    logMessage(
-      `[Import] Parsed ${applicationFeeds.length} / ${feedsList.length} feeds`,
-    );
 
     // Pre-build a Map for O(1) feed lookups by ID
     const feedsById = new Map(feedsList.map((f) => [f.id, f]));
@@ -692,14 +644,10 @@ export const requestImportedData = protectedProcedure
       chunk: { type: "views", views: allViews },
     });
 
-    logMessage(`[Import] Published views`);
-
     await publisher.publish(channel, {
       source: "initial",
       chunk: { type: "feeds", feeds: applicationFeeds },
     });
-
-    logMessage(`[Import] Published feeds`);
 
     await publisher.publish(channel, {
       source: "initial",
@@ -709,14 +657,10 @@ export const requestImportedData = protectedProcedure
       },
     });
 
-    logMessage(`[Import] Published content categories`);
-
     await publisher.publish(channel, {
       source: "initial",
       chunk: { type: "feed-categories", feedCategories: feedCategoriesList },
     });
-
-    logMessage(`[Import] Published feed categories`);
 
     // Step 3: Publish view-feeds chunks and build feedIdToViewIds mapping
     const feedIdToViewIds = new Map<number, number[]>();
@@ -743,10 +687,6 @@ export const requestImportedData = protectedProcedure
         const existingViewIds = feedIdToViewIds.get(feedId) ?? [];
         feedIdToViewIds.set(feedId, [...existingViewIds, view.id]);
       }
-
-      logMessage(
-        `[Import] Published ${feedIdsForView.length} feeds for view ${view.id}`,
-      );
     }
 
     const firstView = allViews[0];
@@ -776,9 +716,6 @@ export const requestImportedData = protectedProcedure
       allViews,
       fetchContentForViewParams,
     )) {
-      logMessage(
-        `[Import] Publishing ${viewResult.type} response for view ${viewResult.viewId}`,
-      );
       await publisher.publish(channel, {
         source: "initial",
         chunk: viewResult,
@@ -1506,12 +1443,6 @@ export const getAllByView = protectedProcedure
 
     const [viewsList, feedsList, contentCategoriesList] = initialData;
 
-    logMessage(`[Initial] Loaded ${viewsList.length} views`);
-    logMessage(`[Initial] Loaded ${feedsList.length} feeds`);
-    logMessage(
-      `[Initial] Loaded ${contentCategoriesList.length} content categories`,
-    );
-
     // Fetch feed categories and view categories in parallel
     const userContentCategoryIds = contentCategoriesList.map((cc) => cc.id);
     const userViewIds = viewsList.map((v) => v.id);
@@ -1531,9 +1462,6 @@ export const getAllByView = protectedProcedure
         : Promise.resolve([]),
     ]);
 
-    logMessage(`[Initial] Loaded ${feedCategoriesList.length} feed categories`);
-    logMessage(`[Initial] Loaded ${viewCategoriesList.length} view categories`);
-
     // Transform views to ApplicationView with categoryIds
     const customViews: ApplicationView[] = viewsList.map((view) => ({
       ...view,
@@ -1544,8 +1472,6 @@ export const getAllByView = protectedProcedure
         .filter((id): id is number => id !== null),
     }));
 
-    logMessage(`[Initial] Formed ${customViews.length} application views`);
-
     const uncategorizedView = buildUncategorizedView(
       context.user.id,
       contentCategoriesList,
@@ -1554,14 +1480,8 @@ export const getAllByView = protectedProcedure
 
     const allViews = sortViewsByPlacement([...customViews, uncategorizedView]);
 
-    logMessage(`[Initial] Sorted ${allViews.length} views`);
-
     // Parse feeds to ApplicationFeed
     const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
-
-    logMessage(
-      `[Initial] Parsed ${applicationFeeds.length} / ${feedsList.length} feeds`,
-    );
 
     // Pre-build a Map for O(1) feed lookups by ID
     const feedsById = new Map(feedsList.map((f) => [f.id, f]));
@@ -1578,28 +1498,20 @@ export const getAllByView = protectedProcedure
         views: allViews,
       } as GetByViewChunk;
 
-      logMessage(`[Initial] Yielded views`);
-
       yield {
         type: "feeds",
         feeds: applicationFeeds,
       } as GetByViewChunk;
-
-      logMessage(`[Initial] Yielded feeds`);
 
       yield {
         type: "content-categories",
         contentCategories: contentCategoriesList,
       } as GetByViewChunk;
 
-      logMessage(`[Initial] Yielded content categories`);
-
       yield {
         type: "feed-categories",
         feedCategories: feedCategoriesList,
       } as GetByViewChunk;
-
-      logMessage(`[Initial] Yielded feed categories`);
 
       // Step 3: Yield view-feeds chunks for each view
       for (const view of allViews) {
@@ -1616,10 +1528,6 @@ export const getAllByView = protectedProcedure
           viewId: view.id,
           feedIds: feedIdsForView,
         } as GetByViewChunk;
-
-        logMessage(
-          `[Initial] Yielded ${feedIdsForView.length} feeds for view ${view.id}`,
-        );
       }
     }
 
@@ -1649,9 +1557,6 @@ export const getAllByView = protectedProcedure
       allViews,
       fetchContentForViewParams,
     )) {
-      logMessage(
-        `[Initial] Yielded ${viewResult.type} response for view ${viewResult.viewId}`,
-      );
       yield viewResult;
     }
 
