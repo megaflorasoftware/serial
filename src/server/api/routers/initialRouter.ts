@@ -618,6 +618,230 @@ export const requestInitialData = protectedProcedure
   });
 
 /**
+ * Request data after importing feeds. Similar to requestInitialData but also
+ * streams ALL RSS-fetched items to the client for immediate display.
+ * Only fetches RSS for the specified newFeedIds (the newly imported feeds).
+ */
+export const requestImportedData = protectedProcedure
+  .input(z.object({ newFeedIds: z.number().array() }))
+  .handler(async ({ context, input }) => {
+    const { newFeedIds } = input;
+    const channel = getUserChannel(context.user.id);
+
+    // Step 1: Fetch all prerequisite data using helper
+    let prerequisiteData: PrerequisiteData;
+    try {
+      prerequisiteData = await fetchUserPrerequisiteData(context);
+    } catch (error) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: {
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch initial data",
+          phase: "initial-fetch",
+          viewId: -1,
+        },
+      });
+      return { status: "error" };
+    }
+
+    const {
+      viewsList,
+      feedsList,
+      contentCategoriesList,
+      feedCategoriesList,
+      viewCategoriesList,
+    } = prerequisiteData;
+
+    logMessage(`[Import] Loaded ${viewsList.length} views`);
+    logMessage(`[Import] Loaded ${feedsList.length} feeds`);
+    logMessage(
+      `[Import] Loaded ${contentCategoriesList.length} content categories`,
+    );
+    logMessage(`[Import] Loaded ${feedCategoriesList.length} feed categories`);
+    logMessage(`[Import] Loaded ${viewCategoriesList.length} view categories`);
+
+    // Build application views using helper
+    const { customViews, allViews, customViewCategoryIds } =
+      buildApplicationViews(
+        context.user.id,
+        viewsList,
+        contentCategoriesList,
+        viewCategoriesList,
+      );
+
+    logMessage(`[Import] Formed ${customViews.length} application views`);
+    logMessage(`[Import] Sorted ${allViews.length} views`);
+
+    // Parse feeds to ApplicationFeed
+    const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
+
+    logMessage(
+      `[Import] Parsed ${applicationFeeds.length} / ${feedsList.length} feeds`,
+    );
+
+    // Pre-build a Map for O(1) feed lookups by ID
+    const feedsById = new Map(feedsList.map((f) => [f.id, f]));
+
+    // Step 2: Publish prerequisite data chunks
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "views", views: allViews },
+    });
+
+    logMessage(`[Import] Published views`);
+
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "feeds", feeds: applicationFeeds },
+    });
+
+    logMessage(`[Import] Published feeds`);
+
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: {
+        type: "content-categories",
+        contentCategories: contentCategoriesList,
+      },
+    });
+
+    logMessage(`[Import] Published content categories`);
+
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "feed-categories", feedCategories: feedCategoriesList },
+    });
+
+    logMessage(`[Import] Published feed categories`);
+
+    // Step 3: Publish view-feeds chunks and build feedIdToViewIds mapping
+    const feedIdToViewIds = new Map<number, number[]>();
+    for (const view of allViews) {
+      const feedIdsForView = computeFeedsForView(
+        view,
+        applicationFeeds,
+        feedCategoriesList,
+        customViews,
+        customViewCategoryIds,
+      );
+
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: {
+          type: "view-feeds",
+          viewId: view.id,
+          feedIds: feedIdsForView,
+        },
+      });
+
+      // Build reverse mapping: feedId -> viewIds
+      for (const feedId of feedIdsForView) {
+        const existingViewIds = feedIdToViewIds.get(feedId) ?? [];
+        feedIdToViewIds.set(feedId, [...existingViewIds, view.id]);
+      }
+
+      logMessage(
+        `[Import] Published ${feedIdsForView.length} feeds for view ${view.id}`,
+      );
+    }
+
+    const firstView = allViews[0];
+    const feedIds = feedsList.map((feed) => feed.id);
+
+    if (feedIds.length === 0 || !firstView) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: { type: "initial-data-complete" },
+      });
+      return { status: "completed" };
+    }
+
+    const fetchContentForViewParams: FetchContentForViewParams = {
+      feedIds,
+      visibilityFilter: undefined,
+      feedCategoriesList,
+      customViewCategoryIds,
+      customViews,
+      applicationFeeds,
+      feedsById,
+    };
+
+    // Step 4: Query and publish initial items for EACH view
+    for await (const viewResult of fetchContentForViews(
+      context,
+      allViews,
+      fetchContentForViewParams,
+    )) {
+      logMessage(
+        `[Import] Publishing ${viewResult.type} response for view ${viewResult.viewId}`,
+      );
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: viewResult,
+      });
+    }
+
+    // Signal that initial data is complete - client can hide loading screen
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "initial-data-complete" },
+    });
+
+    // Step 5: Run fetch and insert for fresh RSS items - ONLY for newly imported feeds
+    // Filter feedsList to only include the newly imported feeds
+    const newFeedsToFetch = feedsList.filter((feed) =>
+      newFeedIds.includes(feed.id),
+    );
+
+    for await (const feedResult of fetchAndInsertFeedData(
+      context,
+      newFeedsToFetch,
+    )) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: {
+          type: "feed-status",
+          status: feedResult.status,
+          feedId: feedResult.id,
+        },
+      });
+
+      // Stream ALL fetched items (unlike requestInitialData which only sends feed-status)
+      if (feedResult.status === "success" && feedResult.feedItems.length > 0) {
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: {
+            type: "feed-items",
+            feedId: feedResult.id,
+            feedItems: feedResult.feedItems,
+          },
+        });
+
+        // Stream view mappings for the items
+        const viewIdsForFeed = feedIdToViewIds.get(feedResult.id) ?? [];
+        const itemIds = feedResult.feedItems.map((item) => item.id);
+        for (const viewId of viewIdsForFeed) {
+          await publisher.publish(channel, {
+            source: "initial",
+            chunk: {
+              type: "view-items",
+              viewId,
+              feedItemIds: itemIds,
+            },
+          });
+        }
+      }
+    }
+
+    return { status: "completed" };
+  },
+);
+
+/**
  * Request new data (refresh). Only performs RSS fetching and returns items
  * newer than the client-provided timestamp.
  */

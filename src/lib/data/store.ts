@@ -1025,6 +1025,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               break;
             }
 
+            case "view-items":
+              // Items already added to feedItemsDict via feed-items chunk
+              // view-items provides view mapping (for future use)
+              break;
+
             case "error":
               console.error("Initial data error:", initialChunk.message);
               break;

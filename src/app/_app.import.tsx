@@ -28,8 +28,6 @@ import {
 } from "~/components/ui/tooltip";
 import { useFeeds } from "~/lib/data/feeds";
 import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
-import { useResetFeeds } from "~/lib/data/feeds/store";
-import { useResetFeedItems } from "~/lib/data/store";
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
@@ -70,8 +68,6 @@ function EditFeedsPage() {
   ).length;
 
   const { feeds } = useFeeds();
-  const resetFeeds = useResetFeeds();
-  const resetFeedItems = useResetFeedItems();
 
   const onSelectFiles = async () => {
     if (!inputElementRef.current) return;
@@ -102,10 +98,12 @@ function EditFeedsPage() {
 
     setFeedResults(results);
 
-    resetFeeds();
-    resetFeedItems();
+    // Extract feedIds from successful imports
+    const newFeedIds = results
+      .filter((result) => result.success)
+      .map((result) => result.feedId);
 
-    void dataSubscriptionActions.requestInitialData("unread");
+    void dataSubscriptionActions.requestImportedData(newFeedIds);
   };
 
   const onReset = () => {
