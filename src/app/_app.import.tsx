@@ -50,7 +50,7 @@ function EditFeedsPage() {
     ImportFeedDataItem[] | null
   >(null);
   const [hasStartedImport, setHasStartedImport] = useState(false);
-  const [importComplete, setImportComplete] = useState(false);
+  const [isImportComplete, setIsImportComplete] = useState(false);
 
   const channelImportCount = feedsFoundFromFile?.filter(
     (feed) => feed.shouldImport,
@@ -60,8 +60,7 @@ function EditFeedsPage() {
   const fetchStatus = useFetchFeedItemsStatus();
   const isFetchingRss = fetchStatus === "fetching";
 
-  // Detect when import completes
-  const isSuccess = importComplete;
+  const isPostImportScreen = isImportComplete || hasStartedImport;
 
   const onSelectFiles = async () => {
     if (!inputElementRef.current) return;
@@ -79,7 +78,9 @@ function EditFeedsPage() {
   const onFeedImport = async () => {
     if (!feedsFoundFromFile?.length) return;
 
-    setHasStartedImport(true);
+    setTimeout(() => {
+      setHasStartedImport(true);
+    }, 500);
 
     const channelsToImport = feedsFoundFromFile
       .filter((channel) => channel.shouldImport)
@@ -90,13 +91,13 @@ function EditFeedsPage() {
 
     // Use the new streaming import that handles both insert and RSS fetch
     await dataSubscriptionActions.streamingImport(channelsToImport);
-    setImportComplete(true);
+    setIsImportComplete(true);
   };
 
   const onReset = () => {
     setFeedsFoundFromFile(null);
     setHasStartedImport(false);
-    setImportComplete(false);
+    setIsImportComplete(false);
   };
 
   if (hasStartedImport && isFetchingRss) {
@@ -106,7 +107,7 @@ function EditFeedsPage() {
   return (
     <div className="mx-auto max-w-2xl p-6">
       <h2 className="font-mono text-lg">Import Feeds</h2>
-      {!isSuccess && (
+      {!isPostImportScreen && (
         <>
           <p className="mt-2">Serial supports importing:</p>
           <ul className="mb-6 list-disc pl-4">
@@ -129,11 +130,10 @@ function EditFeedsPage() {
           />
         </>
       )}
-      {isSuccess && (
+      {isPostImportScreen && (
         <>
           <p className="mt-2 mb-4">
-            Import finished! Your feeds have been added and their content has
-            been fetched.
+            Import finished! Your list has been added.
           </p>
           <div className="flex gap-2">
             <Link to="/">
@@ -156,7 +156,7 @@ function EditFeedsPage() {
       {!!feedsFoundFromFile && (
         <>
           <div className="mt-12">
-            {!isSuccess && (
+            {!isPostImportScreen && (
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Feeds To Import</h3>
                 <Button
@@ -198,7 +198,7 @@ function EditFeedsPage() {
                   const displayTitle = channel.title ?? channel.feedUrl;
                   // Check if feed was imported by looking in the feeds store
                   const wasImported =
-                    isSuccess &&
+                    isPostImportScreen &&
                     feeds.some((feed) => feed.url === channel.feedUrl);
 
                   return (
@@ -216,7 +216,7 @@ function EditFeedsPage() {
                         {displayTitle}
                       </label>
 
-                      {!isSuccess && (
+                      {!isPostImportScreen && (
                         <span className="space-x-1 px-2">
                           {channel.categories.map((category) => (
                             <Badge key={category} variant="outline">
@@ -243,7 +243,7 @@ function EditFeedsPage() {
                           </Tooltip>
                         )}
                         <div className="flex items-center justify-between gap-2">
-                          {!isSuccess && (
+                          {!isPostImportScreen && (
                             <Checkbox
                               id={`channel ${displayTitle}`}
                               checked={channel.shouldImport}
@@ -267,17 +267,19 @@ function EditFeedsPage() {
                               }
                             />
                           )}
-                          {isSuccess && wasImported && channel.shouldImport && (
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <CheckIcon size={20} />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                Imported Successfully!
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                          {isSuccess && !channel.shouldImport && (
+                          {isPostImportScreen &&
+                            wasImported &&
+                            channel.shouldImport && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <CheckIcon size={20} />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Imported Successfully!
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          {isPostImportScreen && !channel.shouldImport && (
                             <Tooltip>
                               <TooltipTrigger>
                                 <MinusIcon size={20} />
@@ -294,7 +296,7 @@ function EditFeedsPage() {
                 })}
             </div>
           </div>
-          {!isSuccess && (
+          {!isPostImportScreen && (
             <div className="fixed inset-x-0 bottom-0">
               <div className="mx-auto box-border max-w-2xl p-6">
                 <Button

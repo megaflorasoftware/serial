@@ -1,6 +1,5 @@
 import { Loader2Icon } from "lucide-react";
 import { Progress } from "~/components/ui/progress";
-import { ClientDatetime } from "~/components/feed/ClientDatetime";
 import {
   useFeedStatusDict,
   useFetchFeedItemsStatus,
@@ -24,7 +23,7 @@ export function ImportLoading() {
         <>
           <Progress value={progress} className="w-48" />
           <p className="text-muted-foreground pt-4 font-mono text-sm">
-            Fetching {feedsCompleted} of {totalFeeds} feeds...
+            Importing {feedsCompleted} of {totalFeeds} feeds...
           </p>
         </>
       ) : (

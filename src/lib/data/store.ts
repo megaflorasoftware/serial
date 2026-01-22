@@ -853,18 +853,21 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               viewsStore.setState({ fetchStatus: "success" });
               // Show UI immediately when views are received
               // Initialize progress tracking for initial fetch
-              set({
-                hasInitialData: true,
-                fetchFeedItemsStatus: "fetching",
-                feedStatusDict: {}, // Clear stale entries from previous fetch
-                progressState: {
-                  fetchType: "initial",
-                  metadataLoaded: false,
-                  totalViews: initialChunk.views.length,
-                  viewsWithFeedItems: new Set(),
-                  totalFeeds: 0,
-                },
-              });
+              // Only reset loading state if this is a true initial load (not a metadata refresh)
+              if (!get().hasInitialData) {
+                set({
+                  hasInitialData: true,
+                  fetchFeedItemsStatus: "fetching",
+                  feedStatusDict: {}, // Clear stale entries from previous fetch
+                  progressState: {
+                    fetchType: "initial",
+                    metadataLoaded: false,
+                    totalViews: initialChunk.views.length,
+                    viewsWithFeedItems: new Set(),
+                    totalFeeds: 0,
+                  },
+                });
+              }
               break;
 
             case "feeds":
@@ -950,7 +953,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               }
 
               set({
-                // Note: fetchFeedItemsStatus is set to "success" when all feed-status chunks arrive
+                fetchFeedItemsStatus: "success",
                 fetchFeedItemsLastFetchedAt: Date.now(),
                 fetchedVisibilityFilters: fetchedFilters,
                 viewPaginationState: paginationState,
