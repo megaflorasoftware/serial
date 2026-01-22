@@ -1012,20 +1012,6 @@ export const streamingImport = protectedProcedure
             status: feedResult.status,
           },
         });
-
-        if (
-          feedResult.status === "success" &&
-          feedResult.feedItems.length > 0
-        ) {
-          await publisher.publish(channel, {
-            source: "initial",
-            chunk: {
-              type: "feed-items",
-              feedId: feedResult.id,
-              feedItems: feedResult.feedItems,
-            },
-          });
-        }
       }
 
       return {
@@ -1046,8 +1032,14 @@ export const streamingImport = protectedProcedure
     const prerequisiteData = await fetchUserPrerequisiteData(context);
     const { contentCategoriesList, feedCategoriesList } = prerequisiteData;
 
-    const { customViews, allViews, customViewCategoryIds, applicationFeeds } =
-      prepareApplicationData(context.user.id, prerequisiteData);
+    const {
+      customViews,
+      allViews,
+      customViewCategoryIds,
+      applicationFeeds,
+      feedsById,
+      feedIds,
+    } = prepareApplicationData(context.user.id, prerequisiteData);
 
     await publishPrerequisiteDataChunks(channel, "initial", {
       allViews,
@@ -1056,38 +1048,35 @@ export const streamingImport = protectedProcedure
       feedCategoriesList,
     });
 
-    // Publish view-feeds chunks and build feedIdToViewIds mapping
-    const result = await publishViewFeedsChunks(channel, "initial", {
+    // Publish view-feeds chunks
+    await publishViewFeedsChunks(channel, "initial", {
       allViews,
       applicationFeeds,
       feedCategoriesList,
       customViews,
       customViewCategoryIds,
-      buildFeedIdToViewIds: true,
     });
-    const feedIdToViewIds = result.feedIdToViewIds!;
 
-    // Publish view-items for the newly imported feeds' items
-    for (const { feedId } of successfulFeeds) {
-      const viewIdsForFeed = feedIdToViewIds.get(feedId) ?? [];
-      if (viewIdsForFeed.length > 0) {
-        // Get the feed items we just imported from the database
-        const feedItemsForFeed = await context.db.query.feedItems.findMany({
-          where: eq(feedItems.feedId, feedId),
-        });
-        const itemIds = feedItemsForFeed.map((item) => item.id);
+    // Query and publish items for all views (like requestInitialData)
+    const fetchContentForViewParams: FetchContentForViewParams = {
+      feedIds,
+      visibilityFilter: undefined,
+      feedCategoriesList,
+      customViewCategoryIds,
+      customViews,
+      applicationFeeds,
+      feedsById,
+    };
 
-        for (const viewId of viewIdsForFeed) {
-          await publisher.publish(channel, {
-            source: "initial",
-            chunk: {
-              type: "view-items",
-              viewId,
-              feedItemIds: itemIds,
-            },
-          });
-        }
-      }
+    for await (const viewResult of fetchContentForViews(
+      context,
+      allViews,
+      fetchContentForViewParams,
+    )) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: viewResult,
+      });
     }
 
     await publisher.publish(channel, {

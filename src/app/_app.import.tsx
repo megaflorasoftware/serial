@@ -100,7 +100,7 @@ function EditFeedsPage() {
     setIsImportComplete(false);
   };
 
-  if (hasStartedImport && isFetchingRss) {
+  if (isFetchingRss) {
     return <ImportLoading />;
   }
 
