@@ -3,21 +3,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CheckIcon,
-  CircleQuestionMarkIcon,
   ExternalLinkIcon,
   GlobeIcon,
   MinusIcon,
   PlayCircleIcon,
-  TriangleAlertIcon,
   YoutubeIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { ImportDropzone } from "../components/feed/import/ImportDropzone";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
-import type { BulkImportFromFileResult } from "~/server/api/routers/feed-router";
 import type { FeedPlatform } from "~/server/db/schema";
 import type { ImportFeedDataItem } from "../components/feed/import/utils/shared";
-import FeedLoading from "~/components/loading";
+import { ImportLoading } from "~/components/ImportLoading";
+import { useFetchFeedItemsStatus } from "~/lib/data/store";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -27,7 +25,6 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { useFeeds } from "~/lib/data/feeds";
-import { useCreateFeedsFromSubscriptionImportMutation } from "~/lib/data/feeds/mutations";
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
@@ -52,22 +49,19 @@ function EditFeedsPage() {
   const [feedsFoundFromFile, setFeedsFoundFromFile] = useState<
     ImportFeedDataItem[] | null
   >(null);
-  const [feedResults, setFeedResults] = useState<BulkImportFromFileResult[]>(
-    [],
-  );
-
-  const {
-    mutateAsync: createFeedsFromSubscriptionImportMutation,
-    isPending,
-    isSuccess,
-    reset: resetCreateFeedsMutation,
-  } = useCreateFeedsFromSubscriptionImportMutation();
+  const [hasStartedImport, setHasStartedImport] = useState(false);
+  const [importComplete, setImportComplete] = useState(false);
 
   const channelImportCount = feedsFoundFromFile?.filter(
     (feed) => feed.shouldImport,
   ).length;
 
   const { feeds } = useFeeds();
+  const fetchStatus = useFetchFeedItemsStatus();
+  const isFetchingRss = fetchStatus === "fetching";
+
+  // Detect when import completes
+  const isSuccess = importComplete;
 
   const onSelectFiles = async () => {
     if (!inputElementRef.current) return;
@@ -85,6 +79,8 @@ function EditFeedsPage() {
   const onFeedImport = async () => {
     if (!feedsFoundFromFile?.length) return;
 
+    setHasStartedImport(true);
+
     const channelsToImport = feedsFoundFromFile
       .filter((channel) => channel.shouldImport)
       .map((feed) => ({
@@ -92,28 +88,19 @@ function EditFeedsPage() {
         feedUrl: feed.feedUrl,
       }));
 
-    const results = await createFeedsFromSubscriptionImportMutation({
-      feeds: channelsToImport,
-    });
-
-    setFeedResults(results);
-
-    // Extract feedIds from successful imports
-    const newFeedIds = results
-      .filter((result) => result.success)
-      .map((result) => result.feedId);
-
-    void dataSubscriptionActions.requestImportedData(newFeedIds);
+    // Use the new streaming import that handles both insert and RSS fetch
+    await dataSubscriptionActions.streamingImport(channelsToImport);
+    setImportComplete(true);
   };
 
   const onReset = () => {
     setFeedsFoundFromFile(null);
-    setFeedResults([]);
-    resetCreateFeedsMutation();
+    setHasStartedImport(false);
+    setImportComplete(false);
   };
 
-  if (isPending) {
-    return <FeedLoading />;
+  if (hasStartedImport && isFetchingRss) {
+    return <ImportLoading />;
   }
 
   return (
@@ -145,15 +132,15 @@ function EditFeedsPage() {
       {isSuccess && (
         <>
           <p className="mt-2 mb-4">
-            Imported finished! Check below to see the status of specific feed
-            imports.
+            Import finished! Your feeds have been added and their content has
+            been fetched.
           </p>
           <div className="flex gap-2">
             <Link to="/">
               <Button>Back to feeds</Button>
             </Link>
             <Button variant="outline" onClick={onReset}>
-              Try again
+              Import more
             </Button>
           </div>
         </>
@@ -209,9 +196,10 @@ function EditFeedsPage() {
                 })
                 .map((channel, i) => {
                   const displayTitle = channel.title ?? channel.feedUrl;
-                  const result = feedResults.find(
-                    (r) => r.feedUrl === channel.feedUrl,
-                  );
+                  // Check if feed was imported by looking in the feeds store
+                  const wasImported =
+                    isSuccess &&
+                    feeds.some((feed) => feed.url === channel.feedUrl);
 
                   return (
                     <div
@@ -279,50 +267,26 @@ function EditFeedsPage() {
                               }
                             />
                           )}
-                          {!!result &&
-                            (result.success ? (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <CheckIcon size={20} />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Imported Successfully!
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <TriangleAlertIcon size={20} />
-                                </TooltipTrigger>
-                                <TooltipContent>{result.error}</TooltipContent>
-                              </Tooltip>
-                            ))}
-                          {!result &&
-                            !!feedResults.length &&
-                            channel.shouldImport && (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <CircleQuestionMarkIcon size={20} />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  We don&apos;t know what happened with this
-                                  import. Feel free to file a bug report with
-                                  this feed URL!
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          {!result &&
-                            !!feedResults.length &&
-                            !channel.shouldImport && (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <MinusIcon size={20} />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  This feed was excluded from the import.
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
+                          {isSuccess && wasImported && channel.shouldImport && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <CheckIcon size={20} />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Imported Successfully!
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {isSuccess && !channel.shouldImport && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <MinusIcon size={20} />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                This feed was excluded from the import.
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -1030,6 +1030,34 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               // view-items provides view mapping (for future use)
               break;
 
+            case "import-start":
+              // Initialize progress tracking for streaming import
+              set({
+                hasInitialData: true,
+                fetchFeedItemsStatus: "fetching",
+                feedStatusDict: {},
+                progressState: {
+                  fetchType: "initial",
+                  metadataLoaded: false,
+                  totalViews: 0,
+                  viewsWithFeedItems: new Set(),
+                  totalFeeds: initialChunk.totalFeeds,
+                },
+              });
+              break;
+
+            case "import-feed-inserted":
+              // Add the newly inserted feed to the feeds store
+              feedsStore.getState().add(initialChunk.feed);
+              break;
+
+            case "import-feed-error":
+              // Log import errors (could also track in state for UI display)
+              console.error(
+                `Import error for ${initialChunk.feedUrl}: ${initialChunk.error}`,
+              );
+              break;
+
             case "error":
               console.error("Initial data error:", initialChunk.message);
               break;

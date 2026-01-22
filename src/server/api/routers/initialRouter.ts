@@ -8,6 +8,7 @@ import {
   REVALIDATE_VIEW_CHUNK_SIZE,
 } from "../constants";
 import { publisher } from "../publisher";
+import { insertFeedWithCategories } from "./feed-router/utils";
 import type { VisibilityFilter } from "~/lib/data/atoms";
 import type {
   ApplicationFeed,
@@ -35,6 +36,7 @@ import { prepareArrayChunks } from "~/lib/iterators";
 import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
 
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
+import { workerPool } from "~/lib/workerPool";
 import {
   contentCategories,
   feedCategories,
@@ -72,6 +74,14 @@ export type GetByViewChunk =
   | { type: "new-data-complete" }
   | { type: "refresh-start"; totalFeeds: number }
   | { type: "view-items"; viewId: number; feedItemIds: string[] }
+  | {
+      type: "import-feed-inserted";
+      feedUrl: string;
+      feedId: number;
+      feed: ApplicationFeed;
+    }
+  | { type: "import-feed-error"; feedUrl: string; error: string }
+  | { type: "import-start"; totalFeeds: number }
   | ViewDataChunk;
 
 export type RevalidateViewChunk =
@@ -910,6 +920,180 @@ export const requestImportedData = protectedProcedure
         }
       }
     }
+
+    return { status: "completed" };
+  });
+
+/**
+ * Combined streaming import endpoint that inserts feeds and fetches RSS content
+ * in a single operation using a worker pool for maximum parallelism.
+ * Each feed is processed completely (insert + RSS fetch) before being considered done.
+ */
+export const streamingImport = protectedProcedure
+  .input(
+    z.object({
+      feeds: z
+        .object({
+          feedUrl: z.string(),
+          categories: z.string().array(),
+        })
+        .array(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    const channel = getUserChannel(context.user.id);
+    const BATCH_SIZE = 8;
+
+    if (!input.feeds.length) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: { type: "initial-data-complete" },
+      });
+      return { status: "completed" };
+    }
+
+    // Publish import start with total feeds count
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "import-start", totalFeeds: input.feeds.length },
+    });
+
+    // Track successful feed IDs for building view mappings later
+    const successfulFeeds: Array<{
+      feedId: number;
+      feed: typeof feeds.$inferSelect;
+    }> = [];
+
+    // Worker function: insert feed + fetch RSS content
+    async function processFeed(feedInput: (typeof input.feeds)[0]) {
+      // 1. Insert feed within a transaction
+      const insertResult = await context.db.transaction(async (tx) => {
+        return await insertFeedWithCategories(tx, context.user.id, feedInput);
+      });
+
+      if (!insertResult.success) {
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: {
+            type: "import-feed-error",
+            feedUrl: feedInput.feedUrl,
+            error: insertResult.error,
+          },
+        });
+        return { success: false as const, feedUrl: feedInput.feedUrl };
+      }
+
+      // 2. Publish that feed was inserted
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: {
+          type: "import-feed-inserted",
+          feedUrl: feedInput.feedUrl,
+          feedId: insertResult.feedId,
+          feed: insertResult.feed,
+        },
+      });
+
+      // Track successful feed for later
+      successfulFeeds.push({
+        feedId: insertResult.feedId,
+        feed: insertResult.feed as typeof feeds.$inferSelect,
+      });
+
+      // 3. Immediately fetch RSS content for this feed
+      for await (const feedResult of fetchAndInsertFeedData(context, [
+        insertResult.feed as typeof feeds.$inferSelect,
+      ])) {
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: {
+            type: "feed-status",
+            feedId: feedResult.id,
+            status: feedResult.status,
+          },
+        });
+
+        if (
+          feedResult.status === "success" &&
+          feedResult.feedItems.length > 0
+        ) {
+          await publisher.publish(channel, {
+            source: "initial",
+            chunk: {
+              type: "feed-items",
+              feedId: feedResult.id,
+              feedItems: feedResult.feedItems,
+            },
+          });
+        }
+      }
+
+      return {
+        success: true as const,
+        feedUrl: feedInput.feedUrl,
+        feedId: insertResult.feedId,
+      };
+    }
+
+    // Process all feeds through worker pool
+    const workerIterator = workerPool(input.feeds, BATCH_SIZE, processFeed);
+    // Consume the iterator - results are published via side effects in processFeed
+    while (!(await workerIterator.next()).done) {
+      // Results stream as each feed completes
+    }
+
+    // After all feeds complete, publish updated prerequisite data
+    const prerequisiteData = await fetchUserPrerequisiteData(context);
+    const { contentCategoriesList, feedCategoriesList } = prerequisiteData;
+
+    const { customViews, allViews, customViewCategoryIds, applicationFeeds } =
+      prepareApplicationData(context.user.id, prerequisiteData);
+
+    await publishPrerequisiteDataChunks(channel, "initial", {
+      allViews,
+      applicationFeeds,
+      contentCategoriesList,
+      feedCategoriesList,
+    });
+
+    // Publish view-feeds chunks and build feedIdToViewIds mapping
+    const result = await publishViewFeedsChunks(channel, "initial", {
+      allViews,
+      applicationFeeds,
+      feedCategoriesList,
+      customViews,
+      customViewCategoryIds,
+      buildFeedIdToViewIds: true,
+    });
+    const feedIdToViewIds = result.feedIdToViewIds!;
+
+    // Publish view-items for the newly imported feeds' items
+    for (const { feedId } of successfulFeeds) {
+      const viewIdsForFeed = feedIdToViewIds.get(feedId) ?? [];
+      if (viewIdsForFeed.length > 0) {
+        // Get the feed items we just imported from the database
+        const feedItemsForFeed = await context.db.query.feedItems.findMany({
+          where: eq(feedItems.feedId, feedId),
+        });
+        const itemIds = feedItemsForFeed.map((item) => item.id);
+
+        for (const viewId of viewIdsForFeed) {
+          await publisher.publish(channel, {
+            source: "initial",
+            chunk: {
+              type: "view-items",
+              viewId,
+              feedItemIds: itemIds,
+            },
+          });
+        }
+      }
+    }
+
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "initial-data-complete" },
+    });
 
     return { status: "completed" };
   });
