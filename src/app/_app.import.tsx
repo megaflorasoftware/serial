@@ -2,6 +2,7 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  AlertTriangleIcon,
   CheckIcon,
   ExternalLinkIcon,
   GlobeIcon,
@@ -71,7 +72,14 @@ function EditFeedsPage() {
     inputElementRef.current.value = "";
 
     if (feedResult.success) {
-      setFeedsFoundFromFile(feedResult.data);
+      // Mark already-added feeds as shouldImport: false
+      const feedsWithImportStatus = feedResult.data.map((feed) => ({
+        ...feed,
+        shouldImport: !feeds.some(
+          (existingFeed) => existingFeed.url === feed.feedUrl,
+        ),
+      }));
+      setFeedsFoundFromFile(feedsWithImportStatus);
     }
   };
 
@@ -167,7 +175,13 @@ function EditFeedsPage() {
                       setFeedsFoundFromFile((prevChannels) => {
                         if (!prevChannels) return prevChannels;
                         return prevChannels.map((channel) => {
-                          channel.shouldImport = true;
+                          // Don't enable import for already-added feeds
+                          const isAlreadyAdded = feeds.some(
+                            (feed) => feed.url === channel.feedUrl,
+                          );
+                          if (!isAlreadyAdded) {
+                            channel.shouldImport = true;
+                          }
                           return channel;
                         });
                       });
@@ -196,19 +210,32 @@ function EditFeedsPage() {
                 })
                 .map((channel, i) => {
                   const displayTitle = channel.title ?? channel.feedUrl;
+                  // Check if feed already exists in the feeds store
+                  const isAlreadyAdded = feeds.some(
+                    (feed) => feed.url === channel.feedUrl,
+                  );
                   // Check if feed was imported by looking in the feeds store
-                  const wasImported =
-                    isPostImportScreen &&
-                    feeds.some((feed) => feed.url === channel.feedUrl);
+                  const wasImported = isPostImportScreen && isAlreadyAdded;
 
                   return (
                     <div
                       key={displayTitle}
                       className="border-muted/50 flex items-center justify-between border-0 border-t border-solid py-4"
                     >
-                      <span className="bg-background border-foreground/30 text-foreground/50 mr-3 grid size-7 place-items-center rounded border border-solid">
-                        <PlatformIcon platform={channel.platform} />
-                      </span>
+                      {!isPostImportScreen && isAlreadyAdded ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="bg-background border-foreground/30 text-foreground/50 mr-3 grid size-7 place-items-center rounded border border-dashed">
+                              <AlertTriangleIcon size={16} />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Feed already exists</TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="bg-background border-foreground/30 text-foreground/50 mr-3 grid size-7 place-items-center rounded border border-solid">
+                          <PlatformIcon platform={channel.platform} />
+                        </span>
+                      )}
                       <label
                         className="line-clamp-1 flex-1"
                         htmlFor={`channel ${displayTitle}`}
@@ -260,11 +287,7 @@ function EditFeedsPage() {
                                   return [...prevChannels];
                                 });
                               }}
-                              disabled={
-                                !!feeds.find(
-                                  (feed) => feed.url === channel.feedUrl,
-                                )
-                              }
+                              disabled={isAlreadyAdded}
                             />
                           )}
                           {isPostImportScreen &&

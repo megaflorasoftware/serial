@@ -23,7 +23,7 @@ export type PaginationState = {
 };
 
 export type ProgressState = {
-  fetchType: "idle" | "initial" | "refresh";
+  fetchType: "idle" | "initial" | "refresh" | "import";
   metadataLoaded: boolean;
   totalViews: number;
   viewsWithFeedItems: Set<number>;
@@ -1040,7 +1040,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 fetchFeedItemsStatus: "fetching",
                 feedStatusDict: {},
                 progressState: {
-                  fetchType: "initial",
+                  fetchType: "import",
                   metadataLoaded: false,
                   totalViews: 0,
                   viewsWithFeedItems: new Set(),
