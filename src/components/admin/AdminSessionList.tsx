@@ -1,6 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
+import dayjs from "dayjs";
 import { MonitorIcon, SmartphoneIcon, UserIcon } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 
@@ -91,10 +91,12 @@ export function AdminSessionList({ sessions }: AdminSessionListProps) {
                 <div className="text-muted-foreground flex flex-col text-xs">
                   {session.ipAddress && <span>IP: {session.ipAddress}</span>}
                   <span>
-                    Created: {format(new Date(session.createdAt), "PPp")}
+                    Created:{" "}
+                    {dayjs(session.createdAt).format("MMM D, YYYY h:mm A")}
                   </span>
                   <span>
-                    Expires: {format(new Date(session.expiresAt), "PPp")}
+                    Expires:{" "}
+                    {dayjs(session.expiresAt).format("MMM D, YYYY h:mm A")}
                   </span>
                 </div>
               </div>

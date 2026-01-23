@@ -38,7 +38,7 @@ export function ImpersonationBanner() {
           <UserIcon size={16} />
           <span>
             You are impersonating{" "}
-            <strong>{session?.user.name || session?.user.email}</strong>
+            <strong>{session.user.name || session.user.email}</strong>
           </span>
         </div>
         <Button

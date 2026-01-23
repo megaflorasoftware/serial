@@ -1,6 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
+import dayjs from "dayjs";
 import {
   ArrowLeftIcon,
   BanIcon,
@@ -84,7 +84,7 @@ export function AdminUserDetails({ data }: AdminUserDetailsProps) {
         <div className="text-muted-foreground grid grid-cols-2 gap-2 text-sm">
           <div>
             <span className="font-medium">Created:</span>{" "}
-            {format(new Date(user.createdAt), "PPp")}
+            {dayjs(user.createdAt).format("MMM D, YYYY h:mm A")}
           </div>
           {user.banned && user.banReason && (
             <div className="col-span-2">
@@ -94,7 +94,7 @@ export function AdminUserDetails({ data }: AdminUserDetailsProps) {
           {user.banned && user.banExpires && (
             <div>
               <span className="font-medium">Ban expires:</span>{" "}
-              {format(user.banExpires, "PPp")}
+              {dayjs(user.banExpires).format("MMM D, YYYY h:mm A")}
             </div>
           )}
         </div>
