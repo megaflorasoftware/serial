@@ -22,8 +22,8 @@ export function PublicSignupToggle() {
         });
         toast.success(
           result.enabled
-            ? "Public sign-ups enabled"
-            : "Public sign-ups disabled",
+            ? "Public sign ups enabled"
+            : "Public sign ups disabled",
         );
       },
       onError: (error) => {
@@ -49,7 +49,7 @@ export function PublicSignupToggle() {
     <div className="flex items-center justify-between rounded-lg border p-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="public-signup-toggle" className="font-medium">
-          Allow Public Sign Up
+          Allow public sign up
         </Label>
         <span className="text-muted-foreground text-sm">
           {data?.enabled

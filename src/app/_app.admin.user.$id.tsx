@@ -16,8 +16,6 @@ export const Route = createFileRoute("/_app/admin/user/$id")({
 function AdminUserPage() {
   const data = Route.useLoaderData();
 
-  console.log(data);
-
   return (
     <div className="mx-auto max-w-2xl p-6">
       <AdminUserDetails data={data} />
