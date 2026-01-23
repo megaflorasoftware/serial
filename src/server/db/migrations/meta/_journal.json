@@ -211,6 +211,13 @@
       "when": 1769068206198,
       "tag": "0029_abandoned_captain_britain",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1769186535697,
+      "tag": "0030_omniscient_firebrand",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { render } from "@react-email/components";
 import sendgrid from "@sendgrid/mail";
 import { betterAuth } from "better-auth";
+import { admin } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { createMiddleware } from "@tanstack/react-start";
@@ -47,7 +48,7 @@ export const auth = betterAuth({
       await sendgrid.send(options);
     },
   },
-  plugins: [tanstackStartCookies()],
+  plugins: [admin(), tanstackStartCookies()],
 
   /** if no database is provided, the user data will be stored in memory.
    * Make sure to provide a database to persist user data **/
