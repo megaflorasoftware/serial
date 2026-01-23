@@ -71,7 +71,7 @@ export const auth = betterAuth({
         const config = await db
           .select()
           .from(appConfig)
-          .where(eq(appConfig.key, "publicSignupsEnabled"))
+          .where(eq(appConfig.key, "public-signup-enabled"))
           .get();
 
         // Default to true if not set (allow signups by default)

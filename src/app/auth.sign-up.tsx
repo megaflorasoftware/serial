@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -12,10 +11,11 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { signUp } from "~/lib/auth-client";
 import { AuthHeader } from "~/components/auth/AuthHeader";
-import { orpc } from "~/lib/orpc";
+import { orpcRouterClient } from "~/lib/orpc";
 
 export const Route = createFileRoute("/auth/sign-up")({
   component: SignUp,
+  loader: () => orpcRouterClient.admin.isPublicSignupEnabled(),
 });
 
 function SignUp() {
@@ -26,26 +26,10 @@ function SignUp() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const { data: signupStatus, isLoading: isCheckingSignup } = useQuery(
-    orpc.admin.isPublicSignupEnabled.queryOptions(),
-  );
+  const signupStatus = Route.useLoaderData();
+  const signupsEnabled = signupStatus.enabled === true;
 
-  const signupsDisabled = signupStatus?.enabled === false;
-
-  if (isCheckingSignup) {
-    return (
-      <>
-        <AuthHeader removePadding />
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="animate-spin" size={24} />
-          </div>
-        </CardContent>
-      </>
-    );
-  }
-
-  if (signupsDisabled) {
+  if (!signupsEnabled) {
     return (
       <AuthHeader>
         <div className="flex flex-col items-center gap-4 text-center">

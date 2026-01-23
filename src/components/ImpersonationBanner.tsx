@@ -16,8 +16,7 @@ export function ImpersonationBanner() {
     orpc.admin.stopImpersonating.mutationOptions({
       onSuccess: () => {
         toast.success("Stopped impersonating");
-        router.navigate({ to: "/admin" });
-        window.location.reload();
+        void router.navigate({ to: "/admin", reloadDocument: true });
       },
       onError: (error) => {
         toast.error(error.message || "Failed to stop impersonating");

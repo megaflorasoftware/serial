@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   BanIcon,
   KeyRoundIcon,
@@ -24,18 +24,12 @@ export function AdminUserActions({
   isBanned,
   isCurrentUser,
 }: AdminUserActionsProps) {
-  const queryClient = useQueryClient();
   const router = useRouter();
 
   const banMutation = useMutation(
     orpc.admin.banUser.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: orpc.admin.listUsers.key(),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: orpc.admin.getUserById.key({ input: { userId } }),
-        });
+        await router.invalidate();
         toast.success("User banned");
       },
       onError: (error) => {
@@ -47,12 +41,7 @@ export function AdminUserActions({
   const unbanMutation = useMutation(
     orpc.admin.unbanUser.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: orpc.admin.listUsers.key(),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: orpc.admin.getUserById.key({ input: { userId } }),
-        });
+        await router.invalidate();
         toast.success("User unbanned");
       },
       onError: (error) => {
@@ -64,9 +53,7 @@ export function AdminUserActions({
   const revokeSessionsMutation = useMutation(
     orpc.admin.revokeUserSessions.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: orpc.admin.getUserById.key({ input: { userId } }),
-        });
+        await router.invalidate();
         toast.success("All sessions revoked");
       },
       onError: (error) => {

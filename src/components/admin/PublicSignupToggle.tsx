@@ -49,7 +49,7 @@ export function PublicSignupToggle() {
     <div className="flex items-center justify-between rounded-lg border p-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="public-signup-toggle" className="font-medium">
-          Public Sign-ups
+          Allow Public Sign Up
         </Label>
         <span className="text-muted-foreground text-sm">
           {data?.enabled
@@ -59,7 +59,7 @@ export function PublicSignupToggle() {
       </div>
       <Switch
         id="public-signup-toggle"
-        checked={data?.enabled ?? true}
+        checked={data?.enabled ?? false}
         onCheckedChange={handleToggle}
         disabled={mutation.isPending}
       />

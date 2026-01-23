@@ -405,8 +405,18 @@ export type DatabaseInstapaperConnection =
   typeof instapaperConnections.$inferSelect;
 
 // === App Config (app-wide settings) ===
+
+/**
+ * Type-safe app config key -> value mappings
+ */
+export type AppConfigKeys = {
+  "public-signup-enabled": "true" | "false";
+};
+
+export type AppConfigKey = keyof AppConfigKeys;
+
 export const appConfig = sqliteTable("app_config", {
-  key: text("key").primaryKey(),
+  key: text("key").$type<AppConfigKey>().primaryKey(),
   value: text("value").notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .$default(() => new Date())

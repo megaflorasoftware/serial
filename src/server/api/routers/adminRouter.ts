@@ -166,7 +166,7 @@ export const getPublicSignupSetting = adminProcedure.handler(async () => {
   const config = await db
     .select()
     .from(appConfig)
-    .where(eq(appConfig.key, "publicSignupsEnabled"))
+    .where(eq(appConfig.key, "public-signup-enabled"))
     .get();
 
   return {
@@ -185,7 +185,7 @@ export const setPublicSignupSetting = adminProcedure
     await db
       .insert(appConfig)
       .values({
-        key: "publicSignupsEnabled",
+        key: "public-signup-enabled",
         value: input.enabled ? "true" : "false",
         updatedAt: new Date(),
       })
@@ -205,7 +205,7 @@ export const isPublicSignupEnabled = publicProcedure.handler(async () => {
   const config = await db
     .select()
     .from(appConfig)
-    .where(eq(appConfig.key, "publicSignupsEnabled"))
+    .where(eq(appConfig.key, "public-signup-enabled"))
     .get();
 
   // Default to false if not set
