@@ -1,0 +1,202 @@
+import { ORPCError } from "@orpc/server";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+
+import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
+import { auth } from "~/server/auth";
+import { appConfig } from "~/server/db/schema";
+import { db } from "~/server/db";
+
+// Admin procedure that requires admin role
+const adminProcedure = protectedProcedure.use(({ context, next }) => {
+  if (context.user.role !== "admin") {
+    throw new ORPCError("FORBIDDEN", { message: "Admin access required" });
+  }
+  return next();
+});
+
+// List all users with offset-based pagination
+export const listUsers = adminProcedure
+  .input(
+    z.object({
+      limit: z.number().min(1).max(100).default(50),
+      offset: z.number().min(0).default(0),
+      searchQuery: z.string().optional(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    const result = await auth.api.listUsers({
+      headers: context.headers,
+      query: {
+        limit: input.limit,
+        offset: input.offset,
+        searchField: input.searchQuery ? "email" : undefined,
+        searchValue: input.searchQuery,
+      },
+    });
+
+    return {
+      users: result.users,
+      total: result.total,
+    };
+  });
+
+// Get a single user by ID with their sessions
+export const getUserById = adminProcedure
+  .input(
+    z.object({
+      userId: z.string(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    const sessionsResult = await auth.api.listUserSessions({
+      headers: context.headers,
+      body: { userId: input.userId },
+    });
+
+    // Find the specific user - we need to search for them
+    const allUsers = await auth.api.listUsers({
+      headers: context.headers,
+      query: {
+        limit: 1000,
+        offset: 0,
+      },
+    });
+
+    const user = allUsers.users.find((u) => u.id === input.userId);
+
+    if (!user) {
+      throw new ORPCError("NOT_FOUND", { message: "User not found" });
+    }
+
+    return {
+      user,
+      sessions: sessionsResult.sessions,
+    };
+  });
+
+// Ban a user
+export const banUser = adminProcedure
+  .input(
+    z.object({
+      userId: z.string(),
+      banReason: z.string().optional(),
+      banExpiresIn: z.number().optional(), // seconds
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    await auth.api.banUser({
+      headers: context.headers,
+      body: {
+        userId: input.userId,
+        banReason: input.banReason,
+        banExpiresIn: input.banExpiresIn,
+      },
+    });
+  });
+
+// Unban a user
+export const unbanUser = adminProcedure
+  .input(
+    z.object({
+      userId: z.string(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    await auth.api.unbanUser({
+      headers: context.headers,
+      body: { userId: input.userId },
+    });
+  });
+
+// Revoke all sessions for a user
+export const revokeUserSessions = adminProcedure
+  .input(
+    z.object({
+      userId: z.string(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    await auth.api.revokeUserSessions({
+      headers: context.headers,
+      body: { userId: input.userId },
+    });
+  });
+
+// Impersonate a user
+export const impersonateUser = adminProcedure
+  .input(
+    z.object({
+      userId: z.string(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    const result = await auth.api.impersonateUser({
+      headers: context.headers,
+      body: { userId: input.userId },
+    });
+
+    return result;
+  });
+
+// Stop impersonating
+export const stopImpersonating = adminProcedure.handler(async ({ context }) => {
+  const result = await auth.api.stopImpersonating({
+    headers: context.headers,
+  });
+
+  return result;
+});
+
+// Get public signup setting
+export const getPublicSignupSetting = adminProcedure.handler(async () => {
+  const config = await db
+    .select()
+    .from(appConfig)
+    .where(eq(appConfig.key, "publicSignupsEnabled"))
+    .get();
+
+  return {
+    enabled: config?.value === "true",
+  };
+});
+
+// Set public signup setting
+export const setPublicSignupSetting = adminProcedure
+  .input(
+    z.object({
+      enabled: z.boolean(),
+    }),
+  )
+  .handler(async ({ input }) => {
+    await db
+      .insert(appConfig)
+      .values({
+        key: "publicSignupsEnabled",
+        value: input.enabled ? "true" : "false",
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: appConfig.key,
+        set: {
+          value: input.enabled ? "true" : "false",
+          updatedAt: new Date(),
+        },
+      });
+
+    return { enabled: input.enabled };
+  });
+
+// Public procedure to check if signups are enabled (used by sign-up page)
+export const isPublicSignupEnabled = publicProcedure.handler(async () => {
+  const config = await db
+    .select()
+    .from(appConfig)
+    .where(eq(appConfig.key, "publicSignupsEnabled"))
+    .get();
+
+  // Default to false if not set
+  return {
+    enabled: config?.value === "true",
+  };
+});
