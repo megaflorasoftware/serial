@@ -76,7 +76,10 @@ export const auth = betterAuth({
 
         if (!isPublicSignupEnabled(config?.value)) {
           // Allow signup if no users exist (first user scenario)
-          const userCount = await db.select({ count: count() }).from(user).get();
+          const userCount = await db
+            .select({ count: count() })
+            .from(user)
+            .get();
           if ((userCount?.count ?? 0) > 0) {
             throw new APIError("BAD_REQUEST", {
               message: "Sign ups are currently disabled",
