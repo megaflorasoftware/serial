@@ -1,10 +1,11 @@
 import { ORPCError } from "@orpc/server";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { isPublicSignupEnabled } from "~/lib/constants";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
-import { appConfig } from "~/server/db/schema";
+import { appConfig, user } from "~/server/db/schema";
 import { db } from "~/server/db";
 
 // Admin procedure that requires admin role
@@ -170,7 +171,7 @@ export const getPublicSignupSetting = adminProcedure.handler(async () => {
     .get();
 
   return {
-    enabled: config?.value === "true",
+    enabled: isPublicSignupEnabled(config?.value),
   };
 });
 
@@ -201,15 +202,18 @@ export const setPublicSignupSetting = adminProcedure
   });
 
 // Public procedure to check if signups are enabled (used by sign-up page)
-export const isPublicSignupEnabled = publicProcedure.handler(async () => {
+export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
   const config = await db
     .select()
     .from(appConfig)
     .where(eq(appConfig.key, "public-signup-enabled"))
     .get();
 
-  // Default to false if not set
+  const userCount = await db.select({ count: count() }).from(user).get();
+  const isFirstUser = (userCount?.count ?? 0) === 0;
+
   return {
-    enabled: config?.value === "true",
+    enabled: isPublicSignupEnabled(config?.value) || isFirstUser,
+    isFirstUser,
   };
 });

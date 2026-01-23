@@ -8,11 +8,11 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
-import { eq } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { db } from "../db";
-import { appConfig } from "../db/schema";
+import { appConfig, user } from "../db/schema";
 import ResetPasswordEmail from "~/emails/reset-password";
-import { BASE_SIGNED_OUT_URL } from "~/lib/constants";
+import { BASE_SIGNED_OUT_URL, isPublicSignupEnabled } from "~/lib/constants";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {
@@ -74,11 +74,38 @@ export const auth = betterAuth({
           .where(eq(appConfig.key, "public-signup-enabled"))
           .get();
 
-        // Default to true if not set (allow signups by default)
-        if (config?.value === "false") {
-          throw new APIError("BAD_REQUEST", {
-            message: "Sign ups are currently disabled",
-          });
+        if (!isPublicSignupEnabled(config?.value)) {
+          // Allow signup if no users exist (first user scenario)
+          const userCount = await db.select({ count: count() }).from(user).get();
+          if ((userCount?.count ?? 0) > 0) {
+            throw new APIError("BAD_REQUEST", {
+              message: "Sign ups are currently disabled",
+            });
+          }
+        }
+      }
+    }),
+    after: createAuthMiddleware(async (ctx) => {
+      // After successful sign-up, check if this is the first user
+      if (
+        ctx.path.startsWith("/sign-up") &&
+        ctx.context?.newSession?.user?.id
+      ) {
+        const userId = ctx.context.newSession.user.id;
+
+        // Check if this user is the first user by creation time
+        const firstUser = await db
+          .select({ id: user.id })
+          .from(user)
+          .orderBy(asc(user.createdAt))
+          .limit(1)
+          .get();
+
+        if (firstUser?.id === userId) {
+          await db
+            .update(user)
+            .set({ role: "admin" })
+            .where(eq(user.id, userId));
         }
       }
     }),

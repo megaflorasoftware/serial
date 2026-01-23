@@ -15,7 +15,7 @@ import { orpcRouterClient } from "~/lib/orpc";
 
 export const Route = createFileRoute("/auth/sign-up")({
   component: SignUp,
-  loader: () => orpcRouterClient.admin.isPublicSignupEnabled(),
+  loader: () => orpcRouterClient.admin.getIsPublicSignupEnabled(),
 });
 
 function SignUp() {
@@ -46,7 +46,18 @@ function SignUp() {
 
   return (
     <>
-      <AuthHeader removePadding />
+      <AuthHeader removePadding={!signupStatus.isFirstUser}>
+        {signupStatus.isFirstUser && (
+          <div className="text-center">
+            <div className="text-center font-semibold">
+              Admin Account Creation
+            </div>
+            <div className="text-muted-foreground mx-auto max-w-2xs pt-1">
+              Welcome to Serial! Let&apos;s create your first account.
+            </div>
+          </div>
+        )}
+      </AuthHeader>
       <CardContent>
         <div className="grid gap-4">
           <div className="grid gap-2">
