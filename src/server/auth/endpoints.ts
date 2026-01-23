@@ -20,6 +20,12 @@ export const fetchAdminUserById = createServerFn({ method: "GET" })
     const request = getRequest();
     const headers = request.headers;
 
+    // Verify the caller is an admin
+    const session = await auth.api.getSession({ headers });
+    if (!session?.user || session.user.role !== "admin") {
+      throw new Error("Unauthorized: Admin access required");
+    }
+
     const sessionsResult = await auth.api.listUserSessions({
       headers,
       body: { userId },
