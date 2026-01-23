@@ -139,14 +139,27 @@ export const impersonateUser = adminProcedure
     return result;
   });
 
-// Stop impersonating
-export const stopImpersonating = adminProcedure.handler(async ({ context }) => {
-  const result = await auth.api.stopImpersonating({
-    headers: context.headers,
-  });
+// Stop impersonating - uses protectedProcedure because when impersonating,
+// the user context is the impersonated user (not admin). We check impersonatedBy instead.
+export const stopImpersonating = protectedProcedure.handler(
+  async ({ context }) => {
+    // Allow if user is admin OR if this is an impersonation session
+    const isAdmin = context.user.role === "admin";
+    const isImpersonating = !!context.session.impersonatedBy;
 
-  return result;
-});
+    if (!isAdmin && !isImpersonating) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Must be admin or in impersonation session",
+      });
+    }
+
+    const result = await auth.api.stopImpersonating({
+      headers: context.headers,
+    });
+
+    return result;
+  },
+);
 
 // Get public signup setting
 export const getPublicSignupSetting = adminProcedure.handler(async () => {
