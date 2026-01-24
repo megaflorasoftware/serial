@@ -328,9 +328,15 @@ async function* fetchContentForViews(
   while (pendingPromises.size > 0) {
     const result = await Promise.any(pendingPromises.values());
 
-    if (result.chunk.type === "feed-items" && result.chunk.viewId !== undefined) {
+    if (
+      result.chunk.type === "feed-items" &&
+      result.chunk.viewId !== undefined
+    ) {
       pendingPromises.delete(result.chunk.viewId);
-    } else if (result.chunk.type === "error" && result.chunk.viewId !== undefined) {
+    } else if (
+      result.chunk.type === "error" &&
+      result.chunk.viewId !== undefined
+    ) {
       pendingPromises.delete(result.chunk.viewId);
     }
     yield result;
@@ -339,14 +345,6 @@ async function* fetchContentForViews(
   return;
 }
 
-/**
- * Filter newly fetched items to only include those that should be streamed for a view.
- * Items must be:
- * - Unread (not watched, not watch later)
- * - Belong to a feed in this view
- * - Not already sent in initial data
- * - Newer than or equal to the oldest initial item (if any initial items exist)
- */
 function filterNewItemsForView(
   items: ApplicationFeedItem[],
   boundary: ViewBoundary,
@@ -370,7 +368,6 @@ function filterNewItemsForView(
   });
 }
 
-// Helper to get the user's channel name
 function getUserChannel(userId: string): string {
   return `user:${userId}`;
 }
@@ -892,7 +889,10 @@ export const requestInitialData = protectedProcedure
         });
 
         // Stream newly fetched items that belong to views
-        if (feedResult.status === "success" && feedResult.feedItems.length > 0) {
+        if (
+          feedResult.status === "success" &&
+          feedResult.feedItems.length > 0
+        ) {
           const viewIdsForFeed = feedIdToViewIds?.get(feedResult.id) ?? [];
 
           // Filter items per view and collect results
