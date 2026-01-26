@@ -21,9 +21,10 @@ export function useVideoShortcuts() {
     captionsModuleLoaded,
     toggleCaptions,
     toggleNativeFullscreen,
+    isNativeFullscreen,
   } = useCustomVideoPlayerContext();
 
-  const { view, setView } = useView();
+  const { view, setView, toggleView } = useView();
 
   const keypressTimeRef = useRef<Record<string, number | null>>({});
 
@@ -115,6 +116,13 @@ export function useVideoShortcuts() {
         toggleNativeFullscreen();
         return;
       }
+      if ((event.key === "f" || event.key === "`") && isNativeFullscreen) {
+        event.preventDefault();
+        // Exit native fullscreen and enter windowed fullscreen
+        document.exitFullscreen();
+        setView("fullscreen");
+        return;
+      }
     };
 
     window.addEventListener("keydown", processKeyDown);
@@ -136,7 +144,9 @@ export function useVideoShortcuts() {
     captionsAvailable,
     toggleCaptions,
     toggleNativeFullscreen,
+    isNativeFullscreen,
     view,
     setView,
+    toggleView,
   ]);
 }
