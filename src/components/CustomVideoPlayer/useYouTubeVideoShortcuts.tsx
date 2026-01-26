@@ -22,7 +22,6 @@ export function useVideoShortcuts() {
     toggleCaptions,
     toggleNativeFullscreen,
     isNativeFullscreen,
-    isMuted,
     toggleMute,
   } = useCustomVideoPlayerContext();
 
