@@ -2,20 +2,44 @@
 "use client";
 
 import clsx from "clsx";
-import { MaximizeIcon, MinimizeIcon, PlayIcon } from "lucide-react";
+import {
+  ALargeSmallIcon,
+  CaptionsIcon,
+  CaptionsOffIcon,
+  LanguagesIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  PlayIcon,
+} from "lucide-react";
 import YouTube from "react-youtube";
 import { useView } from "~/components/feed/watch/[id]/useView";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import { transformSecondsToFormattedTime } from "~/lib/transformSecondsToFormattedTime";
 import { ButtonWithShortcut } from "../ButtonWithShortcut";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { Slider } from "../ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import {
   CustomVideoPlayerProvider,
   useCustomVideoPlayerContext,
 } from "./CustomVideoPlayerProvider";
-import { YOUTUBE_PLAYBACK_SPEEDS, YOUTUBE_PLAYER_STATES } from "./constants";
+import {
+  YOUTUBE_CAPTION_SIZES,
+  YOUTUBE_PLAYBACK_SPEEDS,
+  YOUTUBE_PLAYER_STATES,
+} from "./constants";
 import { useVideoShortcuts } from "./useYouTubeVideoShortcuts";
 
 interface IResponsiveVideoProps {
@@ -29,6 +53,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
   const {
     playerRef,
     onStateChange,
+    onPlayerReady,
     toggleVideoPlayback,
     manualPlayerState,
     playbackSpeed,
@@ -38,6 +63,13 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     videoProgress,
     seekToSecond,
     videoType,
+    captionsEnabled,
+    toggleCaptions,
+    captionSize,
+    setCaptionSize,
+    captionTracks,
+    currentCaptionTrack,
+    setCaptionTrack,
   } = useCustomVideoPlayerContext();
   useVideoShortcuts();
 
@@ -71,6 +103,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
               },
             }}
             onStateChange={onStateChange}
+            onReady={onPlayerReady}
             loading="eager"
           />
           <div className="group">
@@ -173,6 +206,91 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {captionsEnabled && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost">
+                          <CaptionsIcon size={16} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        {captionTracks.length > 0 && (
+                          <>
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <LanguagesIcon size={14} className="mr-2" />
+                                Language
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                <DropdownMenuRadioGroup
+                                  value={
+                                    currentCaptionTrack?.languageCode ?? ""
+                                  }
+                                  onValueChange={(value) => {
+                                    const track = captionTracks.find(
+                                      (t) => t.languageCode === value,
+                                    );
+                                    if (track) setCaptionTrack(track);
+                                  }}
+                                >
+                                  {captionTracks.map((track) => (
+                                    <DropdownMenuRadioItem
+                                      key={track.languageCode}
+                                      value={track.languageCode}
+                                    >
+                                      {track.displayName ||
+                                        track.languageName ||
+                                        track.languageCode}
+                                    </DropdownMenuRadioItem>
+                                  ))}
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
+                          </>
+                        )}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <ALargeSmallIcon size={14} className="mr-2" />
+                            Size
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuRadioGroup
+                              value={captionSize.toString()}
+                              onValueChange={(value) =>
+                                setCaptionSize(parseInt(value))
+                              }
+                            >
+                              {YOUTUBE_CAPTION_SIZES.map((size) => (
+                                <DropdownMenuRadioItem
+                                  key={size.value}
+                                  value={size.value.toString()}
+                                >
+                                  {size.label}
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  <ButtonWithShortcut
+                    shortcut="c"
+                    size="icon"
+                    variant={
+                      hasInlineShortcutsVisible === "show-shortcuts"
+                        ? "outline"
+                        : "ghost"
+                    }
+                    onClick={toggleCaptions}
+                  >
+                    {captionsEnabled ? (
+                      <CaptionsIcon size={16} />
+                    ) : (
+                      <CaptionsOffIcon size={16} />
+                    )}
+                  </ButtonWithShortcut>
                   <ButtonWithShortcut
                     shortcut="f"
                     size="icon"

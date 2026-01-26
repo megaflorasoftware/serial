@@ -11,9 +11,16 @@ import {
 import YouTube, { YouTubeEvent } from "react-youtube";
 import { YouTubeVideoType, YOUTUBE_PLAYER_STATES } from "./constants";
 
+export type CaptionTrack = {
+  languageCode: string;
+  languageName: string;
+  displayName?: string;
+};
+
 type CustomVideoPlayerContext = {
   playerRef: React.RefObject<YouTube | null>;
   onStateChange: (event: YouTubeEvent) => void;
+  onPlayerReady: (event: YouTubeEvent) => void;
   toggleVideoPlayback: () => void;
   manualPlayerState: number;
   playerState: number;
@@ -26,6 +33,13 @@ type CustomVideoPlayerContext = {
   videoType: YouTubeVideoType;
   startVideoHold: () => void;
   stopVideoHold: () => void;
+  captionsEnabled: boolean;
+  toggleCaptions: () => void;
+  captionSize: number;
+  setCaptionSize: (size: number) => void;
+  captionTracks: CaptionTrack[];
+  currentCaptionTrack: CaptionTrack | null;
+  setCaptionTrack: (track: CaptionTrack) => void;
 };
 
 const CustomVideoPlayerContext = createContext<CustomVideoPlayerContext | null>(
@@ -45,6 +59,133 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
   const [isSeeking, setIsSeeking] = useState(false);
 
   const [videoType, setVideoType] = useState<YouTubeVideoType>("video");
+
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  const [captionSize, setCaptionSizeState] = useState(0);
+  const [captionTracks, setCaptionTracks] = useState<CaptionTrack[]>([]);
+  const [currentCaptionTrack, setCurrentCaptionTrack] =
+    useState<CaptionTrack | null>(null);
+  const captionsModuleLoadedRef = useRef(false);
+  const pendingCaptionEnableRef = useRef(false);
+
+  type YouTubePlayerInternal = any;
+
+  // Fetch and store caption tracks from the player
+  const fetchCaptionTracks = useCallback((target?: YouTubePlayerInternal) => {
+    const player = target ?? playerRef?.current?.internalPlayer;
+    if (!player) return null;
+
+    const tracks = player.getOption?.("captions", "tracklist");
+    if (tracks && tracks.length > 0) {
+      setCaptionTracks(tracks as CaptionTrack[]);
+      return tracks as CaptionTrack[];
+    }
+    return null;
+  }, []);
+
+  // Enable captions with a specific track or the default
+  const enableCaptionsWithTrack = useCallback(
+    (target?: YouTubePlayerInternal, tracks?: CaptionTrack[]) => {
+      const player = target ?? playerRef?.current?.internalPlayer;
+      if (!player || !tracks || tracks.length === 0) return;
+
+      // Set the first available track (or English if available)
+      const englishTrack = tracks.find(
+        (t: CaptionTrack) =>
+          t.languageCode === "en" || t.languageCode?.startsWith("en"),
+      );
+      const trackToUse = englishTrack ?? tracks[0];
+      if (trackToUse) {
+        setCurrentCaptionTrack(trackToUse);
+        player.setOption?.("captions", "track", {
+          languageCode: trackToUse.languageCode,
+        });
+      }
+    },
+    [],
+  );
+
+  // Handler for onApiChange event - called when captions module loads
+  const handleApiChange = useCallback(
+    (target: YouTubePlayerInternal) => {
+      // Check which modules are available
+      const modules = target.getOptions?.();
+      if (!modules || !modules.includes("captions")) return;
+
+      captionsModuleLoadedRef.current = true;
+
+      // Fetch tracks (with a small delay as tracks may not be immediately available)
+      setTimeout(() => {
+        const tracks = fetchCaptionTracks(target);
+
+        // If we have a pending caption enable request, complete it now
+        if (pendingCaptionEnableRef.current && tracks && tracks.length > 0) {
+          pendingCaptionEnableRef.current = false;
+          setCaptionsEnabled(true);
+          enableCaptionsWithTrack(target, tracks);
+        }
+      }, 100);
+    },
+    [fetchCaptionTracks, enableCaptionsWithTrack],
+  );
+
+  // Set up the onApiChange listener when player is ready
+  const onPlayerReady = useCallback(
+    (event: YouTubeEvent) => {
+      event.target.addEventListener("onApiChange", () =>
+        handleApiChange(event.target),
+      );
+    },
+    [handleApiChange],
+  );
+
+  const setCaptionTrack = useCallback((track: CaptionTrack) => {
+    if (!playerRef?.current) return;
+    const player = playerRef.current.internalPlayer;
+
+    setCurrentCaptionTrack(track);
+    player?.setOption?.("captions", "track", {
+      languageCode: track.languageCode,
+    });
+  }, []);
+
+  const toggleCaptions = useCallback(() => {
+    if (!playerRef?.current) return;
+    const player = playerRef.current.internalPlayer;
+
+    const newCaptionsEnabled = !captionsEnabled;
+
+    if (newCaptionsEnabled) {
+      // If captions module is loaded and we have tracks, enable immediately
+      if (captionsModuleLoadedRef.current && captionTracks.length > 0) {
+        setCaptionsEnabled(true);
+        enableCaptionsWithTrack(player, captionTracks);
+      } else if (captionsModuleLoadedRef.current) {
+        // Module loaded but no tracks - try fetching again
+        const tracks = fetchCaptionTracks(player);
+        if (tracks && tracks.length > 0) {
+          setCaptionsEnabled(true);
+          enableCaptionsWithTrack(player, tracks);
+        }
+      } else {
+        // Module not loaded yet - mark pending and it will enable when onApiChange fires
+        pendingCaptionEnableRef.current = true;
+      }
+    } else {
+      // Disable captions by setting an empty track
+      setCaptionsEnabled(false);
+      setCurrentCaptionTrack(null);
+      player?.setOption?.("captions", "track", {});
+    }
+  }, [captionsEnabled, captionTracks, enableCaptionsWithTrack, fetchCaptionTracks]);
+
+  const setCaptionSize = useCallback((size: number) => {
+    if (!playerRef?.current) return;
+    const player = playerRef.current;
+
+    setCaptionSizeState(size);
+    void player.internalPlayer?.setOption("captions", "fontSize", size);
+  }, []);
 
   const changeVideoPlaybackSpeed = useCallback((speed: number) => {
     if (!playerRef?.current) return;
@@ -191,6 +332,8 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
     }
   }, [playerState]);
 
+  const hasLoadedCaptionsModuleRef = useRef(false);
+
   const onStateChange = useCallback(
     (event: YouTubeEvent) => {
       setVideoDuration(event.target.getDuration());
@@ -202,6 +345,13 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
       }
 
       if (event.data === YOUTUBE_PLAYER_STATES.PLAYING) {
+        // Load captions module when video starts playing (required for captions API)
+        if (!hasLoadedCaptionsModuleRef.current) {
+          hasLoadedCaptionsModuleRef.current = true;
+          // Load the captions module - this will trigger onApiChange
+          event.target.loadModule?.("captions");
+        }
+
         setTimeout(() => {
           setManualPlayerState(event.data);
           setIsSeeking(false);
@@ -218,6 +368,7 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
       value={{
         playerRef,
         onStateChange,
+        onPlayerReady,
         toggleVideoPlayback,
         manualPlayerState,
         playerState,
@@ -230,6 +381,13 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
         videoType,
         startVideoHold,
         stopVideoHold,
+        captionsEnabled,
+        toggleCaptions,
+        captionSize,
+        setCaptionSize,
+        captionTracks,
+        currentCaptionTrack,
+        setCaptionTrack,
       }}
     >
       {children}

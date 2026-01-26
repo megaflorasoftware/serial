@@ -15,6 +15,7 @@ export function useVideoShortcuts() {
     videoDuration,
     seekToSecond,
     videoProgress,
+    toggleCaptions,
   } = useCustomVideoPlayerContext();
 
   const keypressTimeRef = useRef<Record<string, number | null>>({});
@@ -85,6 +86,11 @@ export function useVideoShortcuts() {
         );
         return;
       }
+      if (event.key === "c") {
+        event.preventDefault();
+        toggleCaptions();
+        return;
+      }
     };
 
     window.addEventListener("keydown", processKeyDown);
@@ -102,5 +108,6 @@ export function useVideoShortcuts() {
     changeVideoPlaybackSpeed,
     seekToSecond,
     videoDuration,
+    toggleCaptions,
   ]);
 }
