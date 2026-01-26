@@ -12,6 +12,8 @@ import {
   MinimizeIcon,
   PlayIcon,
   Settings2Icon,
+  Volume2Icon,
+  VolumeXIcon,
 } from "lucide-react";
 import YouTube from "react-youtube";
 import { useView } from "~/components/feed/watch/[id]/useView";
@@ -78,6 +80,8 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     isNativeFullscreen,
     toggleNativeFullscreen,
     videoContainerRef,
+    isMuted,
+    toggleMute,
   } = useCustomVideoPlayerContext();
   useVideoShortcuts();
 
@@ -230,6 +234,27 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ButtonWithShortcut
+                        shortcut="m"
+                        size="icon"
+                        variant={
+                          hasInlineShortcutsVisible === "show-shortcuts"
+                            ? "outline"
+                            : "ghost"
+                        }
+                        onClick={toggleMute}
+                      >
+                        {isMuted ? (
+                          <VolumeXIcon size={16} />
+                        ) : (
+                          <Volume2Icon size={16} />
+                        )}
+                      </ButtonWithShortcut>
+                    </TooltipTrigger>
+                    <TooltipContent>Toggle mute</TooltipContent>
+                  </Tooltip>
                   {captionsEnabled &&
                     captionsModuleLoaded &&
                     captionsAvailable && (

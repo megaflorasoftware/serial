@@ -51,6 +51,8 @@ type CustomVideoPlayerContext = {
   setCaptionTrack: (track: CaptionTrack) => void;
   isNativeFullscreen: boolean;
   toggleNativeFullscreen: () => void;
+  isMuted: boolean;
+  toggleMute: () => void;
 };
 
 const CustomVideoPlayerContext = createContext<CustomVideoPlayerContext | null>(
@@ -87,6 +89,22 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
 
   // Native fullscreen state
   const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+
+  // Mute state
+  const [isMuted, setIsMuted] = useState(false);
+
+  const toggleMute = useCallback(() => {
+    if (!playerRef?.current) return;
+    const player = playerRef.current.internalPlayer;
+
+    if (isMuted) {
+      player?.unMute();
+      setIsMuted(false);
+    } else {
+      player?.mute();
+      setIsMuted(true);
+    }
+  }, [isMuted]);
 
   // Listen for fullscreen changes
   useEffect(() => {
@@ -450,6 +468,8 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
         setCaptionTrack,
         isNativeFullscreen,
         toggleNativeFullscreen,
+        isMuted,
+        toggleMute,
       }}
     >
       {children}

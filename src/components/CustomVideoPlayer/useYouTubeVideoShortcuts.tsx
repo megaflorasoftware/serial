@@ -22,6 +22,8 @@ export function useVideoShortcuts() {
     toggleCaptions,
     toggleNativeFullscreen,
     isNativeFullscreen,
+    isMuted,
+    toggleMute,
   } = useCustomVideoPlayerContext();
 
   const { view, setView, toggleView } = useView();
@@ -107,6 +109,11 @@ export function useVideoShortcuts() {
         toggleCaptions();
         return;
       }
+      if (event.key === "m") {
+        event.preventDefault();
+        toggleMute();
+        return;
+      }
       // Shift+F or ` for windowed fullscreen
       if ((event.key === "F" && event.shiftKey) || event.key === "`") {
         event.preventDefault();
@@ -154,5 +161,6 @@ export function useVideoShortcuts() {
     view,
     setView,
     toggleView,
+    toggleMute,
   ]);
 }
