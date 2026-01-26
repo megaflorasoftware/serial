@@ -21,6 +21,10 @@ import {
   useFetchMoreItemsForFeed,
   useViewPaginationState,
 } from "~/lib/data/store";
+import {
+  useLastFullyVisibleIndex,
+  useResetVisibleItems,
+} from "~/lib/data/visible-items-store";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
@@ -34,6 +38,8 @@ export function MarkVisibleAsReadButton() {
 
   const filteredItemIds = useFilteredFeedItemsOrder();
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
+  const lastFullyVisibleIndex = useLastFullyVisibleIndex();
+  const resetVisibleItems = useResetVisibleItems();
 
   const viewPaginationState = useViewPaginationState();
   const feedPaginationState = useFeedPaginationState();
@@ -48,11 +54,20 @@ export function MarkVisibleAsReadButton() {
   const handleMarkAsRead = async () => {
     // Only handle for unread filter with visible items
     if (visibilityFilter !== "unread" || filteredItemIds.length === 0) return;
+    // Don't proceed if no items are fully visible yet
+    if (lastFullyVisibleIndex < 0) return;
 
     setIsLoading(true);
     try {
+      // Slice from index 0 to lastFullyVisibleIndex (inclusive)
+      // This includes items that are above the viewport (scrolled past) and fully visible items
+      const visibleItemIds = filteredItemIds.slice(
+        0,
+        lastFullyVisibleIndex + 1,
+      );
+
       // Prepare items payload
-      const items = filteredItemIds
+      const items = visibleItemIds
         .map((id) => ({
           id,
           feedId: feedItemsDict[id]?.feedId ?? 0,
@@ -60,6 +75,9 @@ export function MarkVisibleAsReadButton() {
         .filter((item) => item.feedId > 0);
 
       await bulkMutation.mutateAsync({ items, isWatched: true });
+
+      // Reset visible items tracking so it starts fresh for new items
+      resetVisibleItems();
 
       // Determine active filter type (priority: feed > category > view)
       const activeFilterType =
