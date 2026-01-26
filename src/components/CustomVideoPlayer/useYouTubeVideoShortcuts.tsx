@@ -107,20 +107,26 @@ export function useVideoShortcuts() {
         toggleCaptions();
         return;
       }
-      if (event.key === "F" && event.shiftKey) {
+      // Shift+F or ` for windowed fullscreen
+      if ((event.key === "F" && event.shiftKey) || event.key === "`") {
+        event.preventDefault();
+        // If in native fullscreen, exit it and enter windowed fullscreen
+        if (isNativeFullscreen) {
+          document.exitFullscreen();
+          setView("fullscreen");
+        } else {
+          toggleView();
+        }
+        return;
+      }
+      // f for true/native fullscreen
+      if (event.key === "f" && !event.shiftKey) {
         event.preventDefault();
         // Exit windowed fullscreen if active before entering native fullscreen
         if (view === "fullscreen") {
           setView("windowed");
         }
         toggleNativeFullscreen();
-        return;
-      }
-      if ((event.key === "f" || event.key === "`") && isNativeFullscreen) {
-        event.preventDefault();
-        // Exit native fullscreen and enter windowed fullscreen
-        document.exitFullscreen();
-        setView("fullscreen");
         return;
       }
     };

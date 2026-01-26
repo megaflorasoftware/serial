@@ -25,7 +25,6 @@ export function VideoDisplay({
   const { view, toggleView } = useView();
 
   useShortcut("`", toggleView);
-  useShortcut("f", toggleView);
 
   useVideoNavigationShortcuts();
 

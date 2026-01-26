@@ -336,7 +336,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                     );
                   })()}
                   <ButtonWithShortcut
-                    shortcut="f"
+                    shortcut="F"
                     size="icon"
                     variant={
                       hasInlineShortcutsVisible === "show-shortcuts"
@@ -351,13 +351,18 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                       <MaximizeIcon size={16} />
                     )}
                   </ButtonWithShortcut>
-                  <Button
+                  <ButtonWithShortcut
+                    shortcut="f"
                     size="icon"
-                    variant="ghost"
+                    variant={
+                      hasInlineShortcutsVisible === "show-shortcuts"
+                        ? "outline"
+                        : "ghost"
+                    }
                     onClick={handleNativeFullscreen}
                   >
                     <FullscreenIcon size={16} />
-                  </Button>
+                  </ButtonWithShortcut>
                 </div>
               </div>
               <Slider
