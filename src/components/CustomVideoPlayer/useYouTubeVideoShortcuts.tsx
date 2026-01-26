@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { YOUTUBE_FASTEST_SPEED, YOUTUBE_PLAYBACK_SPEEDS } from "./constants";
 import { useCustomVideoPlayerContext } from "./CustomVideoPlayerProvider";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
@@ -15,6 +16,8 @@ export function useVideoShortcuts() {
     videoDuration,
     seekToSecond,
     videoProgress,
+    captionsAvailable,
+    captionsModuleLoaded,
     toggleCaptions,
   } = useCustomVideoPlayerContext();
 
@@ -88,6 +91,14 @@ export function useVideoShortcuts() {
       }
       if (event.key === "c") {
         event.preventDefault();
+        if (!captionsModuleLoaded) {
+          toast.error("Play video to load available captions");
+          return;
+        }
+        if (!captionsAvailable) {
+          toast.error("Captions not available for this video");
+          return;
+        }
         toggleCaptions();
         return;
       }
@@ -108,6 +119,8 @@ export function useVideoShortcuts() {
     changeVideoPlaybackSpeed,
     seekToSecond,
     videoDuration,
+    captionsModuleLoaded,
+    captionsAvailable,
     toggleCaptions,
   ]);
 }

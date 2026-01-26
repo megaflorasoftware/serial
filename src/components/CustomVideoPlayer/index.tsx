@@ -10,6 +10,7 @@ import {
   MaximizeIcon,
   MinimizeIcon,
   PlayIcon,
+  Settings2Icon,
 } from "lucide-react";
 import YouTube from "react-youtube";
 import { useView } from "~/components/feed/watch/[id]/useView";
@@ -31,6 +32,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Slider } from "../ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
+import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip";
 import {
   CustomVideoPlayerProvider,
   useCustomVideoPlayerContext,
@@ -64,6 +66,8 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     seekToSecond,
     videoType,
     captionsEnabled,
+    captionsAvailable,
+    captionsModuleLoaded,
     toggleCaptions,
     captionSize,
     setCaptionSize,
@@ -206,11 +210,11 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {captionsEnabled && (
+                  {captionsEnabled && captionsModuleLoaded && captionsAvailable && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button size="icon" variant="ghost">
-                          <CaptionsIcon size={16} />
+                          <Settings2Icon size={16} />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent>
@@ -275,22 +279,42 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
-                  <ButtonWithShortcut
-                    shortcut="c"
-                    size="icon"
-                    variant={
-                      hasInlineShortcutsVisible === "show-shortcuts"
-                        ? "outline"
-                        : "ghost"
-                    }
-                    onClick={toggleCaptions}
-                  >
-                    {captionsEnabled ? (
-                      <CaptionsIcon size={16} />
+                  {(() => {
+                    const isDisabled =
+                      !captionsModuleLoaded || !captionsAvailable;
+                    const tooltipMessage = !captionsModuleLoaded
+                      ? "Play video to load available captions"
+                      : "Captions not available";
+
+                    const captionButton = (
+                      <ButtonWithShortcut
+                        shortcut="c"
+                        size="icon"
+                        variant={
+                          hasInlineShortcutsVisible === "show-shortcuts"
+                            ? "outline"
+                            : "ghost"
+                        }
+                        onClick={toggleCaptions}
+                        disabled={isDisabled}
+                      >
+                        {captionsEnabled ? (
+                          <CaptionsIcon size={16} />
+                        ) : (
+                          <CaptionsOffIcon size={16} />
+                        )}
+                      </ButtonWithShortcut>
+                    );
+
+                    return isDisabled ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>{captionButton}</TooltipTrigger>
+                        <TooltipContent>{tooltipMessage}</TooltipContent>
+                      </Tooltip>
                     ) : (
-                      <CaptionsOffIcon size={16} />
-                    )}
-                  </ButtonWithShortcut>
+                      captionButton
+                    );
+                  })()}
                   <ButtonWithShortcut
                     shortcut="f"
                     size="icon"

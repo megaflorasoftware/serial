@@ -10,6 +10,12 @@ import {
 } from "react";
 import YouTube, { YouTubeEvent } from "react-youtube";
 import { YouTubeVideoType, YOUTUBE_PLAYER_STATES } from "./constants";
+import {
+  useCaptionsEnabled,
+  useCaptionSize,
+  useSetCaptionsEnabled,
+  useSetCaptionSize,
+} from "~/lib/data/captions/store";
 
 export type CaptionTrack = {
   languageCode: string;
@@ -34,6 +40,8 @@ type CustomVideoPlayerContext = {
   startVideoHold: () => void;
   stopVideoHold: () => void;
   captionsEnabled: boolean;
+  captionsAvailable: boolean;
+  captionsModuleLoaded: boolean;
   toggleCaptions: () => void;
   captionSize: number;
   setCaptionSize: (size: number) => void;
@@ -60,13 +68,21 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
 
   const [videoType, setVideoType] = useState<YouTubeVideoType>("video");
 
-  const [captionsEnabled, setCaptionsEnabled] = useState(false);
-  const [captionSize, setCaptionSizeState] = useState(0);
+  // Use Zustand store for persistent caption preferences
+  const captionsEnabled = useCaptionsEnabled();
+  const setCaptionsEnabled = useSetCaptionsEnabled();
+  const captionSize = useCaptionSize();
+  const setCaptionSizeState = useSetCaptionSize();
+
   const [captionTracks, setCaptionTracks] = useState<CaptionTrack[]>([]);
   const [currentCaptionTrack, setCurrentCaptionTrack] =
     useState<CaptionTrack | null>(null);
+  const [captionsModuleLoaded, setCaptionsModuleLoaded] = useState(false);
   const captionsModuleLoadedRef = useRef(false);
   const pendingCaptionEnableRef = useRef(false);
+
+  // Derived state: captions are available when tracks are loaded
+  const captionsAvailable = captionTracks.length > 0;
 
   type YouTubePlayerInternal = any;
 
@@ -113,6 +129,7 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
       if (!modules || !modules.includes("captions")) return;
 
       captionsModuleLoadedRef.current = true;
+      setCaptionsModuleLoaded(true);
 
       // Fetch tracks (with a small delay as tracks may not be immediately available)
       setTimeout(() => {
@@ -121,12 +138,15 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
         // If we have a pending caption enable request, complete it now
         if (pendingCaptionEnableRef.current && tracks && tracks.length > 0) {
           pendingCaptionEnableRef.current = false;
-          setCaptionsEnabled(true);
+          enableCaptionsWithTrack(target, tracks);
+        }
+        // If captions are enabled (user preference) and tracks are available, auto-enable
+        else if (captionsEnabled && tracks && tracks.length > 0) {
           enableCaptionsWithTrack(target, tracks);
         }
       }, 100);
     },
-    [fetchCaptionTracks, enableCaptionsWithTrack],
+    [fetchCaptionTracks, enableCaptionsWithTrack, captionsEnabled],
   );
 
   // Set up the onApiChange listener when player is ready
@@ -382,6 +402,8 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
         startVideoHold,
         stopVideoHold,
         captionsEnabled,
+        captionsAvailable,
+        captionsModuleLoaded,
         toggleCaptions,
         captionSize,
         setCaptionSize,
