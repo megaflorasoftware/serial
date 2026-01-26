@@ -10,7 +10,6 @@ const SEEK_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 export function useVideoShortcuts() {
   const {
     toggleVideoPlayback,
-    stopVideoHold,
     playerState,
     playbackSpeed,
     changeVideoPlaybackSpeed,
@@ -36,10 +35,6 @@ export function useVideoShortcuts() {
       }
 
       keypressTimeRef.current[event.key] = Date.now();
-
-      // if (playerState === YOUTUBE_PLAYER_STATES.PLAYING && event.key === " ") {
-      //   startVideoHold();
-      // }
     };
 
     const processKeyUp = (event: KeyboardEvent) => {
@@ -51,7 +46,6 @@ export function useVideoShortcuts() {
       keypressTimeRef.current[event.key] = null;
 
       if (event.key === " ") {
-        stopVideoHold();
         event.preventDefault();
         toggleVideoPlayback();
         return;
