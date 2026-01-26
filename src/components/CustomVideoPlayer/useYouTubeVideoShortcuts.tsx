@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { useView } from "~/components/feed/watch/[id]/useView";
 import { YOUTUBE_FASTEST_SPEED, YOUTUBE_PLAYBACK_SPEEDS } from "./constants";
 import { useCustomVideoPlayerContext } from "./CustomVideoPlayerProvider";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
@@ -19,7 +20,10 @@ export function useVideoShortcuts() {
     captionsAvailable,
     captionsModuleLoaded,
     toggleCaptions,
+    toggleNativeFullscreen,
   } = useCustomVideoPlayerContext();
+
+  const { view, setView } = useView();
 
   const keypressTimeRef = useRef<Record<string, number | null>>({});
 
@@ -102,6 +106,15 @@ export function useVideoShortcuts() {
         toggleCaptions();
         return;
       }
+      if (event.key === "F" && event.shiftKey) {
+        event.preventDefault();
+        // Exit windowed fullscreen if active before entering native fullscreen
+        if (view === "fullscreen") {
+          setView("windowed");
+        }
+        toggleNativeFullscreen();
+        return;
+      }
     };
 
     window.addEventListener("keydown", processKeyDown);
@@ -122,5 +135,8 @@ export function useVideoShortcuts() {
     captionsModuleLoaded,
     captionsAvailable,
     toggleCaptions,
+    toggleNativeFullscreen,
+    view,
+    setView,
   ]);
 }

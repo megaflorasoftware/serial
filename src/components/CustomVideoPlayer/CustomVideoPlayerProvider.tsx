@@ -25,6 +25,7 @@ export type CaptionTrack = {
 
 type CustomVideoPlayerContext = {
   playerRef: React.RefObject<YouTube | null>;
+  videoContainerRef: React.RefObject<HTMLDivElement | null>;
   onStateChange: (event: YouTubeEvent) => void;
   onPlayerReady: (event: YouTubeEvent) => void;
   toggleVideoPlayback: () => void;
@@ -48,6 +49,8 @@ type CustomVideoPlayerContext = {
   captionTracks: CaptionTrack[];
   currentCaptionTrack: CaptionTrack | null;
   setCaptionTrack: (track: CaptionTrack) => void;
+  isNativeFullscreen: boolean;
+  toggleNativeFullscreen: () => void;
 };
 
 const CustomVideoPlayerContext = createContext<CustomVideoPlayerContext | null>(
@@ -56,6 +59,7 @@ const CustomVideoPlayerContext = createContext<CustomVideoPlayerContext | null>(
 
 export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
   const playerRef = useRef<YouTube | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const [playerState, setPlayerState] = useState<number>(
     YOUTUBE_PLAYER_STATES.BUFFERING,
   );
@@ -80,6 +84,34 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
   const [captionsModuleLoaded, setCaptionsModuleLoaded] = useState(false);
   const captionsModuleLoadedRef = useRef(false);
   const pendingCaptionEnableRef = useRef(false);
+
+  // Native fullscreen state
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsNativeFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Toggle native fullscreen - targets the video container
+  const toggleNativeFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(console.error);
+    } else {
+      // Use the video container ref, fallback to player container
+      const container =
+        videoContainerRef.current ?? playerRef.current?.container;
+      if (container) {
+        container.requestFullscreen().catch(console.error);
+      }
+    }
+  }, []);
 
   // Derived state: captions are available when tracks are loaded
   const captionsAvailable = captionTracks.length > 0;
@@ -387,6 +419,7 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
     <CustomVideoPlayerContext.Provider
       value={{
         playerRef,
+        videoContainerRef,
         onStateChange,
         onPlayerReady,
         toggleVideoPlayback,
@@ -410,6 +443,8 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
         captionTracks,
         currentCaptionTrack,
         setCaptionTrack,
+        isNativeFullscreen,
+        toggleNativeFullscreen,
       }}
     >
       {children}

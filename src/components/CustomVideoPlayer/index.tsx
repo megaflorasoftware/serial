@@ -6,6 +6,7 @@ import {
   ALargeSmallIcon,
   CaptionsIcon,
   CaptionsOffIcon,
+  FullscreenIcon,
   LanguagesIcon,
   MaximizeIcon,
   MinimizeIcon,
@@ -74,10 +75,29 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     captionTracks,
     currentCaptionTrack,
     setCaptionTrack,
+    isNativeFullscreen,
+    toggleNativeFullscreen,
+    videoContainerRef,
   } = useCustomVideoPlayerContext();
   useVideoShortcuts();
 
-  const { view, toggleView } = useView();
+  const { view, setView, toggleView } = useView();
+
+  // Wrap toggleNativeFullscreen to exit windowed fullscreen first
+  const handleNativeFullscreen = () => {
+    if (view === "fullscreen") {
+      setView("windowed"); // Exit windowed fullscreen
+    }
+    toggleNativeFullscreen();
+  };
+
+  // Wrap toggleView to exit native fullscreen first
+  const handleWindowedFullscreen = () => {
+    if (isNativeFullscreen) {
+      document.exitFullscreen();
+    }
+    toggleView();
+  };
   const [hasInlineShortcutsVisible] = useFlagState("INLINE_SHORTCUTS");
 
   const player = playerRef?.current;
@@ -89,7 +109,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     shouldShowVideoTimestamps || shouldShowLiveTimestamps;
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={videoContainerRef} className="relative h-full w-full bg-black">
       {props.videoID && (
         <>
           <YouTube
@@ -323,7 +343,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                         ? "outline"
                         : "ghost"
                     }
-                    onClick={toggleView}
+                    onClick={handleWindowedFullscreen}
                   >
                     {view === "fullscreen" ? (
                       <MinimizeIcon size={16} />
@@ -331,6 +351,13 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                       <MaximizeIcon size={16} />
                     )}
                   </ButtonWithShortcut>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleNativeFullscreen}
+                  >
+                    <FullscreenIcon size={16} />
+                  </Button>
                 </div>
               </div>
               <Slider
