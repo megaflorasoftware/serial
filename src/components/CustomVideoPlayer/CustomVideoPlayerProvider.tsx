@@ -229,7 +229,12 @@ export function CustomVideoPlayerProvider({ children }: PropsWithChildren) {
       setCurrentCaptionTrack(null);
       player?.setOption?.("captions", "track", {});
     }
-  }, [captionsEnabled, captionTracks, enableCaptionsWithTrack, fetchCaptionTracks]);
+  }, [
+    captionsEnabled,
+    captionTracks,
+    enableCaptionsWithTrack,
+    fetchCaptionTracks,
+  ]);
 
   const setCaptionSize = useCallback((size: number) => {
     if (!playerRef?.current) return;

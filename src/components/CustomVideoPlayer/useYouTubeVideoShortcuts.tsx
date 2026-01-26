@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { useView } from "~/components/feed/watch/[id]/useView";
 import { YOUTUBE_FASTEST_SPEED, YOUTUBE_PLAYBACK_SPEEDS } from "./constants";
 import { useCustomVideoPlayerContext } from "./CustomVideoPlayerProvider";
+import { useView } from "~/components/feed/watch/[id]/useView";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
 
 const SEEK_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];

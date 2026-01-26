@@ -10,7 +10,6 @@ import { useView } from "./useView";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import ResponsiveVideo from "~/components/ResponsiveVideo";
 import { useFeedItemValue } from "~/lib/data/store";
-import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function VideoDisplay({
   id,
@@ -22,9 +21,7 @@ export function VideoDisplay({
   const item = useFeedItemValue(id);
   const [showVideo, setShowVideo] = useState(false);
 
-  const { view, toggleView } = useView();
-
-  useShortcut("`", toggleView);
+  const { view } = useView();
 
   useVideoNavigationShortcuts();
 

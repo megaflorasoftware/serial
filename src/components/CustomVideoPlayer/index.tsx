@@ -230,139 +230,154 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {captionsEnabled && captionsModuleLoaded && captionsAvailable && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost">
-                          <Settings2Icon size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {captionTracks.length > 0 && (
-                          <>
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger>
-                                <LanguagesIcon size={14} className="mr-2" />
-                                Language
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuSubContent>
-                                <DropdownMenuRadioGroup
-                                  value={
-                                    currentCaptionTrack?.languageCode ?? ""
-                                  }
-                                  onValueChange={(value) => {
-                                    const track = captionTracks.find(
-                                      (t) => t.languageCode === value,
-                                    );
-                                    if (track) setCaptionTrack(track);
-                                  }}
-                                >
-                                  {captionTracks.map((track) => (
-                                    <DropdownMenuRadioItem
-                                      key={track.languageCode}
-                                      value={track.languageCode}
-                                    >
-                                      {track.displayName ||
-                                        track.languageName ||
-                                        track.languageCode}
-                                    </DropdownMenuRadioItem>
-                                  ))}
-                                </DropdownMenuRadioGroup>
-                              </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                            <DropdownMenuSeparator />
-                          </>
-                        )}
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <ALargeSmallIcon size={14} className="mr-2" />
-                            Size
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent>
-                            <DropdownMenuRadioGroup
-                              value={captionSize.toString()}
-                              onValueChange={(value) =>
-                                setCaptionSize(parseInt(value))
-                              }
-                            >
-                              {YOUTUBE_CAPTION_SIZES.map((size) => (
-                                <DropdownMenuRadioItem
-                                  key={size.value}
-                                  value={size.value.toString()}
-                                >
-                                  {size.label}
-                                </DropdownMenuRadioItem>
-                              ))}
-                            </DropdownMenuRadioGroup>
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                  {captionsEnabled &&
+                    captionsModuleLoaded &&
+                    captionsAvailable && (
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost">
+                                <Settings2Icon size={16} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>Caption options</TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent>
+                          {captionTracks.length > 0 && (
+                            <>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <LanguagesIcon size={14} className="mr-2" />
+                                  Language
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuRadioGroup
+                                    value={
+                                      currentCaptionTrack?.languageCode ?? ""
+                                    }
+                                    onValueChange={(value) => {
+                                      const track = captionTracks.find(
+                                        (t) => t.languageCode === value,
+                                      );
+                                      if (track) setCaptionTrack(track);
+                                    }}
+                                  >
+                                    {captionTracks.map((track) => (
+                                      <DropdownMenuRadioItem
+                                        key={track.languageCode}
+                                        value={track.languageCode}
+                                      >
+                                        {track.displayName ||
+                                          track.languageName ||
+                                          track.languageCode}
+                                      </DropdownMenuRadioItem>
+                                    ))}
+                                  </DropdownMenuRadioGroup>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <ALargeSmallIcon size={14} className="mr-2" />
+                              Size
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              <DropdownMenuRadioGroup
+                                value={captionSize.toString()}
+                                onValueChange={(value) =>
+                                  setCaptionSize(parseInt(value))
+                                }
+                              >
+                                {YOUTUBE_CAPTION_SIZES.map((size) => (
+                                  <DropdownMenuRadioItem
+                                    key={size.value}
+                                    value={size.value.toString()}
+                                  >
+                                    {size.label}
+                                  </DropdownMenuRadioItem>
+                                ))}
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   {(() => {
                     const isDisabled =
                       !captionsModuleLoaded || !captionsAvailable;
-                    const tooltipMessage = !captionsModuleLoaded
-                      ? "Play video to load available captions"
-                      : "Captions not available";
+                    const tooltipMessage = isDisabled
+                      ? !captionsModuleLoaded
+                        ? "Play video to load available captions"
+                        : "Captions not available"
+                      : "Toggle captions";
 
-                    const captionButton = (
+                    return (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <ButtonWithShortcut
+                            shortcut="c"
+                            size="icon"
+                            variant={
+                              hasInlineShortcutsVisible === "show-shortcuts"
+                                ? "outline"
+                                : "ghost"
+                            }
+                            onClick={toggleCaptions}
+                            disabled={isDisabled}
+                          >
+                            {captionsEnabled ? (
+                              <CaptionsIcon size={16} />
+                            ) : (
+                              <CaptionsOffIcon size={16} />
+                            )}
+                          </ButtonWithShortcut>
+                        </TooltipTrigger>
+                        <TooltipContent>{tooltipMessage}</TooltipContent>
+                      </Tooltip>
+                    );
+                  })()}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <ButtonWithShortcut
-                        shortcut="c"
+                        shortcut="F"
                         size="icon"
                         variant={
                           hasInlineShortcutsVisible === "show-shortcuts"
                             ? "outline"
                             : "ghost"
                         }
-                        onClick={toggleCaptions}
-                        disabled={isDisabled}
+                        onClick={handleWindowedFullscreen}
                       >
-                        {captionsEnabled ? (
-                          <CaptionsIcon size={16} />
+                        {view === "fullscreen" ? (
+                          <MinimizeIcon size={16} />
                         ) : (
-                          <CaptionsOffIcon size={16} />
+                          <MaximizeIcon size={16} />
                         )}
                       </ButtonWithShortcut>
-                    );
-
-                    return isDisabled ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>{captionButton}</TooltipTrigger>
-                        <TooltipContent>{tooltipMessage}</TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      captionButton
-                    );
-                  })()}
-                  <ButtonWithShortcut
-                    shortcut="F"
-                    size="icon"
-                    variant={
-                      hasInlineShortcutsVisible === "show-shortcuts"
-                        ? "outline"
-                        : "ghost"
-                    }
-                    onClick={handleWindowedFullscreen}
-                  >
-                    {view === "fullscreen" ? (
-                      <MinimizeIcon size={16} />
-                    ) : (
-                      <MaximizeIcon size={16} />
-                    )}
-                  </ButtonWithShortcut>
-                  <ButtonWithShortcut
-                    shortcut="f"
-                    size="icon"
-                    variant={
-                      hasInlineShortcutsVisible === "show-shortcuts"
-                        ? "outline"
-                        : "ghost"
-                    }
-                    onClick={handleNativeFullscreen}
-                  >
-                    <FullscreenIcon size={16} />
-                  </ButtonWithShortcut>
+                    </TooltipTrigger>
+                    <TooltipContent>Toggle windowed fullscreen</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ButtonWithShortcut
+                        shortcut="f"
+                        size="icon"
+                        variant={
+                          hasInlineShortcutsVisible === "show-shortcuts"
+                            ? "outline"
+                            : "ghost"
+                        }
+                        onClick={handleNativeFullscreen}
+                      >
+                        <FullscreenIcon size={16} />
+                      </ButtonWithShortcut>
+                    </TooltipTrigger>
+                    <TooltipContent>Toggle fullscreen</TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
               <Slider
