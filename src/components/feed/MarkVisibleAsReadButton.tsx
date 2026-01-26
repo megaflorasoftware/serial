@@ -21,7 +21,8 @@ import {
   useFetchMoreItemsForFeed,
   useViewPaginationState,
 } from "~/lib/data/store";
-import { Button } from "~/components/ui/button";
+import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
+import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export function MarkVisibleAsReadButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -44,13 +45,10 @@ export function MarkVisibleAsReadButton() {
 
   const bulkMutation = useBulkSetWatchedValueMutation();
 
-  // Only show for unread filter
-  if (visibilityFilter !== "unread") return null;
-
-  // Don't show if no items visible
-  if (filteredItemIds.length === 0) return null;
-
   const handleMarkAsRead = async () => {
+    // Only handle for unread filter with visible items
+    if (visibilityFilter !== "unread" || filteredItemIds.length === 0) return;
+
     setIsLoading(true);
     try {
       // Prepare items payload
@@ -98,22 +96,31 @@ export function MarkVisibleAsReadButton() {
     }
   };
 
+  useShortcut("e", handleMarkAsRead);
+
+  // Only show for unread filter
+  if (visibilityFilter !== "unread") return null;
+
+  // Don't show if no items visible
+  if (filteredItemIds.length === 0) return null;
+
   if (isLoading) {
     return <PaginationLoader />;
   }
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-      <Button
+      <ButtonWithShortcut
         onClick={handleMarkAsRead}
         disabled={isLoading}
         className="shadow-lg"
         variant="outline"
         size="default"
+        shortcut="e"
       >
         <FlameIcon size={16} />
         <span className="pl-1.5">Mark visible as read</span>
-      </Button>
+      </ButtonWithShortcut>
     </div>
   );
 }
