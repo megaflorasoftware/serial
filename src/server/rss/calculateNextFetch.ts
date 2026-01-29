@@ -3,6 +3,7 @@ import type { FeedFetchMetadata } from "./types";
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const MAX_INTERVAL_MS = 24 * ONE_HOUR_MS; // Cap at 24 hours
 const DEFAULT_INTERVAL_MS = ONE_HOUR_MS; // Default to 1 hour
+const MIN_HTTP_CACHE_MS = 5 * 60 * 1000; // Minimum 5 minutes for HTTP caching to be trusted
 
 const UPDATE_PERIOD_MS: Record<
   NonNullable<FeedFetchMetadata["updatePeriod"]>,
@@ -33,28 +34,25 @@ export function calculateNextFetch(
 ): Date {
   const nowMs = now.getTime();
 
-  // 1. HTTP Cache-Control: max-age
+  // 1. HTTP Cache-Control: max-age (skip if too short - shouldn't override RSS TTL)
   if (metadata.cacheControlMaxAge !== undefined) {
-    const intervalMs = Math.min(
-      metadata.cacheControlMaxAge * 1000,
-      MAX_INTERVAL_MS,
-    );
-    return new Date(nowMs + intervalMs);
+    const intervalMs = metadata.cacheControlMaxAge * 1000;
+    if (intervalMs >= MIN_HTTP_CACHE_MS) {
+      return new Date(nowMs + Math.min(intervalMs, MAX_INTERVAL_MS));
+    }
   }
 
-  // 2. HTTP Expires header
+  // 2. HTTP Expires header (skip if too short - shouldn't override RSS TTL)
   if (metadata.expires) {
     const expiresMs = metadata.expires.getTime();
-    // If expires is in the past or too far in the future, apply cap
-    const intervalMs = Math.min(
-      Math.max(expiresMs - nowMs, 0),
-      MAX_INTERVAL_MS,
-    );
-    return new Date(nowMs + intervalMs);
+    const intervalMs = expiresMs - nowMs;
+    if (intervalMs >= MIN_HTTP_CACHE_MS) {
+      return new Date(nowMs + Math.min(intervalMs, MAX_INTERVAL_MS));
+    }
   }
 
-  // 3. RSS <ttl> element (value is in minutes)
-  if (metadata.ttl !== undefined) {
+  // 3. RSS <ttl> element (value is in minutes, skip if 0)
+  if (metadata.ttl !== undefined && metadata.ttl > 0) {
     const intervalMs = Math.min(metadata.ttl * 60 * 1000, MAX_INTERVAL_MS);
     return new Date(nowMs + intervalMs);
   }
@@ -62,8 +60,11 @@ export function calculateNextFetch(
   // 4. sy:updatePeriod / sy:updateFrequency
   if (metadata.updatePeriod) {
     const periodMs = UPDATE_PERIOD_MS[metadata.updatePeriod];
-    const frequency = metadata.updateFrequency ?? 1;
     // Frequency indicates how many times per period the feed updates
+    // Skip if 0 to avoid division issues
+    const frequency = metadata.updateFrequency && metadata.updateFrequency > 0
+      ? metadata.updateFrequency
+      : 1;
     // So interval = period / frequency
     const intervalMs = Math.min(periodMs / frequency, MAX_INTERVAL_MS);
     return new Date(nowMs + intervalMs);

@@ -187,6 +187,7 @@ export async function* fetchAndInsertFeedData(
   let cachedCount = 0;
   let fetchedCount = 0;
   const totalFeeds = databaseFeeds.length;
+  const fetchedFeedNames: string[] = [];
 
   while (feedPromises.length > 0) {
     const result = await Promise.any(Array.from(feedPromises));
@@ -199,6 +200,10 @@ export async function* fetchAndInsertFeedData(
       cachedCount++;
     } else {
       fetchedCount++;
+      const feedName = databaseFeeds.find((f) => f.id === result.id)?.name;
+      if (feedName) {
+        fetchedFeedNames.push(feedName);
+      }
     }
 
     yield result;
@@ -210,6 +215,9 @@ export async function* fetchAndInsertFeedData(
     logMessage(
       `[Feed Fetch] ${cachedCount} cached, ${fetchedCount} fetched (${cachedPercent}% cached) out of ${totalFeeds} feeds`,
     );
+    if (fetchedFeedNames.length > 0) {
+      logMessage(`[Feed Fetch] Fetched: ${fetchedFeedNames.join(", ")}`);
+    }
   }
 
   return;
