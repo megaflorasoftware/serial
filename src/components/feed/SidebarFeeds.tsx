@@ -229,11 +229,8 @@ export function SidebarFeeds() {
         return acc;
       }
 
-      const feedStatus = feedStatusDict[feedOption.id]
-        ? feedStatusDict[feedOption.id]
-        : fetchFeedItemsStatus === "fetching"
-          ? "success"
-          : "empty";
+      // Default to success if no status (e.g., skipped/cached feeds don't report status)
+      const feedStatus = feedStatusDict[feedOption.id] ?? "success";
 
       if (feedStatus === "success") {
         acc.feedOptionsWithContent.push(feedOption);
@@ -323,12 +320,8 @@ export function SidebarFeeds() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           {preferredFeedOptions.map((feed) => {
-            const feedStatus = feedStatusDict[feed.id]
-              ? feedStatusDict[feed.id]
-              : fetchFeedItemsStatus === "fetching"
-                ? "success"
-                : "empty";
-
+            // Default to success if no status (e.g., skipped/cached feeds don't report status)
+            const feedStatus = feedStatusDict[feed.id] ?? "success";
             const isSuccess = feedStatus === "success";
 
             return (

@@ -137,6 +137,8 @@ export const feeds = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
+    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
+    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
   },
   (example) => [
     index("feed_name_idx").on(example.name),

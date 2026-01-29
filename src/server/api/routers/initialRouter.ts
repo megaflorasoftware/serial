@@ -873,12 +873,29 @@ export const requestInitialData = protectedProcedure
         chunk: { type: "initial-data-complete" },
       });
 
+      // Count feeds that will actually be fetched (not cached)
+      const now = new Date();
+      const feedsToFetchCount = feedsList.filter(
+        (feed) => !feed.nextFetchAt || feed.nextFetchAt <= now,
+      ).length;
+
+      // Publish count of feeds that need actual fetching for progress tracking
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: { type: "refresh-start", totalFeeds: feedsToFetchCount },
+      });
+
       // Step 5: Run fetch and insert for fresh RSS items in background
       for await (const feedResult of fetchAndInsertFeedData(
         context,
         feedsList,
       )) {
-        // Always publish feed status
+        // Skip publishing status for cached feeds (they complete instantly with no network activity)
+        if (feedResult.status === "skipped") {
+          continue;
+        }
+
+        // Publish feed status for actual fetches
         await publisher.publish(channel, {
           source: "initial",
           chunk: {
@@ -1313,10 +1330,16 @@ export const requestNewData = protectedProcedure
 
     const { feedsList, feedCategoriesList } = prerequisiteData;
 
-    // Publish total feeds count for progress tracking
+    // Count feeds that will actually be fetched (not cached)
+    const now = new Date();
+    const feedsToFetchCount = feedsList.filter(
+      (feed) => !feed.nextFetchAt || feed.nextFetchAt <= now,
+    ).length;
+
+    // Publish count of feeds that need actual fetching for progress tracking
     await publisher.publish(channel, {
       source: "new-data",
-      chunk: { type: "refresh-start", totalFeeds: feedsList.length },
+      chunk: { type: "refresh-start", totalFeeds: feedsToFetchCount },
     });
 
     if (feedsList.length === 0) {
@@ -1341,7 +1364,12 @@ export const requestNewData = protectedProcedure
 
     // Run RSS fetch and publish new items
     for await (const feedResult of fetchAndInsertFeedData(context, feedsList)) {
-      // Always publish feed status (for progress tracking)
+      // Skip publishing status for cached feeds (they complete instantly with no network activity)
+      if (feedResult.status === "skipped") {
+        continue;
+      }
+
+      // Publish feed status for actual fetches
       await publisher.publish(channel, {
         source: "new-data",
         chunk: {
