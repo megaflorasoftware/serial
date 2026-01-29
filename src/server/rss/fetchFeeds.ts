@@ -215,9 +215,6 @@ export async function* fetchAndInsertFeedData(
     logMessage(
       `[Feed Fetch] ${cachedCount} cached, ${fetchedCount} fetched (${cachedPercent}% cached) out of ${totalFeeds} feeds`,
     );
-    if (fetchedFeedNames.length > 0) {
-      logMessage(`[Feed Fetch] Fetched: ${fetchedFeedNames.join(", ")}`);
-    }
   }
 
   return;
