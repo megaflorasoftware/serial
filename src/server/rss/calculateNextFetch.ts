@@ -62,9 +62,10 @@ export function calculateNextFetch(
     const periodMs = UPDATE_PERIOD_MS[metadata.updatePeriod];
     // Frequency indicates how many times per period the feed updates
     // Skip if 0 to avoid division issues
-    const frequency = metadata.updateFrequency && metadata.updateFrequency > 0
-      ? metadata.updateFrequency
-      : 1;
+    const frequency =
+      metadata.updateFrequency && metadata.updateFrequency > 0
+        ? metadata.updateFrequency
+        : 1;
     // So interval = period / frequency
     const intervalMs = Math.min(periodMs / frequency, MAX_INTERVAL_MS);
     return new Date(nowMs + intervalMs);
