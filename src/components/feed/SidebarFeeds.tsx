@@ -41,6 +41,7 @@ import {
   useFeedItemsDict,
   useFeedItemsOrder,
   useFeedStatusDict,
+  useFetchFeedItemsStatus,
   useHasInitialData,
   useViewFeedIds,
 } from "~/lib/data/store";
@@ -136,6 +137,7 @@ export function SidebarFeeds() {
   const viewFilter = useAtomValue(viewFilterAtom);
   const feedStatusDict = useFeedStatusDict();
   const hasInitialData = useHasInitialData();
+  const fetchFeedItemsStatus = useFetchFeedItemsStatus();
 
   const checkFilteredFeedItemsForFeed = useCheckFilteredFeedItemsForFeed();
   const viewFeedIds = useViewFeedIds();
@@ -143,7 +145,7 @@ export function SidebarFeeds() {
     ? (viewFeedIds[viewFilter.id] ?? [])
     : [];
 
-  if (!hasInitialData) {
+  if (!hasInitialData || fetchFeedItemsStatus === "fetching") {
     return (
       <div>
         <SidebarGroup className="group-data-[collapsible=icon]:hidden">
