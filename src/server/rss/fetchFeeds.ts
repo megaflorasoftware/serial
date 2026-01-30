@@ -15,6 +15,7 @@ import {
 import type { ORPCContext } from "../orpc/base";
 import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
 import type { NewFeedDetails, RSSFeedWithMetadata } from "./types";
+import { dbSemaphore } from "~/lib/semaphore";
 
 export type FetchFeedsStatus = "success" | "empty" | "error" | "skipped";
 
@@ -107,13 +108,15 @@ export async function* fetchAndInsertFeedData(
 
       // Calculate next fetch time and update feed timestamps
       const nextFetchAt = calculateNextFetch(feedData.fetchMetadata, now);
-      await context.db
-        .update(feeds)
-        .set({
-          lastFetchedAt: now,
-          nextFetchAt: nextFetchAt,
-        })
-        .where(eq(feeds.id, feed.id));
+      await dbSemaphore.run(() =>
+        context.db
+          .update(feeds)
+          .set({
+            lastFetchedAt: now,
+            nextFetchAt: nextFetchAt,
+          })
+          .where(eq(feeds.id, feed.id)),
+      );
 
       if (!feedData.items.length) {
         return {
@@ -139,25 +142,27 @@ export async function* fetchAndInsertFeedData(
         });
 
       const feedItemsList = (
-        await context.db
-          .insert(feedItems)
-          .values(feedItemList)
-          .onConflictDoUpdate({
-            target: [feedItems.url, feedItems.feedId],
-            set: buildConflictUpdateColumns(feedItems, [
-              "author",
-              "content",
-              "contentId",
-              "contentSnippet",
-              "createdAt",
-              "orientation",
-              "postedAt",
-              "thumbnail",
-              "title",
-              "url",
-            ]),
-          })
-          .returning()
+        await dbSemaphore.run(() =>
+          context.db
+            .insert(feedItems)
+            .values(feedItemList)
+            .onConflictDoUpdate({
+              target: [feedItems.url, feedItems.feedId],
+              set: buildConflictUpdateColumns(feedItems, [
+                "author",
+                "content",
+                "contentId",
+                "contentSnippet",
+                "createdAt",
+                "orientation",
+                "postedAt",
+                "thumbnail",
+                "title",
+                "url",
+              ]),
+            })
+            .returning(),
+        )
       )
         .filter(Boolean)
         .flat();

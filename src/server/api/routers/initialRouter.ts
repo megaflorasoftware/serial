@@ -36,6 +36,7 @@ import { prepareArrayChunks } from "~/lib/iterators";
 import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
 
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
+import { dbSemaphore } from "~/lib/semaphore";
 import { workerPool } from "~/lib/workerPool";
 import {
   contentCategories,
@@ -1130,7 +1131,7 @@ export const streamingImport = protectedProcedure
   )
   .handler(async ({ context, input }) => {
     const channel = getUserChannel(context.user.id);
-    const BATCH_SIZE = 16;
+    const BATCH_SIZE = 4;
 
     if (!input.feeds.length) {
       await publisher.publish(channel, {
@@ -1164,10 +1165,16 @@ export const streamingImport = protectedProcedure
       });
 
       const importPromise = (async () => {
-        // 1. Insert feed within a transaction
-        const insertResult = await context.db.transaction(async (tx) => {
-          return await insertFeedWithCategories(tx, context.user.id, feedInput);
-        });
+        // 1. Insert feed within a transaction (rate-limited)
+        const insertResult = await dbSemaphore.run(() =>
+          context.db.transaction(async (tx) => {
+            return await insertFeedWithCategories(
+              tx,
+              context.user.id,
+              feedInput,
+            );
+          }),
+        );
 
         if (!insertResult.success) {
           await publisher.publish(channel, {
