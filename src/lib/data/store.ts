@@ -933,9 +933,13 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               }
 
               // Check if all feeds have reported status
-              const { totalFeeds } = get().progressState;
+              // Include importErrors in the count since failed imports send import-feed-error (not feed-status)
+              // For imports (fetchType === "import"), don't trigger completion here - items are sent
+              // via fetchContentForViews AFTER feed-status, so wait for initial-data-complete
+              const { totalFeeds, importErrors, fetchType } = get().progressState;
               const allFeedsComplete =
-                Object.keys(feedStatusDict).length >= totalFeeds &&
+                fetchType !== "import" &&
+                Object.keys(feedStatusDict).length + importErrors >= totalFeeds &&
                 totalFeeds > 0;
 
               set({
@@ -978,12 +982,19 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 };
               }
 
+              // For imports, trigger completion here since items are sent via fetchContentForViews
+              // AFTER all feed-status messages (so we can't rely on feed-status for completion)
+              const { fetchType } = get().progressState;
+              const isImport = fetchType === "import";
+
               set({
-                // Note: fetchFeedItemsLastFetchedAt is now set in feed-status when all feeds complete
-                // This ensures the skeleton shows until RSS refresh is done
                 fetchedVisibilityFilters: fetchedFilters,
                 viewPaginationState: paginationState,
                 _lastItemByView: {}, // Clear after use
+                ...(isImport && {
+                  fetchFeedItemsStatus: "success",
+                  fetchFeedItemsLastFetchedAt: Date.now(),
+                }),
               });
               break;
             }

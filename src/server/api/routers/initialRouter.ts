@@ -1073,44 +1073,45 @@ export const requestImportedData = protectedProcedure
       newFeedIds.includes(feed.id),
     );
 
+    // Send refresh-start with correct totalFeeds count for just the new feeds
+    if (newFeedsToFetch.length > 0) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: { type: "refresh-start", totalFeeds: newFeedsToFetch.length },
+      });
+    }
+
     for await (const feedResult of fetchAndInsertFeedData(
       context,
       newFeedsToFetch,
     )) {
+      // Build combined chunk with feed items and view mappings if successful
+      let feedItems: ApplicationFeedItem[] | undefined;
+      let viewItemMappings:
+        | Array<{ viewId: number; feedItemIds: string[] }>
+        | undefined;
+
+      if (feedResult.status === "success" && feedResult.feedItems.length > 0) {
+        feedItems = feedResult.feedItems;
+        viewItemMappings = [];
+
+        const viewIdsForFeed = feedIdToViewIds.get(feedResult.id) ?? [];
+        const itemIds = feedResult.feedItems.map((item) => item.id);
+        for (const viewId of viewIdsForFeed) {
+          viewItemMappings.push({ viewId, feedItemIds: itemIds });
+        }
+      }
+
       await publisher.publish(channel, {
         source: "initial",
         chunk: {
           type: "feed-status",
           status: feedResult.status,
           feedId: feedResult.id,
+          ...(feedItems && { feedItems }),
+          ...(viewItemMappings && { viewItemMappings }),
         },
       });
-
-      // Stream ALL fetched items (unlike requestInitialData which only sends feed-status)
-      if (feedResult.status === "success" && feedResult.feedItems.length > 0) {
-        await publisher.publish(channel, {
-          source: "initial",
-          chunk: {
-            type: "feed-items",
-            feedId: feedResult.id,
-            feedItems: feedResult.feedItems,
-          },
-        });
-
-        // Stream view mappings for the items
-        const viewIdsForFeed = feedIdToViewIds.get(feedResult.id) ?? [];
-        const itemIds = feedResult.feedItems.map((item) => item.id);
-        for (const viewId of viewIdsForFeed) {
-          await publisher.publish(channel, {
-            source: "initial",
-            chunk: {
-              type: "view-items",
-              viewId,
-              feedItemIds: itemIds,
-            },
-          });
-        }
-      }
     }
 
     return { status: "completed" };
