@@ -927,6 +927,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               const feedStatusDict = { ...get().feedStatusDict };
               feedStatusDict[initialChunk.feedId] = initialChunk.status;
 
+              // Merge feedItems if present in the chunk
+              if (initialChunk.feedItems && initialChunk.feedItems.length > 0) {
+                mergeFeedItems(initialChunk.feedItems);
+              }
+
               // Check if all feeds have reported status
               const { totalFeeds } = get().progressState;
               const allFeedsComplete =
@@ -935,7 +940,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
               set({
                 feedStatusDict,
-                ...(allFeedsComplete && { fetchFeedItemsStatus: "success" }),
+                ...(allFeedsComplete && {
+                  fetchFeedItemsStatus: "success",
+                  fetchFeedItemsLastFetchedAt: Date.now(),
+                }),
               });
               break;
             }
@@ -971,7 +979,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               }
 
               set({
-                fetchFeedItemsLastFetchedAt: Date.now(),
+                // Note: fetchFeedItemsLastFetchedAt is now set in feed-status when all feeds complete
+                // This ensures the skeleton shows until RSS refresh is done
                 fetchedVisibilityFilters: fetchedFilters,
                 viewPaginationState: paginationState,
                 _lastItemByView: {}, // Clear after use
@@ -1243,6 +1252,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             // Update feedStatusDict for progress tracking
             const feedStatusDict = { ...get().feedStatusDict };
             feedStatusDict[chunk.feedId] = chunk.status;
+
+            // Merge feedItems if present in the chunk
+            if (chunk.feedItems && chunk.feedItems.length > 0) {
+              mergeFeedItems(chunk.feedItems);
+            }
+
             set({ feedStatusDict });
             break;
           }

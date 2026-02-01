@@ -79,7 +79,13 @@ export type GetByViewChunk =
   | { type: "feeds"; feeds: ApplicationFeed[] }
   | { type: "feed-categories"; feedCategories: DatabaseFeedCategory[] }
   | { type: "content-categories"; contentCategories: DatabaseContentCategory[] }
-  | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
+  | {
+      type: "feed-status";
+      feedId: number;
+      status: FetchFeedsStatus;
+      feedItems?: ApplicationFeedItem[];
+      viewItemMappings?: Array<{ viewId: number; feedItemIds: string[] }>;
+    }
   | { type: "view-feeds"; viewId: number; feedIds: number[] }
   | { type: "initial-data-complete" }
   | { type: "new-data-complete" }
@@ -896,17 +902,12 @@ export const requestInitialData = protectedProcedure
           continue;
         }
 
-        // Publish feed status for actual fetches
-        await publisher.publish(channel, {
-          source: "initial",
-          chunk: {
-            type: "feed-status",
-            status: feedResult.status,
-            feedId: feedResult.id,
-          },
-        });
+        // Build view item mappings for successful fetches with items
+        let feedItems: ApplicationFeedItem[] | undefined;
+        let viewItemMappings:
+          | Array<{ viewId: number; feedItemIds: string[] }>
+          | undefined;
 
-        // Stream newly fetched items that belong to views
         if (
           feedResult.status === "success" &&
           feedResult.feedItems.length > 0
@@ -933,29 +934,31 @@ export const requestInitialData = protectedProcedure
             }
           }
 
-          // Publish feed-items and view-items using the filtered data
-          for (const [viewId, itemsForView] of viewFilteredItems) {
-            // Publish feed-items chunk for this view
-            await publisher.publish(channel, {
-              source: "initial",
-              chunk: {
-                type: "feed-items",
-                viewId,
-                feedItems: itemsForView,
-              },
-            });
+          // Only include feedItems if there are items for at least one view
+          if (viewFilteredItems.size > 0) {
+            feedItems = feedResult.feedItems;
+            viewItemMappings = [];
 
-            // Publish view-items chunk for this view
-            await publisher.publish(channel, {
-              source: "initial",
-              chunk: {
-                type: "view-items",
+            for (const [viewId, itemsForView] of viewFilteredItems) {
+              viewItemMappings.push({
                 viewId,
                 feedItemIds: itemsForView.map((item) => item.id),
-              },
-            });
+              });
+            }
           }
         }
+
+        // Publish combined feed-status chunk with optional feedItems and viewItemMappings
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: {
+            type: "feed-status",
+            status: feedResult.status,
+            feedId: feedResult.id,
+            ...(feedItems && { feedItems }),
+            ...(viewItemMappings && { viewItemMappings }),
+          },
+        });
       }
     }
 
@@ -1376,15 +1379,11 @@ export const requestNewData = protectedProcedure
         continue;
       }
 
-      // Publish feed status for actual fetches
-      await publisher.publish(channel, {
-        source: "new-data",
-        chunk: {
-          type: "feed-status",
-          status: feedResult.status,
-          feedId: feedResult.id,
-        },
-      });
+      // Build view item mappings for successful fetches with items
+      let feedItems: ApplicationFeedItem[] | undefined;
+      let viewItemMappings:
+        | Array<{ viewId: number; feedItemIds: string[] }>
+        | undefined;
 
       if (feedResult.status === "success" && feedResult.feedItems.length > 0) {
         // Filter items newer than the client-provided timestamp
@@ -1393,32 +1392,33 @@ export const requestNewData = protectedProcedure
         );
 
         if (newItems.length > 0) {
-          // Stream feed items once per feed (not per view)
-          await publisher.publish(channel, {
-            source: "new-data",
-            chunk: {
-              type: "feed-items",
-              feedId: feedResult.id,
-              feedItems: newItems,
-            },
-          });
+          feedItems = newItems;
+          viewItemMappings = [];
 
-          // Stream only item IDs for each view (efficient mapping)
+          // Build view item mappings for each view
           const viewIdsForFeed = feedIdToViewIds.get(feedResult.id) ?? [];
           const newItemIds = newItems.map((item) => item.id);
 
           for (const viewId of viewIdsForFeed) {
-            await publisher.publish(channel, {
-              source: "new-data",
-              chunk: {
-                type: "view-items",
-                viewId,
-                feedItemIds: newItemIds,
-              },
+            viewItemMappings.push({
+              viewId,
+              feedItemIds: newItemIds,
             });
           }
         }
       }
+
+      // Publish combined feed-status chunk with optional feedItems and viewItemMappings
+      await publisher.publish(channel, {
+        source: "new-data",
+        chunk: {
+          type: "feed-status",
+          status: feedResult.status,
+          feedId: feedResult.id,
+          ...(feedItems && { feedItems }),
+          ...(viewItemMappings && { viewItemMappings }),
+        },
+      });
     }
 
     await publisher.publish(channel, {
