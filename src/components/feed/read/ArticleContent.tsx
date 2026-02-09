@@ -27,7 +27,7 @@ export function ArticleContent({ content }: { content: string }) {
       if (videoPlayer === "serial") {
         return (
           <div
-            className={`${classes.videoEmbed} my-4 w-full overflow-hidden rounded ${vertical ? "aspect-[9/16]" : "aspect-video"}`}
+            className={`${classes.videoEmbed} my-4 aspect-video w-full overflow-hidden rounded`}
           >
             <CustomVideoPlayer
               videoID={videoId}
