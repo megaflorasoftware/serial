@@ -186,7 +186,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                   changeVideoPlaybackSpeed(numberValue);
                 }}
                 size="xs"
-                className="flex flex-col items-center justify-center font-mono"
+                className="flex flex-col items-center justify-center font-sans"
               >
                 {YOUTUBE_PLAYBACK_SPEEDS.map((speed) => (
                   <ToggleGroupItem
@@ -213,7 +213,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                     <Button
                       size="sm"
                       variant="link"
-                      className="-ml-3 flex w-max flex-row items-center gap-2 font-mono text-sm font-bold"
+                      className="-ml-3 flex w-max flex-row items-center gap-2 font-sans text-sm font-bold"
                       onClick={() => {
                         const location = Math.max(
                           videoDuration + 160,
@@ -227,7 +227,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                     </Button>
                   )}
                   {shouldShowTimestamps && (
-                    <div className="w-max font-mono text-sm font-bold">
+                    <div className="w-max font-sans text-sm font-bold">
                       {transformSecondsToFormattedTime(videoProgress)} /{" "}
                       {transformSecondsToFormattedTime(videoDuration)}
                     </div>

@@ -77,7 +77,7 @@ function ReadPage() {
         ) : (
           <div className="bg-muted aspect-square size-6 rounded object-cover" />
         )}
-        <span className="line-clamp-1 font-mono text-sm">{feed?.name}</span>
+        <span className="line-clamp-1 font-sans text-sm">{feed?.name}</span>
       </div>
       <div className={`h-full w-full px-6 sm:pb-6 ${classes.article}`}>
         <h1>{feedItem?.title}</h1>

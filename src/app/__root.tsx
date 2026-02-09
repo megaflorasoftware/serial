@@ -17,8 +17,6 @@ import { BASE_SIGNED_OUT_URL } from "~/lib/constants";
 import { orpcRouterClient } from "~/lib/orpc";
 import appCss from "~/styles/globals.css?url";
 
-import "@fontsource-variable/figtree";
-import "@fontsource-variable/lexend";
 import "@fontsource-variable/outfit";
 
 const title = "Serial";

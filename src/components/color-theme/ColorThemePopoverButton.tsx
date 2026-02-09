@@ -148,9 +148,9 @@ function EditColorsForm() {
     <div className="space-y-4">
       <div className="flex-1 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-mono">Hue</h3>
+          <h3 className="font-sans">Hue</h3>
           <Input
-            className="w-18 font-mono"
+            className="w-18 font-sans"
             type="number"
             value={hue.value}
             onChange={(e) => hue.onChange(parseInt(e.target.value) || 0)}
@@ -168,9 +168,9 @@ function EditColorsForm() {
       </div>
       <div className="flex-1 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-mono">Saturation</h3>
+          <h3 className="font-sans">Saturation</h3>
           <Input
-            className="w-18 font-mono"
+            className="w-18 font-sans"
             type="number"
             value={saturation.value}
             onChange={(e) => saturation.onChange(parseInt(e.target.value) || 0)}
@@ -192,9 +192,9 @@ function EditColorsForm() {
       </div>
       <div className="flex-1 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-mono">Lightness</h3>
+          <h3 className="font-sans">Lightness</h3>
           <Input
-            className="w-18 font-mono"
+            className="w-18 font-sans"
             type="number"
             value={lightness.value}
             onChange={(e) => lightness.onChange(parseInt(e.target.value) || 0)}

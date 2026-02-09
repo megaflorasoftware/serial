@@ -231,7 +231,7 @@
   }
 
   * {
-    @apply border-border;
+    @apply border-border font-sans;
   }
 
   body {

@@ -135,12 +135,15 @@ function RouteComponent() {
         <section className="relative mx-auto max-w-xl space-y-6 text-center text-2xl text-pretty md:py-16 md:text-3xl">
           <p className="text-base font-black uppercase">Pricing Transparency</p>
           <p>
+            Serial is currently free while in beta, and there will be a small
+            subscription after that period ends for users over 100 feeds.
+          </p>
+          {/* <p>
             You can have up to 100 different feeds on Serial for free. After
             that, it&apos;s <b>$2 a month or $20 a year.</b>
-          </p>
+          </p>*/}
         </section>
       </div>
-
       <section className="mx-auto max-w-xl space-y-6 px-6 py-12 text-xl text-pretty md:py-24">
         <p>
           If the cost of Serial is too much for you, anyone can run an instance
