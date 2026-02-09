@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { ColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { Button } from "~/components/ui/button";
+import { DemoCarousel } from "~/components/welcome/DemoCarousel";
 import { RecentReleaseBanner } from "~/components/welcome/RecentReleaseBanner";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
@@ -26,24 +27,22 @@ function RouteComponent() {
   return (
     <main className="bg-background text-pretty">
       <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
-      <section className="mx-auto max-w-2xl px-6 py-36 text-center">
-        <img
-          src="/icon-256.png"
-          alt="Serial logo"
-          className="mx-auto size-16 rounded-lg"
-        />
-        <h1 className="mt-8 text-4xl font-bold text-balance">Serial</h1>
-        <p className="mt-3 mb-6 text-xl text-pretty">
-          A calm, customizable, and non-algorithmic RSS reader for the
-          semi-online. Lots of customization options and great support for video
-          content. Fully open source and easily self-hostable.
-        </p>
-        <Link to={AUTH_PAGE_URL} className="hover:bg-transparent">
-          <Button size="lg" className="text-base">
-            Get Started
-          </Button>
-        </Link>
-      </section>
+      <div className="pt-24 pb-32">
+        <DemoCarousel />
+        <section className="mx-auto max-w-2xl px-6 pt-16 text-center">
+          <h1 className="text-4xl font-bold text-balance">Serial</h1>
+          <p className="mt-3 mb-6 text-xl text-pretty">
+            A calm, customizable, and non-algorithmic RSS reader. Lots of
+            customization options and great support for video content. Fully
+            open source and easily self-hostable.
+          </p>
+          <Link to={AUTH_PAGE_URL} className="hover:bg-transparent">
+            <Button size="lg" className="text-base">
+              Get Started
+            </Button>
+          </Link>
+        </section>
+      </div>
       <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:bg-transparent">
         <section className="relative mx-auto max-w-xl space-y-12 py-16 text-center text-2xl text-pretty md:text-3xl">
           <p>
@@ -161,10 +160,10 @@ function RouteComponent() {
           on how to host your own Serial instance.
         </p>
       </section>
-      <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:bg-transparent">
+      <div className="border-foreground mx-auto max-w-4xl border-4 border-dashed px-6 py-16">
         <section className="relative mx-auto max-w-xl space-y-6 py-16 text-center text-3xl text-pretty">
           <p>Ready to take back control of your content?</p>
-          <div className="dark space-x-2">
+          <div className="space-x-2">
             <Link to={AUTH_PAGE_URL}>
               <Button size="lg" className="text-base">
                 Get Started
