@@ -52,6 +52,7 @@ interface IResponsiveVideoProps {
   videoSrc?: string;
   orientation: "vertical" | "horizontal";
   isInactive: boolean;
+  isEmbed?: boolean;
 }
 
 function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
@@ -83,7 +84,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     isMuted,
     toggleMute,
   } = useCustomVideoPlayerContext();
-  useVideoShortcuts();
+  useVideoShortcuts({ disabled: props.isEmbed });
 
   const { view, setView, toggleView } = useView();
 
@@ -186,7 +187,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                   changeVideoPlaybackSpeed(numberValue);
                 }}
                 size="xs"
-                className="flex flex-col items-center justify-center font-sans"
+                className="flex flex-col items-center justify-center font-mono"
               >
                 {YOUTUBE_PLAYBACK_SPEEDS.map((speed) => (
                   <ToggleGroupItem
@@ -227,7 +228,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                     </Button>
                   )}
                   {shouldShowTimestamps && (
-                    <div className="w-max font-sans text-sm font-bold">
+                    <div className="w-max font-mono text-sm font-bold">
                       {transformSecondsToFormattedTime(videoProgress)} /{" "}
                       {transformSecondsToFormattedTime(videoDuration)}
                     </div>
@@ -365,27 +366,31 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
                       </Tooltip>
                     );
                   })()}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <ButtonWithShortcut
-                        shortcut="F"
-                        size="icon"
-                        variant={
-                          hasInlineShortcutsVisible === "show-shortcuts"
-                            ? "outline"
-                            : "ghost"
-                        }
-                        onClick={handleWindowedFullscreen}
-                      >
-                        {view === "fullscreen" ? (
-                          <MinimizeIcon size={16} />
-                        ) : (
-                          <MaximizeIcon size={16} />
-                        )}
-                      </ButtonWithShortcut>
-                    </TooltipTrigger>
-                    <TooltipContent>Toggle windowed fullscreen</TooltipContent>
-                  </Tooltip>
+                  {!props.isEmbed && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <ButtonWithShortcut
+                          shortcut="F"
+                          size="icon"
+                          variant={
+                            hasInlineShortcutsVisible === "show-shortcuts"
+                              ? "outline"
+                              : "ghost"
+                          }
+                          onClick={handleWindowedFullscreen}
+                        >
+                          {view === "fullscreen" ? (
+                            <MinimizeIcon size={16} />
+                          ) : (
+                            <MaximizeIcon size={16} />
+                          )}
+                        </ButtonWithShortcut>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Toggle windowed fullscreen
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <ButtonWithShortcut
