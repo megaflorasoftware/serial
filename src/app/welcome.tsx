@@ -92,7 +92,7 @@ function RouteComponent() {
         </p>
         <div className="mx-auto grid max-w-4xl gap-6 space-y-6 py-8 md:grid-cols-2">
           <div className="flex-1">
-            <p className="font-bold">Customizable views</p>
+            <p className="font-bold">Flexible views</p>
             <p className="mt-2 text-lg">
               If you&apos;ve ever been on social media and felt the
               &quot;content whiplash&quot; of seeing a cute animal right next to
@@ -118,11 +118,12 @@ function RouteComponent() {
             </p>
           </div>
           <div className="flex-1">
-            <p className="font-bold">Fun to use</p>
+            <p className="font-bold">
+              Customizable to your heart&apos;s content
+            </p>
             <p className="mt-2 mb-2 text-lg">
-              Your RSS reader doesn&apos;t have to feel like just another email
-              client – it can be something you&apos;re looking forward to using.
-              Try customizing this page:
+              We believe your RSS reader doesn&apos;t have to feel like an email
+              client. As one small example, check out our theming flexibility:
             </p>
             <ColorThemePopoverButton isDemo={true} />
           </div>
@@ -143,7 +144,7 @@ function RouteComponent() {
           If the cost of Serial is too much for you, anyone can run an instance
           of Serial for themselves. You won&apos;t need to pay us anything, but
           you will need to have a dedicated computer to run it on, which can be
-          as cheap as around $3-4 a month.
+          as cheap as $3-4 a month.
         </p>
         <p>
           This can be a great option for users who are very privacy-conscious,
@@ -183,7 +184,7 @@ function RouteComponent() {
       </div>
       <section className="space-y-2 px-6 py-16 text-center">
         <p className="text-lg">
-          Have questions? Reach us at{" "}
+          Have a question? Reach us at{" "}
           <a
             href="mailto:hey@serial.tube?subject=Question%20about%20serial.tube"
             className="underline"
