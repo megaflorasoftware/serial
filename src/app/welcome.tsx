@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { ColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
+import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { Button } from "~/components/ui/button";
 import { DemoCarousel } from "~/components/welcome/DemoCarousel";
 import { RecentReleaseBanner } from "~/components/welcome/RecentReleaseBanner";
@@ -127,7 +127,7 @@ function RouteComponent() {
               We believe your RSS reader doesn&apos;t have to feel like an email
               client. As one small example, check out our theming flexibility:
             </p>
-            <ColorThemePopoverButton isDemo={true} />
+            <DemoColorThemePopoverButton />
           </div>
         </div>
       </section>
