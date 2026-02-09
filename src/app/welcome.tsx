@@ -27,11 +27,13 @@ function RouteComponent() {
   return (
     <main className="bg-background text-pretty">
       <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
-      <div className="pt-24 pb-32">
+      <div className="pt-12 pb-16 md:pt-24 md:pb-32">
         <DemoCarousel />
         <section className="mx-auto max-w-2xl px-6 pt-16 text-center">
-          <h1 className="text-4xl font-bold text-balance">Serial</h1>
-          <p className="mt-3 mb-6 text-xl text-pretty">
+          <h1 className="text-3xl font-bold text-balance md:text-4xl">
+            Serial
+          </h1>
+          <p className="mt-3 mb-6 text-lg text-pretty md:text-xl">
             A calm, customizable, and non-algorithmic RSS reader. Lots of
             customization options and great support for video content. Fully
             open source and easily self-hostable.
@@ -43,8 +45,8 @@ function RouteComponent() {
           </Link>
         </section>
       </div>
-      <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:bg-transparent">
-        <section className="relative mx-auto max-w-xl space-y-12 py-16 text-center text-2xl text-pretty md:text-3xl">
+      <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:border-x-0 dark:bg-transparent dark:md:border-x-4">
+        <section className="relative mx-auto max-w-xl space-y-12 text-center text-2xl text-pretty md:py-16 md:text-3xl">
           <p>
             Our digital lives are spread across many platforms, publications,
             and channels.
@@ -56,7 +58,7 @@ function RouteComponent() {
         </section>
       </div>
 
-      <section className="mx-auto max-w-xl space-y-6 px-6 py-24 text-xl text-pretty">
+      <section className="mx-auto max-w-xl space-y-6 px-6 py-12 text-xl text-pretty md:py-24">
         <p>
           Serial is what is called an{" "}
           <a
@@ -84,13 +86,13 @@ function RouteComponent() {
         <div className="bg-foreground size-2 rounded-full" />
         <div className="bg-foreground size-2 rounded-full" />
       </div>
-      <section className="space-y-6 px-6 py-16 text-xl text-pretty">
+      <section className="space-y-6 px-6 py-12 text-xl text-pretty md:py-24">
         <p className="mx-auto max-w-4xl">
           Serial is designed to be a calm, customizable, and non-algorithmic RSS
           reader. It has a few distinct features that sets it apart from other
           RSS readers you may have come across:
         </p>
-        <div className="mx-auto grid max-w-4xl gap-6 space-y-6 py-8 md:grid-cols-2">
+        <div className="mx-auto grid max-w-4xl gap-6 space-y-4 py-4 md:grid-cols-2 md:space-y-6 md:py-8">
           <div className="flex-1">
             <p className="font-bold">Flexible views</p>
             <p className="mt-2 text-lg">
@@ -129,8 +131,8 @@ function RouteComponent() {
           </div>
         </div>
       </section>
-      <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:bg-transparent">
-        <section className="relative mx-auto max-w-xl space-y-6 py-16 text-center text-2xl text-pretty md:text-3xl">
+      <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:border-x-0 dark:bg-transparent dark:md:border-x-4">
+        <section className="relative mx-auto max-w-xl space-y-6 text-center text-2xl text-pretty md:py-16 md:text-3xl">
           <p className="text-base font-black uppercase">Pricing Transparency</p>
           <p>
             You can have up to 100 different feeds on Serial for free. After
@@ -139,7 +141,7 @@ function RouteComponent() {
         </section>
       </div>
 
-      <section className="mx-auto max-w-xl space-y-6 px-6 py-24 text-xl text-pretty">
+      <section className="mx-auto max-w-xl space-y-6 px-6 py-12 text-xl text-pretty md:py-24">
         <p>
           If the cost of Serial is too much for you, anyone can run an instance
           of Serial for themselves. You won&apos;t need to pay us anything, but
@@ -161,8 +163,8 @@ function RouteComponent() {
           on how to host your own Serial instance.
         </p>
       </section>
-      <div className="border-foreground mx-auto max-w-4xl border-4 border-dashed px-6 py-16">
-        <section className="relative mx-auto max-w-xl space-y-6 py-16 text-center text-3xl text-pretty">
+      <div className="border-foreground mx-auto max-w-4xl border-4 border-x-0 border-dashed px-6 py-16 md:border-x-4">
+        <section className="relative mx-auto max-w-xl space-y-6 text-center text-2xl text-pretty md:py-16 md:text-3xl">
           <p>Ready to take back control of your content?</p>
           <div className="space-x-2">
             <Link to={AUTH_PAGE_URL}>
