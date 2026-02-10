@@ -933,9 +933,8 @@ export const requestInitialData = protectedProcedure
             }
           }
 
-          // Publish feed-items and view-items using the filtered data
+          // Publish feed-items using the filtered data
           for (const [viewId, itemsForView] of viewFilteredItems) {
-            // Publish feed-items chunk for this view
             await publisher.publish(channel, {
               source: "initial",
               chunk: {
@@ -945,15 +944,6 @@ export const requestInitialData = protectedProcedure
               },
             });
 
-            // Publish view-items chunk for this view
-            await publisher.publish(channel, {
-              source: "initial",
-              chunk: {
-                type: "view-items",
-                viewId,
-                feedItemIds: itemsForView.map((item) => item.id),
-              },
-            });
           }
         }
       }
@@ -1094,19 +1084,6 @@ export const requestImportedData = protectedProcedure
           },
         });
 
-        // Stream view mappings for the items
-        const viewIdsForFeed = feedIdToViewIds.get(feedResult.id) ?? [];
-        const itemIds = feedResult.feedItems.map((item) => item.id);
-        for (const viewId of viewIdsForFeed) {
-          await publisher.publish(channel, {
-            source: "initial",
-            chunk: {
-              type: "view-items",
-              viewId,
-              feedItemIds: itemIds,
-            },
-          });
-        }
       }
     }
 
@@ -1403,20 +1380,6 @@ export const requestNewData = protectedProcedure
             },
           });
 
-          // Stream only item IDs for each view (efficient mapping)
-          const viewIdsForFeed = feedIdToViewIds.get(feedResult.id) ?? [];
-          const newItemIds = newItems.map((item) => item.id);
-
-          for (const viewId of viewIdsForFeed) {
-            await publisher.publish(channel, {
-              source: "new-data",
-              chunk: {
-                type: "view-items",
-                viewId,
-                feedItemIds: newItemIds,
-              },
-            });
-          }
         }
       }
     }

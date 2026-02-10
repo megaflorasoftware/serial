@@ -100,6 +100,8 @@ export type ApplicationStore = {
   ) => Promise<void>;
   // Process chunks received from the publisher subscription
   processChunk: (payload: PublishedChunk) => void;
+  // Process multiple chunks in a single batch (used by RAF buffering)
+  processChunks: (payloads: PublishedChunk[]) => void;
   // Internal: Track oldest item per view during initial data processing for cursor computation
   _lastItemByView: Record<number, ApplicationFeedItem | null>;
 };
@@ -980,13 +982,33 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             }
 
             case "feed-items": {
+              // Build a single updates object to avoid multiple set() calls
+              const updates: Partial<ApplicationStore> = {};
+
               // Track the current view ID from the first feed-items chunk
               const firstView = viewsStore.getState().views[0];
               const viewId = initialChunk.viewId;
               if (get().currentViewId === null && viewId === firstView?.id) {
-                set({ currentViewId: viewId });
+                updates.currentViewId = viewId;
               }
-              mergeFeedItems(initialChunk.feedItems);
+
+              // Merge feed items inline (single copy + sort)
+              const feedItemsDict = { ...get().feedItemsDict };
+              const feedItemsOrder = [...get().feedItemsOrder];
+              const existingIds = new Set(feedItemsOrder);
+
+              for (const item of initialChunk.feedItems) {
+                feedItemsDict[item.id] = item;
+                if (!existingIds.has(item.id)) {
+                  feedItemsOrder.push(item.id);
+                  existingIds.add(item.id);
+                }
+              }
+
+              updates.feedItemsDict = feedItemsDict;
+              updates.feedItemsOrder = feedItemsOrder.sort(
+                sortFeedItemsOrderByDate(feedItemsDict),
+              );
 
               // Only track view-specific data if viewId is present
               if (viewId !== undefined) {
@@ -1009,7 +1031,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     lastItemByView[viewId] = item;
                   }
                 }
-                set({ _lastItemByView: lastItemByView });
+                updates._lastItemByView = lastItemByView;
 
                 // Track that we received feed items for this view (for progress calculation)
                 const currentProgressState = get().progressState;
@@ -1018,12 +1040,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     currentProgressState.viewsWithFeedItems,
                   );
                   newViewsWithFeedItems.add(viewId);
-                  set({
-                    progressState: {
-                      ...currentProgressState,
-                      viewsWithFeedItems: newViewsWithFeedItems,
-                    },
-                  });
+                  updates.progressState = {
+                    ...currentProgressState,
+                    viewsWithFeedItems: newViewsWithFeedItems,
+                  };
                 }
 
                 // Track fetched visibility filter for this view (when fetching non-unread filters)
@@ -1031,17 +1051,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   initialChunk.visibilityFilter &&
                   initialChunk.visibilityFilter !== "unread"
                 ) {
-                  set({
-                    fetchedVisibilityFilters: {
-                      ...get().fetchedVisibilityFilters,
-                      [viewId]: new Set([
-                        ...(get().fetchedVisibilityFilters[viewId] ?? []),
-                        initialChunk.visibilityFilter as VisibilityFilter,
-                      ]),
-                    },
-                  });
+                  updates.fetchedVisibilityFilters = {
+                    ...get().fetchedVisibilityFilters,
+                    [viewId]: new Set([
+                      ...(get().fetchedVisibilityFilters[viewId] ?? []),
+                      initialChunk.visibilityFilter as VisibilityFilter,
+                    ]),
+                  };
                 }
               }
+
+              set(updates);
               break;
             }
 
@@ -1289,6 +1309,207 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           }
           break;
         }
+      }
+    },
+
+    processChunks: (payloads: PublishedChunk[]) => {
+      if (payloads.length === 0) return;
+      if (payloads.length === 1) {
+        get().processChunk(payloads[0]!);
+        return;
+      }
+
+      // Separate high-frequency batchable chunks from infrequent ones
+      const initialFeedItems: Array<
+        Extract<PublishedChunk, { source: "initial" }> & {
+          chunk: { type: "feed-items" };
+        }
+      > = [];
+      const initialFeedStatuses: Array<{
+        feedId: number;
+        status: FetchFeedsStatus;
+      }> = [];
+      const newDataFeedItems: Array<{
+        feedItems: ApplicationFeedItem[];
+      }> = [];
+      const otherPayloads: PublishedChunk[] = [];
+
+      for (const payload of payloads) {
+        if (
+          payload.source === "initial" &&
+          payload.chunk.type === "feed-items"
+        ) {
+          initialFeedItems.push(payload as (typeof initialFeedItems)[number]);
+        } else if (
+          payload.source === "initial" &&
+          payload.chunk.type === "feed-status"
+        ) {
+          initialFeedStatuses.push({
+            feedId: payload.chunk.feedId,
+            status: payload.chunk.status,
+          });
+        } else if (
+          payload.source === "new-data" &&
+          payload.chunk.type === "feed-items"
+        ) {
+          newDataFeedItems.push({ feedItems: payload.chunk.feedItems });
+        } else {
+          otherPayloads.push(payload);
+        }
+      }
+
+      // Process infrequent chunks individually (views, feeds, categories, etc.)
+      for (const payload of otherPayloads) {
+        get().processChunk(payload);
+      }
+
+      // Batch all initial feed-status updates into a single set()
+      if (initialFeedStatuses.length > 0) {
+        const feedStatusDict = { ...get().feedStatusDict };
+        for (const { feedId, status } of initialFeedStatuses) {
+          feedStatusDict[feedId] = status;
+        }
+
+        const { totalFeeds } = get().progressState;
+        const allFeedsComplete =
+          Object.keys(feedStatusDict).length >= totalFeeds && totalFeeds > 0;
+
+        set({
+          feedStatusDict,
+          ...(allFeedsComplete && { fetchFeedItemsStatus: "success" as const }),
+        });
+      }
+
+      // Batch all initial feed-items into a single merge + set()
+      if (initialFeedItems.length > 0) {
+        const updates: Partial<ApplicationStore> = {};
+
+        // Merge all feed items at once
+        const feedItemsDict = { ...get().feedItemsDict };
+        const feedItemsOrder = [...get().feedItemsOrder];
+        const existingIds = new Set(feedItemsOrder);
+
+        const lastItemByView = { ...get()._lastItemByView };
+        let progressState = get().progressState;
+        let progressChanged = false;
+        let fetchedVisibilityFilters = get().fetchedVisibilityFilters;
+        let filtersChanged = false;
+
+        const firstView = viewsStore.getState().views[0];
+
+        for (const payload of initialFeedItems) {
+          const chunk = payload.chunk as {
+            type: "feed-items";
+            viewId?: number;
+            feedId?: number;
+            feedItems: ApplicationFeedItem[];
+            visibilityFilter?: string;
+          };
+
+          // Add items to dict and order
+          for (const item of chunk.feedItems) {
+            feedItemsDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          }
+
+          // Track current view ID
+          const viewId = chunk.viewId;
+          if (
+            get().currentViewId === null &&
+            updates.currentViewId === undefined &&
+            viewId === firstView?.id
+          ) {
+            updates.currentViewId = viewId;
+          }
+
+          if (viewId !== undefined) {
+            // Track oldest item per view
+            for (const item of chunk.feedItems) {
+              const currentOldest = lastItemByView[viewId];
+              const itemTime =
+                item.postedAt instanceof Date
+                  ? item.postedAt.getTime()
+                  : new Date(item.postedAt).getTime();
+              const currentTime =
+                currentOldest?.postedAt instanceof Date
+                  ? currentOldest.postedAt.getTime()
+                  : currentOldest
+                    ? new Date(currentOldest.postedAt).getTime()
+                    : Infinity;
+
+              if (!currentOldest || itemTime < currentTime) {
+                lastItemByView[viewId] = item;
+              }
+            }
+
+            // Track progress
+            if (!progressState.viewsWithFeedItems.has(viewId)) {
+              if (!progressChanged) {
+                progressState = {
+                  ...progressState,
+                  viewsWithFeedItems: new Set(
+                    progressState.viewsWithFeedItems,
+                  ),
+                };
+                progressChanged = true;
+              }
+              progressState.viewsWithFeedItems.add(viewId);
+            }
+
+            // Track fetched visibility filter
+            if (chunk.visibilityFilter && chunk.visibilityFilter !== "unread") {
+              if (!filtersChanged) {
+                fetchedVisibilityFilters = { ...fetchedVisibilityFilters };
+                filtersChanged = true;
+              }
+              fetchedVisibilityFilters[viewId] = new Set([
+                ...(fetchedVisibilityFilters[viewId] ?? []),
+                chunk.visibilityFilter as VisibilityFilter,
+              ]);
+            }
+          }
+        }
+
+        updates.feedItemsDict = feedItemsDict;
+        updates.feedItemsOrder = feedItemsOrder.sort(
+          sortFeedItemsOrderByDate(feedItemsDict),
+        );
+        updates._lastItemByView = lastItemByView;
+        if (progressChanged) {
+          updates.progressState = progressState;
+        }
+        if (filtersChanged) {
+          updates.fetchedVisibilityFilters = fetchedVisibilityFilters;
+        }
+
+        set(updates);
+      }
+
+      // Batch all new-data feed-items into a single merge + set()
+      if (newDataFeedItems.length > 0) {
+        const newDict = { ...get().feedItemsDict };
+        const feedItemsOrder = [...get().feedItemsOrder];
+        const existingIds = new Set(feedItemsOrder);
+
+        for (const { feedItems } of newDataFeedItems) {
+          for (const item of feedItems) {
+            newDict[item.id] = item;
+            if (!existingIds.has(item.id)) {
+              feedItemsOrder.push(item.id);
+              existingIds.add(item.id);
+            }
+          }
+        }
+
+        set({
+          feedItemsDict: newDict,
+          feedItemsOrder: feedItemsOrder.sort(
+            sortFeedItemsOrderByDate(newDict),
+          ),
+        });
       }
     },
   }),
