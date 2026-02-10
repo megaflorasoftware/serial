@@ -884,12 +884,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               feedsStore.getState().set(initialChunk.feeds);
               feedsStore.setState({ fetchStatus: "success" });
               // Track total feeds for progress calculation
-              set({
-                progressState: {
-                  ...get().progressState,
-                  totalFeeds: initialChunk.feeds.length,
-                },
-              });
+              // Don't overwrite totalFeeds during import — the import-start
+              // chunk already set the authoritative count and this post-import
+              // feeds chunk may differ (e.g. pre-existing feeds).
+              if (get().progressState.fetchType !== "import") {
+                set({
+                  progressState: {
+                    ...get().progressState,
+                    totalFeeds: initialChunk.feeds.length,
+                  },
+                });
+              }
               break;
 
             case "content-categories":
@@ -929,11 +934,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               const feedStatusDict = { ...get().feedStatusDict };
               feedStatusDict[initialChunk.feedId] = initialChunk.status;
 
-              // Check if all feeds have reported status
-              const { totalFeeds } = get().progressState;
+              // Check if all feeds have reported status (successes + errors)
+              const { totalFeeds, importErrors } = get().progressState;
               const allFeedsComplete =
-                Object.keys(feedStatusDict).length >= totalFeeds &&
-                totalFeeds > 0;
+                Object.keys(feedStatusDict).length + importErrors >=
+                  totalFeeds && totalFeeds > 0;
 
               set({
                 feedStatusDict,
@@ -1100,12 +1105,21 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               const currentProgress = get().progressState;
               const newFailedUrls = new Set(currentProgress.failedImportUrls);
               newFailedUrls.add(initialChunk.feedUrl);
+              const newImportErrors = currentProgress.importErrors + 1;
+
+              // Check if all feeds are accounted for (successes + errors)
+              const allFeedsComplete =
+                Object.keys(get().feedStatusDict).length + newImportErrors >=
+                  currentProgress.totalFeeds &&
+                currentProgress.totalFeeds > 0;
+
               set({
                 progressState: {
                   ...currentProgress,
-                  importErrors: currentProgress.importErrors + 1,
+                  importErrors: newImportErrors,
                   failedImportUrls: newFailedUrls,
                 },
+                ...(allFeedsComplete && { fetchFeedItemsStatus: "success" }),
               });
               break;
             }
@@ -1370,9 +1384,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           feedStatusDict[feedId] = status;
         }
 
-        const { totalFeeds } = get().progressState;
+        const { totalFeeds, importErrors } = get().progressState;
         const allFeedsComplete =
-          Object.keys(feedStatusDict).length >= totalFeeds && totalFeeds > 0;
+          Object.keys(feedStatusDict).length + importErrors >= totalFeeds &&
+          totalFeeds > 0;
 
         set({
           feedStatusDict,
@@ -1579,9 +1594,11 @@ export function useLoadingProgress(): number {
     return 0;
   }
 
-  const { totalFeeds } = progressState;
+  const { totalFeeds, importErrors } = progressState;
 
-  // Both initial and refresh: 0-100% based on feed status
+  // Both initial and refresh: 0-100% based on feed status (successes + errors)
   if (totalFeeds === 0) return 0;
-  return (Object.keys(feedStatusDict).length / totalFeeds) * 100;
+  return (
+    ((Object.keys(feedStatusDict).length + importErrors) / totalFeeds) * 100
+  );
 }
