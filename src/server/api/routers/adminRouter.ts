@@ -371,82 +371,70 @@ export const getSigninStats = adminProcedure
     };
   });
 
-// Get monthly retention stats (% of total users active each month)
+// Get retention stats by months since signup (0-12)
 export const getRetentionStats = adminProcedure.handler(async () => {
-  const monthGroup = sql<string>`strftime('%Y-%m', datetime(${session.createdAt}, 'unixepoch'))`;
+  const now = new Date();
+  const currentAbsMonth = now.getFullYear() * 12 + (now.getMonth() + 1);
+  const minSignupDate = new Date(now.getFullYear(), now.getMonth() - 12, 1);
 
-  // Monthly active users (distinct, excluding impersonation)
+  // Month offset between session creation and user signup
+  const monthOffsetExpr = sql<number>`
+    (CAST(strftime('%Y', datetime(${session.createdAt}, 'unixepoch')) AS INTEGER)
+     - CAST(strftime('%Y', datetime(${user.createdAt}, 'unixepoch')) AS INTEGER)) * 12
+    + (CAST(strftime('%m', datetime(${session.createdAt}, 'unixepoch')) AS INTEGER)
+     - CAST(strftime('%m', datetime(${user.createdAt}, 'unixepoch')) AS INTEGER))`;
+
+  // Count distinct active users per month offset (0-12), excluding impersonation
+  // Only include users who signed up on or after 2025-04
   const activeResults = await db
     .select({
-      date: monthGroup,
+      month: monthOffsetExpr,
       activeUsers: sql<number>`COUNT(DISTINCT ${session.userId})`,
     })
     .from(session)
-    .where(isNull(session.impersonatedBy))
-    .groupBy(monthGroup)
-    .orderBy(monthGroup)
+    .innerJoin(user, eq(session.userId, user.id))
+    .where(
+      and(
+        isNull(session.impersonatedBy),
+        gte(user.createdAt, minSignupDate),
+        sql`${monthOffsetExpr} >= 0`,
+        sql`${monthOffsetExpr} <= 12`,
+      ),
+    )
+    .groupBy(monthOffsetExpr)
+    .orderBy(monthOffsetExpr)
     .all();
 
-  // Monthly signup counts
-  const signupMonthGroup = sql<string>`strftime('%Y-%m', datetime(${user.createdAt}, 'unixepoch'))`;
-  const signupResults = await db
+  // Get signup absolute month for each user (only those who signed up on or after 2025-04)
+  const signupMonths = await db
     .select({
-      date: signupMonthGroup,
-      count: count(),
+      absMonth: sql<number>`CAST(strftime('%Y', datetime(${user.createdAt}, 'unixepoch')) AS INTEGER) * 12 + CAST(strftime('%m', datetime(${user.createdAt}, 'unixepoch')) AS INTEGER)`,
     })
     .from(user)
-    .groupBy(signupMonthGroup)
-    .orderBy(signupMonthGroup)
+    .where(gte(user.createdAt, minSignupDate))
     .all();
 
-  if (activeResults.length === 0 && signupResults.length === 0) {
+  if (signupMonths.length === 0) {
     return { stats: [] };
   }
 
-  // Build all month keys from earliest to current month
-  const allDates = [
-    ...activeResults.map((r) => r.date),
-    ...signupResults.map((r) => r.date),
-  ];
-  const earliest = allDates.sort()[0]!;
-  const now = new Date();
-  const parts = earliest.split("-").map(Number);
-  const startYear = parts[0]!;
-  const startMonth = parts[1]!;
-  const endYear = now.getFullYear();
-  const endMonth = now.getMonth() + 1;
+  const activeMap = new Map(activeResults.map((r) => [r.month, r.activeUsers]));
 
-  const monthKeys: string[] = [];
-  for (
-    let y = startYear, m = startMonth;
-    y < endYear || (y === endYear && m <= endMonth);
-    m++
-  ) {
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    monthKeys.push(`${y}-${String(m).padStart(2, "0")}`);
-  }
-
-  // Build lookup maps
-  const activeMap = new Map(
-    activeResults.map((r) => [r.date, r.activeUsers]),
-  );
-  const signupMap = new Map(signupResults.map((r) => [r.date, r.count]));
-
-  // Walk months, accumulating total users
-  let cumulativeUsers = 0;
-  const stats = monthKeys.map((month) => {
-    cumulativeUsers += signupMap.get(month) ?? 0;
-    const activeUsers = activeMap.get(month) ?? 0;
-    const totalUsers = cumulativeUsers;
+  // For each month offset 0-12, compute eligible users and retention rate
+  const stats = [];
+  for (let n = 0; n <= 12; n++) {
+    // User is eligible for month N if they signed up at least N months ago
+    const maxSignupAbsMonth = currentAbsMonth - n;
+    const totalUsers = signupMonths.filter(
+      (u) => u.absMonth <= maxSignupAbsMonth,
+    ).length;
+    const activeUsers = activeMap.get(n) ?? 0;
     const retentionRate =
       totalUsers > 0
         ? Math.round((activeUsers / totalUsers) * 1000) / 10
         : 0;
-    return { date: month, retentionRate, activeUsers, totalUsers };
-  });
+    stats.push({ month: n, retentionRate, activeUsers, totalUsers });
+  }
 
   return { stats };
 });

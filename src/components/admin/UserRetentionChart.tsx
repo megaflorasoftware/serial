@@ -21,14 +21,14 @@ const chartConfig = {
 
 export function UserRetentionChart() {
   const { data, isLoading } = useQuery(
-    orpc.admin.getRetentionStats.queryOptions({ input: {} }),
+    orpc.admin.getRetentionStats.queryOptions(),
   );
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="font-sans text-base font-medium">
-          Monthly Retention Rate
+          Retention by Month Since Signup
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -45,10 +45,11 @@ export function UserRetentionChart() {
             <LineChart data={data.stats}>
               <CartesianGrid vertical={false} />
               <XAxis
-                dataKey="date"
+                dataKey="month"
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
+                tickFormatter={(value: number) => `Mo. ${value}`}
               />
               <YAxis
                 domain={[0, 100]}
@@ -62,6 +63,11 @@ export function UserRetentionChart() {
                 content={
                   <ChartTooltipContent
                     hideIndicator
+                    labelFormatter={(_, payload) => {
+                      const item = payload[0];
+                      if (!item) return "";
+                      return `Month ${item.payload.month}`;
+                    }}
                     formatter={(value, _name, item) => (
                       <div className="flex flex-col gap-0.5">
                         <span>Retention: {value}%</span>
