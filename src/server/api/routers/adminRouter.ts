@@ -370,3 +370,83 @@ export const getSigninStats = adminProcedure
       stats: fillDateGaps(stats, input.timeRange, startDate),
     };
   });
+
+// Get monthly retention stats (% of total users active each month)
+export const getRetentionStats = adminProcedure.handler(async () => {
+  const monthGroup = sql<string>`strftime('%Y-%m', datetime(${session.createdAt}, 'unixepoch'))`;
+
+  // Monthly active users (distinct, excluding impersonation)
+  const activeResults = await db
+    .select({
+      date: monthGroup,
+      activeUsers: sql<number>`COUNT(DISTINCT ${session.userId})`,
+    })
+    .from(session)
+    .where(isNull(session.impersonatedBy))
+    .groupBy(monthGroup)
+    .orderBy(monthGroup)
+    .all();
+
+  // Monthly signup counts
+  const signupMonthGroup = sql<string>`strftime('%Y-%m', datetime(${user.createdAt}, 'unixepoch'))`;
+  const signupResults = await db
+    .select({
+      date: signupMonthGroup,
+      count: count(),
+    })
+    .from(user)
+    .groupBy(signupMonthGroup)
+    .orderBy(signupMonthGroup)
+    .all();
+
+  if (activeResults.length === 0 && signupResults.length === 0) {
+    return { stats: [] };
+  }
+
+  // Build all month keys from earliest to current month
+  const allDates = [
+    ...activeResults.map((r) => r.date),
+    ...signupResults.map((r) => r.date),
+  ];
+  const earliest = allDates.sort()[0]!;
+  const now = new Date();
+  const parts = earliest.split("-").map(Number);
+  const startYear = parts[0]!;
+  const startMonth = parts[1]!;
+  const endYear = now.getFullYear();
+  const endMonth = now.getMonth() + 1;
+
+  const monthKeys: string[] = [];
+  for (
+    let y = startYear, m = startMonth;
+    y < endYear || (y === endYear && m <= endMonth);
+    m++
+  ) {
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+    monthKeys.push(`${y}-${String(m).padStart(2, "0")}`);
+  }
+
+  // Build lookup maps
+  const activeMap = new Map(
+    activeResults.map((r) => [r.date, r.activeUsers]),
+  );
+  const signupMap = new Map(signupResults.map((r) => [r.date, r.count]));
+
+  // Walk months, accumulating total users
+  let cumulativeUsers = 0;
+  const stats = monthKeys.map((month) => {
+    cumulativeUsers += signupMap.get(month) ?? 0;
+    const activeUsers = activeMap.get(month) ?? 0;
+    const totalUsers = cumulativeUsers;
+    const retentionRate =
+      totalUsers > 0
+        ? Math.round((activeUsers / totalUsers) * 1000) / 10
+        : 0;
+    return { date: month, retentionRate, activeUsers, totalUsers };
+  });
+
+  return { stats };
+});
