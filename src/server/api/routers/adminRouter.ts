@@ -476,8 +476,7 @@ export const getRetentionStats = adminProcedure.handler(async () => {
       for (const sm of cohortMonths) {
         cohortActive += activeByOffsetAndSignup.get(`${n}:${sm}`) ?? 0;
       }
-      const rate =
-        Math.round((cohortActive / cohortTotal) * 1000) / 10;
+      const rate = Math.round((cohortActive / cohortTotal) * 1000) / 10;
       point[`retention${w}mo`] = rate;
       point[`active${w}mo`] = cohortActive;
       point[`total${w}mo`] = cohortTotal;

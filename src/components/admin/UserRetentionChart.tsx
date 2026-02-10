@@ -49,14 +49,16 @@ export function UserRetentionChart() {
     }),
   );
 
+  const stats = data?.stats;
+
   const chartData = useMemo(() => {
-    if (!data?.stats) return [];
-    return showMonth0 ? data.stats : data.stats.filter((d) => d.month !== 0);
-  }, [data?.stats, showMonth0]);
+    if (!stats) return [];
+    return showMonth0 ? stats : stats.filter((d) => d.month !== 0);
+  }, [stats, showMonth0]);
 
   const yMax = useMemo(() => {
-    if (showMonth0 || !data?.stats) return 100;
-    const mo1 = data.stats.find((d) => d.month === 1);
+    if (showMonth0 || !stats) return 100;
+    const mo1 = stats.find((d) => d.month === 1);
     if (!mo1) return 100;
     const allValues = [
       mo1.retentionRate,
@@ -68,7 +70,7 @@ export function UserRetentionChart() {
     if (allValues.length === 0) return 100;
     const max = Math.max(...allValues);
     return Math.ceil(max / 10) * 10;
-  }, [showMonth0, data?.stats]);
+  }, [showMonth0, stats]);
 
   return (
     <Card>
@@ -77,7 +79,10 @@ export function UserRetentionChart() {
           Retention by Month Since Signup
         </CardTitle>
         <div className="flex items-center gap-2">
-          <Label htmlFor="show-month-0" className="text-muted-foreground text-xs">
+          <Label
+            htmlFor="show-month-0"
+            className="text-muted-foreground text-xs"
+          >
             Show Mo. 0
           </Label>
           <Switch
@@ -137,9 +142,7 @@ export function UserRetentionChart() {
                       const active = suffix
                         ? p[`active${suffix}`]
                         : p.activeUsers;
-                      const total = suffix
-                        ? p[`total${suffix}`]
-                        : p.totalUsers;
+                      const total = suffix ? p[`total${suffix}`] : p.totalUsers;
                       return (
                         <div className="flex items-center justify-between gap-4">
                           <span
