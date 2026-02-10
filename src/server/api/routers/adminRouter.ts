@@ -430,9 +430,7 @@ export const getRetentionStats = adminProcedure.handler(async () => {
     ).length;
     const activeUsers = activeMap.get(n) ?? 0;
     const retentionRate =
-      totalUsers > 0
-        ? Math.round((activeUsers / totalUsers) * 1000) / 10
-        : 0;
+      totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 1000) / 10 : 0;
     stats.push({ month: n, retentionRate, activeUsers, totalUsers });
   }
 
