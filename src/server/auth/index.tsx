@@ -9,10 +9,18 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
 import { asc, count, eq } from "drizzle-orm";
+import { Polar } from "@polar-sh/sdk";
+import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
-import { appConfig, user } from "../db/schema";
+import { appConfig, feeds, user } from "../db/schema";
+import { determinePlanFromProductId, PLANS } from "../subscriptions/plans";
+import { deactivateExcessFeeds } from "../subscriptions/helpers";
 import ResetPasswordEmail from "~/emails/reset-password";
-import { BASE_SIGNED_OUT_URL, isPublicSignupEnabled } from "~/lib/constants";
+import {
+  BASE_SIGNED_OUT_URL,
+  IS_MAIN_INSTANCE,
+  isPublicSignupEnabled,
+} from "~/lib/constants";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {
@@ -38,6 +46,109 @@ export const adminMiddleware = createMiddleware().server(async ({ next }) => {
   return await next();
 });
 
+const polarClient = IS_MAIN_INSTANCE
+  ? new Polar({
+      accessToken: process.env.POLAR_ACCESS_TOKEN ?? "",
+      server: process.env.NODE_ENV === "production" ? "production" : "sandbox",
+    })
+  : null;
+
+function buildPolarPlugin() {
+  if (!polarClient) return [];
+
+  const products = [
+    process.env.POLAR_STANDARD_MONTHLY_PRODUCT_ID
+      ? {
+          productId: process.env.POLAR_STANDARD_MONTHLY_PRODUCT_ID,
+          slug: "standard-monthly",
+        }
+      : null,
+    process.env.POLAR_STANDARD_ANNUAL_PRODUCT_ID
+      ? {
+          productId: process.env.POLAR_STANDARD_ANNUAL_PRODUCT_ID,
+          slug: "standard-annual",
+        }
+      : null,
+    process.env.POLAR_PRO_MONTHLY_PRODUCT_ID
+      ? {
+          productId: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID,
+          slug: "pro-monthly",
+        }
+      : null,
+    process.env.POLAR_PRO_ANNUAL_PRODUCT_ID
+      ? {
+          productId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
+          slug: "pro-annual",
+        }
+      : null,
+  ].filter(Boolean);
+
+  return [
+    polar({
+      client: polarClient,
+      createCustomerOnSignUp: false,
+      use: [
+        checkout({
+          products,
+          successUrl: "/?checkout_success=true",
+          authenticatedUsersOnly: true,
+        }),
+        portal(),
+        webhooks({
+          secret: process.env.POLAR_WEBHOOK_SECRET ?? "",
+          onSubscriptionActive: async (payload) => {
+            const externalId = payload.data.customer?.externalId;
+            if (!externalId) return;
+
+            const productId = payload.data.productId;
+            const planId = determinePlanFromProductId(productId);
+            if (!planId) return;
+
+            const config = PLANS[planId];
+            if (config.backgroundRefreshIntervalMs) {
+              const nextFetchAt = new Date(
+                Date.now() + config.backgroundRefreshIntervalMs,
+              );
+              await db
+                .update(feeds)
+                .set({ nextFetchAt })
+                .where(eq(feeds.userId, externalId));
+            }
+          },
+          onSubscriptionCanceled: async (payload) => {
+            const externalId = payload.data.customer?.externalId;
+            if (!externalId) return;
+
+            await deactivateExcessFeeds(
+              db,
+              externalId,
+              PLANS.free.maxActiveFeeds,
+            );
+            await db
+              .update(feeds)
+              .set({ nextFetchAt: null })
+              .where(eq(feeds.userId, externalId));
+          },
+          onSubscriptionRevoked: async (payload) => {
+            const externalId = payload.data.customer?.externalId;
+            if (!externalId) return;
+
+            await deactivateExcessFeeds(
+              db,
+              externalId,
+              PLANS.free.maxActiveFeeds,
+            );
+            await db
+              .update(feeds)
+              .set({ nextFetchAt: null })
+              .where(eq(feeds.userId, externalId));
+          },
+        }),
+      ],
+    }),
+  ];
+}
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "sqlite",
@@ -62,7 +173,7 @@ export const auth = betterAuth({
       await sendgrid.send(options);
     },
   },
-  plugins: [admin(), tanstackStartCookies()],
+  plugins: [admin(), tanstackStartCookies(), ...buildPolarPlugin()],
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {

@@ -837,9 +837,12 @@ export const requestInitialData = protectedProcedure
         chunk: { type: "initial-data-complete" },
       });
 
+      // Only fetch active feeds
+      const activeFeedsList = feedsList.filter((feed) => feed.isActive);
+
       // Count feeds that will actually be fetched (not cached)
       const now = new Date();
-      const feedsToFetchCount = feedsList.filter(
+      const feedsToFetchCount = activeFeedsList.filter(
         (feed) => !feed.nextFetchAt || feed.nextFetchAt <= now,
       ).length;
 
@@ -852,7 +855,7 @@ export const requestInitialData = protectedProcedure
       // Step 5: Run fetch and insert for fresh RSS items in background
       for await (const feedResult of fetchAndInsertFeedData(
         context,
-        feedsList,
+        activeFeedsList,
       )) {
         // Skip publishing status for cached feeds (they complete instantly with no network activity)
         if (feedResult.status === "skipped") {
@@ -1272,9 +1275,12 @@ export const requestNewData = protectedProcedure
 
     const { feedsList } = prerequisiteData;
 
+    // Only fetch active feeds
+    const activeFeedsList = feedsList.filter((feed) => feed.isActive);
+
     // Count feeds that will actually be fetched (not cached)
     const now = new Date();
-    const feedsToFetchCount = feedsList.filter(
+    const feedsToFetchCount = activeFeedsList.filter(
       (feed) => !feed.nextFetchAt || feed.nextFetchAt <= now,
     ).length;
 
@@ -1284,7 +1290,7 @@ export const requestNewData = protectedProcedure
       chunk: { type: "refresh-start", totalFeeds: feedsToFetchCount },
     });
 
-    if (feedsList.length === 0) {
+    if (activeFeedsList.length === 0) {
       await publisher.publish(channel, {
         source: "new-data",
         chunk: { type: "new-data-complete" },
@@ -1293,7 +1299,10 @@ export const requestNewData = protectedProcedure
     }
 
     // Run RSS fetch and publish new items
-    for await (const feedResult of fetchAndInsertFeedData(context, feedsList)) {
+    for await (const feedResult of fetchAndInsertFeedData(
+      context,
+      activeFeedsList,
+    )) {
       // Skip publishing status for cached feeds (they complete instantly with no network activity)
       if (feedResult.status === "skipped") {
         continue;
@@ -1911,9 +1920,10 @@ export const getAllByView = protectedProcedure
       // Step 5: Run fetch and insert for fresh RSS items in background
       // Items are inserted to DB by fetchAndInsertFeedData - don't yield them here
       // Fresh items will be available via pagination (getItemsByVisibility)
+      const activeFeedsForLegacy = feedsList.filter((feed) => feed.isActive);
       for await (const feedResult of fetchAndInsertFeedData(
         context,
-        feedsList,
+        activeFeedsForLegacy,
       )) {
         yield {
           type: "feed-status",

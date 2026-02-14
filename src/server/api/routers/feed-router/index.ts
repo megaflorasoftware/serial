@@ -16,6 +16,7 @@ import {
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
+import { canActivateFeed } from "~/server/subscriptions/helpers";
 
 type BulkImportFromFileSuccess = {
   feedUrl: string;
@@ -91,6 +92,18 @@ export const create = protectedProcedure
           "feed" in r && !!r.feed,
       )
       .map((r) => r.feed);
+
+    // Check feed limits and deactivate if over
+    for (const feed of createdFeeds) {
+      const canActivate = await canActivateFeed(context.db, context.user.id);
+      if (!canActivate) {
+        await context.db
+          .update(feeds)
+          .set({ isActive: false })
+          .where(eq(feeds.id, feed.id));
+        feed.isActive = false;
+      }
+    }
 
     return parseArrayOfSchema(createdFeeds, feedsSchema);
   });
@@ -361,6 +374,40 @@ export const bulkDelete = protectedProcedure
           eq(feeds.userId, context.user.id),
         ),
       );
+  });
+
+export const setActive = protectedProcedure
+  .input(z.object({ feedId: z.number(), isActive: z.boolean() }))
+  .handler(async ({ context, input }) => {
+    // Verify feed belongs to user
+    const feed = await context.db.query.feeds.findFirst({
+      where: and(eq(feeds.id, input.feedId), eq(feeds.userId, context.user.id)),
+    });
+
+    if (!feed) {
+      throw new Error("Feed not found");
+    }
+
+    // When activating, check feed limits
+    if (input.isActive) {
+      const canActivate = await canActivateFeed(context.db, context.user.id);
+      if (!canActivate) {
+        throw new Error(
+          "Feed limit reached. Upgrade your plan to activate more feeds.",
+        );
+      }
+    }
+
+    const updatedFeeds = await context.db
+      .update(feeds)
+      .set({ isActive: input.isActive })
+      .where(and(eq(feeds.id, input.feedId), eq(feeds.userId, context.user.id)))
+      .returning();
+
+    const updatedFeed = updatedFeeds[0];
+    if (!updatedFeed) return null;
+
+    return feedsSchema.parse(updatedFeed);
   });
 
 export const discoverFeeds = protectedProcedure

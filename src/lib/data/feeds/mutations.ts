@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFetchContentCategories } from "../content-categories/store";
 import { useFetchFeedCategories } from "../feed-categories/store";
 import {
@@ -157,6 +157,25 @@ export function useBulkDeleteFeedsMutation() {
         // Refetch feeds to update the list
         void fetchFeeds();
         void fetchFeedCategories();
+      },
+    }),
+  );
+}
+
+export function useSetFeedActiveMutation() {
+  const updateFeed = useUpdateFeed();
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    orpc.feed.setActive.mutationOptions({
+      onSuccess: (updatedFeed) => {
+        if (updatedFeed) {
+          updateFeed(updatedFeed.id, updatedFeed);
+        }
+        // Invalidate subscription query so active count updates
+        void queryClient.invalidateQueries({
+          queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
+        });
       },
     }),
   );

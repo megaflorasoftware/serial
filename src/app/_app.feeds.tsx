@@ -19,7 +19,9 @@ import { Button } from "~/components/ui/button";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
+import { Switch } from "~/components/ui/switch";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
+import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import {
@@ -27,7 +29,11 @@ import {
   useBulkRemoveFeedCategoryMutation,
 } from "~/lib/data/feed-categories/mutations";
 import { useFeeds } from "~/lib/data/feeds";
-import { useBulkDeleteFeedsMutation } from "~/lib/data/feeds/mutations";
+import {
+  useBulkDeleteFeedsMutation,
+  useSetFeedActiveMutation,
+} from "~/lib/data/feeds/mutations";
+import { useSubscription } from "~/lib/data/subscription";
 
 function useFeedManagementShortcuts({
   onEscape,
@@ -144,6 +150,9 @@ function ManageFeedsPage() {
   const { feedCategories } = useFeedCategories();
   const { contentCategories } = useContentCategories();
   const launchDialog = useDialogStore((store) => store.launchDialog);
+  const { activeFeeds, maxActiveFeeds } = useSubscription();
+  const { mutate: setFeedActive, isPending: isTogglingActive } =
+    useSetFeedActiveMutation();
 
   const [selectedFeedIds, setSelectedFeedIds] = useState<Set<number>>(
     new Set(),
@@ -381,9 +390,16 @@ function ManageFeedsPage() {
     <div>
       <div className="mx-auto max-w-2xl px-6 pt-6">
         <div className="flex items-center justify-between">
-          <h2 ref={headerRef} className="font-sans text-lg">
-            Manage Feeds
-          </h2>
+          <div>
+            <h2 ref={headerRef} className="font-sans text-lg">
+              Manage Feeds
+            </h2>
+            {IS_MAIN_INSTANCE && maxActiveFeeds > 0 && (
+              <p className="text-muted-foreground text-sm">
+                {activeFeeds} / {maxActiveFeeds} feeds active
+              </p>
+            )}
+          </div>
           <ButtonWithShortcut
             variant="outline"
             size="icon"
@@ -438,7 +454,9 @@ function ManageFeedsPage() {
               <button
                 type="button"
                 key={feed.id}
-                className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-colors"
+                className={`hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-colors ${
+                  !feed.isActive ? "opacity-50" : ""
+                }`}
                 onClick={() => toggleFeedSelection(feed.id)}
               >
                 <Checkbox
@@ -464,6 +482,24 @@ function ManageFeedsPage() {
                     );
                   })}
                 </div>
+                <Switch
+                  checked={feed.isActive}
+                  disabled={isTogglingActive}
+                  onCheckedChange={(checked) => {
+                    if (
+                      !checked ||
+                      activeFeeds < maxActiveFeeds ||
+                      maxActiveFeeds < 0
+                    ) {
+                      setFeedActive({ feedId: feed.id, isActive: checked });
+                    } else {
+                      toast.error(
+                        "Feed limit reached. Upgrade your plan to activate more feeds.",
+                      );
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
               </button>
             );
           })}
