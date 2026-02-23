@@ -34,9 +34,8 @@ export function UserManagementNavItem() {
     isPending, // loading state
   } = authClient.useSession();
 
-  const { launchDialog } = useDialogStore();
+  const { launchDialog, closeDialog, dialog } = useDialogStore();
   const { planName } = useSubscription();
-  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
 
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -46,8 +45,10 @@ export function UserManagementNavItem() {
   return (
     <SidebarMenu>
       <SubscriptionDialog
-        open={showSubscriptionDialog}
-        onOpenChange={setShowSubscriptionDialog}
+        open={dialog === "subscription"}
+        onOpenChange={(open) => {
+          if (!open) closeDialog();
+        }}
       />
       <SidebarMenuItem>
         <ResponsiveDropdown
@@ -109,7 +110,7 @@ export function UserManagementNavItem() {
               <Button
                 variant="outline"
                 className="mb-2 w-full"
-                onClick={() => setShowSubscriptionDialog(true)}
+                onClick={() => launchDialog("subscription")}
               >
                 <CreditCardIcon size={16} />
                 <span className="pl-1.5">Subscription</span>

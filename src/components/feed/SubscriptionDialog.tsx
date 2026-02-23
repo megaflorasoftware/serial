@@ -28,21 +28,13 @@ function formatRefreshInterval(ms: number | null): string {
 
 function getPlanFeatures(plan: PlanConfig): string[] {
   const features: string[] = [];
-  features.push(
-    `Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`,
-  );
+  features.push(`Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`);
   features.push(formatRefreshInterval(plan.backgroundRefreshIntervalMs));
-  if (plan.id !== "free") {
-    features.push("Priority support");
-  }
+
   return features;
 }
 
-function EmailVerificationBanner({
-  onVerified,
-}: {
-  onVerified: () => void;
-}) {
+function EmailVerificationBanner({ onVerified }: { onVerified: () => void }) {
   const { data: session } = useSession();
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
@@ -223,11 +215,9 @@ export function SubscriptionDialog({
                 </h3>
                 {hasPrice ? (
                   <p className="text-muted-foreground text-sm">
-                    {monthlyPrice != null &&
-                      `${formatPrice(monthlyPrice)}/mo`}
+                    {monthlyPrice != null && `${formatPrice(monthlyPrice)}/mo`}
                     {monthlyPrice != null && annualPrice != null && " · "}
-                    {annualPrice != null &&
-                      `${formatPrice(annualPrice)}/yr`}
+                    {annualPrice != null && `${formatPrice(annualPrice)}/yr`}
                   </p>
                 ) : (
                   <p className="text-muted-foreground text-sm">

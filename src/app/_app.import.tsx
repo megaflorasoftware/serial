@@ -148,7 +148,7 @@ function EditFeedsPage() {
             Import finished! Your list has been added.
           </p>
           <div className="flex gap-2">
-            <Link to="/">
+            <Link to="/feeds">
               <Button>Back to feeds</Button>
             </Link>
             <Button variant="outline" onClick={onReset}>
