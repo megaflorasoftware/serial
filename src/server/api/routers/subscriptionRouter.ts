@@ -1,18 +1,12 @@
-import { Polar } from "@polar-sh/sdk";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
 import type { PlanId } from "~/server/subscriptions/plans";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { protectedProcedure } from "~/server/orpc/base";
 import { getUserPlanLimits } from "~/server/subscriptions/helpers";
+import { polarClient } from "~/server/subscriptions/polar";
 import { PLANS } from "~/server/subscriptions/plans";
-
-const polarClient =
-  IS_MAIN_INSTANCE && process.env.POLAR_ACCESS_TOKEN
-    ? new Polar({
-        accessToken: process.env.POLAR_ACCESS_TOKEN,
-        server:
-          process.env.NODE_ENV === "production" ? "production" : "sandbox",
-      })
-    : null;
+import { user } from "~/server/db/schema";
 
 type CachedProducts = {
   data: PlanProduct[];
@@ -24,6 +18,8 @@ type PlanProduct = {
   planName: string;
   monthlyPrice: number | null;
   annualPrice: number | null;
+  monthlyProductId: string | null;
+  annualProductId: string | null;
 };
 
 let productsCache: CachedProducts | null = null;
@@ -85,8 +81,8 @@ export const getProducts = protectedProcedure.handler(async () => {
           if (price && "amountType" in price && price.amountType === "fixed") {
             annualPrice = (price as { priceAmount: number }).priceAmount;
           }
-        } catch {
-          // Skip if product not found
+        } catch (e) {
+          console.error(`[subscription] Failed to fetch annual product for ${planId}:`, e);
         }
       }
 
@@ -95,6 +91,8 @@ export const getProducts = protectedProcedure.handler(async () => {
         planName: plan.name,
         monthlyPrice,
         annualPrice,
+        monthlyProductId: plan.polarMonthlyProductId,
+        annualProductId: plan.polarAnnualProductId,
       });
     }
 
@@ -104,7 +102,73 @@ export const getProducts = protectedProcedure.handler(async () => {
     };
 
     return results;
-  } catch {
+  } catch (e) {
+    console.error("[subscription] Failed to fetch products:", e);
     return [];
   }
 });
+
+export const createCheckout = protectedProcedure
+  .input(z.object({ planId: z.enum(["free", "standard", "pro"]) }))
+  .handler(async ({ context, input }) => {
+    if (!IS_MAIN_INSTANCE || !polarClient) {
+      return { url: null, error: null };
+    }
+
+    if (process.env.SENDGRID_API_KEY) {
+      const currentUser = await context.db
+        .select({ emailVerified: user.emailVerified })
+        .from(user)
+        .where(eq(user.id, context.user.id))
+        .get();
+
+      if (!currentUser?.emailVerified) {
+        return { url: null, error: "email-not-verified" as const };
+      }
+    }
+
+    const plan = PLANS[input.planId];
+    const productIds = [
+      plan.polarMonthlyProductId,
+      plan.polarAnnualProductId,
+    ].filter((id): id is string => id != null);
+
+    if (productIds.length === 0) {
+      return { url: null, error: null };
+    }
+
+    const origin = context.headers.get("origin") ?? context.headers.get("referer") ?? "http://localhost:3000";
+    const successUrl = new URL("/?checkout_success=true", origin).toString();
+    const returnUrl = new URL("/", origin).toString();
+
+    const checkout = await polarClient.checkouts.create({
+      externalCustomerId: context.user.id,
+      customerEmail: context.user.email,
+      products: productIds,
+      successUrl,
+      returnUrl,
+    });
+
+    return { url: checkout.url, error: null };
+  });
+
+export const createPortalSession = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_MAIN_INSTANCE || !polarClient) {
+      return { url: null };
+    }
+
+    const origin =
+      context.headers.get("origin") ??
+      context.headers.get("referer") ??
+      "http://localhost:3000";
+    const returnUrl = new URL("/", origin).toString();
+
+    const session = await polarClient.customerSessions.create({
+      externalCustomerId: context.user.id,
+      returnUrl,
+    });
+
+    return { url: session.customerPortalUrl };
+  },
+);

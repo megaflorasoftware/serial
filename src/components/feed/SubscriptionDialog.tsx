@@ -1,32 +1,128 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { CheckIcon } from "lucide-react";
 import { useState } from "react";
-import type { PlanId } from "~/server/subscriptions/plans";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { CheckIcon } from "lucide-react";
+import { toast } from "sonner";
+import type { PlanConfig, PlanId } from "~/server/subscriptions/plans";
+import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
-import { authClient } from "~/lib/auth-client";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
+import { authClient, useSession } from "~/lib/auth-client";
 
 function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  const dollars = cents / 100;
+  return cents % 100 === 0 ? `$${dollars}` : `$${dollars.toFixed(2)}`;
 }
 
-const PLAN_FEATURES: Record<PlanId, string[]> = {
-  free: ["Up to 100 active feeds", "Manual refresh only"],
-  standard: [
-    "Up to 500 active feeds",
-    "Background refresh every 60 min",
-    "Priority support",
-  ],
-  pro: [
-    "Up to 2,500 active feeds",
-    "Background refresh every 5 min",
-    "Priority support",
-  ],
-};
+function formatRefreshInterval(ms: number | null): string {
+  if (ms == null) return "Manual refresh only";
+  const minutes = ms / (60 * 1000);
+  if (minutes < 60) return `Background refresh every ${minutes} min`;
+  const hours = minutes / 60;
+  return `Background refresh every ${hours} hr`;
+}
+
+function getPlanFeatures(plan: PlanConfig): string[] {
+  const features: string[] = [];
+  features.push(
+    `Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`,
+  );
+  features.push(formatRefreshInterval(plan.backgroundRefreshIntervalMs));
+  if (plan.id !== "free") {
+    features.push("Priority support");
+  }
+  return features;
+}
+
+function EmailVerificationBanner({
+  onVerified,
+}: {
+  onVerified: () => void;
+}) {
+  const { data: session } = useSession();
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  const email = session?.user?.email;
+
+  async function handleSendOtp() {
+    if (!email) return;
+    setSending(true);
+    try {
+      await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "email-verification",
+      });
+      setOtpSent(true);
+      toast.success("Verification code sent to your email");
+    } catch {
+      toast.error("Failed to send verification code");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleVerify() {
+    if (!email || !otp) return;
+    setVerifying(true);
+    try {
+      await authClient.emailOtp.verifyEmail({
+        email,
+        otp,
+      });
+      toast.success("Email verified!");
+      onVerified();
+    } catch {
+      toast.error("Invalid verification code");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
+      <p className="text-sm font-medium">Verify your email to subscribe</p>
+      <p className="text-muted-foreground mt-1 text-xs">
+        You need to verify your email address before upgrading your plan.
+      </p>
+      {!otpSent ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2"
+          disabled={sending}
+          onClick={handleSendOtp}
+        >
+          {sending ? "Sending..." : "Send verification code"}
+        </Button>
+      ) : (
+        <div className="mt-2 flex gap-2">
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="Enter code"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            className="h-8 w-32"
+          />
+          <Button
+            size="sm"
+            disabled={verifying || otp.length === 0}
+            onClick={handleVerify}
+          >
+            {verifying ? "Verifying..." : "Verify"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SubscriptionDialog({
   open,
@@ -36,9 +132,11 @@ export function SubscriptionDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { planId } = useSubscription();
-  const [billingInterval, setBillingInterval] = useState<"monthly" | "annual">(
-    "monthly",
-  );
+  const { data: session, refetch: refetchSession } = useSession();
+  const [showVerification, setShowVerification] = useState(false);
+  const [pendingPlanId, setPendingPlanId] = useState<PlanId | null>(null);
+
+  const emailVerified = session?.user?.emailVerified ?? false;
 
   const { data: products } = useQuery({
     ...orpc.subscription.getProducts.queryOptions(),
@@ -46,71 +144,45 @@ export function SubscriptionDialog({
     staleTime: 5 * 60 * 1000,
   });
 
-  const handleCheckout = async (slug: string) => {
-    try {
-      const result = await (authClient as any).checkout({ slug });
-      if (result?.data?.url) {
-        window.location.assign(result.data.url);
-      }
-    } catch {
-      // Checkout failed
-    }
-  };
+  const checkoutMutation = useMutation(
+    orpc.subscription.createCheckout.mutationOptions({
+      onSuccess: (result) => {
+        if (result.error === "email-not-verified") {
+          setShowVerification(true);
+          toast.error("Please verify your email before subscribing");
+          return;
+        }
+        if (result.url) {
+          window.location.assign(result.url);
+        }
+      },
+    }),
+  );
 
-  const handleManage = async () => {
-    try {
-      const result = await (authClient as any).customer.portal();
-      if (result?.data?.url) {
-        window.location.assign(result.data.url);
-      }
-    } catch {
-      // Portal failed
-    }
-  };
-
-  const allPlans: Array<{
-    id: PlanId;
-    name: string;
-    features: string[];
-    monthlyPrice: number | null;
-    annualPrice: number | null;
-    monthlySlug: string | null;
-    annualSlug: string | null;
-  }> = [
-    {
-      id: "free",
-      name: "Free",
-      features: PLAN_FEATURES.free,
-      monthlyPrice: null,
-      annualPrice: null,
-      monthlySlug: null,
-      annualSlug: null,
-    },
-    {
-      id: "standard",
-      name: "Standard",
-      features: PLAN_FEATURES.standard,
-      monthlyPrice:
-        products?.find((p) => p.planId === "standard")?.monthlyPrice ?? null,
-      annualPrice:
-        products?.find((p) => p.planId === "standard")?.annualPrice ?? null,
-      monthlySlug: "standard-monthly",
-      annualSlug: "standard-annual",
-    },
-    {
-      id: "pro",
-      name: "Pro",
-      features: PLAN_FEATURES.pro,
-      monthlyPrice:
-        products?.find((p) => p.planId === "pro")?.monthlyPrice ?? null,
-      annualPrice:
-        products?.find((p) => p.planId === "pro")?.annualPrice ?? null,
-      monthlySlug: "pro-monthly",
-      annualSlug: "pro-annual",
-    },
-  ];
+  const portalMutation = useMutation(
+    orpc.subscription.createPortalSession.mutationOptions({
+      onSuccess: (result) => {
+        if (result.url) {
+          window.location.assign(result.url);
+        }
+      },
+    }),
+  );
 
   const isSubscribed = planId !== "free";
+
+  function handleSubscribeClick(id: PlanId) {
+    setPendingPlanId(id);
+    checkoutMutation.mutate({ planId: id });
+  }
+
+  async function handleVerified() {
+    await refetchSession();
+    setShowVerification(false);
+    if (pendingPlanId) {
+      checkoutMutation.mutate({ planId: pendingPlanId });
+    }
+  }
 
   return (
     <ControlledResponsiveDialog
@@ -119,87 +191,89 @@ export function SubscriptionDialog({
       title="Subscription"
       description="Choose a plan that fits your needs."
     >
-      <div className="grid gap-4">
-        <div className="flex justify-center gap-2">
-          <Button
-            variant={billingInterval === "monthly" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setBillingInterval("monthly")}
-          >
-            Monthly
-          </Button>
-          <Button
-            variant={billingInterval === "annual" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setBillingInterval("annual")}
-          >
-            Annual
-          </Button>
-        </div>
+      <div className="grid gap-3">
+        {showVerification && !emailVerified && (
+          <EmailVerificationBanner onVerified={handleVerified} />
+        )}
+        {PLAN_IDS.map((id) => {
+          const plan = PLANS[id];
+          const isCurrent = id === planId;
+          const isPaid = id !== "free";
+          const product = products?.find((p) => p.planId === id);
+          const monthlyPrice = product?.monthlyPrice ?? null;
+          const annualPrice = product?.annualPrice ?? null;
+          const hasPrice = monthlyPrice != null || annualPrice != null;
+          const features = getPlanFeatures(plan);
 
-        <div className="grid gap-3">
-          {allPlans.map((plan) => {
-            const isCurrent = plan.id === planId;
-            const price =
-              billingInterval === "monthly"
-                ? plan.monthlyPrice
-                : plan.annualPrice;
-            const slug =
-              billingInterval === "monthly"
-                ? plan.monthlySlug
-                : plan.annualSlug;
-
-            return (
-              <div
-                key={plan.id}
-                className={`rounded-lg border p-4 ${
-                  isCurrent ? "border-primary bg-primary/5" : "border-border"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">
-                      {plan.name}
-                      {isCurrent && (
-                        <span className="text-muted-foreground ml-2 text-xs">
-                          Current
-                        </span>
-                      )}
-                    </h3>
-                    {price != null ? (
-                      <p className="text-muted-foreground text-sm">
-                        {formatPrice(price)}/
-                        {billingInterval === "monthly" ? "mo" : "yr"}
-                      </p>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">Free</p>
-                    )}
-                  </div>
-                  {isCurrent && isSubscribed ? (
-                    <Button variant="outline" size="sm" onClick={handleManage}>
-                      Manage
-                    </Button>
-                  ) : !isCurrent && slug ? (
-                    <Button size="sm" onClick={() => handleCheckout(slug)}>
-                      Subscribe
-                    </Button>
-                  ) : null}
-                </div>
-                <ul className="mt-2 space-y-1">
-                  {plan.features.map((feature) => (
-                    <li
-                      key={feature}
-                      className="text-muted-foreground flex items-center gap-2 text-xs"
-                    >
-                      <CheckIcon size={12} />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
+          return (
+            <div
+              key={id}
+              className={`rounded-lg border p-4 ${
+                isCurrent ? "border-primary bg-primary/5" : "border-border"
+              }`}
+            >
+              <div>
+                <h3 className="font-medium">
+                  {plan.name}
+                  {isCurrent && (
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      Current
+                    </span>
+                  )}
+                </h3>
+                {hasPrice ? (
+                  <p className="text-muted-foreground text-sm">
+                    {monthlyPrice != null &&
+                      `${formatPrice(monthlyPrice)}/mo`}
+                    {monthlyPrice != null && annualPrice != null && " · "}
+                    {annualPrice != null &&
+                      `${formatPrice(annualPrice)}/yr`}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    {isPaid ? "" : "Free"}
+                  </p>
+                )}
               </div>
-            );
-          })}
-        </div>
+              <ul className="mt-2 space-y-1">
+                {features.map((feature) => (
+                  <li
+                    key={feature}
+                    className="text-muted-foreground flex items-center gap-2 text-xs"
+                  >
+                    <CheckIcon size={12} />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              {isCurrent && isSubscribed && (
+                <div className="mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={portalMutation.isPending}
+                    onClick={() => portalMutation.mutate({})}
+                  >
+                    Manage
+                  </Button>
+                </div>
+              )}
+              {!isCurrent && isPaid && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={checkoutMutation.isPending}
+                    onClick={() => handleSubscribeClick(id)}
+                  >
+                    Subscribe
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </ControlledResponsiveDialog>
   );

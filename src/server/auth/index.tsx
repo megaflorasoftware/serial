@@ -1,7 +1,7 @@
 import { render } from "@react-email/components";
 import sendgrid from "@sendgrid/mail";
 import { betterAuth } from "better-auth";
-import { admin } from "better-auth/plugins";
+import { admin, emailOTP } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { APIError, createAuthMiddleware } from "better-auth/api";
@@ -9,16 +9,16 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
 import { asc, count, eq } from "drizzle-orm";
-import { Polar } from "@polar-sh/sdk";
 import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
 import { appConfig, feeds, user } from "../db/schema";
 import { determinePlanFromProductId, PLANS } from "../subscriptions/plans";
 import { deactivateExcessFeeds } from "../subscriptions/helpers";
+import { polarClient } from "../subscriptions/polar";
 import ResetPasswordEmail from "~/emails/reset-password";
+import VerifyEmailEmail from "~/emails/verify-email";
 import {
   BASE_SIGNED_OUT_URL,
-  IS_MAIN_INSTANCE,
   isPublicSignupEnabled,
 } from "~/lib/constants";
 
@@ -45,13 +45,6 @@ export const adminMiddleware = createMiddleware().server(async ({ next }) => {
 
   return await next();
 });
-
-const polarClient = IS_MAIN_INSTANCE
-  ? new Polar({
-      accessToken: process.env.POLAR_ACCESS_TOKEN ?? "",
-      server: process.env.NODE_ENV === "production" ? "production" : "sandbox",
-    })
-  : null;
 
 function buildPolarPlugin() {
   if (!polarClient) return [];
@@ -173,7 +166,30 @@ export const auth = betterAuth({
       await sendgrid.send(options);
     },
   },
-  plugins: [admin(), tanstackStartCookies(), ...buildPolarPlugin()],
+  plugins: [
+    admin(),
+    tanstackStartCookies(),
+    ...buildPolarPlugin(),
+    ...(import.meta.env.SENDGRID_API_KEY
+      ? [
+          emailOTP({
+            async sendVerificationOTP({ email, otp, type }) {
+              if (type === "email-verification") {
+                sendgrid.setApiKey(import.meta.env.SENDGRID_API_KEY ?? "");
+                const html = await render(<VerifyEmailEmail otp={otp} />);
+                await sendgrid.send({
+                  from: "hey@serial.tube",
+                  to: email,
+                  subject: "Verify your email for Serial",
+                  html,
+                });
+              }
+            },
+            sendVerificationOnSignUp: true,
+          }),
+        ]
+      : []),
+  ],
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {

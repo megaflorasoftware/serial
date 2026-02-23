@@ -1,21 +1,12 @@
 import { and, count, desc, eq } from "drizzle-orm";
-import { Polar } from "@polar-sh/sdk";
 import { determinePlanFromProductId, getEffectivePlanConfig } from "./plans";
+import { polarClient } from "./polar";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { feeds } from "~/server/db/schema";
 
 type DB = typeof Database;
-
-const polarClient =
-  IS_MAIN_INSTANCE && process.env.POLAR_ACCESS_TOKEN
-    ? new Polar({
-        accessToken: process.env.POLAR_ACCESS_TOKEN,
-        server:
-          process.env.NODE_ENV === "production" ? "production" : "sandbox",
-      })
-    : null;
 
 export async function getActiveFeedCount(db: DB, userId: string) {
   const result = await db

@@ -27,7 +27,7 @@ export default defineConfig({
     }),
     nitro({
       preset: "node",
-      experimental: { tasks: true } as any,
+      experimental: { vite: {}, tasks: true } as any,
       scheduledTasks: { "* * * * *": ["feeds:background-refresh"] },
     } as any),
     viteReact(),

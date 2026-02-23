@@ -4,6 +4,8 @@ import { z } from "zod";
 import { userEmailSchema, userNameSchema } from "../schemas";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { user } from "~/server/db/schema";
+import { IS_MAIN_INSTANCE } from "~/lib/constants";
+import { polarClient } from "~/server/subscriptions/polar";
 
 export const checkIsLegacyUser = publicProcedure
   .input(
@@ -69,8 +71,20 @@ export const updateEmail = protectedProcedure
       .update(user)
       .set({
         email: input.email,
+        emailVerified: false,
       })
       .where(eq(user.id, context.user.id));
+
+    if (IS_MAIN_INSTANCE && polarClient) {
+      try {
+        await polarClient.customers.updateExternal({
+          externalId: context.user.id,
+          customerUpdateExternalID: { email: input.email },
+        });
+      } catch {
+        // Customer may not exist in Polar yet (never checked out)
+      }
+    }
   });
 
 export const deleteUser = protectedProcedure.handler(async ({ context }) => {
