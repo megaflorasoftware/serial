@@ -9,6 +9,7 @@ import {
 } from "../constants";
 import { publisher } from "../publisher";
 import { insertFeedWithCategories } from "./feed-router/utils";
+import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
 import type { VisibilityFilter } from "~/lib/data/atoms";
 import type {
   ApplicationFeed,
@@ -93,6 +94,11 @@ export type GetByViewChunk =
     }
   | { type: "import-feed-error"; feedUrl: string; error: string }
   | { type: "import-start"; totalFeeds: number }
+  | {
+      type: "import-limit-warning";
+      deactivatedCount: number;
+      maxActiveFeeds: number;
+    }
   | ViewDataChunk;
 
 export type RevalidateViewChunk =
@@ -1079,6 +1085,31 @@ export const streamingImport = protectedProcedure
       return { status: "completed" };
     }
 
+    // Check activation budget upfront
+    const { remainingSlots, maxActiveFeeds } = await getFeedsActivationBudget(
+      context.db,
+      context.user.id,
+    );
+    const deactivatedCount = Math.max(0, input.feeds.length - remainingSlots);
+
+    // Publish warning if some feeds will be inactive
+    if (deactivatedCount > 0) {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: {
+          type: "import-limit-warning",
+          deactivatedCount,
+          maxActiveFeeds,
+        },
+      });
+    }
+
+    // Pre-calculate which feeds should be active
+    const feedsWithActivation = input.feeds.map((feed, index) => ({
+      ...feed,
+      shouldBeActive: index < remainingSlots,
+    }));
+
     // Publish import start with total feeds count
     await publisher.publish(channel, {
       source: "initial",
@@ -1092,7 +1123,7 @@ export const streamingImport = protectedProcedure
     }> = [];
 
     // Worker function: insert feed + fetch RSS content
-    async function processFeed(feedInput: (typeof input.feeds)[0]) {
+    async function processFeed(feedInput: (typeof feedsWithActivation)[0]) {
       const IMPORT_TIMEOUT_MS = 15_000; // 10 seconds
 
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1110,6 +1141,7 @@ export const streamingImport = protectedProcedure
               tx,
               context.user.id,
               feedInput,
+              feedInput.shouldBeActive,
             );
           }),
         );
@@ -1180,7 +1212,11 @@ export const streamingImport = protectedProcedure
     }
 
     // Process all feeds through worker pool
-    const workerIterator = workerPool(input.feeds, BATCH_SIZE, processFeed);
+    const workerIterator = workerPool(
+      feedsWithActivation,
+      BATCH_SIZE,
+      processFeed,
+    );
     // Consume the iterator - results are published via side effects in processFeed
     while (!(await workerIterator.next()).done) {
       // Results stream as each feed completes

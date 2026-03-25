@@ -1,5 +1,6 @@
 import { createStore, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { toast } from "sonner";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
 import { contentCategoriesStore } from "./content-categories/store";
@@ -7,6 +8,7 @@ import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
 import { feedsStore } from "./feeds/store";
 import { viewsStore } from "./views/store";
+import { useDialogStore } from "~/components/feed/dialogStore";
 import type { VisibilityFilter } from "./atoms";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type { ApplicationFeedItem } from "~/server/db/schema";
@@ -1091,6 +1093,19 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   failedImportUrls: new Set(),
                 },
               });
+              break;
+
+            case "import-limit-warning":
+              toast.warning(
+                `${initialChunk.deactivatedCount} feed${initialChunk.deactivatedCount > 1 ? "s were" : " was"} added as inactive. To unlock more active feeds, you can switch to a higher plan.`,
+                {
+                  action: {
+                    label: "Upgrade",
+                    onClick: () =>
+                      useDialogStore.getState().launchDialog("subscription"),
+                  },
+                },
+              );
               break;
 
             case "import-feed-inserted":

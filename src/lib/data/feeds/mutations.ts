@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useFetchContentCategories } from "../content-categories/store";
 import { useFetchFeedCategories } from "../feed-categories/store";
 import {
@@ -15,6 +16,7 @@ import {
   useSetFeeds,
   useUpdateFeed,
 } from "./store";
+import { useDialogStore } from "~/components/feed/dialogStore";
 import { orpc } from "~/lib/orpc";
 
 export function useCreateFeedMutation() {
@@ -24,12 +26,25 @@ export function useCreateFeedMutation() {
 
   return useMutation(
     orpc.feed.create.mutationOptions({
-      onSuccess: async (createdFeeds) => {
-        createdFeeds.forEach((feed) => addFeed(feed));
+      onSuccess: async (result) => {
+        result.feeds.forEach((feed) => addFeed(feed));
         await Promise.all(
-          createdFeeds.map((feed) => fetchFeedItemsForFeed(feed.id)),
+          result.feeds.map((feed) => fetchFeedItemsForFeed(feed.id)),
         );
         await fetchFeedCategories();
+
+        if (result.deactivatedCount > 0) {
+          toast.warning(
+            `${result.deactivatedCount} feed${result.deactivatedCount > 1 ? "s were" : " was"} added as inactive. To unlock more active feeds, you can switch to a higher plan.`,
+            {
+              action: {
+                label: "Upgrade",
+                onClick: () =>
+                  useDialogStore.getState().launchDialog("subscription"),
+              },
+            },
+          );
+        }
       },
     }),
   );

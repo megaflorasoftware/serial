@@ -16,7 +16,10 @@ import {
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
-import { canActivateFeed } from "~/server/subscriptions/helpers";
+import {
+  canActivateFeed,
+  getFeedsActivationBudget,
+} from "~/server/subscriptions/helpers";
 
 type BulkImportFromFileSuccess = {
   feedUrl: string;
@@ -40,9 +43,15 @@ export const create = protectedProcedure
       throw new Error("Unsupported feed URL");
     }
 
+    // Check activation budget upfront
+    const { remainingSlots, maxActiveFeeds } = await getFeedsActivationBudget(
+      context.db,
+      context.user.id,
+    );
+
     const results = await context.db.transaction(async (tx) => {
       return await Promise.all(
-        newFeedDetails.map(async (newFeed) => {
+        newFeedDetails.map(async (newFeed, index) => {
           if (!newFeed.url) return { error: "No feed url found." };
 
           const existingFeed = await findExistingFeedThatMatches(tx, {
@@ -54,11 +63,14 @@ export const create = protectedProcedure
             return { error: "Feed already exists" };
           }
 
+          const isActive = index < remainingSlots;
+
           const insertedFeeds = await tx
             .insert(feeds)
             .values({
               userId: context.user.id,
               ...newFeed,
+              isActive,
               openLocation: PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
             })
             .returning();
@@ -93,19 +105,13 @@ export const create = protectedProcedure
       )
       .map((r) => r.feed);
 
-    // Check feed limits and deactivate if over
-    for (const feed of createdFeeds) {
-      const canActivate = await canActivateFeed(context.db, context.user.id);
-      if (!canActivate) {
-        await context.db
-          .update(feeds)
-          .set({ isActive: false })
-          .where(eq(feeds.id, feed.id));
-        feed.isActive = false;
-      }
-    }
+    const deactivatedCount = Math.max(0, createdFeeds.length - remainingSlots);
 
-    return parseArrayOfSchema(createdFeeds, feedsSchema);
+    return {
+      feeds: parseArrayOfSchema(createdFeeds, feedsSchema),
+      deactivatedCount,
+      maxActiveFeeds,
+    };
   });
 
 export const createFromSubscriptionImport = protectedProcedure
@@ -124,9 +130,21 @@ export const createFromSubscriptionImport = protectedProcedure
       return [];
     }
 
+    // Check activation budget upfront and pre-calculate which feeds should be active
+    const { remainingSlots } = await getFeedsActivationBudget(
+      context.db,
+      context.user.id,
+    );
+
+    // Pre-calculate which feeds should be active BEFORE any parallel processing
+    const feedsWithActivation = input.feeds.map((feed, index) => ({
+      ...feed,
+      shouldBeActive: index < remainingSlots,
+    }));
+
     // Process feeds in small batches to avoid overwhelming the database
     const BATCH_SIZE = 4;
-    const feedChunks = prepareArrayChunks(input.feeds, BATCH_SIZE);
+    const feedChunks = prepareArrayChunks(feedsWithActivation, BATCH_SIZE);
     const allResults: BulkImportFromFileResult[] = [];
 
     for (const chunk of feedChunks) {
@@ -163,6 +181,7 @@ export const createFromSubscriptionImport = protectedProcedure
                 .values({
                   userId: context.user.id,
                   ...newFeed,
+                  isActive: feed.shouldBeActive,
                   openLocation:
                     PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
                 })

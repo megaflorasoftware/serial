@@ -44,6 +44,14 @@ export async function canActivateFeed(db: DB, userId: string) {
   return activeCount < config.maxActiveFeeds;
 }
 
+export async function getFeedsActivationBudget(db: DB, userId: string) {
+  const planId = await getUserPlanId(userId);
+  const config = getEffectivePlanConfig(planId);
+  const activeCount = await getActiveFeedCount(db, userId);
+  const remainingSlots = Math.max(0, config.maxActiveFeeds - activeCount);
+  return { remainingSlots, maxActiveFeeds: config.maxActiveFeeds };
+}
+
 export async function getUserPlanLimits(db: DB, userId: string) {
   const planId = await getUserPlanId(userId);
   const config = getEffectivePlanConfig(planId);
