@@ -114,7 +114,7 @@ export function MarkVisibleAsReadButton() {
     }
   };
 
-  useShortcut("e", handleMarkAsRead);
+  useShortcut("f", handleMarkAsRead);
 
   // Only show for unread filter
   if (visibilityFilter !== "unread") return null;
@@ -134,7 +134,7 @@ export function MarkVisibleAsReadButton() {
         className="shadow-lg"
         variant="outline"
         size="default"
-        shortcut="e"
+        shortcut="f"
       >
         <FlameIcon size={16} />
         <span className="pl-1.5">Mark visible as read</span>

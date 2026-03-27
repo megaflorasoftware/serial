@@ -1,6 +1,7 @@
 "use client";
 
-import { useAtomValue } from "jotai";
+import { useEffect } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
 import { EmptyState, FeedEmptyState } from "./EmptyStates";
 import {
   GridSkeleton,
@@ -13,7 +14,12 @@ import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import FeedLoading from "~/components/loading";
-import { viewFilterAtom } from "~/lib/data/atoms";
+import {
+  selectedItemIdAtom,
+  viewFilterAtom,
+  viewFilterIdAtom,
+  visibilityFilterAtom,
+} from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
 import { useFeeds } from "~/lib/data/feeds";
@@ -24,6 +30,7 @@ import {
 import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
 import { VIEW_LAYOUT, viewLayoutSchema } from "~/server/db/constants";
 import { useLazyVisibilityFilter } from "~/lib/hooks/useLazyVisibilityFilter";
+import { useFeedItemNavigation } from "~/lib/hooks/useFeedItemNavigation";
 
 export function RenderViewItems() {
   const { feeds, hasFetchedFeeds } = useFeeds();
@@ -36,6 +43,18 @@ export function RenderViewItems() {
 
   // Lazy load items when visibility filter changes
   useLazyVisibilityFilter();
+
+  // Keyboard navigation
+  useFeedItemNavigation(filteredFeedItemsOrder);
+
+  // Reset selection when view or visibility filter changes
+  const setSelectedItemId = useSetAtom(selectedItemIdAtom);
+  const viewFilterId = useAtomValue(viewFilterIdAtom);
+  const visibilityFilter = useAtomValue(visibilityFilterAtom);
+
+  useEffect(() => {
+    setSelectedItemId(null);
+  }, [viewFilterId, visibilityFilter, setSelectedItemId]);
 
   const currentView = useAtomValue(viewFilterAtom);
   const isUncategorized = currentView?.id === INBOX_VIEW_ID;

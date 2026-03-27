@@ -365,11 +365,15 @@ function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
 interface ItemDisplayProps {
   contentId: string;
   size?: ItemSize;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export function ItemDisplay({
   contentId,
   size = "standard",
+  isSelected,
+  onSelect,
 }: ItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
@@ -392,6 +396,8 @@ export function ItemDisplay({
 
   return (
     <article
+      data-item-id={contentId}
+      onMouseEnter={onSelect}
       className={clsx(
         "group relative flex w-full flex-1 justify-stretch gap-2",
         isLarge
@@ -410,6 +416,7 @@ export function ItemDisplay({
         className={clsx(
           "sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 pt-4 pr-4 pl-6 text-left transition-colors md:flex-row md:items-center md:rounded md:py-4 md:pr-0",
           isLarge ? "pb-1 md:pb-4" : "pb-4 md:h-20 md:py-0",
+          isSelected && "bg-muted",
         )}
       >
         {isLarge ? (
@@ -456,11 +463,15 @@ export function ItemDisplay({
 interface GridItemDisplayProps {
   contentId: string;
   size?: ItemSize;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export function GridItemDisplay({
   contentId,
   size = "standard",
+  isSelected,
+  onSelect,
 }: GridItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
@@ -483,6 +494,8 @@ export function GridItemDisplay({
 
   return (
     <article
+      data-item-id={contentId}
+      onMouseEnter={onSelect}
       className={clsx("group relative flex w-full flex-col", {
         "opacity-50": item.isWatched,
       })}
@@ -498,6 +511,7 @@ export function GridItemDisplay({
             "w-full": !isLarge,
             "w-[calc(100vw-3rem)] md:w-full": isLarge,
           },
+          isSelected && "bg-muted",
         )}
       >
         <ItemThumbnail
