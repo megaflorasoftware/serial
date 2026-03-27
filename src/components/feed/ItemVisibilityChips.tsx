@@ -11,6 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
+import { VISIBILITY_SHORTCUTS } from "~/lib/constants/shortcuts";
 
 export function ItemVisibilityChips() {
   const [visibilityFilter, setVisibilityFilter] = useAtom(visibilityFilterAtom);
@@ -25,9 +27,19 @@ export function ItemVisibilityChips() {
       }}
       size="sm"
     >
-      <ToggleGroupItem value="unread">Unread</ToggleGroupItem>
-      <ToggleGroupItem value="read">Read</ToggleGroupItem>
-      <ToggleGroupItem value="later">Later</ToggleGroupItem>
+      {(["unread", "read", "later"] as const).map((filter) => {
+        const isActive = visibilityFilter === filter;
+        return (
+          <ToggleGroupItem key={filter} value={filter}>
+            {filter.charAt(0).toUpperCase() + filter.slice(1)}
+            <KeyboardShortcutDisplay
+              shortcut={VISIBILITY_SHORTCUTS[filter]}
+              position="right"
+              isActive={isActive}
+            />
+          </ToggleGroupItem>
+        );
+      })}
     </ToggleGroup>
   );
 }

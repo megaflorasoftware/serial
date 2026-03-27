@@ -5,9 +5,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { doesAnyFormElementHaveFocus } from "../doesAnyFormElementHaveFocus";
+import { useCanUseShortcuts } from "./useCanUseShortcuts";
+
 import type { KeyboardEvent } from "react";
-import { useDialogStore } from "~/components/feed/dialogStore";
 
 /**
  * Borrowed from the ever-helpful Tania Rascia:
@@ -23,7 +23,7 @@ export const useShortcut = (
   const callbackRef = useRef(callback);
   const [keyCombo, setKeyCombo] = useState<string[]>([]);
 
-  const dialog = useDialogStore((store) => store.dialog);
+  const { hasOpenDialog, doesFormElementHaveFocus } = useCanUseShortcuts();
 
   useLayoutEffect(() => {
     callbackRef.current = callback;
@@ -31,9 +31,6 @@ export const useShortcut = (
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      const hasOpenDialog = !!dialog;
-      const doesFormElementHaveFocus = doesAnyFormElementHaveFocus();
-
       // Cancel shortcut if key is being held down
       if (event.repeat) {
         return null;
@@ -117,7 +114,8 @@ export const useShortcut = (
       }
     },
     [
-      dialog,
+      hasOpenDialog,
+      doesFormElementHaveFocus,
       shortcut,
       keyCombo.length,
       options.disableTextInputs,
