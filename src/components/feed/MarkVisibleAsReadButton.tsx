@@ -1,12 +1,13 @@
 "use client";
 
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useState } from "react";
 import { FlameIcon } from "lucide-react";
 import { PaginationLoader } from "./view-lists/PaginationLoader";
 import {
   categoryFilterAtom,
   feedFilterAtom,
+  softReadItemIdsAtom,
   viewFilterAtom,
   visibilityFilterAtom,
 } from "~/lib/data/atoms";
@@ -35,6 +36,7 @@ export function MarkVisibleAsReadButton() {
   const viewFilter = useAtomValue(viewFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const feedFilter = useAtomValue(feedFilterAtom);
+  const setSoftReadItemIds = useSetAtom(softReadItemIdsAtom);
 
   const filteredItemIds = useFilteredFeedItemsOrder();
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
@@ -75,6 +77,9 @@ export function MarkVisibleAsReadButton() {
         .filter((item) => item.feedId > 0);
 
       await bulkMutation.mutateAsync({ items, isWatched: true });
+
+      // Add all visible items to soft read items so they still show in unread filter
+      setSoftReadItemIds((prev) => new Set([...prev, ...visibleItemIds]));
 
       // Reset visible items tracking so it starts fresh for new items
       resetVisibleItems();

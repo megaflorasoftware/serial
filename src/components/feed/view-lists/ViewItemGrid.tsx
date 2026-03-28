@@ -1,7 +1,7 @@
 "use client";
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { useAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { GridItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
@@ -11,11 +11,12 @@ import { selectedItemIdAtom } from "~/lib/data/atoms";
 
 interface ViewItemGridProps {
   items: string[];
+  handleMouseSelect?: (itemId: string) => void;
 }
 
-export function ViewItemGrid({ items }: ViewItemGridProps) {
+export function ViewItemGrid({ items, handleMouseSelect }: ViewItemGridProps) {
   const [parent] = useAutoAnimate();
-  const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
+  const selectedItemId = useAtomValue(selectedItemIdAtom);
 
   const { sentinelRef, sentinelIndex, paginationState } =
     useViewListScroll(items);
@@ -32,7 +33,11 @@ export function ViewItemGrid({ items }: ViewItemGridProps) {
               contentId={contentId}
               size="standard"
               isSelected={contentId === selectedItemId}
-              onSelect={() => setSelectedItemId(contentId)}
+              onSelect={
+                handleMouseSelect
+                  ? () => handleMouseSelect(contentId)
+                  : undefined
+              }
             />
             {index === sentinelIndex && (
               <div ref={sentinelRef} key={sentinelIndex} />

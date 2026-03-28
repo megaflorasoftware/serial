@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { EmptyState, FeedEmptyState } from "./EmptyStates";
 import {
   GridSkeleton,
@@ -14,12 +13,7 @@ import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import FeedLoading from "~/components/loading";
-import {
-  selectedItemIdAtom,
-  viewFilterAtom,
-  viewFilterIdAtom,
-  visibilityFilterAtom,
-} from "~/lib/data/atoms";
+import { viewFilterAtom } from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
 import { useFeeds } from "~/lib/data/feeds";
@@ -45,16 +39,7 @@ export function RenderViewItems() {
   useLazyVisibilityFilter();
 
   // Keyboard navigation
-  useFeedItemNavigation(filteredFeedItemsOrder);
-
-  // Reset selection when view or visibility filter changes
-  const setSelectedItemId = useSetAtom(selectedItemIdAtom);
-  const viewFilterId = useAtomValue(viewFilterIdAtom);
-  const visibilityFilter = useAtomValue(visibilityFilterAtom);
-
-  useEffect(() => {
-    setSelectedItemId(null);
-  }, [viewFilterId, visibilityFilter, setSelectedItemId]);
+  const { handleMouseSelect } = useFeedItemNavigation(filteredFeedItemsOrder);
 
   const currentView = useAtomValue(viewFilterAtom);
   const isUncategorized = currentView?.id === INBOX_VIEW_ID;
@@ -98,12 +83,32 @@ export function RenderViewItems() {
 
   switch (layout) {
     case VIEW_LAYOUT.LARGE_LIST:
-      return <ViewItemLargeList items={filteredFeedItemsOrder} />;
+      return (
+        <ViewItemLargeList
+          items={filteredFeedItemsOrder}
+          handleMouseSelect={handleMouseSelect}
+        />
+      );
     case VIEW_LAYOUT.GRID:
-      return <ViewItemGrid items={filteredFeedItemsOrder} />;
+      return (
+        <ViewItemGrid
+          items={filteredFeedItemsOrder}
+          handleMouseSelect={handleMouseSelect}
+        />
+      );
     case VIEW_LAYOUT.LARGE_GRID:
-      return <ViewItemLargeGrid items={filteredFeedItemsOrder} />;
+      return (
+        <ViewItemLargeGrid
+          items={filteredFeedItemsOrder}
+          handleMouseSelect={handleMouseSelect}
+        />
+      );
     default:
-      return <ViewItemStandardList items={filteredFeedItemsOrder} />;
+      return (
+        <ViewItemStandardList
+          items={filteredFeedItemsOrder}
+          handleMouseSelect={handleMouseSelect}
+        />
+      );
   }
 }

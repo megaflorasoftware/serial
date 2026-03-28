@@ -1,7 +1,7 @@
 "use client";
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { useAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { GridItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
@@ -11,11 +11,15 @@ import { selectedItemIdAtom } from "~/lib/data/atoms";
 
 interface ViewItemLargeGridProps {
   items: string[];
+  handleMouseSelect?: (itemId: string) => void;
 }
 
-export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
+export function ViewItemLargeGrid({
+  items,
+  handleMouseSelect,
+}: ViewItemLargeGridProps) {
   const [parent] = useAutoAnimate();
-  const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
+  const selectedItemId = useAtomValue(selectedItemIdAtom);
 
   const { sentinelRef, sentinelIndex, paginationState } =
     useViewListScroll(items);
@@ -32,7 +36,11 @@ export function ViewItemLargeGrid({ items }: ViewItemLargeGridProps) {
               contentId={contentId}
               size="large"
               isSelected={contentId === selectedItemId}
-              onSelect={() => setSelectedItemId(contentId)}
+              onSelect={
+                handleMouseSelect
+                  ? () => handleMouseSelect(contentId)
+                  : undefined
+              }
             />
             {index === sentinelIndex && (
               <div ref={sentinelRef} key={sentinelIndex} />

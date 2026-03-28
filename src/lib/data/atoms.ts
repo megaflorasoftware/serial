@@ -52,3 +52,4 @@ export const shortformVideoZoomAtom = atom<number>(2);
 export const articleZoomAtom = atom<number>(1);
 
 export const selectedItemIdAtom = atom<string | null>(null);
+export const softReadItemIdsAtom = atom<Set<string>>(new Set<string>());

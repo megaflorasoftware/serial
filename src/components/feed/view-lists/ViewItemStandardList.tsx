@@ -1,7 +1,7 @@
 "use client";
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { useAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { ItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
@@ -11,11 +11,15 @@ import { selectedItemIdAtom } from "~/lib/data/atoms";
 
 interface ViewItemStandardListProps {
   items: string[];
+  handleMouseSelect?: (itemId: string) => void;
 }
 
-export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
+export function ViewItemStandardList({
+  items,
+  handleMouseSelect,
+}: ViewItemStandardListProps) {
   const [parent] = useAutoAnimate();
-  const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
+  const selectedItemId = useAtomValue(selectedItemIdAtom);
 
   const { sentinelRef, sentinelIndex, paginationState } =
     useViewListScroll(items);
@@ -28,7 +32,9 @@ export function ViewItemStandardList({ items }: ViewItemStandardListProps) {
             contentId={contentId}
             size="standard"
             isSelected={contentId === selectedItemId}
-            onSelect={() => setSelectedItemId(contentId)}
+            onSelect={
+              handleMouseSelect ? () => handleMouseSelect(contentId) : undefined
+            }
           />
           {index === sentinelIndex && (
             <div ref={sentinelRef} key={sentinelIndex} />
