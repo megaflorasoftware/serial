@@ -25,7 +25,7 @@ export function ViewItemGrid({ items, handleMouseSelect }: ViewItemGridProps) {
     <div className="w-full">
       <div
         ref={parent}
-        className="grid w-full grid-cols-2 gap-y-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
+        className="grid w-full grid-cols-2 items-stretch gap-y-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
       >
         {items.map((contentId, index) => (
           <VisibleItemTracker key={contentId} index={index}>

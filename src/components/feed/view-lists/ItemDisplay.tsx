@@ -508,7 +508,7 @@ export function GridItemDisplay({
     <article
       data-item-id={contentId}
       onMouseEnter={onSelect}
-      className={clsx("group relative flex w-full flex-col", {
+      className={clsx("group relative flex h-full w-full flex-col", {
         "opacity-50": item.isWatched,
       })}
     >
@@ -519,11 +519,7 @@ export function GridItemDisplay({
         preload={shouldOpenInSerial ? "intent" : undefined}
         onClick={handleClick}
         className={clsx(
-          "flex flex-col rounded p-2 text-left",
-          {
-            "w-full": !isLarge,
-            "w-[calc(100vw-3rem)] md:w-full": isLarge,
-          },
+          "flex h-full flex-1 flex-col rounded p-2 text-left",
           isSelected && "bg-muted",
         )}
       >

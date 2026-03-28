@@ -20,7 +20,7 @@ import {
   SHORTCUT_KEYS,
 } from "~/lib/constants/shortcuts";
 
-const SCROLL_DURATION_MS = 200;
+const SCROLL_DURATION_MS = 300;
 const TARGET_VIEWPORT_POSITION = 1 / 3;
 
 function isElementInViewport(element: Element): boolean {

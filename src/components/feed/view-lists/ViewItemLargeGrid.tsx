@@ -28,7 +28,7 @@ export function ViewItemLargeGrid({
     <div className="w-full">
       <div
         ref={parent}
-        className="grid w-full gap-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]"
+        className="grid w-full items-stretch gap-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]"
       >
         {items.map((contentId, index) => (
           <VisibleItemTracker key={contentId} index={index}>
