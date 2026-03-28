@@ -26,7 +26,7 @@ function isElementInViewport(element: Element): boolean {
 }
 
 function getCentermostVisibleItem(items: string[]): string | null {
-  const viewportCenter = window.innerHeight / 2;
+  const viewportTarget = window.innerHeight / 3;
   let closestItem: string | null = null;
   let closestDistance = Infinity;
 
@@ -38,7 +38,7 @@ function getCentermostVisibleItem(items: string[]): string | null {
     if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
 
     const elementCenter = rect.top + rect.height / 2;
-    const distance = Math.abs(elementCenter - viewportCenter);
+    const distance = Math.abs(elementCenter - viewportTarget);
 
     if (distance < closestDistance) {
       closestDistance = distance;
@@ -70,9 +70,13 @@ export function useFeedItemNavigation(items: string[]) {
   const scrollToItem = useCallback((itemId: string | null) => {
     if (!itemId) return;
     const element = document.querySelector(`[data-item-id="${itemId}"]`);
-    if (element) {
-      element.scrollIntoView({ block: "center", behavior: "instant" });
-    }
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const targetPosition = window.innerHeight / 3;
+    const scrollTop =
+      window.scrollY + rect.top - targetPosition + rect.height / 2;
+    window.scrollTo({ top: scrollTop, behavior: "instant" });
   }, []);
 
   const selectItem = useCallback(
