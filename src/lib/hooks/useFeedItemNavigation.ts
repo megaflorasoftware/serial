@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import type { KeyboardEvent } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useLocation } from "@tanstack/react-router";
 import { useShortcut } from "./useShortcut";
@@ -62,100 +63,115 @@ export function useFeedItemNavigation(items: string[]) {
   const prevViewFilterIdRef = useRef<number | null>(null);
   const prevCategoryFilterRef = useRef<number | null>(null);
   const prevFeedFilterRef = useRef<number | null>(null);
-  const shouldScrollRef = useRef(false);
   const keyboardNavActiveRef = useRef(false);
 
   const selectedItemActions = useFeedItemActions(selectedItemId ?? "");
 
-  const selectItemWithScroll = useCallback(
+  const scrollToItem = useCallback((itemId: string | null) => {
+    if (!itemId) return;
+    const element = document.querySelector(`[data-item-id="${itemId}"]`);
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "instant" });
+    }
+  }, []);
+
+  const selectItem = useCallback(
     (itemId: string | null) => {
-      shouldScrollRef.current = true;
       keyboardNavActiveRef.current = true;
       setSelectedItemId(itemId);
+      scrollToItem(itemId);
     },
-    [setSelectedItemId],
+    [setSelectedItemId, scrollToItem],
   );
 
   const selectNextItem = useCallback(
     (currentIndex: number) => {
       const nextIndex = currentIndex + 1;
       if (nextIndex < items.length) {
-        selectItemWithScroll(items[nextIndex]!);
+        selectItem(items[nextIndex]!);
       } else if (currentIndex > 0) {
-        selectItemWithScroll(items[currentIndex - 1]!);
+        selectItem(items[currentIndex - 1]!);
       } else {
-        selectItemWithScroll(null);
+        selectItem(null);
       }
     },
-    [items, selectItemWithScroll],
+    [items, selectItem],
   );
 
-  const handleArrowDown = useCallback(() => {
-    if (pathname !== "/") return;
+  const handleArrowDown = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/") return;
 
-    const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
+      const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
 
-    if (currentIndex === -1) {
-      if (window.scrollY === 0 && items.length > 0) {
-        selectItemWithScroll(items[0]!);
-      } else {
-        const centermostItem = getCentermostVisibleItem(items);
-        if (centermostItem) {
-          selectItemWithScroll(centermostItem);
-        } else if (items.length > 0) {
-          selectItemWithScroll(items[0]!);
-        }
-      }
-    } else {
-      const selectedElement = document.querySelector(
-        `[data-item-id="${selectedItemId}"]`,
-      );
-      if (selectedElement && !isElementInViewport(selectedElement)) {
-        const centermostItem = getCentermostVisibleItem(items);
-        if (centermostItem) {
-          selectItemWithScroll(centermostItem);
-        }
-      } else {
-        const nextIndex = currentIndex + 1;
-        if (nextIndex >= items.length) {
-          selectItemWithScroll(items[0]!);
+      if (currentIndex === -1) {
+        if (window.scrollY === 0 && items.length > 0) {
+          selectItem(items[0]!);
         } else {
-          selectItemWithScroll(items[nextIndex]!);
+          const centermostItem = getCentermostVisibleItem(items);
+          if (centermostItem) {
+            selectItem(centermostItem);
+          } else if (items.length > 0) {
+            selectItem(items[0]!);
+          }
         }
-      }
-    }
-  }, [pathname, selectedItemId, items, selectItemWithScroll]);
-
-  const handleArrowUp = useCallback(() => {
-    if (pathname !== "/") return;
-
-    const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
-
-    if (currentIndex === -1) {
-      if (window.scrollY === 0 && items.length > 0) {
-        selectItemWithScroll(items[0]!);
       } else {
-        const centermostItem = getCentermostVisibleItem(items);
-        if (centermostItem) {
-          selectItemWithScroll(centermostItem);
-        } else if (items.length > 0) {
-          selectItemWithScroll(items[0]!);
+        const selectedElement = document.querySelector(
+          `[data-item-id="${selectedItemId}"]`,
+        );
+        if (selectedElement && !isElementInViewport(selectedElement)) {
+          const centermostItem = getCentermostVisibleItem(items);
+          if (centermostItem) {
+            selectItem(centermostItem);
+          }
+        } else {
+          const nextIndex = currentIndex + 1;
+          if (nextIndex >= items.length) {
+            selectItem(items[0]!);
+          } else {
+            selectItem(items[nextIndex]!);
+          }
         }
       }
-    } else {
-      const selectedElement = document.querySelector(
-        `[data-item-id="${selectedItemId}"]`,
-      );
-      if (selectedElement && !isElementInViewport(selectedElement)) {
-        const centermostItem = getCentermostVisibleItem(items);
-        if (centermostItem) {
-          selectItemWithScroll(centermostItem);
+    },
+    [pathname, selectedItemId, items, selectItem],
+  );
+
+  const handleArrowUp = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/") return;
+
+      const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
+
+      if (currentIndex === -1) {
+        if (window.scrollY === 0 && items.length > 0) {
+          selectItem(items[0]!);
+        } else {
+          const centermostItem = getCentermostVisibleItem(items);
+          if (centermostItem) {
+            selectItem(centermostItem);
+          } else if (items.length > 0) {
+            selectItem(items[0]!);
+          }
         }
-      } else if (currentIndex > 0) {
-        selectItemWithScroll(items[currentIndex - 1]!);
+      } else {
+        const selectedElement = document.querySelector(
+          `[data-item-id="${selectedItemId}"]`,
+        );
+        if (selectedElement && !isElementInViewport(selectedElement)) {
+          const centermostItem = getCentermostVisibleItem(items);
+          if (centermostItem) {
+            selectItem(centermostItem);
+          }
+        } else if (currentIndex > 0) {
+          selectItem(items[currentIndex - 1]!);
+        }
       }
-    }
-  }, [pathname, selectedItemId, items, selectItemWithScroll]);
+    },
+    [pathname, selectedItemId, items, selectItem],
+  );
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_DOWN), handleArrowDown, {
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_DOWN),
@@ -226,26 +242,15 @@ export function useFeedItemNavigation(items: string[]) {
 
     if (isReturningFromRoute && selectedItemId) {
       setIsReturningFromRoute(false);
-      const element = document.querySelector(
-        `[data-item-id="${selectedItemId}"]`,
-      );
-      if (element) {
-        element.scrollIntoView({ block: "center", behavior: "instant" });
-      }
+      scrollToItem(selectedItemId);
     }
-  }, [pathname, selectedItemId, isReturningFromRoute, setIsReturningFromRoute]);
-
-  useEffect(() => {
-    if (selectedItemId && shouldScrollRef.current) {
-      const element = document.querySelector(
-        `[data-item-id="${selectedItemId}"]`,
-      );
-      if (element) {
-        element.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
-      shouldScrollRef.current = false;
-    }
-  }, [selectedItemId]);
+  }, [
+    pathname,
+    selectedItemId,
+    isReturningFromRoute,
+    setIsReturningFromRoute,
+    scrollToItem,
+  ]);
 
   useEffect(() => {
     const handleMouseMove = () => {
