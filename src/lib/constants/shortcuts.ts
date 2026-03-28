@@ -13,6 +13,7 @@ export const SHORTCUT_KEYS = {
   READ: "i",
   LATER: "l",
   TOGGLE_READ: "e",
+  TOGGLE_READ_ALT: " ",
   TOGGLE_LATER: "w",
   MARK_VISIBLE_READ: "f",
   OPEN_ORIGINAL: "o",

@@ -308,15 +308,23 @@ export function useFeedItemNavigation(
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_LEFT),
   });
 
-  useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ), () => {
-    if (pathname !== "/" || !selectedItemId) return;
+  const handleToggleRead = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/" || !selectedItemId) return;
 
-    const wasMarkedRead = selectedItemActions.toggleRead();
-    if (wasMarkedRead) {
-      const idx = items.indexOf(selectedItemId);
-      selectNextItem(idx);
-    }
-  });
+      const wasMarkedRead = selectedItemActions.toggleRead();
+      if (wasMarkedRead) {
+        const idx = items.indexOf(selectedItemId);
+        selectNextItem(idx);
+      }
+    },
+    [pathname, selectedItemId, selectedItemActions, items, selectNextItem],
+  );
+
+  useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ), handleToggleRead);
+
+  useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ_ALT), handleToggleRead);
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_LATER), () => {
     if (pathname !== "/" || !selectedItemId) return;
