@@ -77,6 +77,9 @@ export function MarkVisibleAsReadButton() {
 
       await bulkMutation.mutateAsync({ items, isWatched: true });
 
+      // Scroll to top
+      window.scrollTo({ top: 0, behavior: "instant" });
+
       // Reset visible items tracking so it starts fresh for new items
       resetVisibleItems();
 
