@@ -20,13 +20,16 @@ import {
   SHORTCUT_KEYS,
 } from "~/lib/constants/shortcuts";
 
+const SCROLL_DURATION_MS = 200;
+const TARGET_VIEWPORT_POSITION = 1 / 3;
+
 function isElementInViewport(element: Element): boolean {
   const rect = element.getBoundingClientRect();
   return rect.top < window.innerHeight && rect.bottom > 0;
 }
 
-function getCentermostVisibleItem(items: string[]): string | null {
-  const viewportTarget = window.innerHeight / 3;
+function getClosestVisibleItem(items: string[]): string | null {
+  const viewportTarget = window.innerHeight * TARGET_VIEWPORT_POSITION;
   let closestItem: string | null = null;
   let closestDistance = Infinity;
 
@@ -64,20 +67,34 @@ export function useFeedItemNavigation(items: string[]) {
   const prevCategoryFilterRef = useRef<number | null>(null);
   const prevFeedFilterRef = useRef<number | null>(null);
   const keyboardNavActiveRef = useRef(false);
+  const lastNavTimeRef = useRef<number>(0);
 
   const selectedItemActions = useFeedItemActions(selectedItemId ?? "");
 
-  const scrollToItem = useCallback((itemId: string | null) => {
-    if (!itemId) return;
-    const element = document.querySelector(`[data-item-id="${itemId}"]`);
-    if (!element) return;
+  const scrollToItem = useCallback(
+    (itemId: string | null, forceInstant: boolean = false) => {
+      if (!itemId) return;
+      const element = document.querySelector(`[data-item-id="${itemId}"]`);
+      if (!element) return;
 
-    const rect = element.getBoundingClientRect();
-    const targetPosition = window.innerHeight / 3;
-    const scrollTop =
-      window.scrollY + rect.top - targetPosition + rect.height / 2;
-    window.scrollTo({ top: scrollTop, behavior: "instant" });
-  }, []);
+      const rect = element.getBoundingClientRect();
+      const targetPosition = window.innerHeight * TARGET_VIEWPORT_POSITION;
+      const scrollTop =
+        window.scrollY + rect.top - targetPosition + rect.height / 2;
+
+      const now = performance.now();
+      const isRapid = now - lastNavTimeRef.current < SCROLL_DURATION_MS;
+      lastNavTimeRef.current = now;
+
+      if (forceInstant || isRapid) {
+        window.scrollTo({ top: scrollTop, behavior: "instant" });
+        return;
+      }
+
+      window.scrollTo({ top: scrollTop, behavior: "smooth" });
+    },
+    [],
+  );
 
   const selectItem = useCallback(
     (itemId: string | null) => {
@@ -113,9 +130,9 @@ export function useFeedItemNavigation(items: string[]) {
         if (window.scrollY === 0 && items.length > 0) {
           selectItem(items[0]!);
         } else {
-          const centermostItem = getCentermostVisibleItem(items);
-          if (centermostItem) {
-            selectItem(centermostItem);
+          const closestItem = getClosestVisibleItem(items);
+          if (closestItem) {
+            selectItem(closestItem);
           } else if (items.length > 0) {
             selectItem(items[0]!);
           }
@@ -125,9 +142,9 @@ export function useFeedItemNavigation(items: string[]) {
           `[data-item-id="${selectedItemId}"]`,
         );
         if (selectedElement && !isElementInViewport(selectedElement)) {
-          const centermostItem = getCentermostVisibleItem(items);
-          if (centermostItem) {
-            selectItem(centermostItem);
+          const closestItem = getClosestVisibleItem(items);
+          if (closestItem) {
+            selectItem(closestItem);
           }
         } else {
           const nextIndex = currentIndex + 1;
@@ -153,9 +170,9 @@ export function useFeedItemNavigation(items: string[]) {
         if (window.scrollY === 0 && items.length > 0) {
           selectItem(items[0]!);
         } else {
-          const centermostItem = getCentermostVisibleItem(items);
-          if (centermostItem) {
-            selectItem(centermostItem);
+          const closestItem = getClosestVisibleItem(items);
+          if (closestItem) {
+            selectItem(closestItem);
           } else if (items.length > 0) {
             selectItem(items[0]!);
           }
@@ -165,9 +182,9 @@ export function useFeedItemNavigation(items: string[]) {
           `[data-item-id="${selectedItemId}"]`,
         );
         if (selectedElement && !isElementInViewport(selectedElement)) {
-          const centermostItem = getCentermostVisibleItem(items);
-          if (centermostItem) {
-            selectItem(centermostItem);
+          const closestItem = getClosestVisibleItem(items);
+          if (closestItem) {
+            selectItem(closestItem);
           }
         } else if (currentIndex > 0) {
           selectItem(items[currentIndex - 1]!);
@@ -246,7 +263,7 @@ export function useFeedItemNavigation(items: string[]) {
 
     if (isReturningFromRoute && selectedItemId) {
       setIsReturningFromRoute(false);
-      scrollToItem(selectedItemId);
+      scrollToItem(selectedItemId, true);
     }
   }, [
     pathname,
