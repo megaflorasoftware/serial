@@ -53,3 +53,4 @@ export const articleZoomAtom = atom<number>(1);
 
 export const selectedItemIdAtom = atom<string | null>(null);
 export const softReadItemIdsAtom = atom<Set<string>>(new Set<string>());
+export const isReturningFromRouteAtom = atom(false);

@@ -1,6 +1,6 @@
-import { createFileRoute, useLocation } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { useAtom, useAtomValue } from "jotai";
+import { createFileRoute } from "@tanstack/react-router";
+import { useAtomValue, useSetAtom } from "jotai";
+import type { VisibilityFilter } from "~/lib/data/atoms";
 import { viewsAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { ClientDatetime } from "~/components/feed/ClientDatetime";
 import { ItemVisibilityChips } from "~/components/feed/ItemVisibilityChips";
@@ -8,71 +8,69 @@ import { MarkVisibleAsReadButton } from "~/components/feed/MarkVisibleAsReadButt
 import { RenderViewItems } from "~/components/feed/view-lists";
 import { ViewFilterChips } from "~/components/feed/ViewFilterChips";
 import { useUpdateViewFilter } from "~/lib/data/views";
-import { useCanUseShortcuts } from "~/lib/hooks/useCanUseShortcuts";
-import { MAX_VIEW_SHORTCUTS, SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
-import { getObjectEntries } from "~/lib/utils/getObjectEntries";
+import { useShortcut } from "~/lib/hooks/useShortcut";
+import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 
 export const Route = createFileRoute("/_app/")({
   component: Home,
 });
 
-function useViewSelectionShortcuts() {
+function Home() {
   const views = useAtomValue(viewsAtom);
   const updateViewFilter = useUpdateViewFilter();
-  const { pathname } = useLocation();
-  const { canUseShortcuts } = useCanUseShortcuts();
+  const setVisibilityFilter = useSetAtom(visibilityFilterAtom);
 
-  useEffect(() => {
-    if (pathname !== "/") return;
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_1,
+    () => views[0] && updateViewFilter(views[0].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_2,
+    () => views[1] && updateViewFilter(views[1].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_3,
+    () => views[2] && updateViewFilter(views[2].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_4,
+    () => views[3] && updateViewFilter(views[3].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_5,
+    () => views[4] && updateViewFilter(views[4].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_6,
+    () => views[5] && updateViewFilter(views[5].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_7,
+    () => views[6] && updateViewFilter(views[6].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_8,
+    () => views[7] && updateViewFilter(views[7].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_9,
+    () => views[8] && updateViewFilter(views[8].id),
+  );
+  useShortcut(
+    SHORTCUT_KEYS.VIEW_10,
+    () => views[9] && updateViewFilter(views[9].id),
+  );
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      if (!canUseShortcuts) return;
+  useShortcut(SHORTCUT_KEYS.UNREAD, () =>
+    setVisibilityFilter("unread" as VisibilityFilter),
+  );
+  useShortcut(SHORTCUT_KEYS.READ, () =>
+    setVisibilityFilter("read" as VisibilityFilter),
+  );
+  useShortcut(SHORTCUT_KEYS.LATER, () =>
+    setVisibilityFilter("later" as VisibilityFilter),
+  );
 
-      const num = parseInt(event.key, 10);
-      if (num >= 1 && num <= MAX_VIEW_SHORTCUTS && num <= views.length) {
-        const view = views[num - 1];
-        if (view) {
-          updateViewFilter(view.id);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pathname, views, updateViewFilter, canUseShortcuts]);
-}
-
-function useVisibilityFilterShortcuts() {
-  const { pathname } = useLocation();
-  const { canUseShortcuts } = useCanUseShortcuts();
-  const [, setVisibilityFilter] = useAtom(visibilityFilterAtom);
-
-  useEffect(() => {
-    if (pathname !== "/") return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      if (!canUseShortcuts) return;
-
-      const key = event.key.toLowerCase();
-      const filter = getObjectEntries(SHORTCUT_KEYS).find(
-        ([, shortcut]) => shortcut === key,
-      )?.[0];
-
-      if (filter) {
-        setVisibilityFilter(filter);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pathname, canUseShortcuts, setVisibilityFilter]);
-}
-
-function Home() {
-  useViewSelectionShortcuts();
-  useVisibilityFilterShortcuts();
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center lg:pb-18">
       <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">

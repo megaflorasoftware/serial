@@ -28,6 +28,7 @@ import {
 } from "~/lib/data/visible-items-store";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useShortcut } from "~/lib/hooks/useShortcut";
+import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 
 export function MarkVisibleAsReadButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -119,7 +120,7 @@ export function MarkVisibleAsReadButton() {
     }
   };
 
-  useShortcut("f", handleMarkAsRead);
+  useShortcut(SHORTCUT_KEYS.MARK_VISIBLE_READ, handleMarkAsRead);
 
   // Only show for unread filter
   if (visibilityFilter !== "unread") return null;
@@ -139,7 +140,7 @@ export function MarkVisibleAsReadButton() {
         className="shadow-lg"
         variant="outline"
         size="default"
-        shortcut="f"
+        shortcut={SHORTCUT_KEYS.MARK_VISIBLE_READ}
       >
         <FlameIcon size={16} />
         <span className="pl-1.5">Mark visible as read</span>

@@ -15,11 +15,22 @@ import type { KeyboardEvent } from "react";
  *
  * Expanded with types and negative modifier support
  */
+type UseShortcutOptions = {
+  disableTextInputs?: boolean;
+  disableDialogs?: boolean;
+  allowRepeat?: boolean;
+};
+
 export const useShortcut = (
   shortcut: string,
   callback: (event: KeyboardEvent<Element>) => void,
-  options = { disableTextInputs: true, disableDialogs: true },
+  options: UseShortcutOptions = {},
 ) => {
+  const {
+    disableTextInputs = true,
+    disableDialogs = true,
+    allowRepeat = false,
+  } = options;
   const callbackRef = useRef(callback);
   const [keyCombo, setKeyCombo] = useState<string[]>([]);
 
@@ -32,14 +43,14 @@ export const useShortcut = (
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       // Cancel shortcut if key is being held down
-      if (event.repeat) {
+      if (event.repeat && !allowRepeat) {
         return null;
       }
 
       // Don't enable shortcuts in inputs unless explicitly declared
       if (
-        (options.disableTextInputs && doesFormElementHaveFocus) ||
-        (options.disableDialogs && hasOpenDialog)
+        (disableTextInputs && doesFormElementHaveFocus) ||
+        (disableDialogs && hasOpenDialog)
       ) {
         return event.stopPropagation();
       }
@@ -118,8 +129,9 @@ export const useShortcut = (
       doesFormElementHaveFocus,
       shortcut,
       keyCombo.length,
-      options.disableTextInputs,
-      options.disableDialogs,
+      disableTextInputs,
+      disableDialogs,
+      allowRepeat,
     ],
   );
 

@@ -15,7 +15,10 @@ import {
   useViews,
 } from "~/lib/data/views";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
-import { MAX_VIEW_SHORTCUTS } from "~/lib/constants/shortcuts";
+import {
+  MAX_VIEW_SHORTCUTS,
+  VIEW_SHORTCUT_KEYS,
+} from "~/lib/constants/shortcuts";
 
 export function ViewFilterChips() {
   const { views } = useViews();
@@ -88,7 +91,7 @@ export function ViewFilterChips() {
             {view.name}
             {index < MAX_VIEW_SHORTCUTS && (
               <KeyboardShortcutDisplay
-                shortcut={`${index + 1}`}
+                shortcut={VIEW_SHORTCUT_KEYS[index]!}
                 position="right"
                 isActive={isActive}
               />
