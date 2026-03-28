@@ -9,10 +9,7 @@ import { RenderViewItems } from "~/components/feed/view-lists";
 import { ViewFilterChips } from "~/components/feed/ViewFilterChips";
 import { useUpdateViewFilter } from "~/lib/data/views";
 import { useCanUseShortcuts } from "~/lib/hooks/useCanUseShortcuts";
-import {
-  MAX_VIEW_SHORTCUTS,
-  VISIBILITY_SHORTCUTS,
-} from "~/lib/constants/shortcuts";
+import { MAX_VIEW_SHORTCUTS, SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { getObjectEntries } from "~/lib/utils/getObjectEntries";
 
 export const Route = createFileRoute("/_app/")({
@@ -59,7 +56,7 @@ function useVisibilityFilterShortcuts() {
       if (!canUseShortcuts) return;
 
       const key = event.key.toLowerCase();
-      const filter = getObjectEntries(VISIBILITY_SHORTCUTS).find(
+      const filter = getObjectEntries(SHORTCUT_KEYS).find(
         ([, shortcut]) => shortcut === key,
       )?.[0];
 

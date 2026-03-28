@@ -7,6 +7,7 @@ import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
+import { useEffect } from "react";
 import { useZoom } from "../components/feed/watch/[id]/useZoom";
 import { ContentActions } from "../components/feed/watch/[id]/ContentActions";
 import { useFeeds } from "~/lib/data/feeds";
@@ -51,6 +52,18 @@ function ReadPage() {
   if (articleStyle === "simplified") {
     content = String(parser.processSync(feedItem?.content ?? ""));
   }
+
+  // Shortcut to open original URL
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "o" && feedItem?.url) {
+        window.open(feedItem.url, "_blank", "noopener noreferrer");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [feedItem?.url]);
 
   return (
     <div

@@ -7,6 +7,7 @@ import { useView } from "~/components/feed/watch/[id]/useView";
 import { useZoom } from "~/components/feed/watch/[id]/useZoom";
 import { VideoDisplay } from "~/components/feed/watch/[id]/VideoDisplay";
 import useIsInactive from "~/lib/hooks/useIsInactive";
+import { useFeedItemValue } from "~/lib/data/store";
 
 export const Route = createFileRoute("/_app/watch/$id")({
   component: WatchVideoPage,
@@ -19,6 +20,7 @@ function WatchVideoPage() {
   const { zoom, isVertical } = useZoom();
 
   const isInactive = useIsInactive();
+  const feedItem = useFeedItemValue(params.id);
 
   useEffect(() => {
     if (isInactive) {
@@ -31,6 +33,18 @@ function WatchVideoPage() {
       document.body.classList.remove("no-cursor");
     };
   }, [isInactive]);
+
+  // Shortcut to open original URL
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "o" && feedItem?.url) {
+        window.open(feedItem.url, "_blank", "noopener noreferrer");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [feedItem?.url]);
 
   const isWindowedVertical = view === "windowed" && isVertical;
   const isWindowedHorizontal = view === "windowed" && !isVertical;

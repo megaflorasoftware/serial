@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
-import { VISIBILITY_SHORTCUTS } from "~/lib/constants/shortcuts";
+import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 
 export function ItemVisibilityChips() {
   const [visibilityFilter, setVisibilityFilter] = useAtom(visibilityFilterAtom);
@@ -33,7 +33,7 @@ export function ItemVisibilityChips() {
           <ToggleGroupItem key={filter} value={filter}>
             {filter.charAt(0).toUpperCase() + filter.slice(1)}
             <KeyboardShortcutDisplay
-              shortcut={VISIBILITY_SHORTCUTS[filter]}
+              shortcut={SHORTCUT_KEYS[filter]}
               position="right"
               isActive={isActive}
             />
