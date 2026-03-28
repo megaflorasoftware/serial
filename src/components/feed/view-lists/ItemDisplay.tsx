@@ -15,6 +15,7 @@ import {
 } from "~/lib/data/instapaper";
 import { useFeedItemValue } from "~/lib/data/store";
 import { timeAgo } from "~/lib/utils";
+import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 
 export type ItemSize = "standard" | "large";
 
@@ -377,6 +378,7 @@ export function ItemDisplay({
 }: ItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
+  const { markAsRead } = useFeedItemActions(contentId);
 
   if (!item) return null;
 
@@ -393,6 +395,10 @@ export function ItemDisplay({
   const rel = shouldOpenInSerial ? undefined : "noopener noreferrer";
 
   const isLarge = size === "large";
+
+  const handleClick = () => {
+    markAsRead();
+  };
 
   return (
     <article
@@ -413,6 +419,7 @@ export function ItemDisplay({
         target={target}
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
+        onClick={handleClick}
         className={clsx(
           "flex w-full flex-1 flex-col gap-4 pt-4 pr-4 pl-6 text-left md:flex-row md:items-center md:rounded md:py-4 md:pr-0",
           isLarge ? "pb-1 md:pb-4" : "pb-4 md:h-20 md:py-0",
@@ -475,6 +482,7 @@ export function GridItemDisplay({
 }: GridItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
+  const { markAsRead } = useFeedItemActions(contentId);
 
   if (!item) return null;
 
@@ -492,6 +500,10 @@ export function GridItemDisplay({
 
   const isLarge = size === "large";
 
+  const handleClick = () => {
+    markAsRead();
+  };
+
   return (
     <article
       data-item-id={contentId}
@@ -505,6 +517,7 @@ export function GridItemDisplay({
         target={target}
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
+        onClick={handleClick}
         className={clsx(
           "flex flex-col rounded p-2 text-left",
           {

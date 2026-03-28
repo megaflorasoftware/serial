@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { KeyboardEvent } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useLocation } from "@tanstack/react-router";
 import { useShortcut } from "./useShortcut";
 import { useFeedItemActions } from "./useFeedItemActions";
+import type { KeyboardEvent } from "react";
 import {
   categoryFilterAtom,
   feedFilterAtom,
