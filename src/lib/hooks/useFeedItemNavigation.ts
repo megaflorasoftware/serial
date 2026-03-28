@@ -52,7 +52,46 @@ function getClosestVisibleItem(items: string[]): string | null {
   return closestItem;
 }
 
-export function useFeedItemNavigation(items: string[]) {
+function getGridColumns(items: string[]): number {
+  if (items.length < 2) return 1;
+
+  const firstElement = document.querySelector(`[data-item-id="${items[0]}"]`);
+  if (!firstElement) return 1;
+
+  const firstRect = firstElement.getBoundingClientRect();
+  const firstTop = Math.round(firstRect.top);
+
+  for (let i = 1; i < items.length; i++) {
+    const element = document.querySelector(`[data-item-id="${items[i]}"]`);
+    if (!element) continue;
+
+    const rect = element.getBoundingClientRect();
+    if (Math.round(rect.top) !== firstTop) {
+      return i;
+    }
+  }
+
+  return items.length;
+}
+
+function getGridPosition(
+  items: string[],
+  selectedItemId: string,
+): { row: number; col: number; columns: number } | null {
+  const index = items.indexOf(selectedItemId);
+  if (index === -1) return null;
+
+  const columns = getGridColumns(items);
+  const row = Math.floor(index / columns);
+  const col = index % columns;
+
+  return { row, col, columns };
+}
+
+export function useFeedItemNavigation(
+  items: string[],
+  isGridLayout: boolean = false,
+) {
   const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
   const setSoftReadItemIds = useSetAtom(softReadItemIdsAtom);
   const [isReturningFromRoute, setIsReturningFromRoute] = useAtom(
@@ -137,26 +176,38 @@ export function useFeedItemNavigation(items: string[]) {
             selectItem(items[0]!);
           }
         }
-      } else {
-        const selectedElement = document.querySelector(
-          `[data-item-id="${selectedItemId}"]`,
-        );
-        if (selectedElement && !isElementInViewport(selectedElement)) {
-          const closestItem = getClosestVisibleItem(items);
-          if (closestItem) {
-            selectItem(closestItem);
-          }
-        } else {
-          const nextIndex = currentIndex + 1;
-          if (nextIndex >= items.length) {
-            selectItem(items[0]!);
-          } else {
+        return;
+      }
+
+      const selectedElement = document.querySelector(
+        `[data-item-id="${selectedItemId}"]`,
+      );
+      if (selectedElement && !isElementInViewport(selectedElement)) {
+        const closestItem = getClosestVisibleItem(items);
+        if (closestItem) {
+          selectItem(closestItem);
+        }
+        return;
+      }
+
+      if (isGridLayout && selectedItemId) {
+        const gridPos = getGridPosition(items, selectedItemId);
+        if (gridPos) {
+          const nextIndex = (gridPos.row + 1) * gridPos.columns + gridPos.col;
+          if (nextIndex < items.length) {
             selectItem(items[nextIndex]!);
           }
         }
+      } else {
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= items.length) {
+          selectItem(items[0]!);
+        } else {
+          selectItem(items[nextIndex]!);
+        }
       }
     },
-    [pathname, selectedItemId, items, selectItem],
+    [pathname, selectedItemId, items, selectItem, isGridLayout],
   );
 
   const handleArrowUp = useCallback(
@@ -177,21 +228,68 @@ export function useFeedItemNavigation(items: string[]) {
             selectItem(items[0]!);
           }
         }
-      } else {
-        const selectedElement = document.querySelector(
-          `[data-item-id="${selectedItemId}"]`,
-        );
-        if (selectedElement && !isElementInViewport(selectedElement)) {
-          const closestItem = getClosestVisibleItem(items);
-          if (closestItem) {
-            selectItem(closestItem);
-          }
-        } else if (currentIndex > 0) {
-          selectItem(items[currentIndex - 1]!);
+        return;
+      }
+
+      const selectedElement = document.querySelector(
+        `[data-item-id="${selectedItemId}"]`,
+      );
+      if (selectedElement && !isElementInViewport(selectedElement)) {
+        const closestItem = getClosestVisibleItem(items);
+        if (closestItem) {
+          selectItem(closestItem);
         }
+        return;
+      }
+
+      if (isGridLayout && selectedItemId) {
+        const gridPos = getGridPosition(items, selectedItemId);
+        if (gridPos && gridPos.row > 0) {
+          const prevIndex = (gridPos.row - 1) * gridPos.columns + gridPos.col;
+          selectItem(items[prevIndex]!);
+        }
+      } else if (currentIndex > 0) {
+        selectItem(items[currentIndex - 1]!);
       }
     },
-    [pathname, selectedItemId, items, selectItem],
+    [pathname, selectedItemId, items, selectItem, isGridLayout],
+  );
+
+  const handleArrowRight = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/" || !isGridLayout) return;
+
+      const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
+      if (currentIndex === -1) {
+        if (items.length > 0) selectItem(items[0]!);
+        return;
+      }
+
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < items.length) {
+        selectItem(items[nextIndex]!);
+      }
+    },
+    [pathname, selectedItemId, items, selectItem, isGridLayout],
+  );
+
+  const handleArrowLeft = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/" || !isGridLayout) return;
+
+      const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
+      if (currentIndex === -1) {
+        if (items.length > 0) selectItem(items[0]!);
+        return;
+      }
+
+      if (currentIndex > 0) {
+        selectItem(items[currentIndex - 1]!);
+      }
+    },
+    [pathname, selectedItemId, items, selectItem, isGridLayout],
   );
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_DOWN), handleArrowDown, {
@@ -200,6 +298,14 @@ export function useFeedItemNavigation(items: string[]) {
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_UP), handleArrowUp, {
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_UP),
+  });
+
+  useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_RIGHT), handleArrowRight, {
+    allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_RIGHT),
+  });
+
+  useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_LEFT), handleArrowLeft, {
+    allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_LEFT),
   });
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ), () => {

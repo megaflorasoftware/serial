@@ -18,6 +18,8 @@ export const SHORTCUT_KEYS = {
   OPEN_ORIGINAL: "o",
   ARROW_UP: { key: "ArrowUp", allowRepeat: true },
   ARROW_DOWN: { key: "ArrowDown", allowRepeat: true },
+  ARROW_LEFT: { key: "ArrowLeft", allowRepeat: true },
+  ARROW_RIGHT: { key: "ArrowRight", allowRepeat: true },
   ENTER: "Enter",
 } as const;
 

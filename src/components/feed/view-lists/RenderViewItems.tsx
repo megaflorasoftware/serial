@@ -38,9 +38,6 @@ export function RenderViewItems() {
   // Lazy load items when visibility filter changes
   useLazyVisibilityFilter();
 
-  // Keyboard navigation
-  const { handleMouseSelect } = useFeedItemNavigation(filteredFeedItemsOrder);
-
   const currentView = useAtomValue(viewFilterAtom);
   const isUncategorized = currentView?.id === INBOX_VIEW_ID;
 
@@ -49,6 +46,15 @@ export function RenderViewItems() {
     isUncategorized || !parsedLayout.success
       ? VIEW_LAYOUT.LIST
       : parsedLayout.data;
+
+  const isGridLayout =
+    layout === VIEW_LAYOUT.GRID || layout === VIEW_LAYOUT.LARGE_GRID;
+
+  // Keyboard navigation
+  const { handleMouseSelect } = useFeedItemNavigation(
+    filteredFeedItemsOrder,
+    isGridLayout,
+  );
 
   if (!hasInitialData) {
     return <FeedLoading />;
