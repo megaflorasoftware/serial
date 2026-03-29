@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useFeedItemValue, useSetFeedItemValue } from "../store";
-import { useFeeds as useFeedsArray } from "../feeds/store";
+import { feedsStore } from "../feeds/store";
 import { orpc } from "~/lib/orpc";
 
 export function useInstapaperConnectionStatus() {
@@ -11,8 +11,8 @@ export function useInstapaperConnectionStatus() {
 export function useShowInstapaperAction(itemId: string) {
   const { data: instapaperStatus } = useInstapaperConnectionStatus();
   const item = useFeedItemValue(itemId);
-  const feeds = useFeedsArray();
-  const feed = feeds.find((f) => f.id === item?.feedId);
+  const feedsDict = feedsStore.useFeedsDict();
+  const feed = item ? feedsDict[item.feedId] : undefined;
   const shouldOpenInSerial =
     feed?.openLocation === "serial" || !feed?.openLocation;
 
