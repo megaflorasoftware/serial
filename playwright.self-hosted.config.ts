@@ -11,7 +11,7 @@ export default defineConfig({
   timeout: 180000,
   expect: { timeout: 5000 },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://localhost:3001",
     trace: "on-first-retry",
   },
   projects: [
@@ -25,7 +25,7 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm dev:test:self-hosted",
-      url: "http://localhost:3000",
+      url: "http://localhost:3001",
       reuseExistingServer: false,
     },
     {

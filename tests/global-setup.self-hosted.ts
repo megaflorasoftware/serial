@@ -15,6 +15,6 @@ async function waitForApp(url: string, timeoutMs = 60000) {
 }
 
 export default async function globalSetup() {
-  await waitForApp("http://localhost:3000/api/health");
+  await waitForApp("http://localhost:3001/api/health");
   await resetDb(8082);
 }
