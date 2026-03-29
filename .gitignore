@@ -66,3 +66,7 @@ dist-sw/
 .claude
 
 data/libsql
+
+# testing
+playwright-report
+test-results

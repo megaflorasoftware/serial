@@ -25,7 +25,13 @@
     "format:fix": "prettier --write .",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix"
+    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix",
+    "test": "pnpm test:main && pnpm test:self-hosted",
+    "test:main": "playwright test",
+    "test:main:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:self-hosted": "pnpm playwright test --config playwright.self-hosted.config.ts",
+    "test:self-hosted:ui": "pnpm playwright test --ui --config playwright.self-hosted.config.ts"
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",
@@ -119,6 +125,7 @@
   "devDependencies": {
     "@eslint/compat": "^2.0.2",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@react-email/preview-server": "5.2.8",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
