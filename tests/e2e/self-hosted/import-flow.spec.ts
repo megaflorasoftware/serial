@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { resetDb } from "../fixtures/reset-db";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +10,10 @@ const __dirname = path.dirname(__filename);
 const OPML_PATH = path.join(__dirname, "../fixtures/subscriptions.opml");
 
 test.describe("import flow", () => {
+  test.beforeEach(async () => {
+    await resetDb(8082);
+  });
+
   test("completes full import workflow", async ({ page }) => {
     await page.goto("/");
 

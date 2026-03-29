@@ -1,7 +1,4 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-import { reset } from "drizzle-seed";
-import * as schema from "../src/server/db/schema";
+import { resetDb } from "./e2e/fixtures/reset-db";
 
 async function waitForApp(url: string, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
@@ -19,12 +16,5 @@ async function waitForApp(url: string, timeoutMs = 60000) {
 
 export default async function globalSetup() {
   await waitForApp("http://localhost:3000/api/health");
-
-  const client = createClient({ url: "http://127.0.0.1:8081" });
-  const db = drizzle({ client, schema });
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await reset(db as any, schema as any);
-
-  client.close();
+  await resetDb(8081);
 }

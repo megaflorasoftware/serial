@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { resetDb } from "../fixtures/reset-db";
 
 test.describe("auth page", () => {
   test.beforeEach(async ({ page }) => {
+    await resetDb(8082);
     await page.goto("/");
   });
 
