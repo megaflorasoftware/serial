@@ -87,6 +87,7 @@ export function ViewFilterChips() {
             })}
             key={view.id}
             value={view.id.toString()}
+            tabIndex={-1}
           >
             {view.name}
             {index < MAX_VIEW_SHORTCUTS && (
