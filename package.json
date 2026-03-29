@@ -5,6 +5,12 @@
   "type": "module",
   "scripts": {
     "dev:db": "turso dev --db-file serial.db",
+    "dev:db:test:main": "turso dev --db-file serial-test-main.db --port 8081",
+    "dev:db:test:self-hosted": "turso dev --db-file serial-test-self-hosted.db --port 8082",
+    "dev:migrate:test:main": "DATABASE_URL=http://127.0.0.1:8081 pnpm schema:migrate",
+    "dev:migrate:test:self-hosted": "DATABASE_URL=http://127.0.0.1:8082 pnpm schema:migrate",
+    "dev:test:main": "concurrently --kill-others \"pnpm dev:db:test:main\" \"pnpm dev:migrate:test:main && DATABASE_URL=http://127.0.0.1:8081 BETTER_AUTH_SECRET=test-secret-key-for-main-tests pnpm dev:atomic\"",
+    "dev:test:self-hosted": "concurrently --kill-others \"pnpm dev:db:test:self-hosted\" \"pnpm dev:migrate:test:self-hosted && DATABASE_URL=http://127.0.0.1:8082 BETTER_AUTH_SECRET=test-secret-key-for-self-hosted-tests BETTER_AUTH_BASE_URL=http://localhost:3000 VITE_PUBLIC_IS_MAIN_INSTANCE=false pnpm dev:atomic\"",
     "dev:migrate": "pnpm schema:migrate",
     "dev:atomic": "vite dev",
     "dev": "concurrently --kill-others \"pnpm dev:db\" \"pnpm dev:migrate && pnpm dev:atomic\"",
@@ -27,11 +33,11 @@
     "lint:fix": "eslint --fix .",
     "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix",
     "test": "pnpm test:main && pnpm test:self-hosted",
-    "test:main": "playwright test",
-    "test:main:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed",
-    "test:self-hosted": "pnpm playwright test --config playwright.self-hosted.config.ts",
-    "test:self-hosted:ui": "pnpm playwright test --ui --config playwright.self-hosted.config.ts"
+    "test:main": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-main.db; sleep 1; pnpm playwright test",
+    "test:main:ui": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-main.db; sleep 1; pnpm playwright test --ui",
+    "test:headed": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-main.db; sleep 1; pnpm playwright test --headed",
+    "test:self-hosted": "(lsof -ti:3000 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-self-hosted.db; sleep 1; pnpm playwright test --config playwright.self-hosted.config.ts",
+    "test:self-hosted:ui": "(lsof -ti:3000 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-self-hosted.db; sleep 1; pnpm playwright test --ui --config playwright.self-hosted.config.ts"
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",
