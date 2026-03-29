@@ -31,7 +31,7 @@
     "format:fix": "prettier --write .",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix",
+    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix && git add -u",
     "test": "concurrently \"pnpm test:main\" \"pnpm test:self-hosted\"",
     "test:main": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test",
     "test:main:ui": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui",
