@@ -66,7 +66,9 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install Turso CLI
-        run: curl -sSfL https://get.tur.so/install.sh | bash
+        run: |
+          curl -sSfL https://get.tur.so/install.sh | bash
+          echo "$HOME/.turso" >> $GITHUB_PATH
 
       - name: Run E2E tests
         run: pnpm test
