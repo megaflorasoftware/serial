@@ -23,7 +23,8 @@ export default async function globalSetup() {
   const client = createClient({ url: "http://127.0.0.1:8082" });
   const db = drizzle({ client, schema });
 
-  await reset(db, schema);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await reset(db as any, schema as any);
 
   client.close();
 }

@@ -81,9 +81,7 @@ test.describe("import flow", () => {
     await expect(feedsSection.getByRole("button", { name: "Fireship" })).toBeVisible();
     await expect(feedsSection.getByRole("button", { name: "CGP Grey" })).toBeVisible();
 
-    // Click each feed in the sidebar and verify its items appear in the main view.
-    // Clicking a feed triggers a fresh per-feed data fetch from the DB,
-    // which avoids race conditions with the streaming import's view state.
+    // Click each feed in the sidebar and verify its items appear in the main view
     await feedsSection.getByRole("button", { name: "Scary Pockets" }).click();
     await expect(
       page.locator("article h3").filter({ hasText: "Funky Test Video" }).first(),
