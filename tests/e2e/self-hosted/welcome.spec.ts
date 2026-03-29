@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { resetDb } from "../fixtures/reset-db";
 
 test.describe("auth page", () => {

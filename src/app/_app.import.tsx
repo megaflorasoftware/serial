@@ -122,7 +122,8 @@ function EditFeedsPage() {
       };
       const check = () => {
         if (
-          feedItemsStore.getState().fetchFeedItemsLastFetchedAt !== prevFetchedAt
+          feedItemsStore.getState().fetchFeedItemsLastFetchedAt !==
+          prevFetchedAt
         ) {
           done();
         }
