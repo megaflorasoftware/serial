@@ -115,22 +115,26 @@ function EditFeedsPage() {
 
     // Wait for the store to process initial-data-complete from the import,
     // ensuring all feed items are available before showing "Import finished".
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        unsubscribe();
-        resolve();
-      };
-      const check = () => {
-        if (
-          feedItemsStore.getState().fetchFeedItemsLastFetchedAt !==
-          prevFetchedAt
-        ) {
-          done();
-        }
-      };
-      const unsubscribe = feedItemsStore.subscribe(check);
-      check();
-    });
+    // Times out after 30s to avoid hanging if the subscription drops.
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const done = () => {
+          unsubscribe();
+          resolve();
+        };
+        const check = () => {
+          if (
+            feedItemsStore.getState().fetchFeedItemsLastFetchedAt !==
+            prevFetchedAt
+          ) {
+            done();
+          }
+        };
+        const unsubscribe = feedItemsStore.subscribe(check);
+        check();
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 30000)),
+    ]);
 
     setIsImportComplete(true);
   };
