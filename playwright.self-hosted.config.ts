@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
+  globalSetup: "./tests/global-setup.self-hosted.ts",
   testDir: "./tests",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -29,7 +30,7 @@ export default defineConfig({
     },
     {
       command: "node --import=tsx tests/e2e/fixtures/rss-server.ts",
-      url: "http://localhost:3003",
+      url: "http://127.0.0.1:3003",
       reuseExistingServer: false,
     },
   ],

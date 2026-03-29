@@ -33,11 +33,11 @@
     "lint:fix": "eslint --fix .",
     "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix",
     "test": "pnpm test:main && pnpm test:self-hosted",
-    "test:main": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-main.db; sleep 1; pnpm playwright test",
-    "test:main:ui": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-main.db; sleep 1; pnpm playwright test --ui",
-    "test:headed": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-main.db; sleep 1; pnpm playwright test --headed",
-    "test:self-hosted": "(lsof -ti:3000 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-self-hosted.db; sleep 1; pnpm playwright test --config playwright.self-hosted.config.ts",
-    "test:self-hosted:ui": "(lsof -ti:3000 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); rm -f serial-test-self-hosted.db; sleep 1; pnpm playwright test --ui --config playwright.self-hosted.config.ts"
+    "test:main": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test",
+    "test:main:ui": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui",
+    "test:headed": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --headed",
+    "test:self-hosted": "(lsof -ti:3000 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.self-hosted.config.ts",
+    "test:self-hosted:ui": "(lsof -ti:3000 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.self-hosted.config.ts"
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",
@@ -148,6 +148,7 @@
     "dotenv": "^17.2.4",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",
+    "drizzle-seed": "^0.3.1",
     "esbuild": "^0.27.3",
     "eslint": "^10.0.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",

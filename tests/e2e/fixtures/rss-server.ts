@@ -5,11 +5,11 @@ const feeds: Record<string, string> = {
 <rss version="2.0">
   <channel>
     <title>Scary Pockets</title>
-    <link>http://localhost:3003</link>
+    <link>http://127.0.0.1:3003</link>
     <description>Scary Pockets</description>
     <item>
       <title>Funky Test Video</title>
-      <link>http://localhost:3003/scary-pockets/1</link>
+      <link>http://127.0.0.1:3003/scary-pockets/1</link>
       <guid>scary-pockets-1</guid>
       <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
       <description>Test video</description>
@@ -20,11 +20,11 @@ const feeds: Record<string, string> = {
 <rss version="2.0">
   <channel>
     <title>Fireship</title>
-    <link>http://localhost:3003</link>
+    <link>http://127.0.0.1:3003</link>
     <description>Fireship</description>
     <item>
       <title>100 Seconds of Code</title>
-      <link>http://localhost:3003/fireship/1</link>
+      <link>http://127.0.0.1:3003/fireship/1</link>
       <guid>fireship-1</guid>
       <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
       <description>Test video</description>
@@ -35,11 +35,11 @@ const feeds: Record<string, string> = {
 <rss version="2.0">
   <channel>
     <title>CGP Grey</title>
-    <link>http://localhost:3003</link>
+    <link>http://127.0.0.1:3003</link>
     <description>CGP Grey</description>
     <item>
       <title>Rules for Rulers</title>
-      <link>http://localhost:3003/cgp-grey/1</link>
+      <link>http://127.0.0.1:3003/cgp-grey/1</link>
       <guid>cgp-grey-1</guid>
       <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
       <description>Test video</description>
@@ -77,6 +77,6 @@ const server = createServer((req, res) => {
   res.end();
 });
 
-server.listen(3003, () => {
-  console.log("RSS test server running on http://localhost:3003");
+server.listen(3003, "127.0.0.1", () => {
+  console.log("RSS test server running on http://127.0.0.1:3003");
 });

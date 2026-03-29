@@ -331,6 +331,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.1(@libsql/client@0.17.0)(better-sqlite3@12.6.2)(kysely@0.28.11)
+      drizzle-seed:
+        specifier: ^0.3.1
+        version: 0.3.1(drizzle-orm@0.45.1(@libsql/client@0.17.0)(better-sqlite3@12.6.2)(kysely@0.28.11))
       esbuild:
         specifier: ^0.27.3
         version: 0.27.3
@@ -4733,6 +4736,14 @@ packages:
       sqlite3:
         optional: true
 
+  drizzle-seed@0.3.1:
+    resolution: {integrity: sha512-F/0lgvfOAsqlYoHM/QAGut4xXIOXoE5VoAdv2FIl7DpGYVXlAzKuJO+IphkKUFK3Dz+rFlOsQLnMNrvoQ0cx7g==}
+    peerDependencies:
+      drizzle-orm: '>=0.36.4'
+    peerDependenciesMeta:
+      drizzle-orm:
+        optional: true
+
   drizzle-zod@0.8.3:
     resolution: {integrity: sha512-66yVOuvGhKJnTdiqj1/Xaaz9/qzOdRJADpDa68enqS6g3t0kpNkwNYjUuaeXgZfO/UWuIM9HIhSlJ6C5ZraMww==}
     peerDependencies:
@@ -6415,6 +6426,9 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  pure-rand@6.1.0:
+    resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
 
   radash@12.1.1:
     resolution: {integrity: sha512-h36JMxKRqrAxVD8201FrCpyeNuUY9Y5zZwujr20fFO77tpUtGa6EZzfKw/3WaiBX95fq7+MpsuMLNdSnORAwSA==}
@@ -11688,6 +11702,12 @@ snapshots:
       better-sqlite3: 12.6.2
       kysely: 0.28.11
 
+  drizzle-seed@0.3.1(drizzle-orm@0.45.1(@libsql/client@0.17.0)(better-sqlite3@12.6.2)(kysely@0.28.11)):
+    dependencies:
+      pure-rand: 6.1.0
+    optionalDependencies:
+      drizzle-orm: 0.45.1(@libsql/client@0.17.0)(better-sqlite3@12.6.2)(kysely@0.28.11)
+
   drizzle-zod@0.8.3(drizzle-orm@0.45.1(@libsql/client@0.17.0)(better-sqlite3@12.6.2)(kysely@0.28.11))(zod@4.3.6):
     dependencies:
       drizzle-orm: 0.45.1(@libsql/client@0.17.0)(better-sqlite3@12.6.2)(kysely@0.28.11)
@@ -13766,6 +13786,8 @@ snapshots:
       once: 1.4.0
 
   punycode@2.3.1: {}
+
+  pure-rand@6.1.0: {}
 
   radash@12.1.1: {}
 
