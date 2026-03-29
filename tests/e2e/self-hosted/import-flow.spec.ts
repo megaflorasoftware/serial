@@ -84,11 +84,9 @@ test.describe("import flow", () => {
     await page.keyboard.press("Shift+Backslash");
 
     // Scope to the "Feeds" group in the right sidebar pane
-    const feedsSection = page
-      .locator('[data-sidebar="group"]')
-      .filter({
-        has: page.locator('[data-sidebar="group-label"]', { hasText: "Feeds" }),
-      });
+    const feedsSection = page.locator('[data-sidebar="group"]').filter({
+      has: page.locator('[data-sidebar="group-label"]', { hasText: "Feeds" }),
+    });
 
     await expect(
       feedsSection.getByRole("button", { name: "Scary Pockets" }),
