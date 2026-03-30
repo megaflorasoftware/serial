@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './app/__root'
 import { Route as WelcomeRouteImport } from './app/welcome'
+import { Route as SitemapRouteImport } from './app/sitemap'
 import { Route as BlogRouteImport } from './app/blog'
 import { Route as AuthRouteImport } from './app/auth'
 import { Route as WebRouteImport } from './app/_web'
@@ -37,6 +38,11 @@ import { Route as AppAdminUserIdRouteImport } from './app/_app.admin.user.$id'
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapRoute = SitemapRouteImport.update({
+  id: '/sitemap',
+  path: '/sitemap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
+  '/sitemap': typeof SitemapRoute
   '/welcome': typeof WelcomeRoute
   '/debug': typeof AppDebugRoute
   '/feeds': typeof AppFeedsRoute
@@ -180,6 +187,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/sitemap': typeof SitemapRoute
   '/welcome': typeof WelcomeRoute
   '/debug': typeof AppDebugRoute
   '/feeds': typeof AppFeedsRoute
@@ -206,6 +214,7 @@ export interface FileRoutesById {
   '/_web': typeof WebRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
+  '/sitemap': typeof SitemapRoute
   '/welcome': typeof WelcomeRoute
   '/_app/debug': typeof AppDebugRoute
   '/_app/feeds': typeof AppFeedsRoute
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/blog'
+    | '/sitemap'
     | '/welcome'
     | '/debug'
     | '/feeds'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/sitemap'
     | '/welcome'
     | '/debug'
     | '/feeds'
@@ -281,6 +292,7 @@ export interface FileRouteTypes {
     | '/_web'
     | '/auth'
     | '/blog'
+    | '/sitemap'
     | '/welcome'
     | '/_app/debug'
     | '/_app/feeds'
@@ -308,6 +320,7 @@ export interface RootRouteChildren {
   WebRoute: typeof WebRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
   BlogRoute: typeof BlogRouteWithChildren
+  SitemapRoute: typeof SitemapRoute
   WelcomeRoute: typeof WelcomeRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -321,6 +334,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap': {
+      id: '/sitemap'
+      path: '/sitemap'
+      fullPath: '/sitemap'
+      preLoaderRoute: typeof SitemapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -556,6 +576,7 @@ const rootRouteChildren: RootRouteChildren = {
   WebRoute: WebRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
   BlogRoute: BlogRouteWithChildren,
+  SitemapRoute: SitemapRoute,
   WelcomeRoute: WelcomeRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
