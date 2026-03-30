@@ -160,7 +160,14 @@ function EditFeedsPage() {
               <code className="bg-muted text-foreground rounded px-1 py-0.5">
                 subscriptions.csv
               </code>{" "}
-              files from a Google Takeout export
+              files from{" "}
+              <Link
+                // @ts-expect-error this is fine
+                to="/blog/how-to-export-youtube-subscriptions"
+                className="underline"
+              >
+                a Google Takeout export
+              </Link>
             </li>
             <li>
               <code className="bg-muted text-foreground rounded px-1 py-0.5">
