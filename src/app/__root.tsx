@@ -14,6 +14,7 @@ import { ApplyUserConfig } from "~/components/color-theme/ApplyColorThemeOnMount
 import { ReloadPrompt } from "~/components/pwa/ReloadPrompt";
 import { Button } from "~/components/ui/button";
 import { BASE_SIGNED_OUT_URL } from "~/lib/constants";
+import { fetchConfigCss } from "~/server/auth/endpoints";
 
 import appCss from "~/styles/globals.css?url";
 
@@ -25,7 +26,11 @@ const description =
   "A snappy, customizable video feed. Designed to show you exactly the content you want to see and nothing else.";
 
 export const Route = createRootRoute({
-  head: () => ({
+  loader: async () => {
+    const configCss = await fetchConfigCss();
+    return { configCss };
+  },
+  head: ({ loaderData }) => ({
     meta: [
       { charSet: "utf-8" },
       {
@@ -98,6 +103,7 @@ export const Route = createRootRoute({
         as: "script",
       },
     ],
+    styles: loaderData?.configCss ? [{ children: loaderData.configCss }] : [],
   }),
   component: RootLayout,
   notFoundComponent: () => (
