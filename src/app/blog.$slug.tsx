@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
-import * as icons from "lucide-react";
-import { createElement } from "react";
+import { BookOpenIcon, PenLineIcon, RssIcon, YoutubeIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { Markdown } from "~/components/Markdown";
 
@@ -18,18 +18,20 @@ export const Route = createFileRoute("/blog/$slug")({
   },
 });
 
-function BlogIcon({ name }: { name: string }) {
-  const pascalName = name
-    .split("-")
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
+const BLOG_ICONS: Record<string, LucideIcon> = {
+  youtube: YoutubeIcon,
+  rss: RssIcon,
+  "book-open": BookOpenIcon,
+  "pen-line": PenLineIcon,
+};
 
-  const icon = (icons as any)[pascalName];
-  if (!icon) return null;
+function BlogIcon({ name }: { name: string }) {
+  const Icon = BLOG_ICONS[name];
+  if (!Icon) return null;
 
   return (
     <div className="bg-muted mb-6 inline-flex items-center justify-center rounded-xl p-4">
-      {createElement(icon, { className: "text-muted-foreground size-8" })}
+      <Icon className="text-muted-foreground size-8" />
     </div>
   );
 }
