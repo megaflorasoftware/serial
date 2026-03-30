@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { parseHSL, serializeHSL } from "./hsl";
 import { ARTICLE_FONT_FAMILIES } from "~/lib/constants/article-fonts";
 import { userConfig } from "~/server/db/schema";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
@@ -11,14 +12,6 @@ export type UserConfigValues = {
   articleFontSize: number | undefined;
   articleFontFamily: string | undefined;
 };
-
-function parseHSL(hsl: string | undefined): number[] | undefined {
-  if (!hsl) return undefined;
-  return hsl
-    .split(" ")
-    .map((value) => value.replace("%", ""))
-    .map(Number);
-}
 
 export const setThemeHSL = protectedProcedure
   .input(
@@ -33,7 +26,7 @@ export const setThemeHSL = protectedProcedure
       key = "darkHSL";
     }
 
-    const formattedHSL = `${input.hsl[0]} ${input.hsl[1]}% ${input.hsl[2]}%`;
+    const formattedHSL = serializeHSL(input.hsl);
 
     await context.db
       .insert(userConfig)

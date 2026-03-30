@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, getRequestHeaders } from "@tanstack/react-start/server";
+import { getRequest } from "@tanstack/react-start/server";
 import { eq } from "drizzle-orm";
 import { auth, isServerAuthed } from ".";
 import type { ArticleFontFamily } from "~/lib/constants/article-fonts";
 import { env } from "~/env";
 import { FONT_FAMILY_CSS } from "~/lib/constants/article-fonts";
+import { parseHSL } from "~/server/api/routers/hsl";
 import { db } from "~/server/db";
 import { userConfig } from "~/server/db/schema";
 
@@ -19,10 +20,20 @@ export const fetchIsAuthed = createServerFn({ method: "GET" }).handler(
   },
 );
 
+function hslToCssVars(
+  prefix: "light" | "dark",
+  dbValue: string | undefined,
+): string | null {
+  const parsed = parseHSL(dbValue);
+  if (!parsed) return null;
+  const [hue, sat, lgt] = parsed;
+  return `--${prefix}-hue:${hue};--${prefix}-sat:${sat}%;--${prefix}-lgt:${lgt}%`;
+}
+
 export const fetchConfigCss = createServerFn({ method: "GET" }).handler(
   async () => {
     try {
-      const headers = getRequestHeaders() as Headers;
+      const { headers } = getRequest();
       const session = await auth.api.getSession({ headers });
       if (!session?.user?.id) return "";
 
@@ -36,18 +47,11 @@ export const fetchConfigCss = createServerFn({ method: "GET" }).handler(
 
       const vars: string[] = [];
 
-      if (config.lightHSL) {
-        const [hue, sat, lgt] = config.lightHSL
-          .split(" ")
-          .map((v) => v.replace("%", ""));
-        vars.push(`--light-hue:${hue};--light-sat:${sat}%;--light-lgt:${lgt}%`);
-      }
-      if (config.darkHSL) {
-        const [hue, sat, lgt] = config.darkHSL
-          .split(" ")
-          .map((v) => v.replace("%", ""));
-        vars.push(`--dark-hue:${hue};--dark-sat:${sat}%;--dark-lgt:${lgt}%`);
-      }
+      const lightVars = hslToCssVars("light", config.lightHSL);
+      if (lightVars) vars.push(lightVars);
+      const darkVars = hslToCssVars("dark", config.darkHSL);
+      if (darkVars) vars.push(darkVars);
+
       if (config.articleFontSize) {
         vars.push(`--article-font-size:${config.articleFontSize}`);
       }
