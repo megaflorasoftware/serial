@@ -2,21 +2,21 @@ import { useCallback, useEffect, useRef } from "react";
 import { useSetProgressMutation } from "~/lib/data/feed-items/mutations";
 import { useFeedItemValue } from "~/lib/data/store";
 
-const SAVE_INTERVAL_MS = 30_000;
+const DEBOUNCE_MS = 500;
 
-export function useSaveProgress({
+/**
+ * Saves progress after 500ms of no mouse/trackpad scroll or keyboard input.
+ */
+export function useDebouncedSaveProgress({
   contentId,
   getProgress,
-  enabled,
 }: {
   contentId: string;
   getProgress: () => { progress: number; duration: number };
-  enabled: boolean;
 }) {
   const { mutate } = useSetProgressMutation(contentId);
   const feedItem = useFeedItemValue(contentId);
 
-  // Use refs to avoid stale closures in interval/cleanup callbacks
   const getProgressRef = useRef(getProgress);
   const feedItemRef = useRef(feedItem);
   const mutateRef = useRef(mutate);
@@ -41,19 +41,21 @@ export function useSaveProgress({
     }
   }, []);
 
-  // 30-second interval when enabled
   useEffect(() => {
-    if (!enabled) return;
-    const interval = setInterval(save, SAVE_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [enabled, save]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-  // Save on unmount (covers navigation away)
-  useEffect(() => {
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(save, DEBOUNCE_MS);
+    };
+
+    window.addEventListener("wheel", resetTimer);
+    window.addEventListener("keydown", resetTimer);
+
     return () => {
-      save();
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("wheel", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
     };
   }, [save]);
-
-  return { saveNow: save };
 }

@@ -3,7 +3,7 @@
 import clsx from "clsx";
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
@@ -17,11 +17,10 @@ import { useFeedItemValue } from "~/lib/data/store";
 import { ArticleContent } from "~/components/feed/read/ArticleContent";
 import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import {
-  getClosestVisibleElement,
   getElements,
   useArticleNavigation,
 } from "~/lib/hooks/useArticleNavigation";
-import { useSaveProgress } from "~/lib/hooks/useSaveProgress";
+import { useDebouncedSaveProgress } from "~/lib/hooks/useDebouncedSaveProgress";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
@@ -68,32 +67,19 @@ function ReadPage() {
   // Arrow key navigation between paragraphs/headings
   const { selectedIndex, selectElement } = useArticleNavigation(articleRef);
 
-  // Track user interaction for progress saving
-  const [hasScrolled, setHasScrolled] = useState(false);
-
-  useEffect(() => {
-    const handler = () => setHasScrolled(true);
-    window.addEventListener("scroll", handler, { once: true });
-    return () => window.removeEventListener("scroll", handler);
-  }, []);
-
-  const hasInteracted = hasScrolled || selectedIndex >= 0;
-
-  // Save progress every 30s after interaction, and on unmount
-  useSaveProgress({
+  // Save progress 500ms after last scroll event
+  useDebouncedSaveProgress({
     contentId: params.id,
     getProgress: () => {
       const elements = getElements(articleRef.current);
-      const closest = getClosestVisibleElement(elements);
       return {
-        progress: Math.max(closest, 0),
+        progress: Math.max(selectedIndex, 0),
         duration: elements.length,
       };
     },
-    enabled: hasInteracted,
   });
 
-  // Restore progress on open
+  // Restore progress on open — wait a frame so layout is complete
   const hasRestoredRef = useRef(false);
   useEffect(() => {
     if (hasRestoredRef.current || !feedItem?.progress || feedItem.progress <= 0)
@@ -104,7 +90,9 @@ function ReadPage() {
 
     const targetIndex = Math.min(feedItem.progress, elements.length - 1);
     hasRestoredRef.current = true;
-    selectElement(elements, targetIndex, true);
+    requestAnimationFrame(() => {
+      selectElement(elements, targetIndex, true);
+    });
   }, [feedItem?.progress, feedItem?.content, selectElement]);
 
   return (
