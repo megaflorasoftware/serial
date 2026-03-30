@@ -102,7 +102,7 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
   // --- Progress save/restore ---
   const savedFeedItem = useFeedItemValue(props.feedItemId ?? "");
 
-  useSaveProgress({
+  const { saveNow } = useSaveProgress({
     contentId: props.feedItemId ?? "",
     getProgress: () => ({
       progress: Math.floor(videoProgress * 1000),
@@ -110,6 +110,18 @@ function CustomVideoPlayerContent(props: IResponsiveVideoProps) {
     }),
     enabled: manualPlayerState === YOUTUBE_PLAYER_STATES.PLAYING,
   });
+
+  // Save progress on pause
+  const prevPlayerStateRef = useRef(manualPlayerState);
+  useEffect(() => {
+    const wasPaused =
+      prevPlayerStateRef.current === YOUTUBE_PLAYER_STATES.PLAYING &&
+      manualPlayerState !== YOUTUBE_PLAYER_STATES.PLAYING;
+    prevPlayerStateRef.current = manualPlayerState;
+    if (wasPaused) {
+      saveNow();
+    }
+  }, [manualPlayerState, saveNow]);
 
   // Restore progress on first play
   const hasRestoredRef = useRef(false);
