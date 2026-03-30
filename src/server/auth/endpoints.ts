@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
+import { getRequest, getRequestHeaders } from "@tanstack/react-start/server";
 import { eq } from "drizzle-orm";
 import { auth, isServerAuthed } from ".";
 import type { ArticleFontFamily } from "~/lib/constants/article-fonts";
@@ -22,8 +22,8 @@ export const fetchIsAuthed = createServerFn({ method: "GET" }).handler(
 export const fetchConfigCss = createServerFn({ method: "GET" }).handler(
   async () => {
     try {
-      const request = getRequest();
-      const session = await auth.api.getSession({ headers: request.headers });
+      const headers = getRequestHeaders() as Headers;
+      const session = await auth.api.getSession({ headers });
       if (!session?.user?.id) return "";
 
       const config = await db
