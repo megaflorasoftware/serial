@@ -149,9 +149,9 @@ function ThumbnailContainer({
     >
       {children}
       {percentage > 0 && (
-        <div className="absolute inset-x-0 bottom-0 z-10 h-0.5 bg-white/30">
+        <div className="absolute inset-x-0 bottom-0 z-10 h-1.5 bg-white/30">
           <div
-            className="bg-primary h-full"
+            className="bg-muted-foreground h-full"
             style={{ width: `${percentage}%` }}
           />
         </div>
