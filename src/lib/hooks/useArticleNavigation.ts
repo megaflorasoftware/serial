@@ -95,7 +95,9 @@ export function useArticleNavigation(
         // Set tabindex so the element itself is focusable,
         // allowing Tab to naturally move to the first link inside
         el.setAttribute("tabindex", "-1");
+        suppressFocusInRef.current = true;
         el.focus({ preventScroll: true });
+        suppressFocusInRef.current = false;
 
         prevSelectedRef.current = el;
         setArticleSelectedElement(el);
@@ -240,11 +242,16 @@ export function useArticleNavigation(
   );
 
   // Update selection when Tab moves focus to a different parent element
+  // Suppress during programmatic focus from arrow key navigation
+  const suppressFocusInRef = useRef(false);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleFocusIn = (e: FocusEvent) => {
+      if (suppressFocusInRef.current) return;
+
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
 
