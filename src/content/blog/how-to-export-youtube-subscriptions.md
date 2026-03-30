@@ -46,6 +46,8 @@ Download and unzip the file from Google. You will find the `subscriptions.csv` f
 
 ## That's it!
 
-You now have a backup of your YouTube subscriptions for whatever you need. This is nice to have on its own, but you may also want to keep tabs on these channels while opting out of the YouTube algorithm.
+You now have a backup of your YouTube subscriptions for whatever you need. If you want to keep tabs on these channels while opting out of the YouTube algorithm, we'd love it if you'd try out Serial.
 
 [Serial](/welcome) (this website) supports importing your `subscriptions.csv` file directly, enabling you to start following all of your YouTube channels without the algorithm.
+
+If that sounds like something that interests you, you can find out more [here](/welcome)!
