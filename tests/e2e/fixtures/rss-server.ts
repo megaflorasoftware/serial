@@ -46,6 +46,22 @@ const feeds: Record<string, string> = {
     </item>
   </channel>
 </rss>`,
+  "test-blog": `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Test Blog</title>
+    <link>http://127.0.0.1:3003</link>
+    <description>Test Blog</description>
+    <item>
+      <title>Test Article</title>
+      <link>http://127.0.0.1:3003/test-blog/1</link>
+      <guid>test-blog-1</guid>
+      <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
+      <description>Test article content</description>
+      <content:encoded><![CDATA[${Array.from({ length: 20 }, (_, i) => `<p>Paragraph ${i + 1}: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>`).join("\n")}]]></content:encoded>
+    </item>
+  </channel>
+</rss>`,
 };
 
 const server = createServer((req, res) => {

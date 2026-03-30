@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { resetDb } from "../fixtures/reset-db";
+import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,11 +10,17 @@ const __dirname = path.dirname(__filename);
 const OPML_PATH = path.join(__dirname, "../fixtures/subscriptions.opml");
 
 test.describe("import flow", () => {
-  test.beforeEach(async () => {
-    await resetDb(8082);
+  let testEmail: string;
+
+  test.afterEach(async () => {
+    if (testEmail) {
+      await cleanupUser(8082, testEmail);
+    }
   });
 
   test("completes full import workflow", async ({ page }) => {
+    testEmail = generateTestEmail();
+
     await page.goto("/");
 
     await expect(page).toHaveURL(/auth\/sign-in/);
@@ -23,9 +29,7 @@ test.describe("import flow", () => {
 
     await expect(page).toHaveURL(/auth\/sign-up/);
 
-    await expect(page.getByText(/admin account creation|sign up/i)).toBeVisible(
-      { timeout: 10000 },
-    );
+    await expect(page.locator("#first-name")).toBeVisible({ timeout: 10000 });
 
     await page.locator("#first-name").click();
     await page
@@ -33,10 +37,8 @@ test.describe("import flow", () => {
       .pressSequentially("Test User", { delay: 50 });
     await expect(page.locator("#first-name")).toHaveValue("Test User");
     await page.locator("#email").click();
-    await page
-      .locator("#email")
-      .pressSequentially("test@example.com", { delay: 50 });
-    await expect(page.locator("#email")).toHaveValue("test@example.com");
+    await page.locator("#email").pressSequentially(testEmail, { delay: 50 });
+    await expect(page.locator("#email")).toHaveValue(testEmail);
     await page.locator("#password").click();
     await page
       .locator("#password")

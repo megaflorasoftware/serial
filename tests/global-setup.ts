@@ -1,3 +1,4 @@
+import { enablePublicSignups } from "./e2e/fixtures/enable-public-signups";
 import { resetDb } from "./e2e/fixtures/reset-db";
 
 async function waitForApp(url: string, timeoutMs = 60000) {
@@ -17,4 +18,5 @@ async function waitForApp(url: string, timeoutMs = 60000) {
 export default async function globalSetup() {
   await waitForApp("http://localhost:3000/api/health");
   await resetDb(8081);
+  await enablePublicSignups(8081);
 }
