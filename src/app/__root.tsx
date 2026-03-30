@@ -10,14 +10,15 @@ import { ThemeProvider } from "~/components/ThemeProvider";
 import { Toaster } from "~/components/ui/sonner";
 import { QueryProvider } from "~/lib/query-provider";
 
-import { ApplyColorThemeOnServerMount } from "~/components/color-theme/ApplyColorThemeOnMount";
+import { ApplyUserConfig } from "~/components/color-theme/ApplyColorThemeOnMount";
 import { ReloadPrompt } from "~/components/pwa/ReloadPrompt";
 import { Button } from "~/components/ui/button";
 import { BASE_SIGNED_OUT_URL } from "~/lib/constants";
-import { orpcRouterClient } from "~/lib/orpc";
+
 import appCss from "~/styles/globals.css?url";
 
 import "@fontsource-variable/outfit";
+import "@fontsource-variable/noto-serif";
 
 const title = "Serial";
 const description =
@@ -99,14 +100,6 @@ export const Route = createRootRoute({
     ],
   }),
   component: RootLayout,
-  staleTime: 1000 * 60 * 60 * 10,
-  loader: async () => {
-    const data = await orpcRouterClient.userConfig.getConfig();
-
-    return {
-      variables: data,
-    };
-  },
   notFoundComponent: () => (
     <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 text-center">
       <SproutIcon size={36} className="text-foreground" />
@@ -121,8 +114,6 @@ export const Route = createRootRoute({
 });
 
 export function RootLayout() {
-  const data = Route.useLoaderData();
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -152,8 +143,8 @@ export function RootLayout() {
         />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <ApplyColorThemeOnServerMount data={data.variables} />
         <QueryProvider>
+          <ApplyUserConfig />
           <ThemeProvider
             attribute="class"
             defaultTheme="system"

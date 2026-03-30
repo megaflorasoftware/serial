@@ -1,5 +1,7 @@
 .article {
-  font-size: 1.125rem;
+  font-size: calc(var(--article-font-size, 18) / 16 * 1rem);
+  font-family: var(--article-font-family);
+  line-height: 1.7;
 }
 
 .article h1 {
@@ -44,7 +46,6 @@
 
 .article p {
   margin-block: 1rem;
-  line-height: 1.7rem;
 }
 
 .article a {
@@ -110,7 +111,6 @@
 
 .article li {
   margin-block: 0.25rem;
-  line-height: 1.7rem;
 }
 
 .article blockquote {
@@ -153,6 +153,7 @@
   --edge: calc(100vw - var(--spacing) * 16);
 
   max-width: min(var(--edge), var(--non-edge));
+  font-family: inherit;
 }
 
 .article pre {

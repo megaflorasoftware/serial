@@ -1,32 +1,46 @@
-import type { UserConfigValues } from "~/server/api/routers/userConfigRouter";
+"use client";
 
-export function ApplyColorThemeOnServerMount({
-  data,
-}: {
-  data: UserConfigValues | null;
-}) {
-  if (!data) return null;
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { orpc } from "~/lib/orpc";
 
-  const variables = [];
+const FONT_FAMILY_MAP: Record<string, string> = {
+  "sans-serif": '"Outfit Variable", sans-serif',
+  serif: '"Noto Serif Variable", serif',
+};
 
-  if (data.lightHSL) {
-    const [hue, sat, lgt] = data.lightHSL;
-    variables.push(["--light-hue", `${hue}`]);
-    variables.push(["--light-sat", `${sat}%`]);
-    variables.push(["--light-lgt", `${lgt}%`]);
-  }
+export function ApplyUserConfig() {
+  const { data } = useQuery(orpc.userConfig.getConfig.queryOptions());
 
-  if (data.darkHSL) {
-    const [hue, sat, lgt] = data.darkHSL;
-    variables.push(["--dark-hue", `${hue}`]);
-    variables.push(["--dark-sat", `${sat}%`]);
-    variables.push(["--dark-lgt", `${lgt}%`]);
-  }
+  useEffect(() => {
+    if (!data) return;
 
-  const css = `
-    :root {
-      ${variables.map(([name, value]) => `${name}: ${value};`).join("\n\t")}
-    }`;
+    const root = document.documentElement;
 
-  return <style>{css}</style>;
+    if (data.lightHSL) {
+      const [hue, sat, lgt] = data.lightHSL;
+      root.style.setProperty("--light-hue", `${hue}`);
+      root.style.setProperty("--light-sat", `${sat}%`);
+      root.style.setProperty("--light-lgt", `${lgt}%`);
+    }
+
+    if (data.darkHSL) {
+      const [hue, sat, lgt] = data.darkHSL;
+      root.style.setProperty("--dark-hue", `${hue}`);
+      root.style.setProperty("--dark-sat", `${sat}%`);
+      root.style.setProperty("--dark-lgt", `${lgt}%`);
+    }
+
+    if (data.articleFontSize) {
+      root.style.setProperty("--article-font-size", `${data.articleFontSize}`);
+    }
+
+    const fontFamilyKey = data.articleFontFamily ?? "sans-serif";
+    root.style.setProperty(
+      "--article-font-family",
+      FONT_FAMILY_MAP[fontFamilyKey] ?? fontFamilyKey,
+    );
+  }, [data]);
+
+  return null;
 }
