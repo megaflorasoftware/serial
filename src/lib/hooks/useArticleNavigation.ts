@@ -15,7 +15,7 @@ export const articleSelectedElementAtom = atom<HTMLElement | null>(null);
 const SCROLL_DURATION_MS = 300;
 const TARGET_VIEWPORT_POSITION = 1 / 3;
 const SELECTABLE =
-  ":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > img, :scope > figure, :scope > div";
+  ":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > img, :scope > figure, :scope > div, li";
 
 function getElements(container: HTMLElement | null): HTMLElement[] {
   if (!container) return [];
@@ -65,14 +65,34 @@ export function useArticleNavigation(
 
   const applySelection = useCallback(
     (elements: HTMLElement[], index: number) => {
-      // Remove previous selection
+      // Remove previous selection and blur any focused element
       if (prevSelectedRef.current) {
         prevSelectedRef.current.removeAttribute("data-article-selected");
+        prevSelectedRef.current.removeAttribute("tabindex");
+      }
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
       }
 
       if (index >= 0 && index < elements.length) {
         const el = elements[index]!;
         el.setAttribute("data-article-selected", "true");
+
+        // Calculate offset for nested elements (li) so the selection bar
+        // stays aligned with root-level content
+        if (el.tagName === "LI" && containerRef.current) {
+          const elLeft = el.getBoundingClientRect().left;
+          const containerLeft =
+            containerRef.current.getBoundingClientRect().left;
+          const offset = elLeft - containerLeft - 20;
+          el.style.setProperty("--selection-offset", `${offset}px`);
+        }
+
+        // Set tabindex so the element itself is focusable,
+        // allowing Tab to naturally move to the first link inside
+        el.setAttribute("tabindex", "-1");
+        el.focus({ preventScroll: true });
+
         prevSelectedRef.current = el;
         setArticleSelectedElement(el);
       } else {
@@ -80,31 +100,40 @@ export function useArticleNavigation(
         setArticleSelectedElement(null);
       }
     },
-    [setArticleSelectedElement],
+    [setArticleSelectedElement, containerRef],
   );
 
-  const scrollToElement = useCallback((element: HTMLElement) => {
-    const rect = element.getBoundingClientRect();
-    const targetPosition = window.innerHeight * TARGET_VIEWPORT_POSITION;
-    const scrollTop =
-      window.scrollY + rect.top - targetPosition + rect.height / 2;
+  const scrollToElement = useCallback(
+    (element: HTMLElement, forceInstant = false) => {
+      const rect = element.getBoundingClientRect();
+      const hasImage =
+        element.tagName === "IMG" ||
+        element.tagName === "FIGURE" ||
+        !!element.querySelector("img");
+      const targetPosition = hasImage
+        ? window.innerHeight / 2
+        : window.innerHeight * TARGET_VIEWPORT_POSITION;
+      const scrollTop =
+        window.scrollY + rect.top - targetPosition + rect.height / 2;
 
-    const now = performance.now();
-    const isRapid = now - lastNavTimeRef.current < SCROLL_DURATION_MS;
-    lastNavTimeRef.current = now;
+      const now = performance.now();
+      const isRapid = now - lastNavTimeRef.current < SCROLL_DURATION_MS;
+      lastNavTimeRef.current = now;
 
-    window.scrollTo({
-      top: scrollTop,
-      behavior: isRapid ? "instant" : "smooth",
-    });
-  }, []);
+      window.scrollTo({
+        top: scrollTop,
+        behavior: forceInstant || isRapid ? "instant" : "smooth",
+      });
+    },
+    [],
+  );
 
   const selectElement = useCallback(
-    (elements: HTMLElement[], index: number) => {
+    (elements: HTMLElement[], index: number, forceInstant = false) => {
       setSelectedIndex(index);
       applySelection(elements, index);
       if (index >= 0 && index < elements.length) {
-        scrollToElement(elements[index]!);
+        scrollToElement(elements[index]!, forceInstant);
       }
     },
     [applySelection, scrollToElement],
@@ -144,7 +173,7 @@ export function useArticleNavigation(
       } else {
         setSelectedIndex(-1);
         applySelection(elements, -1);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo({ top: 0, behavior: "instant" });
       }
     },
     [containerRef, selectedIndex, selectElement, applySelection],
@@ -158,7 +187,7 @@ export function useArticleNavigation(
 
       if (selectedIndex === -1) {
         if (window.scrollY === 0) {
-          selectElement(elements, elements.length - 1);
+          selectElement(elements, elements.length - 1, true);
         } else {
           const closest = getClosestVisibleElement(elements);
           selectElement(elements, closest >= 0 ? closest : 0);
@@ -182,7 +211,7 @@ export function useArticleNavigation(
       } else {
         setSelectedIndex(-1);
         applySelection(elements, -1);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo({ top: 0, behavior: "instant" });
       }
     },
     [containerRef, selectedIndex, selectElement, applySelection],

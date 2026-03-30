@@ -45,6 +45,12 @@ export function ArticleContent({ content }: { content: string }) {
     replace: (domNode) => {
       if (!(domNode instanceof Element)) return;
 
+      // Open all links in new tabs
+      if (domNode.name === "a" && domNode.attribs.href) {
+        domNode.attribs.target = "_blank";
+        domNode.attribs.rel = "noopener noreferrer";
+      }
+
       if (domNode.name === "img") {
         const src = domNode.attribs.src ?? "";
         const alt = domNode.attribs.alt ?? "";

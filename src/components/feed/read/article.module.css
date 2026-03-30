@@ -65,10 +65,12 @@
   hyphens: auto;
 }
 
-.article a:not(:has(p)):not(:has(img)):not(:empty):hover {
+.article a:not(:has(p)):not(:has(img)):not(:empty):hover,
+.article a:not(:has(p)):not(:has(img)):not(:empty):focus-visible {
   background: var(--color-sidebar-primary);
   color: var(--color-sidebar-primary-foreground);
   text-decoration: none;
+  outline: none;
 }
 
 .article img {
@@ -132,12 +134,13 @@
 
 .article :global([data-article-selected="true"]) {
   position: relative;
+  outline: none;
 }
 
 .article :global([data-article-selected="true"])::before {
   content: "";
   position: absolute;
-  left: -20px;
+  left: calc(-20px - var(--selection-offset, 0px));
   top: 0;
   bottom: 0;
   width: 2px;
