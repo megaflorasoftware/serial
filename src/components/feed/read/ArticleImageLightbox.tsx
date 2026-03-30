@@ -44,6 +44,9 @@ export function ArticleImageLightbox({
             <DialogPrimitive.Title className="sr-only">
               Image preview
             </DialogPrimitive.Title>
+            <DialogPrimitive.Description className="sr-only">
+              Full-size image preview
+            </DialogPrimitive.Description>
             <img
               src={src}
               alt={alt}

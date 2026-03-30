@@ -61,6 +61,8 @@ export function useArticleNavigation(
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const lastNavTimeRef = useRef<number>(0);
   const prevSelectedRef = useRef<HTMLElement | null>(null);
+  // Suppress focusin handler during programmatic focus from arrow key navigation
+  const suppressFocusInRef = useRef(false);
   const setArticleSelectedElement = useSetAtom(articleSelectedElementAtom);
 
   const applySelection = useCallback(
@@ -240,10 +242,6 @@ export function useArticleNavigation(
     },
     [containerRef, selectedIndex],
   );
-
-  // Update selection when Tab moves focus to a different parent element
-  // Suppress during programmatic focus from arrow key navigation
-  const suppressFocusInRef = useRef(false);
 
   useEffect(() => {
     const container = containerRef.current;
