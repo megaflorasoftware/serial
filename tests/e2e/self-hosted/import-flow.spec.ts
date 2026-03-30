@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import { SELF_HOSTED_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,7 +15,7 @@ test.describe("import flow", () => {
 
   test.afterEach(async () => {
     if (testEmail) {
-      await cleanupUser(8082, testEmail);
+      await cleanupUser(SELF_HOSTED_TURSO_PORT, testEmail);
     }
   });
 

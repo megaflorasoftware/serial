@@ -3,6 +3,7 @@ import { createClient } from "@libsql/client";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "../../../src/server/db/schema";
+import { RSS_SERVER_PORT } from "./ports";
 
 const ARTICLE_HTML = Array.from(
   { length: 20 },
@@ -99,7 +100,7 @@ export async function seedArticleData(
   });
 
   // Create a website feed (skip re-fetch by setting nextFetchAt far in future)
-  const feedUrl = `http://127.0.0.1:3003/feed/test-blog?t=${testId}`;
+  const feedUrl = `http://127.0.0.1:${RSS_SERVER_PORT}/feed/test-blog?t=${testId}`;
   const [testFeed] = await db
     .insert(schema.feeds)
     .values({
@@ -125,7 +126,7 @@ export async function seedArticleData(
     contentId: feedItemId,
     title: "Test Article",
     author: "Test Author",
-    url: `http://127.0.0.1:3003/test-blog/${testId}`,
+    url: `http://127.0.0.1:${RSS_SERVER_PORT}/test-blog/${testId}`,
     thumbnail: "",
     content: ARTICLE_HTML,
     contentSnippet: "Test article content",

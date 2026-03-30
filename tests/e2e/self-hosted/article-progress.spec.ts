@@ -1,22 +1,23 @@
 import { expect, test } from "@playwright/test";
+import {
+  SELF_HOSTED_APP_PORT,
+  SELF_HOSTED_TURSO_PORT,
+} from "../fixtures/ports";
 import { cleanupUser, seedArticleData } from "../fixtures/seed-db";
-
-const TURSO_PORT = 8082;
-const APP_PORT = 3001;
 
 test.describe("article progress tracking", () => {
   let testEmail: string;
 
   test.afterEach(async () => {
     if (testEmail) {
-      await cleanupUser(TURSO_PORT, testEmail);
+      await cleanupUser(SELF_HOSTED_TURSO_PORT, testEmail);
     }
   });
 
   test("saves and restores article progress", async ({ page }) => {
     const { feedItemId, email, password } = await seedArticleData(
-      TURSO_PORT,
-      APP_PORT,
+      SELF_HOSTED_TURSO_PORT,
+      SELF_HOSTED_APP_PORT,
     );
     testEmail = email;
 
