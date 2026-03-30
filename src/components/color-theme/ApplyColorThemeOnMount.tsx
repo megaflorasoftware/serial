@@ -2,12 +2,9 @@
 
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { ArticleFontFamily } from "~/lib/constants/article-fonts";
 import { orpc } from "~/lib/orpc";
-
-const FONT_FAMILY_MAP: Record<string, string> = {
-  "sans-serif": '"Outfit Variable", sans-serif',
-  serif: '"Noto Serif Variable", serif',
-};
+import { FONT_FAMILY_CSS } from "~/lib/constants/article-fonts";
 
 export function ApplyUserConfig() {
   const { data } = useQuery(orpc.userConfig.getConfig.queryOptions());
@@ -35,10 +32,11 @@ export function ApplyUserConfig() {
       root.style.setProperty("--article-font-size", `${data.articleFontSize}`);
     }
 
-    const fontFamilyKey = data.articleFontFamily ?? "sans-serif";
+    const fontFamilyKey = (data.articleFontFamily ??
+      "sans-serif") as ArticleFontFamily;
     root.style.setProperty(
       "--article-font-family",
-      FONT_FAMILY_MAP[fontFamilyKey] ?? fontFamilyKey,
+      FONT_FAMILY_CSS[fontFamilyKey] ?? FONT_FAMILY_CSS["sans-serif"],
     );
   }, [data]);
 

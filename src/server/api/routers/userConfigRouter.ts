@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { ARTICLE_FONT_FAMILIES } from "~/lib/constants/article-fonts";
 import { userConfig } from "~/server/db/schema";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 
@@ -53,7 +54,7 @@ export const setArticleFont = protectedProcedure
   .input(
     z.object({
       fontSize: z.number().min(12).max(24).optional(),
-      fontFamily: z.string().optional(),
+      fontFamily: z.enum(ARTICLE_FONT_FAMILIES).optional(),
     }),
   )
   .handler(async ({ context, input }) => {

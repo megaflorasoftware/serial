@@ -7,22 +7,17 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { ShowArticleStyleToggle } from "./ShowArticleStyleToggle";
+import type { ArticleFontFamily } from "~/lib/constants/article-fonts";
 import { orpc } from "~/lib/orpc";
+import {
+  CSS_TO_FONT_FAMILY,
+  FONT_FAMILY_CSS,
+} from "~/lib/constants/article-fonts";
 
 const MIN_FONT_SIZE = 12;
 const MAX_FONT_SIZE = 24;
 const DEFAULT_FONT_SIZE = 18;
-const DEFAULT_FONT_FAMILY = "sans-serif";
-
-const FONT_FAMILY_MAP: Record<string, string> = {
-  "sans-serif": '"Outfit Variable", sans-serif',
-  serif: '"Noto Serif Variable", serif',
-};
-
-const FONT_FAMILY_REVERSE: Record<string, string> = {
-  '"Outfit Variable", sans-serif': "sans-serif",
-  '"Noto Serif Variable", serif': "serif",
-};
+const DEFAULT_FONT_FAMILY: ArticleFontFamily = "sans-serif";
 
 function getCssVariable(name: string): string {
   return window
@@ -90,7 +85,7 @@ function FontSizeControl() {
 function getInitialFontFamily(): string {
   if (typeof window === "undefined") return DEFAULT_FONT_FAMILY;
   const raw = getCssVariable("--article-font-family");
-  if (raw && FONT_FAMILY_REVERSE[raw]) return FONT_FAMILY_REVERSE[raw];
+  if (raw && CSS_TO_FONT_FAMILY[raw]) return CSS_TO_FONT_FAMILY[raw];
   return DEFAULT_FONT_FAMILY;
 }
 
@@ -103,8 +98,9 @@ function FontFamilyControl() {
   const update = (value: string) => {
     if (!value) return;
     setFontFamily(value);
-    setCssVariable("--article-font-family", FONT_FAMILY_MAP[value] ?? value);
-    saveArticleFont({ fontFamily: value });
+    const key = value as ArticleFontFamily;
+    setCssVariable("--article-font-family", FONT_FAMILY_CSS[key] ?? value);
+    saveArticleFont({ fontFamily: key });
   };
 
   return (
