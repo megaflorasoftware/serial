@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogOverlay, DialogPortal } from "~/components/ui/dialog";
 
@@ -17,17 +17,7 @@ export function ArticleImageLightbox({
 }: ArticleImageLightboxProps) {
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === " ") {
-        e.preventDefault();
-        setOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  const toggle = () => setOpen((prev) => !prev);
 
   return (
     <div
@@ -35,11 +25,11 @@ export function ArticleImageLightbox({
       role="button"
       tabIndex={0}
       style={{ position: "relative", cursor: "zoom-in" }}
-      onClick={() => setOpen(true)}
+      onClick={toggle}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter") {
           e.preventDefault();
-          setOpen(true);
+          toggle();
         }
       }}
     >

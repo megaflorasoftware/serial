@@ -232,8 +232,8 @@ export function useArticleNavigation(
 
       // Toggle lightbox if selected element is or contains a lightbox
       const lightbox = selectedEl.hasAttribute("data-lightbox")
-        ? selectedEl.querySelector<HTMLElement>("img")
-        : selectedEl.querySelector<HTMLElement>("[data-lightbox] img");
+        ? selectedEl
+        : selectedEl.querySelector<HTMLElement>("[data-lightbox]");
       if (lightbox) {
         lightbox.click();
       }
