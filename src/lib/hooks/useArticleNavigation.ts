@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { atom, useSetAtom } from "jotai";
 import { useShortcut } from "./useShortcut";
 import type { KeyboardEvent, RefObject } from "react";
@@ -65,10 +65,14 @@ export function useArticleNavigation(
 
   const applySelection = useCallback(
     (elements: HTMLElement[], index: number) => {
-      // Remove previous selection and blur any focused element
-      if (prevSelectedRef.current) {
-        prevSelectedRef.current.removeAttribute("data-article-selected");
-        prevSelectedRef.current.removeAttribute("tabindex");
+      // Remove all previous selections and blur any focused element
+      if (containerRef.current) {
+        containerRef.current
+          .querySelectorAll("[data-article-selected]")
+          .forEach((el) => {
+            el.removeAttribute("data-article-selected");
+            el.removeAttribute("tabindex");
+          });
       }
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
@@ -234,6 +238,46 @@ export function useArticleNavigation(
     },
     [containerRef, selectedIndex],
   );
+
+  // Update selection when Tab moves focus to a different parent element
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const elements = getElements(container);
+      // Find which selectable element contains the focused target
+      const parentIndex = elements.findIndex(
+        (el) => el.contains(target) && el !== target,
+      );
+      if (parentIndex === -1 || parentIndex === selectedIndex) return;
+
+      // Update selection without scrolling
+      if (prevSelectedRef.current) {
+        prevSelectedRef.current.removeAttribute("data-article-selected");
+        prevSelectedRef.current.removeAttribute("tabindex");
+      }
+      const el = elements[parentIndex]!;
+      el.setAttribute("data-article-selected", "true");
+      if (el.tagName === "LI" && container) {
+        const elLeft = el.getBoundingClientRect().left;
+        const containerLeft = container.getBoundingClientRect().left;
+        const offset = elLeft - containerLeft - 20;
+        el.style.setProperty("--selection-offset", `${offset}px`);
+      }
+      el.setAttribute("tabindex", "-1");
+      prevSelectedRef.current = el;
+      setSelectedIndex(parentIndex);
+      setArticleSelectedElement(el);
+      scrollToElement(el);
+    };
+
+    container.addEventListener("focusin", handleFocusIn);
+    return () => container.removeEventListener("focusin", handleFocusIn);
+  }, [containerRef, selectedIndex, setArticleSelectedElement, scrollToElement]);
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_DOWN), handleArrowDown, {
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_DOWN),
