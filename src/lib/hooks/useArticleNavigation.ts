@@ -24,7 +24,8 @@ function getElements(container: HTMLElement | null): HTMLElement[] {
       !el.hasAttribute("data-serial-header") &&
       (el.textContent?.trim() ||
         el.tagName === "IMG" ||
-        el.tagName === "FIGURE"),
+        el.tagName === "FIGURE" ||
+        el.querySelector("img")),
   );
 }
 
@@ -187,9 +188,23 @@ export function useArticleNavigation(
     [containerRef, selectedIndex, selectElement, applySelection],
   );
 
-  const handleSpace = useCallback((event: KeyboardEvent) => {
-    event.preventDefault();
-  }, []);
+  const handleSpace = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      const elements = getElements(containerRef.current);
+      const selectedEl = selectedIndex >= 0 ? elements[selectedIndex] : null;
+      if (!selectedEl) return;
+
+      // Toggle lightbox if selected element is or contains a lightbox
+      const lightbox = selectedEl.hasAttribute("data-lightbox")
+        ? selectedEl.querySelector<HTMLElement>("img")
+        : selectedEl.querySelector<HTMLElement>("[data-lightbox] img");
+      if (lightbox) {
+        lightbox.click();
+      }
+    },
+    [containerRef, selectedIndex],
+  );
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_DOWN), handleArrowDown, {
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_DOWN),
