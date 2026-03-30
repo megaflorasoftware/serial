@@ -10,7 +10,6 @@ import { ThemeProvider } from "~/components/ThemeProvider";
 import { Toaster } from "~/components/ui/sonner";
 import { QueryProvider } from "~/lib/query-provider";
 
-import { ApplyUserConfig } from "~/components/color-theme/ApplyColorThemeOnMount";
 import { ReloadPrompt } from "~/components/pwa/ReloadPrompt";
 import { Button } from "~/components/ui/button";
 import { BASE_SIGNED_OUT_URL } from "~/lib/constants";
@@ -150,7 +149,6 @@ export function RootLayout() {
       </head>
       <body className="min-h-screen font-sans antialiased">
         <QueryProvider>
-          <ApplyUserConfig />
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
