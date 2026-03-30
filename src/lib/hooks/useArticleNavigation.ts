@@ -249,17 +249,20 @@ export function useArticleNavigation(
       if (!(target instanceof HTMLElement)) return;
 
       const elements = getElements(container);
-      // Find which selectable element contains the focused target
-      const parentIndex = elements.findIndex(
-        (el) => el.contains(target) && el !== target,
-      );
+      // Find the closest (most specific) selectable element containing the target
+      let parentIndex = -1;
+      for (let i = 0; i < elements.length; i++) {
+        if (elements[i]!.contains(target) && elements[i] !== target) {
+          parentIndex = i;
+        }
+      }
       if (parentIndex === -1 || parentIndex === selectedIndex) return;
 
-      // Update selection without scrolling
-      if (prevSelectedRef.current) {
-        prevSelectedRef.current.removeAttribute("data-article-selected");
-        prevSelectedRef.current.removeAttribute("tabindex");
-      }
+      // Clear all previous selections
+      container.querySelectorAll("[data-article-selected]").forEach((el) => {
+        el.removeAttribute("data-article-selected");
+        el.removeAttribute("tabindex");
+      });
       const el = elements[parentIndex]!;
       el.setAttribute("data-article-selected", "true");
       if (el.tagName === "LI" && container) {
