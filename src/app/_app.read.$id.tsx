@@ -95,8 +95,8 @@ function ReadPage() {
         ref={articleRef}
         className={`h-full w-full px-6 sm:pb-6 ${classes.article}`}
       >
-        <h1>{feedItem?.title}</h1>
-        <h6>{feedItem?.author || feed?.name || ""}</h6>
+        <h1 data-serial-header>{feedItem?.title}</h1>
+        <h6 data-serial-header>{feedItem?.author || feed?.name || ""}</h6>
         {articleStyle === "simplified" ? (
           <div
             dangerouslySetInnerHTML={{

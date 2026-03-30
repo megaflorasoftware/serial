@@ -21,7 +21,10 @@ function getElements(container: HTMLElement | null): HTMLElement[] {
   if (!container) return [];
   return Array.from(container.querySelectorAll<HTMLElement>(SELECTABLE)).filter(
     (el) =>
-      el.textContent?.trim() || el.tagName === "IMG" || el.tagName === "FIGURE",
+      !el.hasAttribute("data-serial-header") &&
+      (el.textContent?.trim() ||
+        el.tagName === "IMG" ||
+        el.tagName === "FIGURE"),
   );
 }
 
@@ -133,11 +136,17 @@ export function useArticleNavigation(
         }
       }
 
-      // Move to next, loop to first
+      // Move to next, or deselect and scroll to top
       const nextIndex = selectedIndex + 1;
-      selectElement(elements, nextIndex < elements.length ? nextIndex : 0);
+      if (nextIndex < elements.length) {
+        selectElement(elements, nextIndex);
+      } else {
+        setSelectedIndex(-1);
+        applySelection(elements, -1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     },
-    [containerRef, selectedIndex, selectElement],
+    [containerRef, selectedIndex, selectElement, applySelection],
   );
 
   const handleArrowUp = useCallback(
@@ -148,7 +157,7 @@ export function useArticleNavigation(
 
       if (selectedIndex === -1) {
         if (window.scrollY === 0) {
-          selectElement(elements, 0);
+          selectElement(elements, elements.length - 1);
         } else {
           const closest = getClosestVisibleElement(elements);
           selectElement(elements, closest >= 0 ? closest : 0);
@@ -166,13 +175,16 @@ export function useArticleNavigation(
         }
       }
 
-      // Move to previous, loop to last
-      selectElement(
-        elements,
-        selectedIndex > 0 ? selectedIndex - 1 : elements.length - 1,
-      );
+      // Move to previous, or deselect and scroll to top
+      if (selectedIndex > 0) {
+        selectElement(elements, selectedIndex - 1);
+      } else {
+        setSelectedIndex(-1);
+        applySelection(elements, -1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     },
-    [containerRef, selectedIndex, selectElement],
+    [containerRef, selectedIndex, selectElement, applySelection],
   );
 
   const handleSpace = useCallback((event: KeyboardEvent) => {
