@@ -3,7 +3,7 @@
 import clsx from "clsx";
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
@@ -16,7 +16,12 @@ import classes from "~/components/feed/read/article.module.css";
 import { useFeedItemValue } from "~/lib/data/store";
 import { ArticleContent } from "~/components/feed/read/ArticleContent";
 import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
-import { useArticleNavigation } from "~/lib/hooks/useArticleNavigation";
+import {
+  getClosestVisibleElement,
+  getElements,
+  useArticleNavigation,
+} from "~/lib/hooks/useArticleNavigation";
+import { useSaveProgress } from "~/lib/hooks/useSaveProgress";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
@@ -61,7 +66,46 @@ function ReadPage() {
   useOpenOriginalShortcut(feedItem?.url);
 
   // Arrow key navigation between paragraphs/headings
-  useArticleNavigation(articleRef);
+  const { selectedIndex, selectElement } = useArticleNavigation(articleRef);
+
+  // Track user interaction for progress saving
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setHasScrolled(true);
+    window.addEventListener("scroll", handler, { once: true });
+    return () => window.removeEventListener("scroll", handler);
+  }, []);
+
+  const hasInteracted = hasScrolled || selectedIndex >= 0;
+
+  // Save progress every 30s after interaction, and on unmount
+  useSaveProgress({
+    contentId: params.id,
+    getProgress: () => {
+      const elements = getElements(articleRef.current);
+      const closest = getClosestVisibleElement(elements);
+      return {
+        progress: Math.max(closest, 0),
+        duration: elements.length,
+      };
+    },
+    enabled: hasInteracted,
+  });
+
+  // Restore progress on open
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (hasRestoredRef.current || !feedItem?.progress || feedItem.progress <= 0)
+      return;
+
+    const elements = getElements(articleRef.current);
+    if (elements.length === 0) return;
+
+    const targetIndex = Math.min(feedItem.progress, elements.length - 1);
+    hasRestoredRef.current = true;
+    selectElement(elements, targetIndex, true);
+  }, [feedItem?.progress, feedItem?.content, selectElement]);
 
   return (
     <div

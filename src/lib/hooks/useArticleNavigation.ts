@@ -17,7 +17,7 @@ const TARGET_VIEWPORT_POSITION = 1 / 3;
 const SELECTABLE =
   ":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > img, :scope > figure, :scope > div, li";
 
-function getElements(container: HTMLElement | null): HTMLElement[] {
+export function getElements(container: HTMLElement | null): HTMLElement[] {
   if (!container) return [];
   return Array.from(container.querySelectorAll<HTMLElement>(SELECTABLE)).filter(
     (el) =>
@@ -34,7 +34,7 @@ function isElementInViewport(element: Element): boolean {
   return rect.top < window.innerHeight && rect.bottom > 0;
 }
 
-function getClosestVisibleElement(elements: HTMLElement[]): number {
+export function getClosestVisibleElement(elements: HTMLElement[]): number {
   const viewportTarget = window.innerHeight * TARGET_VIEWPORT_POSITION;
   let closestIndex = -1;
   let closestDistance = Infinity;
@@ -296,4 +296,6 @@ export function useArticleNavigation(
   });
 
   useShortcut(" ", handleSpace);
+
+  return { selectedIndex, selectElement };
 }
