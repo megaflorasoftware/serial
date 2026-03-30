@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { atom, useSetAtom } from "jotai";
 import { useShortcut } from "./useShortcut";
 import type { KeyboardEvent, RefObject } from "react";
 import {
@@ -8,6 +9,8 @@ import {
   getShortcutKey,
   SHORTCUT_KEYS,
 } from "~/lib/constants/shortcuts";
+
+export const articleSelectedElementAtom = atom<HTMLElement | null>(null);
 
 const SCROLL_DURATION_MS = 300;
 const TARGET_VIEWPORT_POSITION = 1 / 3;
@@ -54,6 +57,7 @@ export function useArticleNavigation(
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const lastNavTimeRef = useRef<number>(0);
   const prevSelectedRef = useRef<HTMLElement | null>(null);
+  const setArticleSelectedElement = useSetAtom(articleSelectedElementAtom);
 
   const applySelection = useCallback(
     (elements: HTMLElement[], index: number) => {
@@ -66,11 +70,13 @@ export function useArticleNavigation(
         const el = elements[index]!;
         el.setAttribute("data-article-selected", "true");
         prevSelectedRef.current = el;
+        setArticleSelectedElement(el);
       } else {
         prevSelectedRef.current = null;
+        setArticleSelectedElement(null);
       }
     },
-    [],
+    [setArticleSelectedElement],
   );
 
   const scrollToElement = useCallback((element: HTMLElement) => {
@@ -169,6 +175,10 @@ export function useArticleNavigation(
     [containerRef, selectedIndex, selectElement],
   );
 
+  const handleSpace = useCallback((event: KeyboardEvent) => {
+    event.preventDefault();
+  }, []);
+
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_DOWN), handleArrowDown, {
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_DOWN),
   });
@@ -176,4 +186,6 @@ export function useArticleNavigation(
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_UP), handleArrowUp, {
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_UP),
   });
+
+  useShortcut(" ", handleSpace);
 }
