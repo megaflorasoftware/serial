@@ -84,10 +84,15 @@ test.describe("feed limit for free plan", () => {
     await expect(importButton).toBeEnabled({ timeout: 10000 });
     await importButton.click();
 
-    // Verify the import-limit-warning toast appears
+    // Wait for import to finish
+    await expect(page.getByText("Import finished")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    // Verify the import-limit-warning toast appears post-import
     await expect(
       page.getByText(/\d+ feeds? (?:were|was) added as inactive/i),
-    ).toBeVisible({ timeout: 120_000 });
+    ).toBeVisible({ timeout: 10_000 });
 
     // Click "Upgrade" in the toast to open subscription dialog
     await page.getByRole("button", { name: "Upgrade" }).click();
@@ -95,11 +100,6 @@ test.describe("feed limit for free plan", () => {
       page.getByText("Choose a plan that fits your needs."),
     ).toBeVisible({ timeout: 5000 });
     await page.keyboard.press("Escape");
-
-    // Wait for import to finish
-    await expect(page.getByText("Import finished")).toBeVisible({
-      timeout: 120_000,
-    });
 
     // Navigate to /feeds and verify the counter
     await page.goto("/feeds");

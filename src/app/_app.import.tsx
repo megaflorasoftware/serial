@@ -7,11 +7,13 @@ import {
   ExternalLinkIcon,
   GlobeIcon,
   MinusIcon,
+  PauseIcon,
   PlayCircleIcon,
   XIcon,
   YoutubeIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ImportDropzone } from "../components/feed/import/ImportDropzone";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
 import type { FeedPlatform } from "~/server/db/schema";
@@ -33,6 +35,7 @@ import {
   useProgressState,
 } from "~/lib/data/store";
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
+import { useDialogStore } from "~/components/feed/dialogStore";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   switch (platform) {
@@ -69,8 +72,24 @@ function EditFeedsPage() {
   const isFetchingRss =
     fetchStatus === "fetching" && progressState.fetchType === "import";
   const failedImportUrls = progressState.failedImportUrls;
+  const { launchDialog } = useDialogStore();
 
   const isPostImportScreen = isImportComplete || hasStartedImport;
+
+  useEffect(() => {
+    if (isImportComplete && progressState.importDeactivatedCount > 0) {
+      const count = progressState.importDeactivatedCount;
+      toast.warning(
+        `${count} feed${count > 1 ? "s were" : " was"} added as inactive. To unlock more active feeds, you can switch to a higher plan.`,
+        {
+          action: {
+            label: "Upgrade",
+            onClick: () => launchDialog("subscription"),
+          },
+        },
+      );
+    }
+  }, [isImportComplete, progressState.importDeactivatedCount, launchDialog]);
 
   const onSelectFiles = async () => {
     if (!inputElementRef.current) return;
@@ -338,16 +357,34 @@ function EditFeedsPage() {
                           )}
                           {isPostImportScreen &&
                             wasImported &&
-                            channel.shouldImport && (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <CheckIcon size={20} />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Imported Successfully!
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
+                            channel.shouldImport &&
+                            (() => {
+                              const importedFeed = feeds.find(
+                                (f) => f.url === channel.feedUrl,
+                              );
+                              if (importedFeed && !importedFeed.isActive) {
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <PauseIcon size={20} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Feed inactive
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              }
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <CheckIcon size={20} />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Imported Successfully!
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })()}
                           {isPostImportScreen &&
                             channel.shouldImport &&
                             failedImportUrls.has(channel.feedUrl) && (

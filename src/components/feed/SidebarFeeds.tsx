@@ -5,7 +5,7 @@ import {
   CircleSmall,
   Edit2Icon,
   MinusIcon,
-  PauseCircleIcon,
+  PauseIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -500,10 +500,7 @@ export function SidebarFeeds() {
                     variant={feed.id === feedFilter ? "outline" : "default"}
                     onClick={() => setFeedFilter(feed.id)}
                   >
-                    <PauseCircleIcon
-                      size={16}
-                      className="text-muted-foreground"
-                    />
+                    <PauseIcon size={16} className="text-muted-foreground" />
                     <div className="text-muted-foreground line-clamp-1">
                       {feed.name}
                     </div>

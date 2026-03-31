@@ -7,12 +7,12 @@ export default defineConfig({
   testDir: "./tests/e2e/main-instance",
   use: {
     ...baseConfig.use,
-    baseURL: "http://localhost:3000",
+    baseURL: "http://localhost:3002",
   },
   webServer: [
     {
       command: "pnpm dev:test:main",
-      url: "http://localhost:3000",
+      url: "http://localhost:3002",
       reuseExistingServer: !process.env.CI,
     },
     {

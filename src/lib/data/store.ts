@@ -1,6 +1,5 @@
 import { createStore, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { toast } from "sonner";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
 import { contentCategoriesStore } from "./content-categories/store";
@@ -16,7 +15,6 @@ import type {
   PaginationCursor,
 } from "~/server/api/routers/initialRouter";
 import type { PublishedChunk } from "~/server/api/publisher";
-import { useDialogStore } from "~/components/feed/dialogStore";
 import { getQueryClient } from "~/lib/query-provider";
 import { orpc } from "~/lib/orpc";
 
@@ -34,6 +32,8 @@ export type ProgressState = {
   totalFeeds: number;
   importErrors: number;
   failedImportUrls: Set<string>;
+  importDeactivatedCount: number;
+  importMaxActiveFeeds: number;
 };
 
 export type ApplicationStore = {
@@ -138,6 +138,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           totalFeeds: 0,
           importErrors: 0,
           failedImportUrls: new Set(),
+          importDeactivatedCount: 0,
+          importMaxActiveFeeds: 0,
         },
       }),
     feedItemsOrder: [],
@@ -152,6 +154,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       totalFeeds: 0,
       importErrors: 0,
       failedImportUrls: new Set(),
+      importDeactivatedCount: 0,
+      importMaxActiveFeeds: 0,
     },
     setFeedItemsDict: (itemsDict) => set({ feedItemsDict: itemsDict }),
     setFeedItem: (id, item) =>
@@ -879,6 +883,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     totalFeeds: 0,
                     importErrors: 0,
                     failedImportUrls: new Set(),
+                    importDeactivatedCount: 0,
+                    importMaxActiveFeeds: 0,
                   },
                 });
               }
@@ -1099,21 +1105,20 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   totalFeeds: initialChunk.totalFeeds,
                   importErrors: 0,
                   failedImportUrls: new Set(),
+                  importDeactivatedCount: 0,
+                  importMaxActiveFeeds: 0,
                 },
               });
               break;
 
             case "import-limit-warning":
-              toast.warning(
-                `${initialChunk.deactivatedCount} feed${initialChunk.deactivatedCount > 1 ? "s were" : " was"} added as inactive. To unlock more active feeds, you can switch to a higher plan.`,
-                {
-                  action: {
-                    label: "Upgrade",
-                    onClick: () =>
-                      useDialogStore.getState().launchDialog("subscription"),
-                  },
+              set({
+                progressState: {
+                  ...get().progressState,
+                  importDeactivatedCount: initialChunk.deactivatedCount,
+                  importMaxActiveFeeds: initialChunk.maxActiveFeeds,
                 },
-              );
+              });
               break;
 
             case "import-feed-inserted":
@@ -1290,6 +1295,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 totalFeeds: chunk.totalFeeds,
                 importErrors: 0,
                 failedImportUrls: new Set(),
+                importDeactivatedCount: 0,
+                importMaxActiveFeeds: 0,
               },
             });
             break;

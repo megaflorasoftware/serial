@@ -1092,6 +1092,19 @@ export const streamingImport = protectedProcedure
     );
     const deactivatedCount = Math.max(0, input.feeds.length - remainingSlots);
 
+    // Pre-calculate which feeds should be active
+    const feedsWithActivation = input.feeds.map((feed, index) => ({
+      ...feed,
+      shouldBeActive: index < remainingSlots,
+    }));
+
+    // Publish import start with total feeds count (must come before
+    // import-limit-warning so the client's progressState is initialized first)
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "import-start", totalFeeds: input.feeds.length },
+    });
+
     // Publish warning if some feeds will be inactive
     if (deactivatedCount > 0) {
       await publisher.publish(channel, {
@@ -1103,18 +1116,6 @@ export const streamingImport = protectedProcedure
         },
       });
     }
-
-    // Pre-calculate which feeds should be active
-    const feedsWithActivation = input.feeds.map((feed, index) => ({
-      ...feed,
-      shouldBeActive: index < remainingSlots,
-    }));
-
-    // Publish import start with total feeds count
-    await publisher.publish(channel, {
-      source: "initial",
-      chunk: { type: "import-start", totalFeeds: input.feeds.length },
-    });
 
     // Track successful feed IDs for building view mappings later
     const successfulFeeds: Array<{

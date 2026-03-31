@@ -1,6 +1,6 @@
 /** Ports for the "main" test environment */
 export const MAIN_TURSO_PORT = 8081;
-export const MAIN_APP_PORT = 3000;
+export const MAIN_APP_PORT = 3002;
 
 /** Ports for the "self-hosted" test environment */
 export const SELF_HOSTED_TURSO_PORT = 8082;
