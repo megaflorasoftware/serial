@@ -8,7 +8,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
 import { appConfig, feeds, user } from "../db/schema";
@@ -42,6 +42,19 @@ export const adminMiddleware = createMiddleware().server(async ({ next }) => {
 
   return await next();
 });
+
+async function handleSubscriptionEnd(payload: {
+  data: { customer?: { externalId?: string | null } | null };
+}) {
+  const externalId = payload.data.customer?.externalId;
+  if (!externalId) return;
+
+  await deactivateExcessFeeds(db, externalId, PLANS.free.maxActiveFeeds);
+  await db
+    .update(feeds)
+    .set({ nextFetchAt: null })
+    .where(eq(feeds.userId, externalId));
+}
 
 function buildPolarPlugin() {
   if (!polarClient) return [];
@@ -92,7 +105,10 @@ function buildPolarPlugin() {
 
             const productId = payload.data.productId;
             const planId = determinePlanFromProductId(productId);
-            if (!planId) return;
+            if (!planId) {
+              console.warn(`[polar webhook] Unknown product ID: ${productId}`);
+              return;
+            }
 
             const config = PLANS[planId];
             if (config.backgroundRefreshIntervalMs) {
@@ -102,36 +118,16 @@ function buildPolarPlugin() {
               await db
                 .update(feeds)
                 .set({ nextFetchAt })
-                .where(eq(feeds.userId, externalId));
+                .where(
+                  and(eq(feeds.userId, externalId), eq(feeds.isActive, true)),
+                );
             }
           },
           onSubscriptionCanceled: async (payload) => {
-            const externalId = payload.data.customer?.externalId;
-            if (!externalId) return;
-
-            await deactivateExcessFeeds(
-              db,
-              externalId,
-              PLANS.free.maxActiveFeeds,
-            );
-            await db
-              .update(feeds)
-              .set({ nextFetchAt: null })
-              .where(eq(feeds.userId, externalId));
+            await handleSubscriptionEnd(payload);
           },
           onSubscriptionRevoked: async (payload) => {
-            const externalId = payload.data.customer?.externalId;
-            if (!externalId) return;
-
-            await deactivateExcessFeeds(
-              db,
-              externalId,
-              PLANS.free.maxActiveFeeds,
-            );
-            await db
-              .update(feeds)
-              .set({ nextFetchAt: null })
-              .where(eq(feeds.userId, externalId));
+            await handleSubscriptionEnd(payload);
           },
         }),
       ],

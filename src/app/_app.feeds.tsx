@@ -414,7 +414,7 @@ function ManageFeedsPage() {
               <AlertDescription>
                 The {planName} plan supports a maximum of {maxActiveFeeds}{" "}
                 feeds. You can add more than this, but only your active feeds
-                will recieve new content.
+                will receive new content.
                 <Button
                   type="button"
                   onClick={() => launchDialog("subscription")}

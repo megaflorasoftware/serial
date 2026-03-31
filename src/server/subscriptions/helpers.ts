@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { determinePlanFromProductId, getEffectivePlanConfig } from "./plans";
 import { polarClient } from "./polar";
 import type { PlanId } from "./plans";
@@ -32,7 +32,11 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
 
     const plan = determinePlanFromProductId(activeSub.productId);
     return plan ?? "free";
-  } catch {
+  } catch (e) {
+    console.error(
+      `[subscription] Failed to fetch plan for user ${userId}, defaulting to free:`,
+      e,
+    );
     return "free";
   }
 }
@@ -82,9 +86,19 @@ export async function deactivateExcessFeeds(
   if (activeFeeds.length <= maxActive) return;
 
   const feedsToDeactivate = activeFeeds.slice(maxActive);
-  const idsToDeactivate = feedsToDeactivate.map((f) => f.id);
 
-  for (const feedId of idsToDeactivate) {
-    await db.update(feeds).set({ isActive: false }).where(eq(feeds.id, feedId));
-  }
+  if (feedsToDeactivate.length === 0) return;
+
+  await db
+    .update(feeds)
+    .set({ isActive: false })
+    .where(
+      and(
+        eq(feeds.userId, userId),
+        inArray(
+          feeds.id,
+          feedsToDeactivate.map((f) => f.id),
+        ),
+      ),
+    );
 }

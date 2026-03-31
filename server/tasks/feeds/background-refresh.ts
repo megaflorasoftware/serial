@@ -33,12 +33,26 @@ export default defineTask({
       return { result: "no-feeds-to-refresh" };
     }
 
+    // Pre-fetch plan IDs for all users to avoid N+1 Polar API calls
+    const userPlanIds = new Map<
+      string,
+      Awaited<ReturnType<typeof getUserPlanId>>
+    >();
+    if (IS_MAIN_INSTANCE) {
+      await Promise.all(
+        usersWithFeeds.map(async ({ userId }) => {
+          const planId = await getUserPlanId(userId);
+          userPlanIds.set(userId, planId);
+        }),
+      );
+    }
+
     let refreshedCount = 0;
 
     for (const { userId } of usersWithFeeds) {
       // For main instance, only refresh for paid users
       if (IS_MAIN_INSTANCE) {
-        const planId = await getUserPlanId(userId);
+        const planId = userPlanIds.get(userId) ?? "free";
         const config = getEffectivePlanConfig(planId);
         if (!config.backgroundRefreshIntervalMs) {
           continue; // Free plan, no background refresh
