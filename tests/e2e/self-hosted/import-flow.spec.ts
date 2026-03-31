@@ -85,7 +85,7 @@ test.describe("import flow", () => {
       timeout: 60000,
     });
 
-    await page.getByRole("link", { name: /back to feeds/i }).click();
+    await page.getByRole("link", { name: /back to home/i }).click();
     await expect(page).toHaveURL("/");
 
     // Open the feeds sidebar (Shift+| keyboard shortcut toggles right sidebar)
