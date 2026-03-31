@@ -5,6 +5,12 @@
   "type": "module",
   "scripts": {
     "dev:db": "turso dev --db-file serial.db",
+    "dev:db:test:main": "turso dev --db-file serial-test-main-instance.db --port 8081",
+    "dev:db:test:self-hosted": "turso dev --db-file serial-test-self-hosted.db --port 8082",
+    "dev:migrate:test:main": "DATABASE_URL=http://127.0.0.1:8081 BETTER_AUTH_SECRET=test-secret-key-for-main-tests pnpm schema:migrate",
+    "dev:migrate:test:self-hosted": "DATABASE_URL=http://127.0.0.1:8082 BETTER_AUTH_SECRET=test-secret-key-for-self-hosted-tests pnpm schema:migrate",
+    "dev:test:main": "concurrently --kill-others \"pnpm dev:db:test:main\" \"pnpm dev:migrate:test:main && DATABASE_URL=http://127.0.0.1:8081 BETTER_AUTH_SECRET=test-secret-key-for-main-tests VITE_PUBLIC_IS_MAIN_INSTANCE=true pnpm dev:atomic\"",
+    "dev:test:self-hosted": "concurrently --kill-others \"pnpm dev:db:test:self-hosted\" \"pnpm dev:migrate:test:self-hosted && DATABASE_URL=http://127.0.0.1:8082 BETTER_AUTH_SECRET=test-secret-key-for-self-hosted-tests BETTER_AUTH_BASE_URL=http://localhost:3001 VITE_PUBLIC_IS_MAIN_INSTANCE=false vite dev --port 3001\"",
     "dev:migrate": "pnpm schema:migrate",
     "dev:atomic": "vite dev",
     "dev": "concurrently --kill-others \"pnpm dev:db\" \"pnpm dev:migrate && pnpm dev:atomic\"",
@@ -18,6 +24,8 @@
     "schema:migrate": "node --experimental-specifier-resolution=node --loader ts-node/esm src/server/db/migrate",
     "schema:update": "pnpm schema:generate && pnpm schema:migrate",
     "db:studio": "drizzle-kit studio",
+    "db:studio:test:main": "DATABASE_URL=http://127.0.0.1:8081 drizzle-kit studio",
+    "db:studio:test:self-hosted": "DATABASE_URL=http://127.0.0.1:8082 drizzle-kit studio",
     "start": "node .output/server/index.mjs",
     "start:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm start\"",
     "typecheck": "tsc --noEmit",
@@ -25,7 +33,13 @@
     "format:fix": "prettier --write .",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix"
+    "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix && git add -u",
+    "test": "concurrently \"pnpm test:main\" \"pnpm test:self-hosted\"",
+    "test:main": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.main-instance.config.ts",
+    "test:main:ui": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.main-instance.config.ts",
+    "test:headed": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --headed --config playwright.main-instance.config.ts",
+    "test:self-hosted": "(lsof -ti:3001 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.self-hosted.config.ts",
+    "test:self-hosted:ui": "(lsof -ti:3001 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.self-hosted.config.ts"
   },
   "dependencies": {
     "@content-collections/core": "^0.13.1",
@@ -34,13 +48,14 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource-variable/noto-serif": "^5.2.9",
     "@fontsource-variable/outfit": "^5.2.8",
     "@formkit/auto-animate": "^0.9.0",
     "@libsql/client": "0.17.0",
     "@libsql/linux-arm64-gnu": "^0.5.22",
     "@libsql/linux-arm64-musl": "0.5.22",
     "@libsql/linux-x64-musl": "0.5.22",
-    "@orpc/client": "^1.13.4",
+    "@orpc/client": "^1.13.6",
     "@orpc/experimental-publisher": "^1.13.4",
     "@orpc/server": "^1.13.4",
     "@orpc/tanstack-query": "^1.13.4",
@@ -121,6 +136,7 @@
   "devDependencies": {
     "@eslint/compat": "^2.0.2",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@react-email/preview-server": "5.2.8",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
@@ -137,6 +153,7 @@
     "dotenv": "^17.2.4",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",
+    "drizzle-seed": "^0.3.1",
     "esbuild": "^0.27.3",
     "eslint": "^10.0.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -147,6 +164,7 @@
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "react-email": "^5.2.8",
+    "simple-git-hooks": "^2.13.1",
     "tailwindcss": "^4.1.18",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
@@ -168,6 +186,9 @@
     "node": ">=22.0.0"
   },
   "packageManager": "pnpm@10.8.0",
+  "simple-git-hooks": {
+    "pre-commit": "pnpm precommit"
+  },
   "pnpm": {
     "overrides": {
       "@types/react": "19.2.2",

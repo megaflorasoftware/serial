@@ -82,7 +82,10 @@ export const getProducts = protectedProcedure.handler(async () => {
             annualPrice = (price as { priceAmount: number }).priceAmount;
           }
         } catch (e) {
-          console.error(`[subscription] Failed to fetch annual product for ${planId}:`, e);
+          console.error(
+            `[subscription] Failed to fetch annual product for ${planId}:`,
+            e,
+          );
         }
       }
 
@@ -137,7 +140,10 @@ export const createCheckout = protectedProcedure
       return { url: null, error: null };
     }
 
-    const origin = context.headers.get("origin") ?? context.headers.get("referer") ?? "http://localhost:3000";
+    const origin =
+      context.headers.get("origin") ??
+      context.headers.get("referer") ??
+      "http://localhost:3000";
     const successUrl = new URL("/?checkout_success=true", origin).toString();
     const returnUrl = new URL("/", origin).toString();
 

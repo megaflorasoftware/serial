@@ -204,6 +204,8 @@ export const feedItems = sqliteTable(
     isWatchLater: integer("is_watch_later", { mode: "boolean" })
       .notNull()
       .default(false),
+    progress: integer("progress", { mode: "number" }).notNull().default(0),
+    duration: integer("duration", { mode: "number" }).notNull().default(0),
     orientation: text("orientation", { length: 64 }),
     postedAt: integer("posted_at", { mode: "timestamp" }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
@@ -300,6 +302,8 @@ export const userConfig = sqliteTable("user_config", {
     .notNull(),
   lightHSL: text("light_hsl", { length: 16 }).notNull().default(""),
   darkHSL: text("dark_hsl", { length: 16 }).notNull().default(""),
+  articleFontSize: integer("article_font_size"),
+  articleFontFamily: text("article_font_family", { length: 64 }),
 });
 export type DatabaseUserConfig = typeof userConfig.$inferSelect;
 

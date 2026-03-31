@@ -16,6 +16,7 @@ import { ImportDropzone } from "../components/feed/import/ImportDropzone";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
 import type { FeedPlatform } from "~/server/db/schema";
 import type { ImportFeedDataItem } from "../components/feed/import/utils/shared";
+import { getBlogUrl } from "~/lib/constants";
 import { ImportLoading } from "~/components/ImportLoading";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -26,7 +27,11 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { useFeeds } from "~/lib/data/feeds";
-import { useFetchFeedItemsStatus, useProgressState } from "~/lib/data/store";
+import {
+  feedItemsStore,
+  useFetchFeedItemsStatus,
+  useProgressState,
+} from "~/lib/data/store";
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
@@ -101,8 +106,37 @@ function EditFeedsPage() {
         feedUrl: feed.feedUrl,
       }));
 
-    // Use the new streaming import that handles both insert and RSS fetch
+    // Capture the current timestamp so we can detect when the subscription
+    // finishes processing all import chunks (initial-data-complete updates this).
+    const prevFetchedAt = feedItemsStore.getState().fetchFeedItemsLastFetchedAt;
+
+    // The RPC resolves when the server finishes publishing, but the
+    // subscription may still be processing buffered chunks via rAF.
     await dataSubscriptionActions.streamingImport(channelsToImport);
+
+    // Wait for the store to process initial-data-complete from the import,
+    // ensuring all feed items are available before showing "Import finished".
+    // Times out after 30s to avoid hanging if the subscription drops.
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const done = () => {
+          unsubscribe();
+          resolve();
+        };
+        const check = () => {
+          if (
+            feedItemsStore.getState().fetchFeedItemsLastFetchedAt !==
+            prevFetchedAt
+          ) {
+            done();
+          }
+        };
+        const unsubscribe = feedItemsStore.subscribe(check);
+        check();
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 30000)),
+    ]);
+
     setIsImportComplete(true);
   };
 
@@ -127,7 +161,15 @@ function EditFeedsPage() {
               <code className="bg-muted text-foreground rounded px-1 py-0.5">
                 subscriptions.csv
               </code>{" "}
-              files from a Google Takeout export
+              files from{" "}
+              <a
+                href={getBlogUrl("/how-to-export-youtube-subscriptions")}
+                className="underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                a Google Takeout export
+              </a>
             </li>
             <li>
               <code className="bg-muted text-foreground rounded px-1 py-0.5">

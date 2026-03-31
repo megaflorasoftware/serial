@@ -4,17 +4,15 @@ import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { CheckIcon, ClockIcon, EyeIcon, SendIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import {
-  useFeedItemsSetWatchedValueMutation,
-  useFeedItemsSetWatchLaterValueMutation,
-} from "~/lib/data/feed-items/mutations";
+import { useFeedItemsSetWatchLaterValueMutation } from "~/lib/data/feed-items/mutations";
 import { useFeeds as useFeedsArray } from "~/lib/data/feeds/store";
 import {
-  useInstapaperConnectionStatus,
   useSaveToInstapaperMutation,
+  useShowInstapaperAction,
 } from "~/lib/data/instapaper";
 import { useFeedItemValue } from "~/lib/data/store";
 import { timeAgo } from "~/lib/utils";
+import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 
 export type ItemSize = "standard" | "large";
 
@@ -103,15 +101,24 @@ interface ThumbnailContainerProps {
   layout: ThumbnailLayout;
   thumbnailType: ThumbnailType;
   children: React.ReactNode;
+  progress?: number;
+  duration?: number;
 }
 
 function ThumbnailContainer({
   layout,
   thumbnailType,
   children,
+  progress,
+  duration,
 }: ThumbnailContainerProps) {
   const isVideo =
     thumbnailType === "horizontal-video" || thumbnailType === "vertical-video";
+
+  const percentage =
+    progress && duration && duration > 0
+      ? Math.min((progress / duration) * 100, 100)
+      : 0;
 
   return (
     <div
@@ -141,6 +148,14 @@ function ThumbnailContainer({
       })}
     >
       {children}
+      {percentage > 0 && (
+        <div className="absolute inset-x-0 bottom-0 z-10 h-1.5 bg-white/30">
+          <div
+            className="bg-muted-foreground h-full"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -242,12 +257,11 @@ interface ItemActionsProps {
 }
 
 function ItemActions({ contentId, item, layout }: ItemActionsProps) {
-  const { mutateAsync: setWatchedValue } =
-    useFeedItemsSetWatchedValueMutation(contentId);
   const { mutateAsync: setWatchLaterValue } =
     useFeedItemsSetWatchLaterValueMutation(contentId);
+  const { toggleRead } = useFeedItemActions(contentId);
 
-  const { data: instapaperStatus } = useInstapaperConnectionStatus();
+  const showInstapaperAction = useShowInstapaperAction(contentId);
   const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
     useSaveToInstapaperMutation(contentId);
 
@@ -268,11 +282,7 @@ function ItemActions({ contentId, item, layout }: ItemActionsProps) {
   };
 
   const handleToggleWatched = () => {
-    void setWatchedValue({
-      id: item.id,
-      feedId: item.feedId,
-      isWatched: !item.isWatched,
-    });
+    toggleRead();
   };
 
   return (
@@ -284,19 +294,17 @@ function ItemActions({ contentId, item, layout }: ItemActionsProps) {
           isLargeList,
       })}
     >
-      {instapaperStatus?.isConfigured &&
-        instapaperStatus.isConnected &&
-        item.platform === "website" && (
-          <Button
-            size={isGrid ? "sm" : "icon"}
-            variant="ghost"
-            disabled={isSavingToInstapaper}
-            onClick={handleSaveToInstapaper}
-            className={clsx({ "h-8 w-8 p-0": isGrid })}
-          >
-            <SendIcon size={isGrid ? 14 : 16} />
-          </Button>
-        )}
+      {showInstapaperAction && (
+        <Button
+          size={isGrid ? "sm" : "icon"}
+          variant="ghost"
+          disabled={isSavingToInstapaper}
+          onClick={handleSaveToInstapaper}
+          className={clsx({ "h-8 w-8 p-0": isGrid })}
+        >
+          <SendIcon size={isGrid ? 14 : 16} />
+        </Button>
+      )}
       <Button
         size={isGrid ? "sm" : "icon"}
         variant="ghost"
@@ -328,6 +336,8 @@ interface ItemThumbnailProps {
     title: string;
     platform: string;
     orientation?: string;
+    progress?: number;
+    duration?: number;
   };
   feed?: {
     imageUrl?: string;
@@ -339,7 +349,12 @@ function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
   const thumbnailType = getThumbnailType(item, feed, layout);
 
   return (
-    <ThumbnailContainer layout={layout} thumbnailType={thumbnailType}>
+    <ThumbnailContainer
+      layout={layout}
+      thumbnailType={thumbnailType}
+      progress={item.progress}
+      duration={item.duration}
+    >
       {thumbnailType === "horizontal-video" && item.thumbnail && (
         <VideoThumbnail thumbnail={item.thumbnail} title={item.title} />
       )}
@@ -365,11 +380,15 @@ function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
 interface ItemDisplayProps {
   contentId: string;
   size?: ItemSize;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export function ItemDisplay({
   contentId,
   size = "standard",
+  isSelected,
+  onSelect,
 }: ItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
@@ -392,6 +411,8 @@ export function ItemDisplay({
 
   return (
     <article
+      data-item-id={contentId}
+      onMouseEnter={onSelect}
       className={clsx(
         "group relative flex w-full flex-1 justify-stretch gap-2",
         isLarge
@@ -408,8 +429,9 @@ export function ItemDisplay({
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
         className={clsx(
-          "sm:hover:bg-muted flex w-full flex-1 flex-col gap-4 pt-4 pr-4 pl-6 text-left transition-colors md:flex-row md:items-center md:rounded md:py-4 md:pr-0",
+          "flex w-full flex-1 flex-col gap-4 pt-4 pr-4 pl-6 text-left md:flex-row md:items-center md:rounded md:py-4 md:pr-0",
           isLarge ? "pb-1 md:pb-4" : "pb-4 md:h-20 md:py-0",
+          isSelected && "bg-muted",
         )}
       >
         {isLarge ? (
@@ -456,11 +478,15 @@ export function ItemDisplay({
 interface GridItemDisplayProps {
   contentId: string;
   size?: ItemSize;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export function GridItemDisplay({
   contentId,
   size = "standard",
+  isSelected,
+  onSelect,
 }: GridItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
@@ -483,7 +509,9 @@ export function GridItemDisplay({
 
   return (
     <article
-      className={clsx("group relative flex w-full flex-col", {
+      data-item-id={contentId}
+      onMouseEnter={onSelect}
+      className={clsx("group relative flex h-full w-full flex-col", {
         "opacity-50": item.isWatched,
       })}
     >
@@ -493,11 +521,8 @@ export function GridItemDisplay({
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
         className={clsx(
-          "sm:hover:bg-muted flex flex-col rounded p-2 text-left transition-colors",
-          {
-            "w-full": !isLarge,
-            "w-[calc(100vw-3rem)] md:w-full": isLarge,
-          },
+          "flex h-full flex-1 flex-col rounded p-2 text-left",
+          isSelected && "bg-muted",
         )}
       >
         <ItemThumbnail

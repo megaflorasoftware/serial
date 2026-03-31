@@ -17,10 +17,7 @@ import { deactivateExcessFeeds } from "../subscriptions/helpers";
 import { polarClient } from "../subscriptions/polar";
 import ResetPasswordEmail from "~/emails/reset-password";
 import VerifyEmailEmail from "~/emails/verify-email";
-import {
-  BASE_SIGNED_OUT_URL,
-  isPublicSignupEnabled,
-} from "~/lib/constants";
+import { BASE_SIGNED_OUT_URL, isPublicSignupEnabled } from "~/lib/constants";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {

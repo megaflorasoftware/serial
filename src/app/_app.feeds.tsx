@@ -1,6 +1,6 @@
 "use client";
 
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   GlobeIcon,
   PlayCircleIcon,
@@ -14,15 +14,14 @@ import type { FeedPlatform } from "~/server/db/schema";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useDialogStore } from "~/components/feed/dialogStore";
+import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
-import { Switch } from "~/components/ui/switch";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { SubscriptionDialog } from "~/components/feed/SubscriptionDialog";
+import { Switch } from "~/components/ui/switch";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
@@ -36,7 +35,7 @@ import {
   useSetFeedActiveMutation,
 } from "~/lib/data/feeds/mutations";
 import { useSubscription } from "~/lib/data/subscription";
-import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
+import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
 
 function useFeedManagementShortcuts({
   onEscape,
@@ -152,7 +151,7 @@ function ManageFeedsPage() {
   const { feeds } = useFeeds();
   const { feedCategories } = useFeedCategories();
   const { contentCategories } = useContentCategories();
-  const { launchDialog, dialog } = useDialogStore();
+  const { launchDialog } = useDialogStore();
   const { activeFeeds, maxActiveFeeds, planName } = useSubscription();
   const { mutate: setFeedActive, isPending: isTogglingActive } =
     useSetFeedActiveMutation();

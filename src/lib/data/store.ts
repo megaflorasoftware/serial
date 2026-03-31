@@ -8,7 +8,6 @@ import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
 import { feedsStore } from "./feeds/store";
 import { viewsStore } from "./views/store";
-import { useDialogStore } from "~/components/feed/dialogStore";
 import type { VisibilityFilter } from "./atoms";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type { ApplicationFeedItem } from "~/server/db/schema";
@@ -17,6 +16,7 @@ import type {
   PaginationCursor,
 } from "~/server/api/routers/initialRouter";
 import type { PublishedChunk } from "~/server/api/publisher";
+import { useDialogStore } from "~/components/feed/dialogStore";
 
 export type PaginationState = {
   cursor: PaginationCursor;

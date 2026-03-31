@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0456b9f1-990c-4ec8-97f9-0c4399be31d4",
+  "id": "7fde3d1e-d564-4e49-83a2-f27ea863ddd2",
   "prevId": "83c58f02-2fa0-4bca-984e-d133692b9a67",
   "tables": {
     "serial_account": {
@@ -557,14 +557,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
         }
       },
       "indexes": {
@@ -587,14 +579,6 @@
           "columns": [
             "user_id",
             "url"
-          ],
-          "isUnique": false
-        },
-        "feed_user_id_is_active_idx": {
-          "name": "feed_user_id_is_active_idx",
-          "columns": [
-            "user_id",
-            "is_active"
           ],
           "isUnique": false
         }
@@ -943,6 +927,20 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "article_font_size": {
+          "name": "article_font_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "article_font_family": {
+          "name": "article_font_family",
+          "type": "text(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {

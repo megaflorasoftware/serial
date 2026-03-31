@@ -4,13 +4,14 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
-import FeedLoading from "../components/loading";
 import type React from "react";
+import FeedLoading from "~/components/loading";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { ImpersonationBanner } from "~/components/ImpersonationBanner";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
+import { useAltKeyHeld } from "~/lib/hooks/useAltKeyHeld";
 import { authMiddleware } from "~/server/auth";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
 
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/_app")({
 
 function RootLayout() {
   const { mostRecentRelease } = Route.useLoaderData();
+  useAltKeyHeld();
 
   return (
     // <ApplyColorTheme>
