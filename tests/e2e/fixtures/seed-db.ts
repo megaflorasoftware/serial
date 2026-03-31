@@ -144,3 +144,82 @@ export async function seedArticleData(
 
   return { feedItemId, email, password };
 }
+
+/**
+ * Verifies that all user-related data has been cleaned up from the database.
+ * Queries every table that references a user (directly or transitively) and
+ * asserts zero orphaned rows remain.
+ */
+export async function verifyUserCleanup(tursoPort: number, email: string) {
+  const client = createClient({ url: `http://127.0.0.1:${tursoPort}` });
+
+  // Check the user row is gone
+  const userResult = await client.execute({
+    sql: "SELECT count(*) as c FROM serial_user WHERE email = ?",
+    args: [email],
+  });
+  const userCount = (userResult.rows[0]?.c as number) ?? 0;
+  if (userCount > 0) {
+    client.close();
+    throw new Error(`Expected user ${email} to be deleted, but found a row`);
+  }
+
+  // For cascade-dependent tables, verify no orphaned rows reference
+  // non-existent parents.
+  const queries: Array<{ label: string; sql: string }> = [
+    {
+      label: "sessions",
+      sql: "SELECT count(*) as c FROM serial_session WHERE user_id NOT IN (SELECT id FROM serial_user)",
+    },
+    {
+      label: "accounts",
+      sql: "SELECT count(*) as c FROM serial_account WHERE user_id NOT IN (SELECT id FROM serial_user)",
+    },
+    {
+      label: "feeds",
+      sql: "SELECT count(*) as c FROM serial_feed WHERE user_id NOT IN (SELECT id FROM serial_user)",
+    },
+    {
+      label: "feed_items",
+      sql: "SELECT count(*) as c FROM serial_feed_item WHERE feed_id NOT IN (SELECT id FROM serial_feed)",
+    },
+    {
+      label: "content_categories",
+      sql: "SELECT count(*) as c FROM serial_content_categories WHERE user_id NOT IN (SELECT id FROM serial_user)",
+    },
+    {
+      label: "feed_categories",
+      sql: "SELECT count(*) as c FROM serial_feed_categories WHERE feed_id NOT IN (SELECT id FROM serial_feed) OR category_id NOT IN (SELECT id FROM serial_content_categories)",
+    },
+    {
+      label: "views",
+      sql: "SELECT count(*) as c FROM serial_views WHERE user_id NOT IN (SELECT id FROM serial_user)",
+    },
+    {
+      label: "view_categories",
+      sql: "SELECT count(*) as c FROM serial_view_categories WHERE view_id NOT IN (SELECT id FROM serial_views) OR category_id NOT IN (SELECT id FROM serial_content_categories)",
+    },
+    {
+      label: "user_config",
+      sql: "SELECT count(*) as c FROM serial_user_config WHERE user_id NOT IN (SELECT id FROM serial_user)",
+    },
+  ];
+
+  const errors: string[] = [];
+
+  for (const q of queries) {
+    const result = await client.execute(q.sql);
+    const count = (result.rows[0]?.c as number) ?? 0;
+    if (count > 0) {
+      errors.push(`${q.label}: ${count} orphaned row(s)`);
+    }
+  }
+
+  client.close();
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Database cleanup verification failed:\n${errors.join("\n")}`,
+    );
+  }
+}
