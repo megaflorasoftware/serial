@@ -35,9 +35,9 @@
     "lint:fix": "eslint --fix .",
     "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix && git add -u",
     "test": "concurrently \"pnpm test:main\" \"pnpm test:self-hosted\"",
-    "test:main": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.main-instance.config.ts",
-    "test:main:ui": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.main-instance.config.ts",
-    "test:headed": "(lsof -ti:3000 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --headed --config playwright.main-instance.config.ts",
+    "test:main": "(lsof -ti:3000 -ti:3004 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.main-instance.config.ts",
+    "test:main:ui": "(lsof -ti:3000 -ti:3004 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.main-instance.config.ts",
+    "test:headed": "(lsof -ti:3000 -ti:3004 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --headed --config playwright.main-instance.config.ts",
     "test:self-hosted": "(lsof -ti:3001 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.self-hosted.config.ts",
     "test:self-hosted:ui": "(lsof -ti:3001 -ti:3003 -ti:8082 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.self-hosted.config.ts"
   },

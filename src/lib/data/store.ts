@@ -17,6 +17,8 @@ import type {
 } from "~/server/api/routers/initialRouter";
 import type { PublishedChunk } from "~/server/api/publisher";
 import { useDialogStore } from "~/components/feed/dialogStore";
+import { getQueryClient } from "~/lib/query-provider";
+import { orpc } from "~/lib/orpc";
 
 export type PaginationState = {
   cursor: PaginationCursor;
@@ -985,6 +987,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 viewPaginationState: paginationState,
                 _lastItemByView: {}, // Clear after use
               });
+
+              // Invalidate subscription query so active feed count updates
+              void getQueryClient().invalidateQueries({
+                queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
+              });
+
               break;
             }
 
