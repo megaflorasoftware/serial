@@ -13,7 +13,10 @@ import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
 import { appConfig, feeds, user } from "../db/schema";
 import { determinePlanFromProductId, PLANS } from "../subscriptions/plans";
-import { deactivateExcessFeeds } from "../subscriptions/helpers";
+import {
+  deactivateExcessFeeds,
+  invalidatePlanCache,
+} from "../subscriptions/helpers";
 import { polarClient } from "../subscriptions/polar";
 import ResetPasswordEmail from "~/emails/reset-password";
 import VerifyEmailEmail from "~/emails/verify-email";
@@ -49,6 +52,7 @@ async function handleSubscriptionEnd(payload: {
   const externalId = payload.data.customer?.externalId;
   if (!externalId) return;
 
+  invalidatePlanCache(externalId);
   await deactivateExcessFeeds(db, externalId, PLANS.free.maxActiveFeeds);
   await db
     .update(feeds)
@@ -103,6 +107,8 @@ function buildPolarPlugin() {
             const externalId = payload.data.customer?.externalId;
             if (!externalId) return;
 
+            invalidatePlanCache(externalId);
+
             const productId = payload.data.productId;
             const planId = determinePlanFromProductId(productId);
             if (!planId) {
@@ -112,15 +118,26 @@ function buildPolarPlugin() {
 
             const config = PLANS[planId];
             if (config.backgroundRefreshIntervalMs) {
-              const nextFetchAt = new Date(
-                Date.now() + config.backgroundRefreshIntervalMs,
-              );
-              await db
-                .update(feeds)
-                .set({ nextFetchAt })
+              // Stagger nextFetchAt across the refresh interval so feeds
+              // don't all become due at the same instant (thundering herd).
+              const activeFeeds = await db
+                .select({ id: feeds.id })
+                .from(feeds)
                 .where(
                   and(eq(feeds.userId, externalId), eq(feeds.isActive, true)),
-                );
+                )
+                .all();
+
+              const interval = config.backgroundRefreshIntervalMs;
+              const feedCount = activeFeeds.length;
+              for (let i = 0; i < feedCount; i++) {
+                const offset =
+                  feedCount > 1 ? Math.round((interval / feedCount) * i) : 0;
+                await db
+                  .update(feeds)
+                  .set({ nextFetchAt: new Date(Date.now() + offset) })
+                  .where(eq(feeds.id, activeFeeds[i]!.id));
+              }
             }
           },
           onSubscriptionCanceled: async (payload) => {

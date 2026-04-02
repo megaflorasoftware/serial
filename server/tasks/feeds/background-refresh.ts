@@ -50,35 +50,42 @@ export default defineTask({
     let refreshedCount = 0;
 
     for (const { userId } of usersWithFeeds) {
-      // For main instance, only refresh for paid users
-      if (IS_MAIN_INSTANCE) {
-        const planId = userPlanIds.get(userId) ?? "free";
-        const config = getEffectivePlanConfig(planId);
-        if (!config.backgroundRefreshIntervalMs) {
-          continue; // Free plan, no background refresh
+      try {
+        // For main instance, only refresh for paid users
+        if (IS_MAIN_INSTANCE) {
+          const planId = userPlanIds.get(userId) ?? "free";
+          const config = getEffectivePlanConfig(planId);
+          if (!config.backgroundRefreshIntervalMs) {
+            continue; // Free plan, no background refresh
+          }
         }
-      }
 
-      // Get active feeds that need refreshing for this user
-      const userFeeds = await db
-        .select()
-        .from(feeds)
-        .where(
-          and(
-            eq(feeds.userId, userId),
-            eq(feeds.isActive, true),
-            lte(feeds.nextFetchAt, now),
-          ),
-        )
-        .all();
+        // Get active feeds that need refreshing for this user
+        const userFeeds = await db
+          .select()
+          .from(feeds)
+          .where(
+            and(
+              eq(feeds.userId, userId),
+              eq(feeds.isActive, true),
+              lte(feeds.nextFetchAt, now),
+            ),
+          )
+          .all();
 
-      if (userFeeds.length === 0) continue;
+        if (userFeeds.length === 0) continue;
 
-      // Fetch and insert feed data
-      for await (const result of fetchAndInsertFeedData({ db }, userFeeds)) {
-        if (result.status === "success") {
-          refreshedCount++;
+        // Fetch and insert feed data
+        for await (const result of fetchAndInsertFeedData({ db }, userFeeds)) {
+          if (result.status === "success") {
+            refreshedCount++;
+          }
         }
+      } catch (e) {
+        console.error(
+          `[background-refresh] Failed to refresh feeds for user ${userId}:`,
+          e,
+        );
       }
     }
 

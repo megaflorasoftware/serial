@@ -8,6 +8,9 @@ import { feeds } from "~/server/db/schema";
 
 type DB = typeof Database;
 
+const PLAN_CACHE_TTL_MS = 60_000; // 1 minute
+const planCache = new Map<string, { planId: PlanId; expiresAt: number }>();
+
 export async function getActiveFeedCount(db: DB, userId: string) {
   const result = await db
     .select({ count: count() })
@@ -20,6 +23,11 @@ export async function getActiveFeedCount(db: DB, userId: string) {
 export async function getUserPlanId(userId: string): Promise<PlanId> {
   if (!IS_MAIN_INSTANCE || !polarClient) return "pro";
 
+  const cached = planCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.planId;
+  }
+
   try {
     // Look up active subscriptions by externalCustomerId (Better Auth sets this to user ID)
     const subscriptions = await polarClient.subscriptions.list({
@@ -28,17 +36,38 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
     });
 
     const activeSub = subscriptions.result?.items?.[0];
-    if (!activeSub?.productId) return "free";
+    const planId: PlanId = activeSub?.productId
+      ? (determinePlanFromProductId(activeSub.productId) ?? "free")
+      : "free";
 
-    const plan = determinePlanFromProductId(activeSub.productId);
-    return plan ?? "free";
+    planCache.set(userId, {
+      planId,
+      expiresAt: Date.now() + PLAN_CACHE_TTL_MS,
+    });
+
+    return planId;
   } catch (e) {
+    // On failure, prefer the last-known plan over defaulting to free —
+    // a Polar outage shouldn't downgrade paid users mid-session.
+    if (cached) {
+      console.warn(
+        `[subscription] Polar API failed for user ${userId}, using cached plan "${cached.planId}":`,
+        e,
+      );
+      return cached.planId;
+    }
+
     console.error(
-      `[subscription] Failed to fetch plan for user ${userId}, defaulting to free:`,
+      `[subscription] Failed to fetch plan for user ${userId}, no cached value, defaulting to free:`,
       e,
     );
     return "free";
   }
+}
+
+/** Evict the cached plan for a user (e.g. after a webhook updates their subscription). */
+export function invalidatePlanCache(userId: string) {
+  planCache.delete(userId);
 }
 
 export async function canActivateFeed(db: DB, userId: string) {

@@ -1125,7 +1125,7 @@ export const streamingImport = protectedProcedure
 
     // Worker function: insert feed + fetch RSS content
     async function processFeed(feedInput: (typeof feedsWithActivation)[0]) {
-      const IMPORT_TIMEOUT_MS = 15_000; // 10 seconds
+      const IMPORT_TIMEOUT_MS = 15_000; // 15 seconds
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
