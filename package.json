@@ -9,7 +9,7 @@
     "dev:db:test:self-hosted": "turso dev --db-file serial-test-self-hosted.db --port 8082",
     "dev:migrate:test:main": "DATABASE_URL=http://127.0.0.1:8081 BETTER_AUTH_SECRET=test-secret-key-for-main-tests pnpm schema:migrate",
     "dev:migrate:test:self-hosted": "DATABASE_URL=http://127.0.0.1:8082 BETTER_AUTH_SECRET=test-secret-key-for-self-hosted-tests pnpm schema:migrate",
-    "dev:test:main": "concurrently --kill-others \"pnpm dev:db:test:main\" \"pnpm dev:migrate:test:main && DATABASE_URL=http://127.0.0.1:8081 BETTER_AUTH_SECRET=test-secret-key-for-main-tests BETTER_AUTH_BASE_URL=http://localhost:3002 VITE_PUBLIC_IS_MAIN_INSTANCE=true vite dev --port 3002\"",
+    "dev:test:main": "concurrently --kill-others \"pnpm dev:db:test:main\" \"pnpm dev:migrate:test:main && DATABASE_URL=http://127.0.0.1:8081 BETTER_AUTH_SECRET=test-secret-key-for-main-tests BETTER_AUTH_BASE_URL=http://localhost:3002 VITE_PUBLIC_IS_MAIN_INSTANCE=true POLAR_ACCESS_TOKEN=test-token-for-e2e vite dev --port 3002\"",
     "dev:test:self-hosted": "concurrently --kill-others \"pnpm dev:db:test:self-hosted\" \"pnpm dev:migrate:test:self-hosted && DATABASE_URL=http://127.0.0.1:8082 BETTER_AUTH_SECRET=test-secret-key-for-self-hosted-tests BETTER_AUTH_BASE_URL=http://localhost:3001 VITE_PUBLIC_IS_MAIN_INSTANCE=false vite dev --port 3001\"",
     "dev:migrate": "pnpm schema:migrate",
     "dev:atomic": "vite dev",
