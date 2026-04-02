@@ -1,11 +1,9 @@
 import { defineTask } from "nitro/task";
 import { and, eq, lte } from "drizzle-orm";
 import { db } from "~/server/db";
-import { feeds } from "~/server/db/schema";
+import { feeds, user } from "~/server/db/schema";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
-import { getUserPlanId } from "~/server/subscriptions/helpers";
-import { getEffectivePlanConfig } from "~/server/subscriptions/plans";
-import { IS_BILLING_ENABLED } from "~/server/subscriptions/polar";
+import { IS_MAIN_INSTANCE } from "~/lib/constants";
 
 export default defineTask({
   meta: {
@@ -22,6 +20,8 @@ export default defineTask({
 
     const now = new Date();
 
+    console.log("[background-refresh] Running at ", now.toLocaleString());
+
     // Find distinct userIds with active feeds that need refreshing
     const usersWithFeeds = await db
       .selectDistinct({ userId: feeds.userId })
@@ -33,31 +33,24 @@ export default defineTask({
       return { result: "no-feeds-to-refresh" };
     }
 
-    // Pre-fetch plan IDs for all users to avoid N+1 Polar API calls
-    const userPlanIds = new Map<
-      string,
-      Awaited<ReturnType<typeof getUserPlanId>>
-    >();
-    if (IS_BILLING_ENABLED) {
-      await Promise.all(
-        usersWithFeeds.map(async ({ userId }) => {
-          const planId = await getUserPlanId(userId);
-          userPlanIds.set(userId, planId);
-        }),
-      );
+    // On the main instance, only refresh feeds for admin users.
+    // Paid users' feeds have nextFetchAt managed by subscription webhooks.
+    let adminUserIds: Set<string> | null = null;
+    if (IS_MAIN_INSTANCE) {
+      const admins = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.role, "admin"))
+        .all();
+      adminUserIds = new Set(admins.map((a) => a.id));
     }
 
     let refreshedCount = 0;
 
     for (const { userId } of usersWithFeeds) {
       try {
-        // For main instance, only refresh for paid users
-        if (IS_BILLING_ENABLED) {
-          const planId = userPlanIds.get(userId) ?? "free";
-          const config = getEffectivePlanConfig(planId);
-          if (!config.backgroundRefreshIntervalMs) {
-            continue; // Free plan, no background refresh
-          }
+        if (adminUserIds && !adminUserIds.has(userId)) {
+          continue;
         }
 
         // Get active feeds that need refreshing for this user
@@ -88,6 +81,11 @@ export default defineTask({
         );
       }
     }
+
+    console.log(
+      "[background-refresh] Finished at ",
+      new Date().toLocaleString(),
+    );
 
     return { result: `refreshed ${refreshedCount} feeds` };
   },
