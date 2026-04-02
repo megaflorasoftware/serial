@@ -298,12 +298,14 @@ function ItemActions({
   return (
     <div
       className={clsx(
-        "md:bg-background/90 flex flex-row items-center md:absolute md:right-4 md:bottom-2 md:rounded md:shadow-sm",
+        "md:bg-background/90 flex flex-row items-center md:absolute md:right-2 md:bottom-2 md:rounded-lg md:shadow-sm",
         {
           "md:hidden md:group-hover:flex": !(showShortcuts && isSelected),
-          "h-full justify-center pr-6 md:pr-0": isStandardList,
+          "-ml-2 justify-start pb-2 pl-6 md:right-4 md:bottom-5 md:ml-0 md:pb-0 md:pl-0":
+            isStandardList,
           "-ml-2 justify-start gap-1 px-2 pb-2 md:ml-0 md:px-0 md:pb-0": isGrid,
-          "-ml-2 justify-start pb-2 pl-6 md:ml-0 md:pb-0 md:pl-0": isLargeList,
+          "-ml-2 justify-start pb-2 pl-6 md:ml-0 md:pb-0 md:pl-0":
+            isStandardList || isLargeList,
         },
       )}
     >
