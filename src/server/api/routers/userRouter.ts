@@ -4,8 +4,7 @@ import { z } from "zod";
 import { userEmailSchema, userNameSchema } from "../schemas";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { user } from "~/server/db/schema";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
-import { polarClient } from "~/server/subscriptions/polar";
+import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 
 export const checkIsLegacyUser = publicProcedure
   .input(
@@ -75,7 +74,7 @@ export const updateEmail = protectedProcedure
       })
       .where(eq(user.id, context.user.id));
 
-    if (IS_MAIN_INSTANCE && polarClient) {
+    if (IS_BILLING_ENABLED && polarClient) {
       try {
         await polarClient.customers.updateExternal({
           externalId: context.user.id,

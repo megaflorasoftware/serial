@@ -9,3 +9,6 @@ export const polarClient =
           process.env.NODE_ENV === "production" ? "production" : "sandbox",
       })
     : null;
+
+/** True only when running as the main instance with Polar credentials configured. */
+export const IS_BILLING_ENABLED = polarClient !== null;

@@ -22,7 +22,6 @@ import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Switch } from "~/components/ui/switch";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import {
@@ -152,7 +151,8 @@ function ManageFeedsPage() {
   const { feedCategories } = useFeedCategories();
   const { contentCategories } = useContentCategories();
   const { launchDialog } = useDialogStore();
-  const { activeFeeds, maxActiveFeeds, planName } = useSubscription();
+  const { billingEnabled, activeFeeds, maxActiveFeeds, planName } =
+    useSubscription();
   const { mutate: setFeedActive, isPending: isTogglingActive } =
     useSetFeedActiveMutation();
 
@@ -391,7 +391,7 @@ function ManageFeedsPage() {
             <h2 ref={headerRef} className="font-sans text-lg">
               Manage Feeds
             </h2>
-            {IS_MAIN_INSTANCE && maxActiveFeeds > 0 && (
+            {billingEnabled && maxActiveFeeds > 0 && (
               <p className="text-muted-foreground text-sm">
                 {activeFeeds} / {maxActiveFeeds} feeds active
               </p>
@@ -406,7 +406,7 @@ function ManageFeedsPage() {
             <PlusIcon size={16} />
           </ButtonWithShortcut>
         </div>
-        {IS_MAIN_INSTANCE &&
+        {billingEnabled &&
           maxActiveFeeds > 0 &&
           activeFeeds >= maxActiveFeeds && (
             <Alert className="mt-4">

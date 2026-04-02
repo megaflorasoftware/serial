@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import type { PlanId } from "~/server/subscriptions/plans";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { protectedProcedure } from "~/server/orpc/base";
 import { getUserPlanLimits } from "~/server/subscriptions/helpers";
-import { polarClient } from "~/server/subscriptions/polar";
+import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import { PLANS } from "~/server/subscriptions/plans";
 import { user } from "~/server/db/schema";
 
@@ -30,7 +29,7 @@ export const getStatus = protectedProcedure.handler(async ({ context }) => {
 });
 
 export const getProducts = protectedProcedure.handler(async () => {
-  if (!IS_MAIN_INSTANCE || !polarClient) {
+  if (!IS_BILLING_ENABLED || !polarClient) {
     return [];
   }
 
@@ -114,7 +113,7 @@ export const getProducts = protectedProcedure.handler(async () => {
 export const createCheckout = protectedProcedure
   .input(z.object({ planId: z.enum(["free", "standard", "pro"]) }))
   .handler(async ({ context, input }) => {
-    if (!IS_MAIN_INSTANCE || !polarClient) {
+    if (!IS_BILLING_ENABLED || !polarClient) {
       return { url: null, error: null };
     }
 
@@ -160,7 +159,7 @@ export const createCheckout = protectedProcedure
 
 export const createPortalSession = protectedProcedure.handler(
   async ({ context }) => {
-    if (!IS_MAIN_INSTANCE || !polarClient) {
+    if (!IS_BILLING_ENABLED || !polarClient) {
       return { url: null };
     }
 

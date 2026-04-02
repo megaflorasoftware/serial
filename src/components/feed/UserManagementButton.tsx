@@ -24,7 +24,6 @@ import {
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
 import { authClient, signOut } from "~/lib/auth-client";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { useClearAllUserData } from "~/lib/data/atoms";
 import { useSubscription } from "~/lib/data/subscription";
 
@@ -35,7 +34,7 @@ export function UserManagementNavItem() {
   } = authClient.useSession();
 
   const { launchDialog, closeDialog, dialog } = useDialogStore();
-  const { planName } = useSubscription();
+  const { billingEnabled, planName } = useSubscription();
 
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -82,7 +81,7 @@ export function UserManagementNavItem() {
               <p className="text-muted-foreground text-xs">
                 {data?.user.email}
               </p>
-              {IS_MAIN_INSTANCE && (
+              {billingEnabled && (
                 <p className="text-muted-foreground text-xs">{planName} plan</p>
               )}
               <Link
@@ -105,7 +104,7 @@ export function UserManagementNavItem() {
               <span className="pl-1.5">Connections</span>
             </Button>
           </ResponsiveDropdownMenuItem>
-          {IS_MAIN_INSTANCE && (
+          {billingEnabled && (
             <ResponsiveDropdownMenuItem asChild>
               <Button
                 variant="outline"

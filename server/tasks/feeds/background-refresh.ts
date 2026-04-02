@@ -5,7 +5,7 @@ import { feeds } from "~/server/db/schema";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import { getUserPlanId } from "~/server/subscriptions/helpers";
 import { getEffectivePlanConfig } from "~/server/subscriptions/plans";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
+import { IS_BILLING_ENABLED } from "~/server/subscriptions/polar";
 
 export default defineTask({
   meta: {
@@ -38,7 +38,7 @@ export default defineTask({
       string,
       Awaited<ReturnType<typeof getUserPlanId>>
     >();
-    if (IS_MAIN_INSTANCE) {
+    if (IS_BILLING_ENABLED) {
       await Promise.all(
         usersWithFeeds.map(async ({ userId }) => {
           const planId = await getUserPlanId(userId);
@@ -52,7 +52,7 @@ export default defineTask({
     for (const { userId } of usersWithFeeds) {
       try {
         // For main instance, only refresh for paid users
-        if (IS_MAIN_INSTANCE) {
+        if (IS_BILLING_ENABLED) {
           const planId = userPlanIds.get(userId) ?? "free";
           const config = getEffectivePlanConfig(planId);
           if (!config.backgroundRefreshIntervalMs) {

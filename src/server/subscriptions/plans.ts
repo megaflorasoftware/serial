@@ -1,4 +1,4 @@
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
+import { IS_BILLING_ENABLED } from "./polar";
 
 export const PLAN_IDS = ["free", "standard", "pro"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
@@ -50,7 +50,7 @@ const UNLIMITED_CONFIG: PlanConfig = {
 };
 
 export function getEffectivePlanConfig(planId: PlanId): PlanConfig {
-  if (!IS_MAIN_INSTANCE) return UNLIMITED_CONFIG;
+  if (!IS_BILLING_ENABLED) return UNLIMITED_CONFIG;
   return PLANS[planId];
 }
 

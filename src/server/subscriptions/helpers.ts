@@ -1,9 +1,8 @@
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { determinePlanFromProductId, getEffectivePlanConfig } from "./plans";
-import { polarClient } from "./polar";
+import { IS_BILLING_ENABLED, polarClient } from "./polar";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { feeds } from "~/server/db/schema";
 
 type DB = typeof Database;
@@ -21,7 +20,7 @@ export async function getActiveFeedCount(db: DB, userId: string) {
 }
 
 export async function getUserPlanId(userId: string): Promise<PlanId> {
-  if (!IS_MAIN_INSTANCE || !polarClient) return "pro";
+  if (!IS_BILLING_ENABLED) return "pro";
 
   const cached = planCache.get(userId);
   if (cached && Date.now() < cached.expiresAt) {
@@ -30,7 +29,7 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
 
   try {
     // Look up active subscriptions by externalCustomerId (Better Auth sets this to user ID)
-    const subscriptions = await polarClient.subscriptions.list({
+    const subscriptions = await polarClient!.subscriptions.list({
       externalCustomerId: [userId],
       active: true,
     });
@@ -97,6 +96,7 @@ export async function getUserPlanLimits(db: DB, userId: string) {
       config.maxActiveFeeds === Infinity ? -1 : config.maxActiveFeeds,
     activeFeeds,
     backgroundRefreshIntervalMs: config.backgroundRefreshIntervalMs,
+    billingEnabled: IS_BILLING_ENABLED,
   };
 }
 
