@@ -500,7 +500,18 @@ export function SidebarFeeds() {
                     variant={feed.id === feedFilter ? "outline" : "default"}
                     onClick={() => setFeedFilter(feed.id)}
                   >
-                    <PauseIcon size={16} className="text-muted-foreground" />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <PauseIcon
+                          size={16}
+                          className="text-muted-foreground"
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        This feed is inactive and won&apos;t receive new
+                        content.
+                      </TooltipContent>
+                    </Tooltip>
                     <div className="text-muted-foreground line-clamp-1">
                       {feed.name}
                     </div>
