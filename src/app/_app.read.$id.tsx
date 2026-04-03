@@ -83,8 +83,9 @@ function ReadPage() {
   const hasRestoredRef = useRef(false);
   useEffect(() => {
     if (hasRestoredRef.current) return;
+    if (feedItem == null) return;
 
-    const progress = feedItem?.progress ?? 0;
+    const progress = feedItem.progress ?? 0;
 
     if (progress <= 0) {
       hasRestoredRef.current = true;
