@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
 import { toast } from "sonner";
-import type { PlanConfig, PlanId } from "~/server/subscriptions/plans";
+import type { PlanConfig } from "~/server/subscriptions/plans";
 import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -126,7 +126,9 @@ export function SubscriptionDialog({
   const { planId } = useSubscription();
   const { data: session, refetch: refetchSession } = useSession();
   const [showVerification, setShowVerification] = useState(false);
-  const [pendingPlanId, setPendingPlanId] = useState<PlanId | null>(null);
+  const [pendingPlanId, setPendingPlanId] = useState<"standard" | "pro" | null>(
+    null,
+  );
 
   const emailVerified = session?.user?.emailVerified ?? false;
 
@@ -163,7 +165,7 @@ export function SubscriptionDialog({
 
   const isSubscribed = planId !== "free";
 
-  function handleSubscribeClick(id: PlanId) {
+  function handleSubscribeClick(id: "standard" | "pro") {
     setPendingPlanId(id);
     checkoutMutation.mutate({ planId: id });
   }
@@ -249,7 +251,7 @@ export function SubscriptionDialog({
                   </Button>
                 </div>
               )}
-              {!isCurrent && isPaid && (
+              {!isCurrent && id !== "free" && (
                 <div className="mt-3">
                   <Button
                     size="sm"

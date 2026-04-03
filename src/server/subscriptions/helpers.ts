@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { determinePlanFromProductId, getEffectivePlanConfig } from "./plans";
 import { IS_BILLING_ENABLED, polarClient } from "./polar";
 import type { PlanId } from "./plans";
@@ -109,7 +109,7 @@ export async function deactivateExcessFeeds(
     .select({ id: feeds.id })
     .from(feeds)
     .where(and(eq(feeds.userId, userId), eq(feeds.isActive, true)))
-    .orderBy(desc(feeds.lastFetchedAt))
+    .orderBy(asc(feeds.lastFetchedAt))
     .all();
 
   if (activeFeeds.length <= maxActive) return;

@@ -37,6 +37,28 @@ import {
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 import { useDialogStore } from "~/components/feed/dialogStore";
 
+function ImportedFeedStatus({
+  feedUrl,
+  feeds,
+}: {
+  feedUrl: string;
+  feeds: Array<{ url: string; isActive: boolean }>;
+}) {
+  const importedFeed = feeds.find((f) => f.url === feedUrl);
+  const isInactive = importedFeed && !importedFeed.isActive;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger>
+        {isInactive ? <PauseIcon size={20} /> : <CheckIcon size={20} />}
+      </TooltipTrigger>
+      <TooltipContent>
+        {isInactive ? "Feed inactive" : "Imported Successfully!"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function PlatformIcon({ platform }: { platform: FeedPlatform }) {
   switch (platform) {
     case "youtube":
@@ -357,34 +379,12 @@ function EditFeedsPage() {
                           )}
                           {isPostImportScreen &&
                             wasImported &&
-                            channel.shouldImport &&
-                            (() => {
-                              const importedFeed = feeds.find(
-                                (f) => f.url === channel.feedUrl,
-                              );
-                              if (importedFeed && !importedFeed.isActive) {
-                                return (
-                                  <Tooltip>
-                                    <TooltipTrigger>
-                                      <PauseIcon size={20} />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      Feed inactive
-                                    </TooltipContent>
-                                  </Tooltip>
-                                );
-                              }
-                              return (
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <CheckIcon size={20} />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    Imported Successfully!
-                                  </TooltipContent>
-                                </Tooltip>
-                              );
-                            })()}
+                            channel.shouldImport && (
+                              <ImportedFeedStatus
+                                feedUrl={channel.feedUrl}
+                                feeds={feeds}
+                              />
+                            )}
                           {isPostImportScreen &&
                             channel.shouldImport &&
                             failedImportUrls.has(channel.feedUrl) && (

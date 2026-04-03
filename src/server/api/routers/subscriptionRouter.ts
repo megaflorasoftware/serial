@@ -111,7 +111,7 @@ export const getProducts = protectedProcedure.handler(async () => {
 });
 
 export const createCheckout = protectedProcedure
-  .input(z.object({ planId: z.enum(["free", "standard", "pro"]) }))
+  .input(z.object({ planId: z.enum(["standard", "pro"]) }))
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
       return { url: null, error: null };
