@@ -7,6 +7,24 @@ import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import { PLANS } from "~/server/subscriptions/plans";
 import { user } from "~/server/db/schema";
 
+const BASE_URL = process.env.BETTER_AUTH_BASE_URL ?? "http://localhost:3000";
+
+function getValidatedOrigin(headers: Headers): string {
+  const origin = headers.get("origin") ?? headers.get("referer");
+  if (origin) {
+    try {
+      const parsed = new URL(origin);
+      const base = new URL(BASE_URL);
+      if (parsed.origin === base.origin) {
+        return base.origin;
+      }
+    } catch {
+      // invalid URL, fall through
+    }
+  }
+  return BASE_URL;
+}
+
 type CachedProducts = {
   data: PlanProduct[];
   expiresAt: number;
@@ -139,19 +157,13 @@ export const createCheckout = protectedProcedure
       return { url: null, error: null };
     }
 
-    const origin =
-      context.headers.get("origin") ??
-      context.headers.get("referer") ??
-      "http://localhost:3000";
-    const successUrl = new URL("/?checkout_success=true", origin).toString();
-    const returnUrl = new URL("/", origin).toString();
-
+    const origin = getValidatedOrigin(context.headers);
     const checkout = await polarClient.checkouts.create({
       externalCustomerId: context.user.id,
       customerEmail: context.user.email,
       products: productIds,
-      successUrl,
-      returnUrl,
+      successUrl: `${origin}/?checkout_success=true`,
+      returnUrl: `${origin}/`,
     });
 
     return { url: checkout.url, error: null };
@@ -163,15 +175,10 @@ export const createPortalSession = protectedProcedure.handler(
       return { url: null };
     }
 
-    const origin =
-      context.headers.get("origin") ??
-      context.headers.get("referer") ??
-      "http://localhost:3000";
-    const returnUrl = new URL("/", origin).toString();
-
+    const origin = getValidatedOrigin(context.headers);
     const session = await polarClient.customerSessions.create({
       externalCustomerId: context.user.id,
-      returnUrl,
+      returnUrl: `${origin}/`,
     });
 
     return { url: session.customerPortalUrl };

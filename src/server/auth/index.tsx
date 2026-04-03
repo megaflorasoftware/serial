@@ -62,6 +62,7 @@ async function handleSubscriptionEnd(payload: {
 
 function buildPolarPlugin() {
   if (!polarClient) return [];
+  if (!process.env.POLAR_WEBHOOK_SECRET) return [];
 
   const products = [
     process.env.POLAR_STANDARD_MONTHLY_PRODUCT_ID
