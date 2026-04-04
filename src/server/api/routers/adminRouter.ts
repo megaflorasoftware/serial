@@ -190,32 +190,38 @@ export const getPublicSignupSetting = adminProcedure.handler(async () => {
     .where(eq(user.role, "admin"))
     .all();
 
-  const adminAccountRows = await db
-    .select({ userId: account.userId, providerId: account.providerId })
-    .from(account)
-    .where(
-      sql`${account.userId} IN (${sql.join(
-        adminUsers.map((u) => sql`${u.id}`),
-        sql`, `,
-      )})`,
-    )
-    .all();
-
-  const oauthProviderId = env.OAUTH_PROVIDER_ID;
-
-  // A method is "required" if any admin has it as their only sign-in method
   const requiredMethods = new Set<AuthProvider>();
-  for (const admin of adminUsers) {
-    const rows = adminAccountRows.filter((r) => r.userId === admin.id);
-    const methods: AuthProvider[] = [];
-    if (rows.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
-      methods.push("email");
-    }
-    if (oauthProviderId && rows.some((a) => a.providerId === oauthProviderId)) {
-      methods.push("oauth");
-    }
-    if (methods.length === 1) {
-      requiredMethods.add(methods[0]!);
+
+  if (adminUsers.length > 0) {
+    const adminAccountRows = await db
+      .select({ userId: account.userId, providerId: account.providerId })
+      .from(account)
+      .where(
+        sql`${account.userId} IN (${sql.join(
+          adminUsers.map((u) => sql`${u.id}`),
+          sql`, `,
+        )})`,
+      )
+      .all();
+
+    const oauthProviderId = env.OAUTH_PROVIDER_ID;
+
+    // A method is "required" if any admin has it as their only sign-in method
+    for (const admin of adminUsers) {
+      const rows = adminAccountRows.filter((r) => r.userId === admin.id);
+      const methods: AuthProvider[] = [];
+      if (rows.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
+        methods.push("email");
+      }
+      if (
+        oauthProviderId &&
+        rows.some((a) => a.providerId === oauthProviderId)
+      ) {
+        methods.push("oauth");
+      }
+      if (methods.length === 1) {
+        requiredMethods.add(methods[0]!);
+      }
     }
   }
 
@@ -270,36 +276,38 @@ export const setEnabledSigninProviders = adminProcedure
       .where(eq(user.role, "admin"))
       .all();
 
-    const adminAccountRows = await db
-      .select({ userId: account.userId, providerId: account.providerId })
-      .from(account)
-      .where(
-        sql`${account.userId} IN (${sql.join(
-          adminUsers.map((u) => sql`${u.id}`),
-          sql`, `,
-        )})`,
-      )
-      .all();
+    if (adminUsers.length > 0) {
+      const adminAccountRows = await db
+        .select({ userId: account.userId, providerId: account.providerId })
+        .from(account)
+        .where(
+          sql`${account.userId} IN (${sql.join(
+            adminUsers.map((u) => sql`${u.id}`),
+            sql`, `,
+          )})`,
+        )
+        .all();
 
-    const oauthProviderId = env.OAUTH_PROVIDER_ID;
-    for (const admin of adminUsers) {
-      const methods: AuthProvider[] = [];
-      const rows = adminAccountRows.filter((r) => r.userId === admin.id);
-      if (rows.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
-        methods.push("email");
-      }
-      if (
-        oauthProviderId &&
-        rows.some((a) => a.providerId === oauthProviderId)
-      ) {
-        methods.push("oauth");
-      }
-      const hasRemaining = methods.some((m) => input.providers.includes(m));
-      if (!hasRemaining) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "Cannot disable sign-in methods — this would lock out an admin user",
-        });
+      const oauthProviderId = env.OAUTH_PROVIDER_ID;
+      for (const admin of adminUsers) {
+        const methods: AuthProvider[] = [];
+        const rows = adminAccountRows.filter((r) => r.userId === admin.id);
+        if (rows.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
+          methods.push("email");
+        }
+        if (
+          oauthProviderId &&
+          rows.some((a) => a.providerId === oauthProviderId)
+        ) {
+          methods.push("oauth");
+        }
+        const hasRemaining = methods.some((m) => input.providers.includes(m));
+        if (!hasRemaining) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "Cannot disable sign-in methods — this would lock out an admin user",
+          });
+        }
       }
     }
 
