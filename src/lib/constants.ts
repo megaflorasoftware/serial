@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { env } from "~/env";
 
 export const IS_MAIN_INSTANCE =
   String(import.meta.env.VITE_PUBLIC_IS_MAIN_INSTANCE) === "true" ||
@@ -50,24 +49,6 @@ export function getEnabledAuthProviders(
   } catch {
     return DEFAULT_AUTH_PROVIDERS;
   }
-}
-
-/**
- * Whether OAuth env vars are fully configured.
- */
-export function isOAuthConfigured(): boolean {
-  const providerId = env.OAUTH_PROVIDER_ID;
-  const clientId = env.OAUTH_CLIENT_ID;
-  const clientSecret = env.OAUTH_CLIENT_SECRET;
-  const hasDiscovery = !!env.OAUTH_DISCOVERY_URL;
-  const hasManualUrls = !!env.OAUTH_AUTHORIZATION_URL && !!env.OAUTH_TOKEN_URL;
-
-  return (
-    !!providerId &&
-    !!clientId &&
-    !!clientSecret &&
-    (hasDiscovery || hasManualUrls)
-  );
 }
 
 /**

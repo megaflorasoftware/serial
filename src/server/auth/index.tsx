@@ -24,9 +24,10 @@ import {
   BASE_SIGNED_OUT_URL,
   getAvailableSignupProviders,
   getEnabledAuthProviders,
-  isOAuthConfigured,
   isPublicSignupEnabled,
 } from "~/lib/constants";
+import { isOAuthConfigured } from "~/server/auth/constants";
+import { env } from "~/env";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {
@@ -166,17 +167,15 @@ function buildGenericOAuthPlugin() {
     genericOAuth({
       config: [
         {
-          providerId: process.env.OAUTH_PROVIDER_ID!,
-          clientId: process.env.OAUTH_CLIENT_ID!,
-          clientSecret: process.env.OAUTH_CLIENT_SECRET!,
-          discoveryUrl: process.env.OAUTH_DISCOVERY_URL,
-          authorizationUrl: process.env.OAUTH_AUTHORIZATION_URL,
-          tokenUrl: process.env.OAUTH_TOKEN_URL,
-          userInfoUrl: process.env.OAUTH_USER_INFO_URL,
-          scopes: (process.env.OAUTH_SCOPES ?? "openid email profile").split(
-            " ",
-          ),
-          pkce: process.env.OAUTH_PKCE === "true",
+          providerId: env.OAUTH_PROVIDER_ID!,
+          clientId: env.OAUTH_CLIENT_ID!,
+          clientSecret: env.OAUTH_CLIENT_SECRET!,
+          discoveryUrl: env.OAUTH_DISCOVERY_URL,
+          authorizationUrl: env.OAUTH_AUTHORIZATION_URL,
+          tokenUrl: env.OAUTH_TOKEN_URL,
+          userInfoUrl: env.OAUTH_USER_INFO_URL,
+          scopes: (env.OAUTH_SCOPES ?? "openid email profile").split(" "),
+          pkce: env.OAUTH_PKCE === "true",
         },
       ],
     }),

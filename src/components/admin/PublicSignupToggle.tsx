@@ -145,11 +145,8 @@ export function PublicSignupToggle() {
   };
 
   const getSigninLockedTooltip = (provider: AuthProvider) => {
-    if (
-      adminSigninMethods.includes(provider) &&
-      adminSigninMethods.length === 1
-    ) {
-      return "You can't disable an admin's sign-in method";
+    if (adminSigninMethods.includes(provider)) {
+      return "An admin is using this method, so it cannot be disabled";
     }
     return undefined;
   };

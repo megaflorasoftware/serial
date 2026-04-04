@@ -8,9 +8,10 @@ import {
   CREDENTIAL_PROVIDER_ID,
   getAvailableSignupProviders,
   getEnabledAuthProviders,
-  isOAuthConfigured,
   isPublicSignupEnabled,
 } from "~/lib/constants";
+import { isOAuthConfigured } from "~/server/auth/constants";
+import { env } from "~/env";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
 import { account, appConfig, session, user } from "~/server/db/schema";
@@ -171,46 +172,62 @@ export const stopImpersonating = protectedProcedure.handler(
 );
 
 // Get public signup setting (admin)
-export const getPublicSignupSetting = adminProcedure.handler(
-  async ({ context }) => {
-    const configs = await db.select().from(appConfig).all();
-    const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
-    const signinProvidersConfig = configs.find(
-      (c) => c.key === "enabled-signin-providers",
-    );
-    const signupProvidersConfig = configs.find(
-      (c) => c.key === "enabled-signup-providers",
-    );
+export const getPublicSignupSetting = adminProcedure.handler(async () => {
+  const configs = await db.select().from(appConfig).all();
+  const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
+  const signinProvidersConfig = configs.find(
+    (c) => c.key === "enabled-signin-providers",
+  );
+  const signupProvidersConfig = configs.find(
+    (c) => c.key === "enabled-signup-providers",
+  );
 
-    // Determine which sign-in methods the current admin has
-    const adminAccounts = await db
-      .select({ providerId: account.providerId })
-      .from(account)
-      .where(eq(account.userId, context.user.id))
-      .all();
+  // Determine which sign-in methods are the sole method for any admin
+  // (i.e. disabling them would lock that admin out)
+  const adminUsers = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.role, "admin"))
+    .all();
 
-    const adminSigninMethods: AuthProvider[] = [];
-    if (adminAccounts.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
-      adminSigninMethods.push("email");
+  const adminAccountRows = await db
+    .select({ userId: account.userId, providerId: account.providerId })
+    .from(account)
+    .where(
+      sql`${account.userId} IN (${sql.join(
+        adminUsers.map((u) => sql`${u.id}`),
+        sql`, `,
+      )})`,
+    )
+    .all();
+
+  const oauthProviderId = env.OAUTH_PROVIDER_ID;
+
+  // A method is "required" if any admin has it as their only sign-in method
+  const requiredMethods = new Set<AuthProvider>();
+  for (const admin of adminUsers) {
+    const rows = adminAccountRows.filter((r) => r.userId === admin.id);
+    const methods: AuthProvider[] = [];
+    if (rows.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
+      methods.push("email");
     }
-    const oauthProviderId = process.env.OAUTH_PROVIDER_ID;
-    if (
-      oauthProviderId &&
-      adminAccounts.some((a) => a.providerId === oauthProviderId)
-    ) {
-      adminSigninMethods.push("oauth");
+    if (oauthProviderId && rows.some((a) => a.providerId === oauthProviderId)) {
+      methods.push("oauth");
     }
+    if (methods.length === 1) {
+      requiredMethods.add(methods[0]!);
+    }
+  }
 
-    return {
-      enabled: isPublicSignupEnabled(publicSignup?.value),
-      signinProviders: getEnabledAuthProviders(signinProvidersConfig?.value),
-      signupProviders: getEnabledAuthProviders(signupProvidersConfig?.value),
-      isOAuthConfigured: isOAuthConfigured(),
-      oauthProviderName: process.env.OAUTH_PROVIDER_NAME ?? "OAuth",
-      adminSigninMethods,
-    };
-  },
-);
+  return {
+    enabled: isPublicSignupEnabled(publicSignup?.value),
+    signinProviders: getEnabledAuthProviders(signinProvidersConfig?.value),
+    signupProviders: getEnabledAuthProviders(signupProvidersConfig?.value),
+    isOAuthConfigured: isOAuthConfigured(),
+    oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",
+    adminSigninMethods: [...requiredMethods],
+  };
+});
 
 // Set public signup setting
 export const setPublicSignupSetting = adminProcedure
@@ -242,37 +259,48 @@ export const setPublicSignupSetting = adminProcedure
 export const setEnabledSigninProviders = adminProcedure
   .input(
     z.object({
-      providers: z.array(authProviderSchema).min(1),
+      providers: z.array(authProviderSchema),
     }),
   )
-  .handler(async ({ input, context }) => {
-    // Prevent admin from removing their own only sign-in method
-    const adminAccounts = await db
-      .select({ providerId: account.providerId })
-      .from(account)
-      .where(eq(account.userId, context.user.id))
+  .handler(async ({ input }) => {
+    // Prevent disabling sign-in methods that would lock out any admin
+    const adminUsers = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.role, "admin"))
       .all();
 
-    const adminMethods: AuthProvider[] = [];
-    if (adminAccounts.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
-      adminMethods.push("email");
-    }
-    const oauthProviderId = process.env.OAUTH_PROVIDER_ID;
-    if (
-      oauthProviderId &&
-      adminAccounts.some((a) => a.providerId === oauthProviderId)
-    ) {
-      adminMethods.push("oauth");
-    }
+    const adminAccountRows = await db
+      .select({ userId: account.userId, providerId: account.providerId })
+      .from(account)
+      .where(
+        sql`${account.userId} IN (${sql.join(
+          adminUsers.map((u) => sql`${u.id}`),
+          sql`, `,
+        )})`,
+      )
+      .all();
 
-    const adminHasRemainingMethod = adminMethods.some((m) =>
-      input.providers.includes(m),
-    );
-    if (!adminHasRemainingMethod) {
-      throw new ORPCError("BAD_REQUEST", {
-        message:
-          "Cannot disable all sign-in methods — you would lock yourself out",
-      });
+    const oauthProviderId = env.OAUTH_PROVIDER_ID;
+    for (const admin of adminUsers) {
+      const methods: AuthProvider[] = [];
+      const rows = adminAccountRows.filter((r) => r.userId === admin.id);
+      if (rows.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
+        methods.push("email");
+      }
+      if (
+        oauthProviderId &&
+        rows.some((a) => a.providerId === oauthProviderId)
+      ) {
+        methods.push("oauth");
+      }
+      const hasRemaining = methods.some((m) => input.providers.includes(m));
+      if (!hasRemaining) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "Cannot disable sign-in methods — this would lock out an admin user",
+        });
+      }
     }
 
     const value = JSON.stringify(input.providers);
@@ -358,9 +386,9 @@ export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
     signinProviders,
     signupProviders,
     isOAuthConfigured: oauthConfigured,
-    oauthProviderName: process.env.OAUTH_PROVIDER_NAME ?? "OAuth",
+    oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",
     oauthProviderId: signupProviders.includes("oauth")
-      ? (process.env.OAUTH_PROVIDER_ID ?? "")
+      ? (env.OAUTH_PROVIDER_ID ?? "")
       : "",
   };
 });
