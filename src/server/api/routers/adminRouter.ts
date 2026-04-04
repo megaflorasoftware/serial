@@ -2,10 +2,15 @@ import { ORPCError } from "@orpc/server";
 import { and, count, eq, gte, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { isPublicSignupEnabled } from "~/lib/constants";
+import type { AuthProvider } from "~/lib/constants";
+import {
+  getEnabledAuthProviders,
+  isOAuthConfigured,
+  isPublicSignupEnabled,
+} from "~/lib/constants";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
-import { appConfig, session, user } from "~/server/db/schema";
+import { account, appConfig, session, user } from "~/server/db/schema";
 import { db } from "~/server/db";
 
 // Admin procedure that requires admin role
@@ -162,18 +167,43 @@ export const stopImpersonating = protectedProcedure.handler(
   },
 );
 
-// Get public signup setting
-export const getPublicSignupSetting = adminProcedure.handler(async () => {
-  const config = await db
-    .select()
-    .from(appConfig)
-    .where(eq(appConfig.key, "public-signup-enabled"))
-    .get();
+// Get public signup setting (admin)
+export const getPublicSignupSetting = adminProcedure.handler(
+  async ({ context }) => {
+    const configs = await db.select().from(appConfig).all();
+    const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
+    const signinProvidersConfig = configs.find(
+      (c) => c.key === "enabled-signin-providers",
+    );
+    const signupProvidersConfig = configs.find(
+      (c) => c.key === "enabled-signup-providers",
+    );
 
-  return {
-    enabled: isPublicSignupEnabled(config?.value),
-  };
-});
+    // Determine which sign-in methods the current admin has
+    const adminAccounts = await db
+      .select({ providerId: account.providerId })
+      .from(account)
+      .where(eq(account.userId, context.user.id))
+      .all();
+
+    const adminSigninMethods: AuthProvider[] = [];
+    if (adminAccounts.some((a) => a.providerId === "credential")) {
+      adminSigninMethods.push("email");
+    }
+    if (adminAccounts.some((a) => a.providerId !== "credential")) {
+      adminSigninMethods.push("oauth");
+    }
+
+    return {
+      enabled: isPublicSignupEnabled(publicSignup?.value),
+      signinProviders: getEnabledAuthProviders(signinProvidersConfig?.value),
+      signupProviders: getEnabledAuthProviders(signupProvidersConfig?.value),
+      isOAuthConfigured: isOAuthConfigured(),
+      oauthProviderName: process.env.OAUTH_PROVIDER_NAME ?? "OAuth",
+      adminSigninMethods,
+    };
+  },
+);
 
 // Set public signup setting
 export const setPublicSignupSetting = adminProcedure
@@ -201,20 +231,103 @@ export const setPublicSignupSetting = adminProcedure
     return { enabled: input.enabled };
   });
 
-// Public procedure to check if signups are enabled (used by sign-up page)
+// Set enabled sign-in providers
+export const setEnabledSigninProviders = adminProcedure
+  .input(
+    z.object({
+      providers: z.array(z.enum(["email", "oauth"])),
+    }),
+  )
+  .handler(async ({ input }) => {
+    const value = JSON.stringify(input.providers);
+    await db
+      .insert(appConfig)
+      .values({
+        key: "enabled-signin-providers",
+        value,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: appConfig.key,
+        set: {
+          value,
+          updatedAt: new Date(),
+        },
+      });
+
+    return { providers: input.providers };
+  });
+
+// Set enabled sign-up providers
+export const setEnabledSignupProviders = adminProcedure
+  .input(
+    z.object({
+      providers: z.array(z.enum(["email", "oauth"])),
+    }),
+  )
+  .handler(async ({ input }) => {
+    const value = JSON.stringify(input.providers);
+    await db
+      .insert(appConfig)
+      .values({
+        key: "enabled-signup-providers",
+        value,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: appConfig.key,
+        set: {
+          value,
+          updatedAt: new Date(),
+        },
+      });
+
+    return { providers: input.providers };
+  });
+
+// Public procedure to check auth config (used by sign-in/sign-up pages)
 export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
-  const config = await db
-    .select()
-    .from(appConfig)
-    .where(eq(appConfig.key, "public-signup-enabled"))
-    .get();
+  const configs = await db.select().from(appConfig).all();
+  const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
+  const signinConfig = configs.find(
+    (c) => c.key === "enabled-signin-providers",
+  );
+  const signupConfig = configs.find(
+    (c) => c.key === "enabled-signup-providers",
+  );
 
   const userCount = await db.select({ count: count() }).from(user).get();
   const isFirstUser = (userCount?.count ?? 0) === 0;
+  const oauthConfigured = isOAuthConfigured();
+
+  const filterOAuth = (providers: AuthProvider[]) =>
+    oauthConfigured ? providers : providers.filter((p) => p !== "oauth");
+
+  // Sign-in providers: always respect DB config directly
+  const signinProviders = filterOAuth(
+    getEnabledAuthProviders(signinConfig?.value),
+  );
+
+  // Sign-up providers: gated by public signup toggle
+  let signupProviders: AuthProvider[];
+  if (isFirstUser) {
+    // First user can use any configured method
+    signupProviders = ["email"];
+    if (oauthConfigured) signupProviders.push("oauth");
+  } else if (isPublicSignupEnabled(publicSignup?.value)) {
+    signupProviders = filterOAuth(getEnabledAuthProviders(signupConfig?.value));
+  } else {
+    signupProviders = [];
+  }
 
   return {
-    enabled: isPublicSignupEnabled(config?.value) || isFirstUser,
+    enabled: signupProviders.length > 0,
     isFirstUser,
+    signinProviders,
+    signupProviders,
+    isOAuthConfigured: oauthConfigured,
+    oauthProviderName: process.env.OAUTH_PROVIDER_NAME ?? "OAuth",
+    oauthProviderId: process.env.OAUTH_PROVIDER_ID ?? "",
   };
 });
 

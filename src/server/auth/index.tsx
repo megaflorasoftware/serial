@@ -1,7 +1,7 @@
 import { render } from "@react-email/components";
 import sendgrid from "@sendgrid/mail";
 import { betterAuth } from "better-auth";
-import { admin, emailOTP } from "better-auth/plugins";
+import { admin, emailOTP, genericOAuth } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { APIError, createAuthMiddleware } from "better-auth/api";
@@ -20,7 +20,12 @@ import {
 import { polarClient } from "../subscriptions/polar";
 import ResetPasswordEmail from "~/emails/reset-password";
 import VerifyEmailEmail from "~/emails/verify-email";
-import { BASE_SIGNED_OUT_URL, isPublicSignupEnabled } from "~/lib/constants";
+import {
+  BASE_SIGNED_OUT_URL,
+  getEnabledAuthProviders,
+  isOAuthConfigured,
+  isPublicSignupEnabled,
+} from "~/lib/constants";
 
 export const authMiddleware = createMiddleware().server(
   async ({ pathname, next }) => {
@@ -153,6 +158,30 @@ function buildPolarPlugin() {
   ];
 }
 
+function buildGenericOAuthPlugin() {
+  if (!isOAuthConfigured()) return [];
+
+  return [
+    genericOAuth({
+      config: [
+        {
+          providerId: process.env.OAUTH_PROVIDER_ID!,
+          clientId: process.env.OAUTH_CLIENT_ID!,
+          clientSecret: process.env.OAUTH_CLIENT_SECRET!,
+          discoveryUrl: process.env.OAUTH_DISCOVERY_URL,
+          authorizationUrl: process.env.OAUTH_AUTHORIZATION_URL,
+          tokenUrl: process.env.OAUTH_TOKEN_URL,
+          userInfoUrl: process.env.OAUTH_USER_INFO_URL,
+          scopes: (process.env.OAUTH_SCOPES ?? "openid email profile").split(
+            " ",
+          ),
+          pkce: process.env.OAUTH_PKCE === "true",
+        },
+      ],
+    }),
+  ];
+}
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "sqlite",
@@ -181,6 +210,7 @@ export const auth = betterAuth({
     admin(),
     tanstackStartCookies(),
     ...buildPolarPlugin(),
+    ...buildGenericOAuthPlugin(),
     ...(import.meta.env.SENDGRID_API_KEY
       ? [
           emailOTP({
@@ -204,34 +234,62 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      // Block sign-up endpoints if public signups are disabled
-      if (ctx.path.startsWith("/sign-up")) {
-        const config = await db
-          .select()
-          .from(appConfig)
-          .where(eq(appConfig.key, "public-signup-enabled"))
-          .get();
+      const isEmailSignUp = ctx.path.startsWith("/sign-up");
+      const isEmailSignIn = ctx.path.startsWith("/sign-in/email");
+      const isOAuth =
+        ctx.path.startsWith("/sign-in/oauth2") ||
+        ctx.path.startsWith("/oauth2/callback/");
 
-        if (!isPublicSignupEnabled(config?.value)) {
-          // Allow signup if no users exist (first user scenario)
-          const userCount = await db
-            .select({ count: count() })
-            .from(user)
-            .get();
-          if ((userCount?.count ?? 0) > 0) {
-            throw new APIError("BAD_REQUEST", {
-              message: "Sign ups are currently disabled",
-            });
-          }
+      if (!isEmailSignUp && !isEmailSignIn && !isOAuth) return;
+
+      // Allow first user to use any available method
+      const userCount = await db.select({ count: count() }).from(user).get();
+      if ((userCount?.count ?? 0) === 0) return;
+
+      const configs = await db.select().from(appConfig).all();
+      const signinConfig = configs.find(
+        (c) => c.key === "enabled-signin-providers",
+      );
+      const signupConfig = configs.find(
+        (c) => c.key === "enabled-signup-providers",
+      );
+      const publicSignupConfig = configs.find(
+        (c) => c.key === "public-signup-enabled",
+      );
+      const signinProviders = getEnabledAuthProviders(signinConfig?.value);
+      const signupProviders = getEnabledAuthProviders(signupConfig?.value);
+
+      // Sign-in gating
+      if (isEmailSignIn && !signinProviders.includes("email")) {
+        throw new APIError("BAD_REQUEST", {
+          message: "Email sign in is currently disabled",
+        });
+      }
+
+      if (isOAuth && !signinProviders.includes("oauth")) {
+        throw new APIError("BAD_REQUEST", {
+          message: "OAuth is currently disabled",
+        });
+      }
+
+      // Sign-up gating
+      if (isEmailSignUp) {
+        if (
+          !isPublicSignupEnabled(publicSignupConfig?.value) ||
+          !signupProviders.includes("email")
+        ) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Sign ups are currently disabled",
+          });
         }
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
-      // After successful sign-up, check if this is the first user
-      if (
-        ctx.path.startsWith("/sign-up") &&
-        ctx.context?.newSession?.user?.id
-      ) {
+      // After successful sign-up (email or OAuth), check if this is the first user
+      const isSignUp =
+        ctx.path.startsWith("/sign-up") ||
+        ctx.path.startsWith("/oauth2/callback/");
+      if (isSignUp && ctx.context?.newSession?.user?.id) {
         const userId = ctx.context.newSession.user.id;
 
         // Check if this user is the first user by creation time
@@ -247,6 +305,34 @@ export const auth = betterAuth({
             .update(user)
             .set({ role: "admin" })
             .where(eq(user.id, userId));
+
+          // Set sign-in and sign-up methods to match how the first user signed up
+          const method: string = ctx.path.startsWith("/sign-up")
+            ? "email"
+            : "oauth";
+          const providers = JSON.stringify([method]);
+          await db
+            .insert(appConfig)
+            .values({
+              key: "enabled-signin-providers",
+              value: providers,
+              updatedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: appConfig.key,
+              set: { value: providers, updatedAt: new Date() },
+            });
+          await db
+            .insert(appConfig)
+            .values({
+              key: "enabled-signup-providers",
+              value: providers,
+              updatedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: appConfig.key,
+              set: { value: providers, updatedAt: new Date() },
+            });
         }
       }
     }),
