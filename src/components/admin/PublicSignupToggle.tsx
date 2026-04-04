@@ -182,7 +182,7 @@ export function PublicSignupToggle() {
         )}
 
         <div
-          className={`flex items-center justify-between${globalEnabled ? "mt-2 border-t pt-4" : ""}`}
+          className={`flex items-center justify-between ${globalEnabled ? "mt-2 border-t pt-4" : ""}`}
         >
           <div className="flex flex-1 flex-col gap-1">
             <Label htmlFor="public-signup-toggle" className="font-medium">

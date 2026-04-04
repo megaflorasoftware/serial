@@ -286,6 +286,11 @@ export const auth = betterAuth({
           message: "Sign ups are currently disabled",
         });
       }
+
+      // If neither OAuth sign-in nor sign-up is allowed, the isOAuth check
+      // above already blocked it. No additional gating needed here — the
+      // after hook handles the case where OAuth sign-in is enabled but
+      // sign-up is not (rolling back auto-created users).
     }),
     after: createAuthMiddleware(async (ctx) => {
       const isEmailSignUp = ctx.path.startsWith("/sign-up");
@@ -307,11 +312,7 @@ export const auth = betterAuth({
         await db.update(user).set({ role: "admin" }).where(eq(user.id, userId));
 
         // Set sign-in and sign-up methods to match how the first user signed up
-        const method: string = isEmailSignUp
-          ? "email"
-          : isOAuthCallback
-            ? "oauth"
-            : "email";
+        const method: string = isOAuthCallback ? "oauth" : "email";
         const providers = JSON.stringify([method]);
         await db
           .insert(appConfig)
@@ -336,9 +337,9 @@ export const auth = betterAuth({
             set: { value: providers, updatedAt: new Date() },
           });
       } else if (isOAuthCallback) {
-        // Non-first user arriving via OAuth — if this is a newly created
-        // user (only one session so far), verify that OAuth sign-ups are
-        // actually allowed. If not, roll back the auto-created user.
+        // Non-first user arriving via OAuth callback — Better Auth may have
+        // auto-created a user. If this is a brand-new user (single session)
+        // and OAuth sign-ups aren't allowed, roll back the auto-created user.
         const sessionCount = await db
           .select({ count: count() })
           .from(session)
