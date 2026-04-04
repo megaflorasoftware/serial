@@ -15,7 +15,7 @@ import { orpcRouterClient } from "~/lib/orpc";
 
 export const Route = createFileRoute("/auth/sign-up")({
   component: SignUp,
-  loader: () => orpcRouterClient.admin.getIsPublicSignupEnabled(),
+  loader: () => orpcRouterClient.admin.getSignupConfig(),
 });
 
 function SignUp() {

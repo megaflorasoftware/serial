@@ -349,16 +349,16 @@ export const setEnabledSignupProviders = adminProcedure
     return { providers: input.providers };
   });
 
-// Public procedure to check auth config (used by sign-in/sign-up pages)
-export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
+// Public procedure: sign-in page config
+export const getSigninConfig = publicProcedure.handler(async () => {
   const configs = await db.select().from(appConfig).all();
-  const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
   const signinConfig = configs.find(
     (c) => c.key === "enabled-signin-providers",
   );
   const signupConfig = configs.find(
     (c) => c.key === "enabled-signup-providers",
   );
+  const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
 
   const userCount = await db.select({ count: count() }).from(user).get();
   const isFirstUser = (userCount?.count ?? 0) === 0;
@@ -367,12 +367,41 @@ export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
   const filterOAuth = (providers: AuthProvider[]) =>
     oauthConfigured ? providers : providers.filter((p) => p !== "oauth");
 
-  // Sign-in providers: always respect DB config directly
   const signinProviders = filterOAuth(
     getEnabledAuthProviders(signinConfig?.value),
   );
 
-  // Sign-up providers: single source of truth
+  const signupProviders = getAvailableSignupProviders({
+    isFirstUser,
+    publicSignupEnabled: isPublicSignupEnabled(publicSignup?.value),
+    signupProvidersConfig: signupConfig?.value,
+    oauthConfigured,
+  });
+
+  return {
+    isFirstUser,
+    signinProviders,
+    signupEnabled: signupProviders.length > 0,
+    isOAuthConfigured: oauthConfigured,
+    oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",
+    oauthProviderId: signinProviders.includes("oauth")
+      ? (env.OAUTH_PROVIDER_ID ?? "")
+      : "",
+  };
+});
+
+// Public procedure: sign-up page config
+export const getSignupConfig = publicProcedure.handler(async () => {
+  const configs = await db.select().from(appConfig).all();
+  const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
+  const signupConfig = configs.find(
+    (c) => c.key === "enabled-signup-providers",
+  );
+
+  const userCount = await db.select({ count: count() }).from(user).get();
+  const isFirstUser = (userCount?.count ?? 0) === 0;
+  const oauthConfigured = isOAuthConfigured();
+
   const signupProviders = getAvailableSignupProviders({
     isFirstUser,
     publicSignupEnabled: isPublicSignupEnabled(publicSignup?.value),
@@ -383,7 +412,6 @@ export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
   return {
     enabled: signupProviders.length > 0,
     isFirstUser,
-    signinProviders,
     signupProviders,
     isOAuthConfigured: oauthConfigured,
     oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",

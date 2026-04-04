@@ -30,7 +30,7 @@ export const Route = createFileRoute("/auth/sign-in")({
   loader: async () => {
     const [isForgotPasswordEnabled, authConfig] = await Promise.all([
       fetchIsForgotPasswordEnabled(),
-      orpcRouterClient.admin.getIsPublicSignupEnabled(),
+      orpcRouterClient.admin.getSigninConfig(),
     ]);
     if (authConfig.isFirstUser) {
       throw redirect({ to: "/auth/sign-up" });
@@ -186,7 +186,7 @@ function SignIn() {
             </Button>
           )}
 
-          {authConfig.enabled && (
+          {authConfig.signupEnabled && (
             <Link
               className="block text-center text-sm underline"
               to="/auth/sign-up"
