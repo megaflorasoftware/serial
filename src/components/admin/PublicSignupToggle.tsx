@@ -132,7 +132,7 @@ export function PublicSignupToggle() {
     const next = checked
       ? [...signinProviders, provider]
       : signinProviders.filter((p) => p !== provider);
-    signinMutation.mutate({ providers: next as Array<"email" | "oauth"> });
+    signinMutation.mutate({ providers: next });
   };
 
   const toggleSignup = (provider: AuthProvider, checked: boolean) => {
@@ -140,7 +140,7 @@ export function PublicSignupToggle() {
       ? [...signupProviders, provider]
       : signupProviders.filter((p) => p !== provider);
     signupProvidersMutation.mutate({
-      providers: next as Array<"email" | "oauth">,
+      providers: next,
     });
   };
 

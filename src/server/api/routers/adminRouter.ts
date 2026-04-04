@@ -4,6 +4,9 @@ import { z } from "zod";
 
 import type { AuthProvider } from "~/lib/constants";
 import {
+  authProviderSchema,
+  CREDENTIAL_PROVIDER_ID,
+  getAvailableSignupProviders,
   getEnabledAuthProviders,
   isOAuthConfigured,
   isPublicSignupEnabled,
@@ -187,10 +190,14 @@ export const getPublicSignupSetting = adminProcedure.handler(
       .all();
 
     const adminSigninMethods: AuthProvider[] = [];
-    if (adminAccounts.some((a) => a.providerId === "credential")) {
+    if (adminAccounts.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
       adminSigninMethods.push("email");
     }
-    if (adminAccounts.some((a) => a.providerId !== "credential")) {
+    const oauthProviderId = process.env.OAUTH_PROVIDER_ID;
+    if (
+      oauthProviderId &&
+      adminAccounts.some((a) => a.providerId === oauthProviderId)
+    ) {
       adminSigninMethods.push("oauth");
     }
 
@@ -235,10 +242,39 @@ export const setPublicSignupSetting = adminProcedure
 export const setEnabledSigninProviders = adminProcedure
   .input(
     z.object({
-      providers: z.array(z.enum(["email", "oauth"])),
+      providers: z.array(authProviderSchema).min(1),
     }),
   )
-  .handler(async ({ input }) => {
+  .handler(async ({ input, context }) => {
+    // Prevent admin from removing their own only sign-in method
+    const adminAccounts = await db
+      .select({ providerId: account.providerId })
+      .from(account)
+      .where(eq(account.userId, context.user.id))
+      .all();
+
+    const adminMethods: AuthProvider[] = [];
+    if (adminAccounts.some((a) => a.providerId === CREDENTIAL_PROVIDER_ID)) {
+      adminMethods.push("email");
+    }
+    const oauthProviderId = process.env.OAUTH_PROVIDER_ID;
+    if (
+      oauthProviderId &&
+      adminAccounts.some((a) => a.providerId === oauthProviderId)
+    ) {
+      adminMethods.push("oauth");
+    }
+
+    const adminHasRemainingMethod = adminMethods.some((m) =>
+      input.providers.includes(m),
+    );
+    if (!adminHasRemainingMethod) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Cannot disable all sign-in methods — you would lock yourself out",
+      });
+    }
+
     const value = JSON.stringify(input.providers);
     await db
       .insert(appConfig)
@@ -262,7 +298,7 @@ export const setEnabledSigninProviders = adminProcedure
 export const setEnabledSignupProviders = adminProcedure
   .input(
     z.object({
-      providers: z.array(z.enum(["email", "oauth"])),
+      providers: z.array(authProviderSchema),
     }),
   )
   .handler(async ({ input }) => {
@@ -308,17 +344,13 @@ export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
     getEnabledAuthProviders(signinConfig?.value),
   );
 
-  // Sign-up providers: gated by public signup toggle
-  let signupProviders: AuthProvider[];
-  if (isFirstUser) {
-    // First user can use any configured method
-    signupProviders = ["email"];
-    if (oauthConfigured) signupProviders.push("oauth");
-  } else if (isPublicSignupEnabled(publicSignup?.value)) {
-    signupProviders = filterOAuth(getEnabledAuthProviders(signupConfig?.value));
-  } else {
-    signupProviders = [];
-  }
+  // Sign-up providers: single source of truth
+  const signupProviders = getAvailableSignupProviders({
+    isFirstUser,
+    publicSignupEnabled: isPublicSignupEnabled(publicSignup?.value),
+    signupProvidersConfig: signupConfig?.value,
+    oauthConfigured,
+  });
 
   return {
     enabled: signupProviders.length > 0,
@@ -327,7 +359,9 @@ export const getIsPublicSignupEnabled = publicProcedure.handler(async () => {
     signupProviders,
     isOAuthConfigured: oauthConfigured,
     oauthProviderName: process.env.OAUTH_PROVIDER_NAME ?? "OAuth",
-    oauthProviderId: process.env.OAUTH_PROVIDER_ID ?? "",
+    oauthProviderId: signupProviders.includes("oauth")
+      ? (process.env.OAUTH_PROVIDER_ID ?? "")
+      : "",
   };
 });
 

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const IS_MAIN_INSTANCE =
   String(import.meta.env.VITE_PUBLIC_IS_MAIN_INSTANCE) === "true" ||
   String(process.env.VITE_PUBLIC_IS_MAIN_INSTANCE) === "true";
@@ -21,7 +23,11 @@ export function isPublicSignupEnabled(
   return configValue === "true";
 }
 
-export type AuthProvider = "email" | "oauth";
+export const authProviderSchema = z.enum(["email", "oauth"]);
+export type AuthProvider = z.infer<typeof authProviderSchema>;
+
+/** Better Auth provider ID stored in the `account` table for email/password users */
+export const CREDENTIAL_PROVIDER_ID = "credential";
 
 const DEFAULT_AUTH_PROVIDERS: AuthProvider[] = ["email"];
 
@@ -62,4 +68,27 @@ export function isOAuthConfigured(): boolean {
     !!clientSecret &&
     (hasDiscovery || hasManualUrls)
   );
+}
+
+/**
+ * Single source of truth for computing which sign-up providers are currently
+ * available, factoring in the public-signup toggle, the configured provider
+ * list, whether OAuth env vars are present, and the first-user special case.
+ */
+export function getAvailableSignupProviders(opts: {
+  isFirstUser: boolean;
+  publicSignupEnabled: boolean;
+  signupProvidersConfig: string | undefined | null;
+  oauthConfigured: boolean;
+}): AuthProvider[] {
+  if (opts.isFirstUser) {
+    const providers: AuthProvider[] = ["email"];
+    if (opts.oauthConfigured) providers.push("oauth");
+    return providers;
+  }
+  if (!opts.publicSignupEnabled) return [];
+  const providers = getEnabledAuthProviders(opts.signupProvidersConfig);
+  return opts.oauthConfigured
+    ? providers
+    : providers.filter((p) => p !== "oauth");
 }

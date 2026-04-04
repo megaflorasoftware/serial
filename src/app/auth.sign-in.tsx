@@ -176,7 +176,6 @@ function SignIn() {
                   providerId: authConfig.oauthProviderId,
                   callbackURL: AUTH_SIGNED_IN_URL,
                 });
-                setLoading(false);
               }}
             >
               {loading && !showEmail ? (
