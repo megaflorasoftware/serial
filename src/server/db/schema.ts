@@ -148,6 +148,8 @@ export const feeds = sqliteTable(
     lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
     nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    etag: text("etag"),
+    lastModifiedHeader: text("last_modified_header"),
   },
   (example) => [
     index("feed_name_idx").on(example.name),

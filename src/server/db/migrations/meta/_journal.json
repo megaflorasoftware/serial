@@ -267,6 +267,13 @@
       "when": 1775236359534,
       "tag": "0037_complex_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1775502146805,
+      "tag": "0038_awesome_lord_hawal",
+      "breakpoints": true
     }
   ]
 }
