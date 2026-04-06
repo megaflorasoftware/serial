@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
 import { feedItems, feeds } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
@@ -175,11 +175,64 @@ export async function* fetchAndInsertFeedData(
           } satisfies typeof feedItems.$inferInsert;
         });
 
+      // Diff against existing items to avoid unnecessary writes.
+      // Reads are cheap on Turso; writes are billed per row.
+      const incomingUrls = feedItemList.map((item) => item.url);
+      const existingItems = await dbSemaphore.run(() =>
+        context.db
+          .select({
+            url: feedItems.url,
+            contentId: feedItems.contentId,
+            title: feedItems.title,
+            author: feedItems.author,
+            content: feedItems.content,
+            contentSnippet: feedItems.contentSnippet,
+            thumbnail: feedItems.thumbnail,
+            postedAt: feedItems.postedAt,
+            orientation: feedItems.orientation,
+          })
+          .from(feedItems)
+          .where(
+            and(
+              eq(feedItems.feedId, feed.id),
+              inArray(feedItems.url, incomingUrls),
+            ),
+          )
+          .all(),
+      );
+
+      const existingByUrl = new Map(
+        existingItems.map((item) => [item.url, item]),
+      );
+
+      const changedItems = feedItemList.filter((incoming) => {
+        const existing = existingByUrl.get(incoming.url);
+        if (!existing) return true; // new item
+        return (
+          existing.contentId !== incoming.contentId ||
+          existing.title !== incoming.title ||
+          existing.author !== incoming.author ||
+          existing.content !== (incoming.content ?? "") ||
+          existing.contentSnippet !== (incoming.contentSnippet ?? "") ||
+          existing.thumbnail !== (incoming.thumbnail ?? "") ||
+          existing.postedAt?.getTime() !== incoming.postedAt?.getTime() ||
+          existing.orientation !== (incoming.orientation ?? null)
+        );
+      });
+
+      if (changedItems.length === 0) {
+        return {
+          status: "success",
+          feedItems: [],
+          id: feed.id,
+        };
+      }
+
       const feedItemsList = (
         await dbSemaphore.run(() =>
           context.db
             .insert(feedItems)
-            .values(feedItemList)
+            .values(changedItems)
             .onConflictDoUpdate({
               target: [feedItems.url, feedItems.feedId],
               set: buildConflictUpdateColumns(feedItems, [

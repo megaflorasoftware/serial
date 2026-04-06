@@ -110,7 +110,7 @@ function makeFeed(overrides?: Partial<DatabaseFeed>): DatabaseFeed {
   };
 }
 
-function createMockDb() {
+function createMockDb(existingItems: unknown[] = []) {
   const updateSetCalls: unknown[] = [];
   const insertValuesCalls: unknown[] = [];
 
@@ -131,10 +131,17 @@ function createMockDb() {
     returning: vi.fn(() => []),
   };
 
+  const selectChain = {
+    from: vi.fn(() => selectChain),
+    where: vi.fn(() => selectChain),
+    all: vi.fn(() => existingItems),
+  };
+
   return {
     db: {
       update: vi.fn(() => updateChain),
       insert: vi.fn(() => insertChain),
+      select: vi.fn(() => selectChain),
     },
     updateSetCalls,
     insertValuesCalls,
@@ -250,8 +257,8 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
 });
 
 describe("fetchAndInsertFeedData with content update", () => {
-  it("inserts new items when feed content updates (ETag changes)", async () => {
-    // First fetch with old content
+  it("inserts only the 1 new item when server updates from v1 to v2", async () => {
+    // First fetch with old content (14 items)
     setServerContent("v1");
     const feed = makeFeed();
     const {
@@ -272,42 +279,51 @@ describe("fetchAndInsertFeedData with content update", () => {
     const firstUpdate = updates1[0] as Record<string, unknown>;
     expect(firstUpdate.etag).toBe(ETAG_V1);
 
-    // Second fetch with cached v1 etag → 304, no insert
-    const cachedFeed = makeFeed({ etag: ETAG_V1 });
-    const { db: db2 } = createMockDb();
+    // Capture the 14 items as "existing" DB state
+    const existingItems = (inserts1[0] as Array<Record<string, unknown>>).map(
+      (item) => ({
+        url: item.url as string,
+        contentId: item.contentId as string,
+        title: item.title as string,
+        author: item.author as string,
+        content: (item.content as string) ?? "",
+        contentSnippet: (item.contentSnippet as string) ?? "",
+        thumbnail: (item.thumbnail as string) ?? "",
+        postedAt: item.postedAt as Date,
+        orientation: (item.orientation as string) ?? null,
+      }),
+    );
 
-    for await (const result of fetchAndInsertFeedData({ db: db2 as any }, [
-      cachedFeed,
-    ])) {
-      expect(result.status).toBe("skipped");
-    }
-    expect(db2.insert).not.toHaveBeenCalled();
-
-    // Server publishes a new video
+    // Server publishes a new video (v2 has 15 items — 14 old + 1 new)
     setServerContent("v2");
 
-    // Third fetch — old etag no longer matches → 200, full insert
+    // Fetch with stale etag → 200 with new content.
+    // DB already has the 14 old items, so diff should detect only 1 new item.
     const {
-      db: db3,
-      updateSetCalls: updates3,
-      insertValuesCalls: inserts3,
-    } = createMockDb();
+      db: db2,
+      updateSetCalls: updates2,
+      insertValuesCalls: inserts2,
+    } = createMockDb(existingItems);
 
-    for await (const result of fetchAndInsertFeedData({ db: db3 as any }, [
-      cachedFeed,
+    for await (const result of fetchAndInsertFeedData({ db: db2 as any }, [
+      makeFeed({ etag: ETAG_V1 }),
     ])) {
       expect(result.status).toBe("success");
     }
 
-    // Should have inserted 15 items (new content)
-    expect(db3.insert).toHaveBeenCalled();
-    expect(inserts3).toHaveLength(1);
-    expect((inserts3[0] as unknown[]).length).toBe(15);
+    // Should have inserted only the 1 new item
+    expect(db2.insert).toHaveBeenCalled();
+    expect(inserts2).toHaveLength(1);
+    expect((inserts2[0] as unknown[]).length).toBe(1);
+
+    // Verify it's the new "Cursor ditches VS Code" video
+    const newItem = (inserts2[0] as Array<Record<string, unknown>>)[0]!;
+    expect(newItem.url).toBe("https://www.youtube.com/watch?v=JSuS-zXMVwE");
 
     // Should store updated etag
-    const thirdUpdate = updates3[0] as Record<string, unknown>;
-    expect(thirdUpdate.etag).toBe(ETAG_V2);
-    expect(thirdUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V2);
+    const secondUpdate = updates2[0] as Record<string, unknown>;
+    expect(secondUpdate.etag).toBe(ETAG_V2);
+    expect(secondUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V2);
   });
 
   it("caches again after fetching updated content", async () => {
@@ -342,5 +358,133 @@ describe("fetchAndInsertFeedData with content update", () => {
       expect(result.status).toBe("skipped");
     }
     expect(db3.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchAndInsertFeedData content diffing", () => {
+  it("skips insert for unchanged items when server returns 200", async () => {
+    setServerContent("v1");
+
+    // First fetch to capture real parser output
+    const { db: db1, insertValuesCalls: firstInsert } = createMockDb();
+    for await (const result of fetchAndInsertFeedData({ db: db1 as any }, [
+      makeFeed(),
+    ])) {
+      expect(result.status).toBe("success");
+    }
+
+    // Take only the first 2 items as "existing" — the other 12 are "new"
+    const allItems = (firstInsert[0] as Array<Record<string, unknown>>).map(
+      (item) => ({
+        url: item.url as string,
+        contentId: item.contentId as string,
+        title: item.title as string,
+        author: item.author as string,
+        content: (item.content as string) ?? "",
+        contentSnippet: (item.contentSnippet as string) ?? "",
+        thumbnail: (item.thumbnail as string) ?? "",
+        postedAt: item.postedAt as Date,
+        orientation: (item.orientation as string) ?? null,
+      }),
+    );
+    const twoExisting = allItems.slice(0, 2);
+
+    const { db: db2, insertValuesCalls: secondInsert } =
+      createMockDb(twoExisting);
+
+    for await (const result of fetchAndInsertFeedData({ db: db2 as any }, [
+      makeFeed(),
+    ])) {
+      expect(result.status).toBe("success");
+    }
+
+    // Should have inserted only the 12 new items, not all 14
+    expect(db2.insert).toHaveBeenCalled();
+    expect(secondInsert).toHaveLength(1);
+    expect((secondInsert[0] as unknown[]).length).toBe(12);
+  });
+
+  it("skips insert entirely when all items match existing DB content", async () => {
+    setServerContent("v1");
+
+    // First, do a real fetch to capture exactly what the parser produces
+    const { db: db1, insertValuesCalls: firstInsert } = createMockDb();
+    for await (const result of fetchAndInsertFeedData({ db: db1 as any }, [
+      makeFeed(),
+    ])) {
+      expect(result.status).toBe("success");
+    }
+
+    // Use the exact items that were inserted as "existing" DB state
+    const insertedItems = (
+      firstInsert[0] as Array<Record<string, unknown>>
+    ).map((item) => ({
+      url: item.url as string,
+      contentId: item.contentId as string,
+      title: item.title as string,
+      author: item.author as string,
+      content: (item.content as string) ?? "",
+      contentSnippet: (item.contentSnippet as string) ?? "",
+      thumbnail: (item.thumbnail as string) ?? "",
+      postedAt: item.postedAt as Date,
+      orientation: (item.orientation as string) ?? null,
+    }));
+
+    // Second fetch with all items already in DB
+    const { db: db2, insertValuesCalls: secondInsert } =
+      createMockDb(insertedItems);
+
+    for await (const result of fetchAndInsertFeedData({ db: db2 as any }, [
+      makeFeed(),
+    ])) {
+      // Still "success" but with empty feedItems
+      expect(result.status).toBe("success");
+    }
+
+    // No insert should have been called since nothing changed
+    expect(db2.insert).not.toHaveBeenCalled();
+    expect(secondInsert).toHaveLength(0);
+  });
+
+  it("detects title change and upserts only the changed item", async () => {
+    setServerContent("v1");
+
+    // First fetch to capture items
+    const { db: db1, insertValuesCalls: firstInsert } = createMockDb();
+    for await (const result of fetchAndInsertFeedData({ db: db1 as any }, [
+      makeFeed(),
+    ])) {
+      expect(result.status).toBe("success");
+    }
+
+    // Modify one item's title to simulate a stale DB entry
+    const existingItems = (
+      firstInsert[0] as Array<Record<string, unknown>>
+    ).map((item) => ({
+      url: item.url as string,
+      contentId: item.contentId as string,
+      title: item.title as string,
+      author: item.author as string,
+      content: (item.content as string) ?? "",
+      contentSnippet: (item.contentSnippet as string) ?? "",
+      thumbnail: (item.thumbnail as string) ?? "",
+      postedAt: item.postedAt as Date,
+      orientation: (item.orientation as string) ?? null,
+    }));
+    existingItems[0]!.title = "Old title that was updated";
+
+    // Re-fetch — only the one changed item should be upserted
+    const { db: db2, insertValuesCalls: secondInsert } =
+      createMockDb(existingItems);
+
+    for await (const result of fetchAndInsertFeedData({ db: db2 as any }, [
+      makeFeed(),
+    ])) {
+      expect(result.status).toBe("success");
+    }
+
+    expect(db2.insert).toHaveBeenCalled();
+    expect(secondInsert).toHaveLength(1);
+    expect((secondInsert[0] as unknown[]).length).toBe(1);
   });
 });

@@ -69,6 +69,9 @@ export default defineTask({
 
     let refreshedCount = 0;
     let totalRowsWritten = 0;
+    let skippedCount = 0;
+    let emptyCount = 0;
+    let errorCount = 0;
 
     for (const [userId, userFeeds] of feedsByUser) {
       try {
@@ -77,6 +80,12 @@ export default defineTask({
           if (result.status === "success") {
             refreshedCount++;
             totalRowsWritten += result.feedItems.length;
+          } else if (result.status === "skipped") {
+            skippedCount++;
+          } else if (result.status === "empty") {
+            emptyCount++;
+          } else if (result.status === "error") {
+            errorCount++;
           }
         }
       } catch (e) {
@@ -88,11 +97,11 @@ export default defineTask({
     }
 
     console.log(
-      `[background-refresh] Finished at ${new Date().toLocaleString()} — refreshed ${refreshedCount} feeds, wrote ${totalRowsWritten} rows total`,
+      `[background-refresh] Finished at ${new Date().toLocaleString()} — refreshed ${refreshedCount}, skipped ${skippedCount} (304/cached), empty ${emptyCount}, errors ${errorCount}, wrote ${totalRowsWritten} rows total`,
     );
 
     return {
-      result: `refreshed ${refreshedCount} feeds, wrote ${totalRowsWritten} rows`,
+      result: `refreshed ${refreshedCount}, skipped ${skippedCount}, empty ${emptyCount}, errors ${errorCount}, wrote ${totalRowsWritten} rows`,
     };
   },
 });
