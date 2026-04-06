@@ -34,6 +34,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "precommit": "pnpm typecheck && pnpm lint:fix && pnpm format:fix && git add -u",
+    "precommit:fast": "pnpm format:fix && git add -u",
     "test": "concurrently \"pnpm test:main\" \"pnpm test:self-hosted\"",
     "test:main": "(lsof -ti:3002 -ti:3004 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --config playwright.main-instance.config.ts",
     "test:main:ui": "(lsof -ti:3002 -ti:3004 -ti:8081 2>/dev/null | xargs kill -9 2>/dev/null); sleep 1; pnpm playwright test --ui --config playwright.main-instance.config.ts",
@@ -185,7 +186,7 @@
   },
   "packageManager": "pnpm@10.8.0",
   "simple-git-hooks": {
-    "pre-commit": "pnpm precommit"
+    "pre-commit": "if git diff --cached --name-only | grep -qE '\\.(js|ts|tsx|jsx)$'; then pnpm precommit; else pnpm precommit:fast; fi"
   },
   "pnpm": {
     "overrides": {
