@@ -21,7 +21,7 @@
     "build": "pnpm build:atomic && pnpm schema:migrate",
     "build:local": "concurrently --kill-others \"pnpm dev:db\" \"pnpm build\"",
     "schema:generate": "drizzle-kit generate",
-    "schema:migrate": "node --experimental-specifier-resolution=node --loader ts-node/esm src/server/db/migrate",
+    "schema:migrate": "node --import tsx src/server/db/migrate.ts",
     "schema:update": "pnpm schema:generate && pnpm schema:migrate",
     "db:studio": "drizzle-kit studio",
     "db:studio:test:main": "DATABASE_URL=http://127.0.0.1:8081 drizzle-kit studio",
