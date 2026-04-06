@@ -183,7 +183,6 @@ export async function* fetchAndInsertFeedData(
       }));
 
       // Diff against existing hashes to avoid unnecessary writes.
-      // Reads are cheap on Turso; writes are billed per row.
       const incomingUrls = feedItemListWithHash.map((item) => item.url);
       const existingItems = await dbSemaphore.run(() =>
         context.db
