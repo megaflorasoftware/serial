@@ -480,7 +480,7 @@ dialog:modal {
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --animate-marquee: marquee 40s linear infinite;
+  --animate-marquee: marquee 60s linear infinite;
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
