@@ -279,18 +279,11 @@ describe("fetchAndInsertFeedData with content update", () => {
     const firstUpdate = updates1[0] as Record<string, unknown>;
     expect(firstUpdate.etag).toBe(ETAG_V1);
 
-    // Capture the 14 items as "existing" DB state
+    // Capture the 14 items as "existing" DB state (only url + contentHash needed)
     const existingItems = (inserts1[0] as Array<Record<string, unknown>>).map(
       (item) => ({
         url: item.url as string,
-        contentId: item.contentId as string,
-        title: item.title as string,
-        author: item.author as string,
-        content: (item.content as string) ?? "",
-        contentSnippet: (item.contentSnippet as string) ?? "",
-        thumbnail: (item.thumbnail as string) ?? "",
-        postedAt: item.postedAt as Date,
-        orientation: (item.orientation as string) ?? null,
+        contentHash: item.contentHash as string,
       }),
     );
 
@@ -377,14 +370,7 @@ describe("fetchAndInsertFeedData content diffing", () => {
     const allItems = (firstInsert[0] as Array<Record<string, unknown>>).map(
       (item) => ({
         url: item.url as string,
-        contentId: item.contentId as string,
-        title: item.title as string,
-        author: item.author as string,
-        content: (item.content as string) ?? "",
-        contentSnippet: (item.contentSnippet as string) ?? "",
-        thumbnail: (item.thumbnail as string) ?? "",
-        postedAt: item.postedAt as Date,
-        orientation: (item.orientation as string) ?? null,
+        contentHash: item.contentHash as string,
       }),
     );
     const twoExisting = allItems.slice(0, 2);
@@ -420,14 +406,7 @@ describe("fetchAndInsertFeedData content diffing", () => {
       firstInsert[0] as Array<Record<string, unknown>>
     ).map((item) => ({
       url: item.url as string,
-      contentId: item.contentId as string,
-      title: item.title as string,
-      author: item.author as string,
-      content: (item.content as string) ?? "",
-      contentSnippet: (item.contentSnippet as string) ?? "",
-      thumbnail: (item.thumbnail as string) ?? "",
-      postedAt: item.postedAt as Date,
-      orientation: (item.orientation as string) ?? null,
+      contentHash: item.contentHash as string,
     }));
 
     // Second fetch with all items already in DB
@@ -457,21 +436,14 @@ describe("fetchAndInsertFeedData content diffing", () => {
       expect(result.status).toBe("success");
     }
 
-    // Modify one item's title to simulate a stale DB entry
+    // Simulate a stale DB entry by using a hash that doesn't match
     const existingItems = (
       firstInsert[0] as Array<Record<string, unknown>>
     ).map((item) => ({
       url: item.url as string,
-      contentId: item.contentId as string,
-      title: item.title as string,
-      author: item.author as string,
-      content: (item.content as string) ?? "",
-      contentSnippet: (item.contentSnippet as string) ?? "",
-      thumbnail: (item.thumbnail as string) ?? "",
-      postedAt: item.postedAt as Date,
-      orientation: (item.orientation as string) ?? null,
+      contentHash: item.contentHash as string,
     }));
-    existingItems[0]!.title = "Old title that was updated";
+    existingItems[0]!.contentHash = "stale-hash-that-wont-match";
 
     // Re-fetch — only the one changed item should be upserted
     const { db: db2, insertValuesCalls: secondInsert } =

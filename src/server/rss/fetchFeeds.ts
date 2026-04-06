@@ -12,6 +12,7 @@ import {
   fetchYouTubeFeedData,
   fetchYouTubeFeedDetails,
 } from "./parsers/youtube";
+import { computeItemHash } from "./hash";
 import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
 import type { db as Database } from "../db";
 import type {
@@ -175,21 +176,20 @@ export async function* fetchAndInsertFeedData(
           } satisfies typeof feedItems.$inferInsert;
         });
 
-      // Diff against existing items to avoid unnecessary writes.
+      // Compute content hash for each incoming item
+      const feedItemListWithHash = feedItemList.map((item) => ({
+        ...item,
+        contentHash: computeItemHash(item),
+      }));
+
+      // Diff against existing hashes to avoid unnecessary writes.
       // Reads are cheap on Turso; writes are billed per row.
-      const incomingUrls = feedItemList.map((item) => item.url);
+      const incomingUrls = feedItemListWithHash.map((item) => item.url);
       const existingItems = await dbSemaphore.run(() =>
         context.db
           .select({
             url: feedItems.url,
-            contentId: feedItems.contentId,
-            title: feedItems.title,
-            author: feedItems.author,
-            content: feedItems.content,
-            contentSnippet: feedItems.contentSnippet,
-            thumbnail: feedItems.thumbnail,
-            postedAt: feedItems.postedAt,
-            orientation: feedItems.orientation,
+            contentHash: feedItems.contentHash,
           })
           .from(feedItems)
           .where(
@@ -205,19 +205,11 @@ export async function* fetchAndInsertFeedData(
         existingItems.map((item) => [item.url, item]),
       );
 
-      const changedItems = feedItemList.filter((incoming) => {
+      const changedItems = feedItemListWithHash.filter((incoming) => {
         const existing = existingByUrl.get(incoming.url);
         if (!existing) return true; // new item
-        return (
-          existing.contentId !== incoming.contentId ||
-          existing.title !== incoming.title ||
-          existing.author !== incoming.author ||
-          existing.content !== (incoming.content ?? "") ||
-          existing.contentSnippet !== (incoming.contentSnippet ?? "") ||
-          existing.thumbnail !== (incoming.thumbnail ?? "") ||
-          existing.postedAt?.getTime() !== incoming.postedAt?.getTime() ||
-          existing.orientation !== (incoming.orientation ?? null)
-        );
+        // null hash means pre-migration row — force re-write to populate hash
+        return existing.contentHash !== incoming.contentHash;
       });
 
       if (changedItems.length === 0) {
@@ -238,6 +230,7 @@ export async function* fetchAndInsertFeedData(
               set: buildConflictUpdateColumns(feedItems, [
                 "author",
                 "content",
+                "contentHash",
                 "contentId",
                 "contentSnippet",
                 "createdAt",

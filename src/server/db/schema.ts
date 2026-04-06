@@ -220,6 +220,7 @@ export const feedItems = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
+    contentHash: text("content_hash"),
   },
   (example) => [
     index("feed_item_id_idx").on(example.id),
