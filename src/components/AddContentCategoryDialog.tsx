@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
+import type { Ref } from "react";
 import type { FeedCategorization } from "~/server/api/routers/contentCategoriesRouter";
 import {
   useCreateContentCategoryMutation,
@@ -17,14 +18,17 @@ import { useDialogStore } from "~/components/feed/dialogStore";
 function CategoryNameInput({
   name,
   setName,
+  inputRef,
 }: {
   name: string;
   setName: (name: string) => void;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   return (
     <div className="grid gap-2">
       <Label htmlFor="name">Name</Label>
       <Input
+        ref={inputRef}
         id="name"
         type="text"
         value={name}
@@ -39,6 +43,7 @@ function CategoryNameInput({
 
 export function AddContentCategoryDialog() {
   const [isAddingContentCategory, setIsAddingContentCategory] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const { mutateAsync: createContentCategory } =
     useCreateContentCategoryMutation();
@@ -66,9 +71,17 @@ export function AddContentCategoryDialog() {
       open={dialog === "add-content-category"}
       onOpenChange={onOpenChange}
       title="Add Tag"
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        nameInputRef.current?.focus();
+      }}
     >
       <div className="grid gap-6">
-        <CategoryNameInput name={name} setName={setName} />
+        <CategoryNameInput
+          name={name}
+          setName={setName}
+          inputRef={nameInputRef}
+        />
         <Button
           disabled={isDisabled}
           onClick={async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { ChipCombobox } from "./ui/chip-combobox";
@@ -8,6 +8,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import type { Ref } from "react";
 import type React from "react";
 import type { ViewContentType, ViewLayout } from "~/server/db/constants";
 import {
@@ -45,14 +46,17 @@ function AddViewToggleItem({
 function ViewNameInput({
   name,
   setName,
+  inputRef,
 }: {
   name: string;
   setName: (name: string) => void;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   return (
     <div className="grid gap-2">
       <Label htmlFor="name">Name</Label>
       <Input
+        ref={inputRef}
         id="name"
         type="text"
         value={name}
@@ -248,6 +252,7 @@ function ViewFeedsInput({
 
 export function AddViewDialog() {
   const [isAddingView, setIsAddingView] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const { mutateAsync: createView } = useCreateViewMutation();
 
@@ -283,9 +288,13 @@ export function AddViewDialog() {
       open={dialog === "add-view"}
       onOpenChange={onOpenChange}
       title="Add View"
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        nameInputRef.current?.focus();
+      }}
     >
       <div className="grid gap-6">
-        <ViewNameInput name={name} setName={setName} />
+        <ViewNameInput name={name} setName={setName} inputRef={nameInputRef} />
         <ViewFeedsInput
           selectedFeedIds={selectedFeedIds}
           setSelectedFeedIds={setSelectedFeedIds}

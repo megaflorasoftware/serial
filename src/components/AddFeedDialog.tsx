@@ -5,7 +5,7 @@ import {
   ImportIcon,
   LinkIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { ViewCategoriesInput } from "./AddViewDialog";
@@ -53,6 +53,7 @@ export function AddFeedDialog() {
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
 
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const discovery = useFeedDiscovery();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
   const { mutateAsync: quickCreateView } = useQuickCreateViewMutation();
@@ -84,6 +85,10 @@ export function AddFeedDialog() {
       open={dialog === "add-feed"}
       onOpenChange={onOpenChange}
       title="Add Feed"
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        urlInputRef.current?.focus();
+      }}
     >
       <div className="grid gap-6">
         <div className="grid gap-2">
@@ -102,6 +107,7 @@ export function AddFeedDialog() {
               onDiscover={discovery.discoverFeeds}
               isDiscovering={discovery.isDiscovering}
               canDiscover={discovery.canDiscover}
+              inputRef={urlInputRef}
             />
           )}
         </div>
