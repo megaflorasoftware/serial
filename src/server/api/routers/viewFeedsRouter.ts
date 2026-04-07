@@ -61,12 +61,22 @@ export const removeFromView = protectedProcedure
   .input(z.object({ viewId: z.number(), feedId: z.number() }))
   .handler(async ({ context, input }) => {
     await context.db.transaction(async (tx) => {
-      const viewOwned = await verifyViewsOwnedByUser({
-        viewIds: [input.viewId],
-        userId: context.user.id,
-        db: tx,
-      });
+      const [feedOwned, viewOwned] = await Promise.all([
+        verifyFeedsOwnedByUser({
+          feedIds: [input.feedId],
+          userId: context.user.id,
+          db: tx,
+        }),
+        verifyViewsOwnedByUser({
+          viewIds: [input.viewId],
+          userId: context.user.id,
+          db: tx,
+        }),
+      ]);
 
+      if (!feedOwned) {
+        throw new Error("Unauthorized: Feed does not belong to user");
+      }
       if (!viewOwned) {
         throw new Error("Unauthorized: View does not belong to user");
       }
@@ -128,12 +138,24 @@ export const bulkRemoveFromView = protectedProcedure
     if (input.feedIds.length === 0) return;
 
     await context.db.transaction(async (tx) => {
-      const viewOwned = await verifyViewsOwnedByUser({
-        viewIds: [input.viewId],
-        userId: context.user.id,
-        db: tx,
-      });
+      const [feedsOwned, viewOwned] = await Promise.all([
+        verifyFeedsOwnedByUser({
+          feedIds: input.feedIds,
+          userId: context.user.id,
+          db: tx,
+        }),
+        verifyViewsOwnedByUser({
+          viewIds: [input.viewId],
+          userId: context.user.id,
+          db: tx,
+        }),
+      ]);
 
+      if (!feedsOwned) {
+        throw new Error(
+          "Unauthorized: One or more feeds do not belong to user",
+        );
+      }
       if (!viewOwned) {
         throw new Error("Unauthorized: View does not belong to user");
       }
