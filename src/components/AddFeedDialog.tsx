@@ -133,7 +133,6 @@ export function AddFeedDialog() {
                 }
               }}
               createLabel="Create view"
-              badgeVariant="default"
             />
             <ViewCategoriesInput
               selectedCategories={selectedCategories}
@@ -398,7 +397,6 @@ export function EditFeedDialog({
             }
           }}
           createLabel="Create view"
-          badgeVariant="default"
         />
         <ViewCategoriesInput
           selectedCategories={selectedCategories}

@@ -44,7 +44,7 @@ function useFeedManagementShortcuts({
   onEscape,
   onSelectAll,
   onEdit,
-  onClearCategories,
+  onClear,
   onDelete,
   isDialogOpen,
   hasSelection,
@@ -52,7 +52,7 @@ function useFeedManagementShortcuts({
   onEscape: () => void;
   onSelectAll: () => void;
   onEdit: () => void;
-  onClearCategories: () => void;
+  onClear: () => void;
   onDelete: () => void;
   isDialogOpen: boolean;
   hasSelection: boolean;
@@ -84,7 +84,7 @@ function useFeedManagementShortcuts({
           break;
         case "c":
           if (!isDialogOpen && hasSelection) {
-            onClearCategories();
+            onClear();
           }
           break;
         case "d":
@@ -100,7 +100,7 @@ function useFeedManagementShortcuts({
   }, [
     hasSelection,
     isDialogOpen,
-    onClearCategories,
+    onClear,
     onDelete,
     onEdit,
     onEscape,
@@ -342,27 +342,39 @@ function ManageFeedsPage() {
     setShowEditDialog(true);
   };
 
-  const handleClearCategories = () => {
+  const handleClear = () => {
     const feedIds = Array.from(selectedFeedIds);
     const count = feedIds.length;
 
-    // Get all categories that any selected feed currently has
+    // Get all categories any selected feed currently has
     const allCurrentCategories = new Set<number>();
     feedIds.forEach((feedId) => {
       const categories = feedCategoriesMap.get(feedId) ?? [];
       categories.forEach((c) => allCurrentCategories.add(c));
     });
 
-    if (allCurrentCategories.size === 0) return;
+    // Get all views any selected feed currently has
+    const allCurrentViews = new Set<number>();
+    feedIds.forEach((feedId) => {
+      const views = feedViewsMap.get(feedId) ?? [];
+      views.forEach((v) => allCurrentViews.add(v));
+    });
 
-    const promises = Array.from(allCurrentCategories).map((categoryId) =>
-      bulkRemoveCategory({ feedIds, categoryId }),
-    );
+    if (allCurrentCategories.size === 0 && allCurrentViews.size === 0) return;
+
+    const promises: Array<Promise<void>> = [
+      ...Array.from(allCurrentCategories).map((categoryId) =>
+        bulkRemoveCategory({ feedIds, categoryId }),
+      ),
+      ...Array.from(allCurrentViews).map((viewId) =>
+        bulkRemoveView({ feedIds, viewId }),
+      ),
+    ];
 
     toast.promise(Promise.all(promises), {
-      loading: `Clearing categories from ${count} feed${count > 1 ? "s" : ""}...`,
-      success: `Cleared categories from ${count} feed${count > 1 ? "s" : ""}!`,
-      error: "Failed to clear categories",
+      loading: `Clearing ${count} feed${count > 1 ? "s" : ""}...`,
+      success: `Cleared ${count} feed${count > 1 ? "s" : ""}!`,
+      error: "Failed to clear feeds",
     });
   };
 
@@ -370,7 +382,7 @@ function ManageFeedsPage() {
     onEscape: deselectAll,
     onSelectAll: toggleSelectAll,
     onEdit: openEditDialog,
-    onClearCategories: handleClearCategories,
+    onClear: handleClear,
     onDelete: () => setShowDeleteDialog(true),
     isDialogOpen: showDeleteDialog || showEditDialog,
     hasSelection: selectedCount > 0,
@@ -546,25 +558,33 @@ function ManageFeedsPage() {
                   platform={feed.platform}
                 />
                 <span className="line-clamp-1 flex-1">{feed.name}</span>
-                <div className="flex flex-wrap gap-1">
-                  {feedCategoryIds.map((categoryId) => {
-                    const categoryName = categoryNamesMap.get(categoryId);
-                    if (!categoryName) return null;
-                    return (
-                      <Badge key={`cat-${categoryId}`} variant="outline">
-                        {categoryName}
-                      </Badge>
-                    );
-                  })}
-                  {feedViewIds.map((viewId) => {
-                    const viewName = viewNamesMap.get(viewId);
-                    if (!viewName) return null;
-                    return (
-                      <Badge key={`view-${viewId}`} variant="default">
-                        {viewName}
-                      </Badge>
-                    );
-                  })}
+                <div className="flex flex-wrap items-center gap-3">
+                  {feedCategoryIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {feedCategoryIds.map((categoryId) => {
+                        const categoryName = categoryNamesMap.get(categoryId);
+                        if (!categoryName) return null;
+                        return (
+                          <Badge key={`cat-${categoryId}`} variant="outline">
+                            {categoryName}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {feedViewIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {feedViewIds.map((viewId) => {
+                        const viewName = viewNamesMap.get(viewId);
+                        if (!viewName) return null;
+                        return (
+                          <Badge key={`view-${viewId}`} variant="default">
+                            {viewName}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <Switch
                   checked={feed.isActive}
@@ -620,11 +640,11 @@ function ManageFeedsPage() {
               </ButtonWithShortcut>
               <ButtonWithShortcut
                 variant="outline"
-                onClick={handleClearCategories}
-                disabled={isRemovingCategory}
+                onClick={handleClear}
+                disabled={isRemovingCategory || isRemovingView}
                 shortcut="c"
               >
-                Clear Categories
+                Clear
               </ButtonWithShortcut>
             </div>
             <ButtonWithShortcut
@@ -692,7 +712,6 @@ function ManageFeedsPage() {
               }
             }}
             createLabel="Create view"
-            badgeVariant="default"
           />
           <ViewCategoriesInput
             selectedCategories={selectedCategoryIds}
