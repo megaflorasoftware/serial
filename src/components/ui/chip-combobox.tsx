@@ -58,8 +58,16 @@ export function ChipCombobox({
   const selectedOptions = options.filter((o) => selectedSet.has(o.id));
 
   const trimmedSearch = search.trim();
+  const lowerSearch = trimmedSearch.toLowerCase();
+  const filteredOptions = (
+    trimmedSearch
+      ? options.filter((o) => o.label.toLowerCase().includes(lowerSearch))
+      : options
+  )
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label));
   const hasExactMatch = options.some(
-    (o) => o.label.toLowerCase() === trimmedSearch.toLowerCase(),
+    (o) => o.label.toLowerCase() === lowerSearch,
   );
   const canCreate = !!onCreate && !!trimmedSearch && !hasExactMatch;
 
@@ -88,7 +96,12 @@ export function ChipCombobox({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[250px] p-0" align="start">
-            <Command>
+            <Command
+              shouldFilter={false}
+              // cmdk inside Radix Dialog incorrectly sets data-[disabled]
+              // on items, which kills pointer events. Override here.
+              className="[&_[cmdk-item]]:pointer-events-auto [&_[cmdk-item]]:opacity-100"
+            >
               <CommandInput
                 ref={inputRef}
                 placeholder={placeholder}
@@ -96,59 +109,40 @@ export function ChipCombobox({
                 onValueChange={setSearch}
               />
               <CommandList>
-                <CommandEmpty>
-                  {canCreate ? (
-                    <button
-                      type="button"
-                      className="hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm"
-                      onClick={handleCreate}
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                      <span className="truncate">
-                        {createLabel ?? "Create"} &quot;{trimmedSearch}&quot;
-                      </span>
-                    </button>
-                  ) : (
-                    emptyMessage
-                  )}
-                </CommandEmpty>
+                {filteredOptions.length === 0 && !canCreate && (
+                  <CommandEmpty>{emptyMessage}</CommandEmpty>
+                )}
                 <CommandGroup>
-                  {options
-                    .sort((a, b) => a.label.localeCompare(b.label))
-                    .map((option) => {
-                      const isSelected = selectedSet.has(option.id);
-                      return (
-                        <CommandItem
-                          key={option.id}
-                          value={option.label}
-                          onSelect={() => {
-                            if (isSelected) {
-                              onRemove(option.id);
-                            } else {
-                              onAdd(option.id);
-                            }
-                            setSearch("");
-                            // Keep focus on input after selection
-                            requestAnimationFrame(() => {
-                              inputRef.current?.focus();
-                            });
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              isSelected ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          {option.label}
-                        </CommandItem>
-                      );
-                    })}
-                  {canCreate && options.length > 0 && (
-                    <CommandItem
-                      value={`__create__${trimmedSearch}`}
-                      onSelect={handleCreate}
-                    >
+                  {filteredOptions.map((option) => {
+                    const isSelected = selectedSet.has(option.id);
+                    return (
+                      <CommandItem
+                        key={option.id}
+                        value={String(option.id)}
+                        onSelect={() => {
+                          if (isSelected) {
+                            onRemove(option.id);
+                          } else {
+                            onAdd(option.id);
+                          }
+                          setSearch("");
+                          requestAnimationFrame(() => {
+                            inputRef.current?.focus();
+                          });
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            isSelected ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                        {option.label}
+                      </CommandItem>
+                    );
+                  })}
+                  {canCreate && (
+                    <CommandItem value="__create__" onSelect={handleCreate}>
                       <PlusIcon className="mr-2 h-4 w-4" />
                       <span className="truncate">
                         {createLabel ?? "Create"} &quot;{trimmedSearch}&quot;
