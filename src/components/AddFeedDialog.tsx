@@ -39,6 +39,7 @@ import { useDialogStore } from "~/components/feed/dialogStore";
 import { useViews } from "~/lib/data/views";
 import { useViewFeeds } from "~/lib/data/view-feeds";
 import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
+import { useQuickCreateViewMutation } from "~/lib/data/views/mutations";
 
 function useViewOptions() {
   const { views } = useViews();
@@ -54,6 +55,7 @@ export function AddFeedDialog() {
 
   const discovery = useFeedDiscovery();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
+  const { mutateAsync: quickCreateView } = useQuickCreateViewMutation();
 
   const dialog = useDialogStore((store) => store.dialog);
   const onDialogOpenChange = useDialogStore((store) => store.onOpenChange);
@@ -111,19 +113,28 @@ export function AddFeedDialog() {
         )}
         {discovery.isLocked && (
           <>
-            {viewOptions.length > 0 && (
-              <ChipCombobox
-                label="Views"
-                placeholder="Search views..."
-                options={viewOptions}
-                selectedIds={selectedViewIds}
-                onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
-                onRemove={(id) =>
-                  setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+            <ChipCombobox
+              label="Views"
+              placeholder="Search views..."
+              options={viewOptions}
+              selectedIds={selectedViewIds}
+              onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
+              onRemove={(id) =>
+                setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+              }
+              onCreate={async (name) => {
+                try {
+                  const created = await quickCreateView({ name });
+                  if (created) {
+                    setSelectedViewIds([...selectedViewIds, created.id]);
+                  }
+                } catch {
+                  toast.error("Failed to create view.");
                 }
-                badgeVariant="default"
-              />
-            )}
+              }}
+              createLabel="Create view"
+              badgeVariant="default"
+            />
             <ViewCategoriesInput
               selectedCategories={selectedCategories}
               setSelectedCategories={setSelectedCategories}
@@ -233,6 +244,7 @@ export function EditFeedDialog({
   const { mutateAsync: editFeed } = useEditFeedMutation();
   const { mutateAsync: deleteFeed } = useDeleteFeedMutation();
   const { mutate: setFeedActive } = useSetFeedActiveMutation();
+  const { mutateAsync: quickCreateView } = useQuickCreateViewMutation();
 
   const [name, setName] = useState<string>("");
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -366,19 +378,28 @@ export function EditFeedDialog({
             </Tooltip>
           </div>
         </div>
-        {viewOptions.length > 0 && (
-          <ChipCombobox
-            label="Views"
-            placeholder="Search views..."
-            options={viewOptions}
-            selectedIds={selectedViewIds}
-            onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
-            onRemove={(id) =>
-              setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+        <ChipCombobox
+          label="Views"
+          placeholder="Search views..."
+          options={viewOptions}
+          selectedIds={selectedViewIds}
+          onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
+          onRemove={(id) =>
+            setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+          }
+          onCreate={async (name) => {
+            try {
+              const created = await quickCreateView({ name });
+              if (created) {
+                setSelectedViewIds([...selectedViewIds, created.id]);
+              }
+            } catch {
+              toast.error("Failed to create view.");
             }
-            badgeVariant="default"
-          />
-        )}
+          }}
+          createLabel="Create view"
+          badgeVariant="default"
+        />
         <ViewCategoriesInput
           selectedCategories={selectedCategories}
           setSelectedCategories={setSelectedCategories}

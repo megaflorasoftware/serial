@@ -32,6 +32,8 @@ type ChipComboboxProps = {
   selectedIds: number[];
   onAdd: (id: number) => void;
   onRemove: (id: number) => void;
+  onCreate?: (name: string) => void | Promise<void>;
+  createLabel?: string;
   badgeVariant?: "default" | "outline" | "secondary";
   emptyMessage?: string;
 };
@@ -43,6 +45,8 @@ export function ChipCombobox({
   selectedIds,
   onAdd,
   onRemove,
+  onCreate,
+  createLabel,
   badgeVariant = "outline",
   emptyMessage = "No options found.",
 }: ChipComboboxProps) {
@@ -52,6 +56,21 @@ export function ChipCombobox({
 
   const selectedSet = new Set(selectedIds);
   const selectedOptions = options.filter((o) => selectedSet.has(o.id));
+
+  const trimmedSearch = search.trim();
+  const hasExactMatch = options.some(
+    (o) => o.label.toLowerCase() === trimmedSearch.toLowerCase(),
+  );
+  const canCreate = !!onCreate && !!trimmedSearch && !hasExactMatch;
+
+  const handleCreate = async () => {
+    if (!onCreate || !trimmedSearch) return;
+    await onCreate(trimmedSearch);
+    setSearch("");
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  };
 
   return (
     <div className="grid gap-2">
@@ -77,7 +96,22 @@ export function ChipCombobox({
                 onValueChange={setSearch}
               />
               <CommandList>
-                <CommandEmpty>{emptyMessage}</CommandEmpty>
+                <CommandEmpty>
+                  {canCreate ? (
+                    <button
+                      type="button"
+                      className="hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm"
+                      onClick={handleCreate}
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                      <span className="truncate">
+                        {createLabel ?? "Create"} &quot;{trimmedSearch}&quot;
+                      </span>
+                    </button>
+                  ) : (
+                    emptyMessage
+                  )}
+                </CommandEmpty>
                 <CommandGroup>
                   {options
                     .sort((a, b) => a.label.localeCompare(b.label))
@@ -110,6 +144,17 @@ export function ChipCombobox({
                         </CommandItem>
                       );
                     })}
+                  {canCreate && options.length > 0 && (
+                    <CommandItem
+                      value={`__create__${trimmedSearch}`}
+                      onSelect={handleCreate}
+                    >
+                      <PlusIcon className="mr-2 h-4 w-4" />
+                      <span className="truncate">
+                        {createLabel ?? "Create"} &quot;{trimmedSearch}&quot;
+                      </span>
+                    </CommandItem>
+                  )}
                 </CommandGroup>
               </CommandList>
             </Command>

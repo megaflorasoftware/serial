@@ -59,7 +59,8 @@ function useCheckFilteredFeedItemsForFeed() {
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
-  const { customViews, customViewCategoryIds } = useCustomViewsData();
+  const { customViews, customViewCategoryIds, customViewFeedIds } =
+    useCustomViewsData();
 
   return useCallback(
     (feed: number) => {
@@ -77,6 +78,8 @@ function useCheckFilteredFeedItemsForFeed() {
             viewFilter,
             customViewCategoryIds,
             customViews,
+            undefined,
+            customViewFeedIds,
           ),
       );
     },
@@ -91,6 +94,7 @@ function useCheckFilteredFeedItemsForFeed() {
       viewFilter,
       customViewCategoryIds,
       customViews,
+      customViewFeedIds,
     ],
   );
 }

@@ -32,6 +32,7 @@ import {
 import { useSubscription } from "~/lib/data/subscription";
 import { useViews } from "~/lib/data/views";
 import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
+import { useQuickCreateViewMutation } from "~/lib/data/views/mutations";
 import { useViewFeeds } from "~/lib/data/view-feeds";
 import {
   useBulkAssignViewFeedMutation,
@@ -212,6 +213,7 @@ function ManageFeedsPage() {
     useBulkAssignViewFeedMutation();
   const { mutateAsync: bulkRemoveView, isPending: isRemovingView } =
     useBulkRemoveViewFeedMutation();
+  const { mutateAsync: quickCreateView } = useQuickCreateViewMutation();
 
   const feedCategoriesMap = useMemo(() => {
     const map = new Map<number, number[]>();
@@ -670,19 +672,28 @@ function ManageFeedsPage() {
         description={`Edit ${selectedCount} feed${selectedCount > 1 ? "s" : ""}.`}
       >
         <div className="grid gap-4">
-          {customViewOptions.length > 0 && (
-            <ChipCombobox
-              label="Views"
-              placeholder="Search views..."
-              options={customViewOptions}
-              selectedIds={selectedViewIds}
-              onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
-              onRemove={(id) =>
-                setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+          <ChipCombobox
+            label="Views"
+            placeholder="Search views..."
+            options={customViewOptions}
+            selectedIds={selectedViewIds}
+            onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
+            onRemove={(id) =>
+              setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+            }
+            onCreate={async (name) => {
+              try {
+                const created = await quickCreateView({ name });
+                if (created) {
+                  setSelectedViewIds([...selectedViewIds, created.id]);
+                }
+              } catch {
+                toast.error("Failed to create view.");
               }
-              badgeVariant="default"
-            />
-          )}
+            }}
+            createLabel="Create view"
+            badgeVariant="default"
+          />
           <ViewCategoriesInput
             selectedCategories={selectedCategoryIds}
             setSelectedCategories={setSelectedCategoryIds}

@@ -29,6 +29,26 @@ export function useCreateViewMutation() {
   );
 }
 
+/**
+ * Like useCreateViewMutation but does not switch the active view filter.
+ * Use when creating a view inline (e.g. from a combobox in another dialog).
+ */
+export function useQuickCreateViewMutation() {
+  const setViews = useSetViews();
+  const fetchViews = useFetchViews();
+  const fetchViewFeeds = useFetchViewFeeds();
+
+  return useMutation(
+    orpc.view.create.mutationOptions({
+      onSuccess: async () => {
+        setViews([]);
+        await fetchViews();
+        await fetchViewFeeds();
+      },
+    }),
+  );
+}
+
 export function useEditViewMutation() {
   const setViews = useSetViews();
   const fetchViews = useFetchViews();

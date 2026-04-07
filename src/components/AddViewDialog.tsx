@@ -24,6 +24,7 @@ import {
 } from "~/lib/data/views/mutations";
 import { useViews } from "~/lib/data/views";
 import { useContentCategories } from "~/lib/data/content-categories";
+import { useCreateContentCategoryMutation } from "~/lib/data/content-categories/mutations";
 import { useFeeds } from "~/lib/data/feeds";
 import { useDialogStore } from "~/components/feed/dialogStore";
 
@@ -191,6 +192,8 @@ export function ViewCategoriesInput({
   setSelectedCategories: (categories: number[]) => void;
 }) {
   const categoryOptions = useCategoryOptions();
+  const { mutateAsync: createContentCategory } =
+    useCreateContentCategoryMutation();
 
   return (
     <ChipCombobox
@@ -202,6 +205,20 @@ export function ViewCategoriesInput({
       onRemove={(id) =>
         setSelectedCategories(selectedCategories.filter((c) => c !== id))
       }
+      onCreate={async (name) => {
+        try {
+          const created = await createContentCategory({
+            name,
+            feedCategorizations: [],
+          });
+          if (created) {
+            setSelectedCategories([...selectedCategories, created.id]);
+          }
+        } catch {
+          toast.error("Failed to create category.");
+        }
+      }}
+      createLabel="Create category"
     />
   );
 }
