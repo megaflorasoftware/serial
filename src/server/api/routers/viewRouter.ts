@@ -1,9 +1,13 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { z } from "zod";
+
+import {
+  verifyContentCategoriesOwnedByUser,
+  verifyFeedsOwnedByUser,
+} from "./feed-router/utils";
 import type { ApplicationView } from "~/server/db/schema";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
 import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
-
 import { protectedProcedure } from "~/server/orpc/base";
 import {
   contentCategories,
@@ -19,6 +23,30 @@ export const create = protectedProcedure
   .input(createViewSchema)
   .handler(async ({ context, input }) => {
     return await context.db.transaction(async (tx) => {
+      const [categoriesOwned, feedsOwned] = await Promise.all([
+        verifyContentCategoriesOwnedByUser({
+          categoryIds: input.categoryIds ?? [],
+          userId: context.user.id,
+          db: tx,
+        }),
+        verifyFeedsOwnedByUser({
+          feedIds: input.feedIds ?? [],
+          userId: context.user.id,
+          db: tx,
+        }),
+      ]);
+
+      if (!categoriesOwned) {
+        throw new Error(
+          "Unauthorized: One or more categories do not belong to user",
+        );
+      }
+      if (!feedsOwned) {
+        throw new Error(
+          "Unauthorized: One or more feeds do not belong to user",
+        );
+      }
+
       const viewsResult = await tx
         .insert(views)
         .values({
@@ -37,25 +65,21 @@ export const create = protectedProcedure
 
       if (!view) return null;
 
-      if (input.categoryIds) {
-        await Promise.all(
-          input.categoryIds.map(async (categoryId) => {
-            await tx.insert(viewCategories).values({
-              viewId: view.id,
-              categoryId,
-            });
-          }),
+      if (input.categoryIds && input.categoryIds.length > 0) {
+        await tx.insert(viewCategories).values(
+          input.categoryIds.map((categoryId) => ({
+            viewId: view.id,
+            categoryId,
+          })),
         );
       }
 
-      if (input.feedIds) {
-        await Promise.all(
-          input.feedIds.map(async (feedId) => {
-            await tx.insert(viewFeeds).values({
-              viewId: view.id,
-              feedId,
-            });
-          }),
+      if (input.feedIds && input.feedIds.length > 0) {
+        await tx.insert(viewFeeds).values(
+          input.feedIds.map((feedId) => ({
+            viewId: view.id,
+            feedId,
+          })),
         );
       }
 
@@ -67,6 +91,30 @@ export const update = protectedProcedure
   .input(updateViewSchema)
   .handler(async ({ context, input }) => {
     await context.db.transaction(async (tx) => {
+      const [categoriesOwned, feedsOwned] = await Promise.all([
+        verifyContentCategoriesOwnedByUser({
+          categoryIds: input.categoryIds,
+          userId: context.user.id,
+          db: tx,
+        }),
+        verifyFeedsOwnedByUser({
+          feedIds: input.feedIds,
+          userId: context.user.id,
+          db: tx,
+        }),
+      ]);
+
+      if (!categoriesOwned) {
+        throw new Error(
+          "Unauthorized: One or more categories do not belong to user",
+        );
+      }
+      if (!feedsOwned) {
+        throw new Error(
+          "Unauthorized: One or more feeds do not belong to user",
+        );
+      }
+
       const viewsResult = await tx
         .update(views)
         .set({
@@ -100,17 +148,15 @@ export const update = protectedProcedure
             ),
           );
 
-        await Promise.all(
-          input.categoryIds.map(async (categoryId) => {
-            await tx
-              .insert(viewCategories)
-              .values({
-                viewId: view.id,
-                categoryId,
-              })
-              .onConflictDoNothing();
-          }),
-        );
+        await tx
+          .insert(viewCategories)
+          .values(
+            input.categoryIds.map((categoryId) => ({
+              viewId: view.id,
+              categoryId,
+            })),
+          )
+          .onConflictDoNothing();
       }
 
       // Sync directly assigned feeds
@@ -126,17 +172,15 @@ export const update = protectedProcedure
             ),
           );
 
-        await Promise.all(
-          input.feedIds.map(async (feedId) => {
-            await tx
-              .insert(viewFeeds)
-              .values({
-                viewId: view.id,
-                feedId,
-              })
-              .onConflictDoNothing();
-          }),
-        );
+        await tx
+          .insert(viewFeeds)
+          .values(
+            input.feedIds.map((feedId) => ({
+              viewId: view.id,
+              feedId,
+            })),
+          )
+          .onConflictDoNothing();
       }
     });
   });

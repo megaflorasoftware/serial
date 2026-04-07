@@ -1,7 +1,11 @@
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { discoverFeeds as discoverFeedsFromUrl } from "feedscout";
 import { z } from "zod";
-import { findExistingFeedThatMatches } from "./utils";
+import {
+  findExistingFeedThatMatches,
+  verifyContentCategoriesOwnedByUser,
+  verifyViewsOwnedByUser,
+} from "./utils";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 import { prepareArrayChunks } from "~/lib/iterators";
@@ -57,6 +61,30 @@ export const create = protectedProcedure
     );
 
     const results = await context.db.transaction(async (tx) => {
+      const [categoriesOwned, viewsOwned] = await Promise.all([
+        verifyContentCategoriesOwnedByUser({
+          categoryIds: input.categoryIds,
+          userId: context.user.id,
+          db: tx,
+        }),
+        verifyViewsOwnedByUser({
+          viewIds: input.viewIds ?? [],
+          userId: context.user.id,
+          db: tx,
+        }),
+      ]);
+
+      if (!categoriesOwned) {
+        throw new Error(
+          "Unauthorized: One or more categories do not belong to user",
+        );
+      }
+      if (!viewsOwned) {
+        throw new Error(
+          "Unauthorized: One or more views do not belong to user",
+        );
+      }
+
       return await Promise.all(
         newFeedDetails.map(async (newFeed, index) => {
           if (!newFeed.url) return { error: "No feed url found." };
@@ -85,24 +113,20 @@ export const create = protectedProcedure
           const newFeedRow = insertedFeeds[0];
 
           if (!!input.categoryIds.length && !!newFeedRow) {
-            await Promise.all(
-              input.categoryIds.map(async (categoryId) => {
-                return await tx.insert(feedCategories).values({
-                  feedId: Number(newFeedRow.id),
-                  categoryId: categoryId,
-                });
-              }),
+            await tx.insert(feedCategories).values(
+              input.categoryIds.map((categoryId) => ({
+                feedId: Number(newFeedRow.id),
+                categoryId,
+              })),
             );
           }
 
           if (input.viewIds?.length && newFeedRow) {
-            await Promise.all(
-              input.viewIds.map(async (viewId) => {
-                return await tx.insert(viewFeeds).values({
-                  viewId,
-                  feedId: Number(newFeedRow.id),
-                });
-              }),
+            await tx.insert(viewFeeds).values(
+              input.viewIds.map((viewId) => ({
+                viewId,
+                feedId: Number(newFeedRow.id),
+              })),
             );
           }
 
