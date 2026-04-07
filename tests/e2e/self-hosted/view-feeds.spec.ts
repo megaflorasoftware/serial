@@ -76,16 +76,19 @@ test.describe("view-feed direct assignment CRUD", () => {
     await page.waitForTimeout(300);
 
     // Close the popover by clicking dialog title
-    await addViewDialog.getByText("Add View").click();
+    await addViewDialog.getByRole("heading", { name: "Add View" }).click();
 
     // Submit the view
     await addViewDialog.getByRole("button", { name: /add view/i }).click();
     await expect(page.getByText("View added!")).toBeVisible({ timeout: 10000 });
 
     // ── 3. Verify the view appears in sidebar ───────────────────────
-    await expect(page.getByText("Test Direct View")).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(
+      page
+        .locator('[data-sidebar="group"]')
+        .filter({ hasText: "Views" })
+        .getByText("Test Direct View"),
+    ).toBeVisible({ timeout: 10000 });
 
     // ── 4. Go to /feeds and verify the view badge ───────────────────
     await page.goto("/feeds");
@@ -93,10 +96,12 @@ test.describe("view-feed direct assignment CRUD", () => {
       timeout: 10000,
     });
 
-    // The feed should show "Test Direct View" as a badge
-    await expect(page.getByText("Test Direct View")).toBeVisible({
-      timeout: 10000,
-    });
+    // The feed should show "Test Direct View" as a badge in the feed row
+    await expect(
+      page.locator("main").locator('[data-slot="badge"]').filter({
+        hasText: "Test Direct View",
+      }),
+    ).toBeVisible({ timeout: 10000 });
 
     // ── 5. Select feed and use Edit Views bulk action ───────────────
     // Click the feed row to select it
@@ -106,7 +111,7 @@ test.describe("view-feed direct assignment CRUD", () => {
     await feedRow.click();
 
     // Click "Edit" button in the action bar
-    const editBtn = page.getByRole("button", { name: /^edit$/i });
+    const editBtn = page.getByRole("button", { name: /^edit\b/i });
     await expect(editBtn).toBeVisible({ timeout: 5000 });
     await editBtn.click();
 
