@@ -37,16 +37,14 @@ function useCheckFilteredFeedItemsForCategory() {
       return feedItemsOrder.filter(
         (item) =>
           feedItemsMap[item] &&
-          doesFeedItemPassFilters(
-            feedItemsMap[item],
-            30,
+          doesFeedItemPassFilters({
+            item: feedItemsMap[item],
             visibilityFilter,
-            category,
+            categoryFilter: category,
             feedCategories,
-            -1,
-            [],
-            null,
-          ),
+            feedFilter: -1,
+            viewFilter: null,
+          }),
       );
     },
     [feedItemsOrder, feedItemsMap, visibilityFilter, feedCategories],

@@ -411,8 +411,24 @@ test.describe("full user lifecycle", () => {
     ).toBeVisible();
     await deleteDialog.getByRole("button", { name: /^delete$/i }).click();
 
-    // Wait for deletion to complete - should show empty state or no feed rows
-    await page.waitForTimeout(2000);
+    // Wait for the dialog to close
+    await expect(
+      deleteDialog.getByRole("heading", { name: "Delete Feeds" }),
+    ).toBeHidden({ timeout: 10000 });
+
+    // Verify all feed rows are gone from the main feeds list
+    await expect(
+      mainContent.getByRole("button", { name: /Scary Pockets/ }),
+    ).toHaveCount(0, { timeout: 10000 });
+    await expect(
+      mainContent.getByRole("button", { name: /Fireship/ }),
+    ).toHaveCount(0);
+    await expect(
+      mainContent.getByRole("button", { name: /CGP Grey/ }),
+    ).toHaveCount(0);
+    await expect(
+      mainContent.getByRole("button", { name: /Test Blog/ }),
+    ).toHaveCount(0);
 
     // ── 8. Delete User Account ──────────────────────────────────────
     // Navigate to the feeds management page which has visible UI controls

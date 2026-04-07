@@ -113,7 +113,10 @@ function customViewCategoryIdsFor(views: ApplicationView[]): Set<number> {
   return new Set(views.flatMap((v) => v.categoryIds));
 }
 
-// Convenience wrapper that supplies sensible defaults for the noisy positional args.
+// Convenience wrapper that supplies sensible defaults for the production
+// filter. Callers may still pass `feeds` for fixture clarity (e.g. to make
+// the test setup self-documenting), but the production filter no longer
+// reads it, so the wrapper accepts and ignores it.
 function passes(
   item: ApplicationFeedItem,
   viewFilter: ApplicationView | null,
@@ -123,7 +126,6 @@ function passes(
     customViews?: ApplicationView[];
   } = {},
 ): boolean {
-  const feeds = opts.feeds ?? [];
   const feedCategories = opts.feedCategories ?? [];
   const customViews = opts.customViews;
   const customViewCategoryIds = customViews
@@ -133,20 +135,18 @@ function passes(
     ? customViewFeedIdsFor(customViews)
     : undefined;
 
-  return doesFeedItemPassFilters(
+  return doesFeedItemPassFilters({
     item,
-    0, // dateFilter
-    "unread", // visibilityFilter
-    -1, // categoryFilter
+    visibilityFilter: "unread",
+    categoryFilter: -1,
     feedCategories,
-    -1, // feedFilter
-    feeds,
+    feedFilter: -1,
     viewFilter,
     customViewCategoryIds,
     customViews,
-    undefined, // softReadItemIds
+    softReadItemIds: undefined,
     customViewFeedIds,
-  );
+  });
 }
 
 // ---------- isFeedCompatibleWithContentType ----------

@@ -122,11 +122,42 @@ test.describe("view-feed direct assignment CRUD", () => {
     });
 
     // "Test Direct View" should already be selected (shown as a chip)
-    await expect(editDialog.getByText("Test Direct View")).toBeVisible({
-      timeout: 3000,
-    });
+    const viewChip = editDialog
+      .locator('[data-slot="badge"]')
+      .filter({ hasText: "Test Direct View" });
+    await expect(viewChip).toBeVisible({ timeout: 3000 });
 
-    // Save without changes
+    // ── 6. Remove the view assignment via the chip's inline X button ─
+    await viewChip.locator("button").click();
+    await expect(viewChip).toHaveCount(0);
+
+    // Save the change
     await editDialog.getByRole("button", { name: /save/i }).click();
+
+    // Dialog should close
+    await expect(
+      editDialog.getByRole("heading", { name: "Edit Feeds" }),
+    ).toBeHidden({ timeout: 5000 });
+
+    // ── 7. Verify the badge is gone from /feeds ─────────────────────
+    // Re-render by reloading so we don't depend on cache invalidation timing
+    await page.goto("/feeds");
+    await expect(page.getByText("Manage Feeds")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.locator("main").locator('[data-slot="badge"]').filter({
+        hasText: "Test Direct View",
+      }),
+    ).toHaveCount(0, { timeout: 10000 });
+
+    // The view itself should still exist in the sidebar (we removed the
+    // feed-from-view assignment, not the view).
+    await expect(
+      page
+        .locator('[data-sidebar="group"]')
+        .filter({ hasText: "Views" })
+        .getByText("Test Direct View"),
+    ).toBeVisible({ timeout: 5000 });
   });
 });

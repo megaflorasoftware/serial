@@ -1,7 +1,6 @@
 import { useAtomValue } from "jotai";
 import {
   categoryFilterAtom,
-  dateFilterAtom,
   feedFilterAtom,
   softReadItemIdsAtom,
   viewFilterAtom,
@@ -9,14 +8,12 @@ import {
 } from "../atoms";
 import { feedItemsStore } from "../store";
 import { useFeedCategories } from "../feed-categories/store";
-import { useFeeds } from "../feeds/store";
 import { INBOX_VIEW_ID, useCustomViewsData } from "../views";
 import { isFeedCompatibleWithContentType } from "./filters";
 import type { VisibilityFilter } from "../atoms";
 import type {
   ApplicationFeedItem,
   ApplicationView,
-  DatabaseFeed,
   DatabaseFeedCategory,
 } from "~/server/db/schema";
 import type { PaginationCursor } from "~/server/api/routers/initialRouter";
@@ -46,20 +43,29 @@ function isItemOlderThanCursor(
   return false;
 }
 
-export function doesFeedItemPassFilters(
-  item: ApplicationFeedItem,
-  dateFilter: number,
-  visibilityFilter: VisibilityFilter,
-  categoryFilter: number,
-  feedCategories: DatabaseFeedCategory[],
-  feedFilter: number,
-  feeds: DatabaseFeed[],
-  viewFilter: ApplicationView | null,
-  customViewCategoryIds?: Set<number>,
-  customViews?: ApplicationView[],
-  softReadItemIds?: Set<string>,
-  customViewFeedIds?: Set<number>,
-) {
+export function doesFeedItemPassFilters({
+  item,
+  visibilityFilter,
+  categoryFilter,
+  feedCategories,
+  feedFilter,
+  viewFilter,
+  customViewCategoryIds,
+  customViews,
+  softReadItemIds,
+  customViewFeedIds,
+}: {
+  item: ApplicationFeedItem;
+  visibilityFilter: VisibilityFilter;
+  categoryFilter: number;
+  feedCategories: DatabaseFeedCategory[];
+  feedFilter: number;
+  viewFilter: ApplicationView | null;
+  customViewCategoryIds?: Set<number>;
+  customViews?: ApplicationView[];
+  softReadItemIds?: Set<string>;
+  customViewFeedIds?: Set<number>;
+}) {
   // Visibility filter
   if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
     // Allow soft read items to pass through unread filter
@@ -193,14 +199,12 @@ export function doesFeedItemPassFilters(
 }
 
 export const useFilteredFeedItemsOrder = () => {
-  const dateFilter = useAtomValue(dateFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const feedItemsOrder = feedItemsStore.useFeedItemsOrder();
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
   const feedCategories = useFeedCategories();
   const feedFilter = useAtomValue(feedFilterAtom);
-  const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
   const { customViews, customViewCategoryIds, customViewFeedIds } =
     useCustomViewsData();
@@ -235,47 +239,41 @@ export const useFilteredFeedItemsOrder = () => {
       return false;
     }
 
-    return doesFeedItemPassFilters(
+    return doesFeedItemPassFilters({
       item,
-      dateFilter,
       visibilityFilter,
       categoryFilter,
       feedCategories,
       feedFilter,
-      feeds,
       viewFilter,
       customViewCategoryIds,
       customViews,
       softReadItemIds,
       customViewFeedIds,
-    );
+    });
   });
 };
 
 export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
-  const dateFilter = useAtomValue(dateFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const feedCategories = useFeedCategories();
   const feedFilter = useAtomValue(feedFilterAtom);
-  const feeds = useFeeds();
   const viewFilter = useAtomValue(viewFilterAtom);
   const { customViews, customViewCategoryIds, customViewFeedIds } =
     useCustomViewsData();
   const softReadItemIds = useAtomValue(softReadItemIdsAtom);
 
-  return doesFeedItemPassFilters(
+  return doesFeedItemPassFilters({
     item,
-    dateFilter,
     visibilityFilter,
     categoryFilter,
     feedCategories,
     feedFilter,
-    feeds,
     viewFilter,
     customViewCategoryIds,
     customViews,
     softReadItemIds,
     customViewFeedIds,
-  );
+  });
 }

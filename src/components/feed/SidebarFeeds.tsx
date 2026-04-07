@@ -53,9 +53,7 @@ function useCheckFilteredFeedItemsForFeed() {
   const feedItemsOrder = useFeedItemsOrder();
   const feedItemsDict = useFeedItemsDict();
   const { feedCategories } = useFeedCategories();
-  const { feeds } = useFeeds();
 
-  const dateFilter = useAtomValue(dateFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
@@ -67,30 +65,26 @@ function useCheckFilteredFeedItemsForFeed() {
       return feedItemsOrder.filter(
         (item) =>
           feedItemsDict[item] &&
-          doesFeedItemPassFilters(
-            feedItemsDict[item],
-            dateFilter,
+          doesFeedItemPassFilters({
+            item: feedItemsDict[item],
             visibilityFilter,
             categoryFilter,
             feedCategories,
-            feed,
-            feeds,
+            feedFilter: feed,
             viewFilter,
             customViewCategoryIds,
             customViews,
-            undefined,
+            softReadItemIds: undefined,
             customViewFeedIds,
-          ),
+          }),
       );
     },
     [
       feedItemsOrder,
       feedItemsDict,
-      dateFilter,
       visibilityFilter,
       categoryFilter,
       feedCategories,
-      feeds,
       viewFilter,
       customViewCategoryIds,
       customViews,

@@ -590,7 +590,7 @@ function ManageFeedsPage() {
                         const viewName = viewNamesMap.get(viewId);
                         if (!viewName) return null;
                         return (
-                          <Badge key={`view-${viewId}`} variant="default">
+                          <Badge key={`view-${viewId}`} variant="secondary">
                             {viewName}
                           </Badge>
                         );
