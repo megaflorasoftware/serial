@@ -346,13 +346,17 @@ test.describe("full user lifecycle", () => {
       expect(techGroupMatch).toBeTruthy();
       expect(techGroupMatch?.[1]).toMatch(/Fireship/i);
 
-      // The OPML importer auto-creates tags from each feed's title at import
-      // time, so every imported feed has at least one tag. We don't assert
-      // any root-level (ungrouped) feeds here in tag mode — instead verify
-      // additional auto-created tag groups exist for the imported feeds.
-      expect(tagOpmlContent).toMatch(
-        /<outline title="(Scary Pockets|Fireship|CGP Grey|Test Blog)"[^>]*>/,
-      );
+      // Validate ungrouped (at root level under <body>) for feeds with no tag.
+      // The OPML test fixture has bare feeds (no real sections), and only
+      // Scary Pockets and Fireship are manually tagged in this test, so the
+      // remaining feeds (CGP Grey, Test Blog) should appear at root level.
+      const bodyMatch = tagOpmlContent.match(/<body>([\s\S]*?)<\/body>/);
+      expect(bodyMatch).toBeTruthy();
+      const bodyContent = bodyMatch?.[1] ?? "";
+      const rootLevelFeedLines = bodyContent
+        .split("\n")
+        .filter((line) => /^\s{4}<outline type="rss"/.test(line));
+      expect(rootLevelFeedLines.length).toBeGreaterThan(0);
 
       // Now switch to Group by View and re-export to verify view mode works
       await settingsDialog.getByText("Group by View").click();
