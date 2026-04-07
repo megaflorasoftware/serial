@@ -92,7 +92,9 @@ test.describe("view-feed direct assignment CRUD", () => {
 
     // ── 4. Go to /feeds and verify the view badge ───────────────────
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible({
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible({
       timeout: 10000,
     });
 
@@ -142,7 +144,9 @@ test.describe("view-feed direct assignment CRUD", () => {
     // ── 7. Verify the badge is gone from /feeds ─────────────────────
     // Re-render by reloading so we don't depend on cache invalidation timing
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible({
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible({
       timeout: 10000,
     });
     await expect(

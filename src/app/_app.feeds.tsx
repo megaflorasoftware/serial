@@ -9,6 +9,8 @@ import { YoutubeIcon } from "~/components/brand-icons";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useDialogStore } from "~/components/feed/dialogStore";
+import { FeedManagementTabs } from "~/components/feed/FeedManagementTabs";
+import { useFeedManagementShortcuts } from "~/components/feed/useManagementShortcuts";
 import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
@@ -38,75 +40,6 @@ import {
   useBulkAssignViewFeedMutation,
   useBulkRemoveViewFeedMutation,
 } from "~/lib/data/view-feeds/mutations";
-import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
-
-function useFeedManagementShortcuts({
-  onEscape,
-  onSelectAll,
-  onEdit,
-  onClear,
-  onDelete,
-  isDialogOpen,
-  hasSelection,
-}: {
-  onEscape: () => void;
-  onSelectAll: () => void;
-  onEdit: () => void;
-  onClear: () => void;
-  onDelete: () => void;
-  isDialogOpen: boolean;
-  hasSelection: boolean;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      if (doesAnyFormElementHaveFocus()) return;
-
-      // Check if event originated from within a dialog
-      const target = event.target as HTMLElement;
-      const isInDialog = target.closest('[role="dialog"]') !== null;
-
-      switch (event.key) {
-        case "Escape":
-          if (!isDialogOpen && !isInDialog) {
-            onEscape();
-          }
-          break;
-        case "s":
-          if (!isDialogOpen) {
-            onSelectAll();
-          }
-          break;
-        case "e":
-          if (!isDialogOpen && hasSelection) {
-            onEdit();
-          }
-          break;
-        case "c":
-          if (!isDialogOpen && hasSelection) {
-            onClear();
-          }
-          break;
-        case "d":
-          if (!isDialogOpen && hasSelection) {
-            onDelete();
-          }
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    hasSelection,
-    isDialogOpen,
-    onClear,
-    onDelete,
-    onEdit,
-    onEscape,
-    onSelectAll,
-  ]);
-}
 
 export const Route = createFileRoute("/_app/feeds")({
   component: ManageFeedsPage,
@@ -169,7 +102,7 @@ function ManageFeedsPage() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const headerRef = useRef<HTMLHeadingElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -439,7 +372,7 @@ function ManageFeedsPage() {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-sans text-lg">Manage Feeds</h2>
+          <FeedManagementTabs value="feeds" />
           <Button
             variant="outline"
             size="icon"
@@ -455,14 +388,12 @@ function ManageFeedsPage() {
 
   return (
     <div>
-      <div className="mx-auto max-w-3xl px-6 pt-6">
+      <div ref={headerRef} className="mx-auto max-w-3xl px-6 pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 ref={headerRef} className="font-sans text-lg">
-              Manage Feeds
-            </h2>
+            <FeedManagementTabs value="feeds" />
             {billingEnabled && maxActiveFeeds > 0 && (
-              <p className="text-muted-foreground text-sm">
+              <p className="text-muted-foreground mt-1 text-sm">
                 {activeFeeds} / {maxActiveFeeds} feeds active
               </p>
             )}
