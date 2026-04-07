@@ -166,10 +166,24 @@ export function buildViewCategoryFilter(
     // AND whose platform is compatible with that view's content type
     const feedsInCustomViews = new Set<number>();
 
-    // Also exclude feeds directly assigned to any custom view
-    if (customViewFeedIds) {
+    // Also exclude feeds directly assigned to any custom view, but only if
+    // the assigned view's content type is compatible with the feed's platform
+    // (otherwise the feed would be orphaned: filtered out of the custom view
+    // by the content-type filter, and excluded from Inbox here too).
+    if (customViewFeedIds && customViews) {
       for (const feedId of customViewFeedIds) {
-        feedsInCustomViews.add(feedId);
+        const feed = feedsById.get(feedId);
+        if (!feed) continue;
+
+        const wouldAppearInDirectView = customViews.some(
+          (v) =>
+            v.feedIds.includes(feedId) &&
+            isFeedCompatibleWithContentType(feed.platform, v.contentType),
+        );
+
+        if (wouldAppearInDirectView) {
+          feedsInCustomViews.add(feedId);
+        }
       }
     }
 

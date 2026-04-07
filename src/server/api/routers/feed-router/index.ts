@@ -351,17 +351,28 @@ export const update = protectedProcedure
   )
   .handler(async ({ context, input }) => {
     return await context.db.transaction(async (tx) => {
-      if (input.viewIds && input.viewIds.length > 0) {
-        const viewsOwned = await verifyViewsOwnedByUser({
-          viewIds: input.viewIds,
+      const [categoriesOwned, viewsOwned] = await Promise.all([
+        verifyContentCategoriesOwnedByUser({
+          categoryIds: input.categoryIds,
           userId: context.user.id,
           db: tx,
-        });
-        if (!viewsOwned) {
-          throw new Error(
-            "Unauthorized: One or more views do not belong to user",
-          );
-        }
+        }),
+        verifyViewsOwnedByUser({
+          viewIds: input.viewIds ?? [],
+          userId: context.user.id,
+          db: tx,
+        }),
+      ]);
+
+      if (!categoriesOwned) {
+        throw new Error(
+          "Unauthorized: One or more categories do not belong to user",
+        );
+      }
+      if (!viewsOwned) {
+        throw new Error(
+          "Unauthorized: One or more views do not belong to user",
+        );
       }
 
       const updatedFeeds = await tx

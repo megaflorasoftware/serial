@@ -104,20 +104,15 @@ export function doesFeedItemPassFilters(
 
   // For Uncategorized view, exclude feeds that are in a custom view category
   // AND whose platform is compatible with that view's content type,
-  // OR directly assigned to any custom view
+  // OR directly assigned to a custom view whose content type is compatible
   if (viewFilter?.id === INBOX_VIEW_ID) {
-    // Exclude feeds directly assigned to any custom view
-    if (customViewFeedIds?.has(item.feedId)) {
-      return false;
-    }
-
     const feedCategoriesForItem = feedCategories.filter(
       (fc) =>
         fc.feedId === item.feedId && customViewCategoryIds?.has(fc.categoryId),
     );
 
     // Check if this feed would appear in any custom view via categories
-    const wouldAppearInCustomView = feedCategoriesForItem.some((fc) => {
+    const wouldAppearViaCategory = feedCategoriesForItem.some((fc) => {
       if (!customViews) return true; // Fallback to old behavior if no views provided
 
       // Find views that include this category
@@ -131,7 +126,20 @@ export function doesFeedItemPassFilters(
       );
     });
 
-    if (wouldAppearInCustomView) {
+    // Check if this feed would appear in any custom view via direct assignment.
+    // We must check content-type compatibility here too — otherwise a feed
+    // directly assigned to an incompatible view would be orphaned (hidden from
+    // both that view and Inbox).
+    const wouldAppearViaDirectAssignment =
+      !!customViewFeedIds?.has(item.feedId) &&
+      (customViews?.some(
+        (v) =>
+          v.feedIds.includes(item.feedId) &&
+          isFeedCompatibleWithContentType(item.platform, v.contentType),
+      ) ??
+        true);
+
+    if (wouldAppearViaCategory || wouldAppearViaDirectAssignment) {
       return false;
     }
     // Include uncategorized feeds in Uncategorized view
