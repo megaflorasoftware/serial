@@ -55,7 +55,9 @@ export function ChipCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedSet = new Set(selectedIds);
-  const selectedOptions = options.filter((o) => selectedSet.has(o.id));
+  const selectedOptions = options
+    .filter((o) => selectedSet.has(o.id))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const trimmedSearch = search.trim();
   const lowerSearch = trimmedSearch.toLowerCase();

@@ -534,8 +534,20 @@ function ManageFeedsPage() {
         <div className="-mx-3">
           {filteredFeeds.map((feed) => {
             const isSelected = selectedFeedIds.has(feed.id);
-            const feedCategoryIds = feedCategoriesMap.get(feed.id) ?? [];
-            const feedViewIds = feedViewsMap.get(feed.id) ?? [];
+            const feedCategoryIds = (feedCategoriesMap.get(feed.id) ?? [])
+              .slice()
+              .sort((a, b) =>
+                (categoryNamesMap.get(a) ?? "").localeCompare(
+                  categoryNamesMap.get(b) ?? "",
+                ),
+              );
+            const feedViewIds = (feedViewsMap.get(feed.id) ?? [])
+              .slice()
+              .sort((a, b) =>
+                (viewNamesMap.get(a) ?? "").localeCompare(
+                  viewNamesMap.get(b) ?? "",
+                ),
+              );
 
             return (
               <button
