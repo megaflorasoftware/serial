@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AddContentCategoriesButton } from "./AddContentCategoryButton";
 import { Button } from "./ui/button";
+import { ChipCombobox } from "./ui/chip-combobox";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
@@ -24,6 +24,7 @@ import {
 } from "~/lib/data/views/mutations";
 import { useViews } from "~/lib/data/views";
 import { useContentCategories } from "~/lib/data/content-categories";
+import { useFeeds } from "~/lib/data/feeds";
 import { useDialogStore } from "~/components/feed/dialogStore";
 
 function AddViewToggleItem({
@@ -172,6 +173,16 @@ function ViewContentTypeInput({
   );
 }
 
+function useCategoryOptions() {
+  const { contentCategories } = useContentCategories();
+  return contentCategories.map((c) => ({ id: c.id, label: c.name }));
+}
+
+function useFeedOptions() {
+  const { feeds } = useFeeds();
+  return feeds.map((f) => ({ id: f.id, label: f.name }));
+}
+
 export function ViewCategoriesInput({
   selectedCategories,
   setSelectedCategories,
@@ -179,55 +190,42 @@ export function ViewCategoriesInput({
   selectedCategories: number[];
   setSelectedCategories: (categories: number[]) => void;
 }) {
-  const { contentCategories } = useContentCategories();
-
-  if (contentCategories.length === 0) {
-    return (
-      <div className="grid gap-2">
-        <Label htmlFor="categories">Categories</Label>
-        <AddContentCategoriesButton />
-      </div>
-    );
-  }
-
-  const isAllSelected = selectedCategories.length === 0;
+  const categoryOptions = useCategoryOptions();
 
   return (
-    <div className="grid gap-2">
-      <Label htmlFor="categories">Categories</Label>
-      <ToggleGroup
-        id="categories"
-        type="multiple"
-        value={
-          isAllSelected
-            ? ["all"]
-            : selectedCategories.map((category) => category.toString())
-        }
-        onValueChange={(value) => {
-          // If "all" was just selected, clear all categories
-          if (value.includes("all") && !isAllSelected) {
-            setSelectedCategories([]);
-            return;
-          }
-          // Filter out "all" and set the selected category ids
-          const categoryIds = value
-            .filter((id) => id !== "all")
-            .map((id) => parseInt(id));
-          setSelectedCategories(categoryIds);
-        }}
-        size="sm"
-        className="flex w-fit flex-wrap justify-start gap-1"
-      >
-        <AddViewToggleItem value="all">All</AddViewToggleItem>
-        {contentCategories.map((category) => {
-          return (
-            <AddViewToggleItem key={category.id} value={category.id.toString()}>
-              {category.name}
-            </AddViewToggleItem>
-          );
-        })}
-      </ToggleGroup>
-    </div>
+    <ChipCombobox
+      label="Categories"
+      placeholder="Search categories..."
+      options={categoryOptions}
+      selectedIds={selectedCategories}
+      onAdd={(id) => setSelectedCategories([...selectedCategories, id])}
+      onRemove={(id) =>
+        setSelectedCategories(selectedCategories.filter((c) => c !== id))
+      }
+    />
+  );
+}
+
+function ViewFeedsInput({
+  selectedFeedIds,
+  setSelectedFeedIds,
+}: {
+  selectedFeedIds: number[];
+  setSelectedFeedIds: (feedIds: number[]) => void;
+}) {
+  const feedOptions = useFeedOptions();
+
+  return (
+    <ChipCombobox
+      label="Feeds"
+      placeholder="Search feeds..."
+      options={feedOptions}
+      selectedIds={selectedFeedIds}
+      onAdd={(id) => setSelectedFeedIds([...selectedFeedIds, id])}
+      onRemove={(id) =>
+        setSelectedFeedIds(selectedFeedIds.filter((f) => f !== id))
+      }
+    />
   );
 }
 
@@ -243,6 +241,7 @@ export function AddViewDialog() {
   );
   const [layout, setLayout] = useState<ViewLayout>(VIEW_LAYOUT.LIST);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [selectedFeedIds, setSelectedFeedIds] = useState<number[]>([]);
 
   const dialog = useDialogStore((store) => store.dialog);
   const onOpenChangeDialog = useDialogStore((store) => store.onOpenChange);
@@ -258,6 +257,7 @@ export function AddViewDialog() {
       setContentType(VIEW_CONTENT_TYPE.LONGFORM);
       setLayout(VIEW_LAYOUT.LIST);
       setSelectedCategories([]);
+      setSelectedFeedIds([]);
     }
   };
 
@@ -272,6 +272,10 @@ export function AddViewDialog() {
         <ViewCategoriesInput
           selectedCategories={selectedCategories}
           setSelectedCategories={setSelectedCategories}
+        />
+        <ViewFeedsInput
+          selectedFeedIds={selectedFeedIds}
+          setSelectedFeedIds={setSelectedFeedIds}
         />
         <ViewTimeInput
           daysWindow={daysTimeWindow}
@@ -295,6 +299,7 @@ export function AddViewDialog() {
                 contentType: contentType,
                 layout: layout,
                 categoryIds: selectedCategories,
+                feedIds: selectedFeedIds,
               });
               toast.promise(addViewPromise, {
                 loading: "Adding view...",
@@ -340,6 +345,7 @@ export function EditViewDialog({
   );
   const [layout, setLayout] = useState<ViewLayout>(VIEW_LAYOUT.LIST);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [selectedFeedIds, setSelectedFeedIds] = useState<number[]>([]);
 
   const isFormDisabled = !name;
 
@@ -361,6 +367,7 @@ export function EditViewDialog({
     const parsedLayout = viewLayoutSchema.safeParse(view.layout);
     setLayout(parsedLayout.success ? parsedLayout.data : VIEW_LAYOUT.LIST);
     setSelectedCategories(view.categoryIds);
+    setSelectedFeedIds(view.feedIds);
   }, [views, selectedViewId]);
 
   return (
@@ -374,6 +381,10 @@ export function EditViewDialog({
         <ViewCategoriesInput
           selectedCategories={selectedCategories}
           setSelectedCategories={setSelectedCategories}
+        />
+        <ViewFeedsInput
+          selectedFeedIds={selectedFeedIds}
+          setSelectedFeedIds={setSelectedFeedIds}
         />
         <ViewTimeInput
           daysWindow={daysTimeWindow}
@@ -431,6 +442,7 @@ export function EditViewDialog({
                   contentType: contentType,
                   layout: layout,
                   categoryIds: selectedCategories,
+                  feedIds: selectedFeedIds,
                 });
                 toast.promise(editViewPromise, {
                   loading: "Updating view...",

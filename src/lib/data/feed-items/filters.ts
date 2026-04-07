@@ -133,15 +133,24 @@ export function buildViewCategoryFilter(
   customViewCategoryIds?: Set<number>,
   customViews?: ApplicationView[],
   feeds?: DatabaseFeed[],
+  customViewFeedIds?: Set<number>,
 ): SQL | undefined {
-  if (!viewFilter || viewFilter.categoryIds.length === 0) {
+  if (
+    !viewFilter ||
+    (viewFilter.categoryIds.length === 0 && viewFilter.feedIds.length === 0)
+  ) {
     return undefined;
   }
 
   // Get feed IDs that are in any of the view's categories
-  const feedsForView = feedCategories
+  const feedsFromCategories = feedCategories
     .filter((fc) => viewFilter.categoryIds.includes(fc.categoryId))
     .map((fc) => fc.feedId);
+
+  // Union category-based feeds with directly assigned feeds
+  const feedsForView = [
+    ...new Set([...feedsFromCategories, ...viewFilter.feedIds]),
+  ];
 
   // For Uncategorized view, also include uncategorized feeds, but exclude feeds in custom views
   if (viewFilter.id === INBOX_VIEW_ID) {
@@ -156,6 +165,13 @@ export function buildViewCategoryFilter(
     // Exclude feeds that belong to a category assigned to a custom view
     // AND whose platform is compatible with that view's content type
     const feedsInCustomViews = new Set<number>();
+
+    // Also exclude feeds directly assigned to any custom view
+    if (customViewFeedIds) {
+      for (const feedId of customViewFeedIds) {
+        feedsInCustomViews.add(feedId);
+      }
+    }
 
     if (customViews && customViewCategoryIds) {
       for (const fc of feedCategories) {
@@ -190,7 +206,7 @@ export function buildViewCategoryFilter(
     return inArray(feedItems.feedId, allIncludedFeedIds);
   }
 
-  // Regular view - only include feeds in the view's categories
+  // Regular view - include feeds from categories + directly assigned feeds
   if (feedsForView.length === 0) {
     return eq(feedItems.feedId, -1);
   }
@@ -285,6 +301,7 @@ export interface BuildFeedItemFiltersParams {
   feedCategories: DatabaseFeedCategory[];
   feeds: DatabaseFeed[];
   customViewCategoryIds?: Set<number>;
+  customViewFeedIds?: Set<number>;
 }
 
 /**
@@ -304,6 +321,7 @@ export function buildFeedItemFilters(
     feedCategories,
     feeds,
     customViewCategoryIds,
+    customViewFeedIds,
   } = params;
 
   const allFeedIds = feeds.map((feed) => feed.id);
@@ -318,6 +336,9 @@ export function buildFeedItemFilters(
       feedCategories,
       allFeedIds,
       customViewCategoryIds,
+      undefined,
+      feeds,
+      customViewFeedIds,
     ),
     buildContentTypeFilter(viewFilter?.contentType, feeds),
     buildTimeWindowFilter(viewFilter?.daysWindow),

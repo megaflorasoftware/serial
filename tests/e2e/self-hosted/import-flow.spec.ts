@@ -168,12 +168,24 @@ test.describe("full user lifecycle", () => {
       page.getByRole("heading", { name: "Edit Categories" }),
     ).toBeVisible();
 
-    // Toggle the "Music" category in the dialog
-    await page.locator('[role="dialog"]').getByText("Music").click();
-    await page
-      .locator('[role="dialog"]')
-      .getByRole("button", { name: "Save" })
+    // Open the categories combobox and select "Music"
+    const editCatDialog = page.locator('[role="dialog"]');
+    // Click the "+" button next to "Categories" label to open combobox
+    await editCatDialog
+      .getByText("Categories", { exact: true })
+      .locator("..")
+      .locator("button")
       .click();
+    await page.waitForTimeout(500);
+    // Use keyboard to search and select
+    await page.keyboard.type("Music", { delay: 30 });
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(300);
+    // Close combobox by pressing Escape twice (once for combobox, once if needed)
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    await editCatDialog.getByRole("button", { name: "Save" }).click();
 
     // Wait for save to complete
     await page.waitForTimeout(1000);
@@ -194,11 +206,21 @@ test.describe("full user lifecycle", () => {
       page.getByRole("heading", { name: "Edit Categories" }),
     ).toBeVisible();
 
-    await page.locator('[role="dialog"]').getByText("Tech").click();
-    await page
-      .locator('[role="dialog"]')
-      .getByRole("button", { name: "Save" })
+    // Open the categories combobox and select "Tech"
+    const editCatDialog2 = page.locator('[role="dialog"]');
+    await editCatDialog2
+      .getByText("Categories", { exact: true })
+      .locator("..")
+      .locator("button")
       .click();
+    await page.waitForTimeout(500);
+    await page.keyboard.type("Tech", { delay: 30 });
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    await editCatDialog2.getByRole("button", { name: "Save" }).click();
 
     await page.waitForTimeout(1000);
 

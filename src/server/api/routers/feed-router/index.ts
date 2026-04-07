@@ -13,6 +13,7 @@ import {
   feedsSchema,
   openLocationSchema,
   PLATFORM_DEFAULT_OPEN_LOCATION,
+  viewFeeds,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
@@ -36,7 +37,13 @@ export type BulkImportFromFileResult =
   | BulkImportFromFileSuccess;
 
 export const create = protectedProcedure
-  .input(z.object({ url: z.string().min(5), categoryIds: z.number().array() }))
+  .input(
+    z.object({
+      url: z.string().min(5),
+      categoryIds: z.number().array(),
+      viewIds: z.number().array().optional(),
+    }),
+  )
   .handler(async ({ context, input }) => {
     const newFeedDetails = await fetchNewFeedDetails(input.url);
     if (!newFeedDetails.length) {
@@ -83,6 +90,17 @@ export const create = protectedProcedure
                 return await tx.insert(feedCategories).values({
                   feedId: Number(newFeedRow.id),
                   categoryId: categoryId,
+                });
+              }),
+            );
+          }
+
+          if (input.viewIds?.length && newFeedRow) {
+            await Promise.all(
+              input.viewIds.map(async (viewId) => {
+                return await tx.insert(viewFeeds).values({
+                  viewId,
+                  feedId: Number(newFeedRow.id),
                 });
               }),
             );
@@ -303,6 +321,7 @@ export const update = protectedProcedure
     z.object({
       feedId: z.number(),
       categoryIds: z.number().array(),
+      viewIds: z.number().array().optional(),
       openLocation: openLocationSchema,
     }),
   )
@@ -342,6 +361,34 @@ export const update = protectedProcedure
             .onConflictDoNothing();
         }),
       );
+
+      // View feeds - sync direct view assignments
+      if (input.viewIds !== undefined) {
+        if (input.viewIds.length === 0) {
+          await tx.delete(viewFeeds).where(eq(viewFeeds.feedId, input.feedId));
+        } else {
+          await tx
+            .delete(viewFeeds)
+            .where(
+              and(
+                eq(viewFeeds.feedId, input.feedId),
+                notInArray(viewFeeds.viewId, input.viewIds),
+              ),
+            );
+
+          await Promise.all(
+            input.viewIds.map(async (viewId) => {
+              await tx
+                .insert(viewFeeds)
+                .values({
+                  viewId,
+                  feedId: input.feedId,
+                })
+                .onConflictDoNothing();
+            }),
+          );
+        }
+      }
 
       return feedsSchema.parse(updatedFeed);
     });

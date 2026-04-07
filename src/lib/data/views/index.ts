@@ -59,7 +59,7 @@ export function useCheckFilteredFeedItemsForView() {
   const { feeds } = useFeeds();
   const { views } = useViews();
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
-  const { customViewCategoryIds } = useCustomViewsData();
+  const { customViewCategoryIds, customViewFeedIds } = useCustomViewsData();
 
   return useCallback(
     (viewId: number) => {
@@ -78,6 +78,9 @@ export function useCheckFilteredFeedItemsForView() {
             feeds,
             viewFilter,
             customViewCategoryIds,
+            undefined,
+            undefined,
+            customViewFeedIds,
           ),
       );
     },
@@ -88,6 +91,7 @@ export function useCheckFilteredFeedItemsForView() {
       feeds,
       views,
       customViewCategoryIds,
+      customViewFeedIds,
       visibilityFilter,
     ],
   );
@@ -118,5 +122,9 @@ export function useCustomViewsData() {
     return new Set(customViews.flatMap((v) => v.categoryIds));
   }, [customViews]);
 
-  return { customViews, customViewCategoryIds };
+  const customViewFeedIds = useMemo(() => {
+    return new Set(customViews.flatMap((v) => v.feedIds));
+  }, [customViews]);
+
+  return { customViews, customViewCategoryIds, customViewFeedIds };
 }

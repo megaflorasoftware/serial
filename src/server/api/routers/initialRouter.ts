@@ -19,6 +19,7 @@ import type {
   DatabaseFeedCategory,
   DatabaseView,
   DatabaseViewCategory,
+  DatabaseViewFeed,
 } from "~/server/db/schema";
 import type { ORPCContext } from "~/server/orpc/base";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
@@ -46,6 +47,7 @@ import {
   feeds,
   feedsSchema,
   viewCategories,
+  viewFeeds,
   views,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
@@ -140,13 +142,22 @@ function computeFeedsForView(
   customViews: ApplicationView[],
   customViewCategoryIds: Set<number>,
   feedCategoriesMap?: Map<number, number[]>,
+  customViewFeedIds?: Set<number>,
 ): number[] {
   const feedIds: number[] = [];
 
   const categoryMap =
     feedCategoriesMap ?? buildFeedCategoriesMap(allFeedCategories);
 
+  // For non-inbox views, start with directly assigned feeds
+  if (view.id !== INBOX_VIEW_ID) {
+    feedIds.push(...view.feedIds);
+  }
+
   for (const feed of allFeeds) {
+    // Skip if already included via direct assignment
+    if (feedIds.includes(feed.id)) continue;
+
     // Check if feed's content type is compatible with the view
     const isCompatible = isFeedCompatibleWithContentType(
       feed.platform,
@@ -161,6 +172,11 @@ function computeFeedsForView(
     // For Uncategorized view, include feeds that are NOT in any custom view category
     // or feeds that are in the Uncategorized view's category list
     if (view.id === INBOX_VIEW_ID) {
+      // Exclude feeds directly assigned to any custom view
+      if (customViewFeedIds?.has(feed.id)) {
+        continue;
+      }
+
       // Check if feed has any category that's in a custom view with compatible content type
       const wouldAppearInCustomView = feedCategoryIds.some((categoryId) => {
         if (!customViewCategoryIds.has(categoryId)) return false;
@@ -191,10 +207,10 @@ function computeFeedsForView(
         continue;
       }
     } else {
-      // Empty categoryIds means "all categories" (no category filter)
-      if (view.categoryIds.length === 0) {
+      // Empty categoryIds and feedIds means "all categories" (no category filter)
+      if (view.categoryIds.length === 0 && view.feedIds.length === 0) {
         feedIds.push(feed.id);
-      } else {
+      } else if (view.categoryIds.length > 0) {
         // For views with specific categories, check if any of the feed's categories are in the view
         const categoryMatch = feedCategoryIds.some((categoryId) =>
           view.categoryIds.includes(categoryId),
@@ -389,6 +405,7 @@ type PrerequisiteData = {
   contentCategoriesList: DatabaseContentCategory[];
   feedCategoriesList: DatabaseFeedCategory[];
   viewCategoriesList: DatabaseViewCategory[];
+  viewFeedsList: DatabaseViewFeed[];
 };
 
 /**
@@ -424,20 +441,27 @@ async function fetchUserPrerequisiteData(
   const userContentCategoryIds = contentCategoriesList.map((cc) => cc.id);
   const userViewIds = viewsList.map((v) => v.id);
 
-  const [feedCategoriesList, viewCategoriesList] = await Promise.all([
-    userContentCategoryIds.length > 0
-      ? context.db
-          .select()
-          .from(feedCategories)
-          .where(inArray(feedCategories.categoryId, userContentCategoryIds))
-      : Promise.resolve([]),
-    userViewIds.length > 0
-      ? context.db
-          .select()
-          .from(viewCategories)
-          .where(inArray(viewCategories.viewId, userViewIds))
-      : Promise.resolve([]),
-  ]);
+  const [feedCategoriesList, viewCategoriesList, viewFeedsList] =
+    await Promise.all([
+      userContentCategoryIds.length > 0
+        ? context.db
+            .select()
+            .from(feedCategories)
+            .where(inArray(feedCategories.categoryId, userContentCategoryIds))
+        : Promise.resolve([]),
+      userViewIds.length > 0
+        ? context.db
+            .select()
+            .from(viewCategories)
+            .where(inArray(viewCategories.viewId, userViewIds))
+        : Promise.resolve([]),
+      userViewIds.length > 0
+        ? context.db
+            .select()
+            .from(viewFeeds)
+            .where(inArray(viewFeeds.viewId, userViewIds))
+        : Promise.resolve([]),
+    ]);
 
   return {
     viewsList,
@@ -445,6 +469,7 @@ async function fetchUserPrerequisiteData(
     contentCategoriesList,
     feedCategoriesList,
     viewCategoriesList,
+    viewFeedsList,
   };
 }
 
@@ -452,6 +477,7 @@ type ApplicationViewsData = {
   customViews: ApplicationView[];
   allViews: ApplicationView[];
   customViewCategoryIds: Set<number>;
+  customViewFeedIds: Set<number>;
 };
 
 /**
@@ -463,8 +489,9 @@ function buildApplicationViews(
   viewsList: PrerequisiteData["viewsList"],
   contentCategoriesList: PrerequisiteData["contentCategoriesList"],
   viewCategoriesList: PrerequisiteData["viewCategoriesList"],
+  viewFeedsList: PrerequisiteData["viewFeedsList"],
 ): ApplicationViewsData {
-  // Transform database views to ApplicationView with categoryIds
+  // Transform database views to ApplicationView with categoryIds and feedIds
   const customViews: ApplicationView[] = viewsList.map((view) => ({
     ...view,
     isDefault: false,
@@ -472,6 +499,9 @@ function buildApplicationViews(
       .filter((vc) => vc.viewId === view.id)
       .map((vc) => vc.categoryId)
       .filter((id): id is number => id !== null),
+    feedIds: viewFeedsList
+      .filter((vf) => vf.viewId === view.id)
+      .map((vf) => vf.feedId),
   }));
 
   // Build the Uncategorized view
@@ -489,7 +519,10 @@ function buildApplicationViews(
     customViews.flatMap((v) => v.categoryIds),
   );
 
-  return { customViews, allViews, customViewCategoryIds };
+  // Collect all feed IDs directly assigned to custom views
+  const customViewFeedIds = new Set(customViews.flatMap((v) => v.feedIds));
+
+  return { customViews, allViews, customViewCategoryIds, customViewFeedIds };
 }
 
 // ============================================================================
@@ -542,6 +575,7 @@ type PreparedApplicationData = {
   customViews: ApplicationView[];
   allViews: ApplicationView[];
   customViewCategoryIds: Set<number>;
+  customViewFeedIds: Set<number>;
   applicationFeeds: ApplicationFeed[];
   feedsById: Map<number, DatabaseFeed>;
   feedIds: number[];
@@ -555,15 +589,21 @@ function prepareApplicationData(
   userId: string,
   prerequisiteData: PrerequisiteData,
 ): PreparedApplicationData {
-  const { viewsList, feedsList, contentCategoriesList, viewCategoriesList } =
-    prerequisiteData;
+  const {
+    viewsList,
+    feedsList,
+    contentCategoriesList,
+    viewCategoriesList,
+    viewFeedsList,
+  } = prerequisiteData;
 
-  const { customViews, allViews, customViewCategoryIds } =
+  const { customViews, allViews, customViewCategoryIds, customViewFeedIds } =
     buildApplicationViews(
       userId,
       viewsList,
       contentCategoriesList,
       viewCategoriesList,
+      viewFeedsList,
     );
 
   const applicationFeeds = parseArrayOfSchema(feedsList, feedsSchema);
@@ -574,6 +614,7 @@ function prepareApplicationData(
     customViews,
     allViews,
     customViewCategoryIds,
+    customViewFeedIds,
     applicationFeeds,
     feedsById,
     feedIds,
@@ -634,6 +675,7 @@ async function publishViewFeedsChunks(
     feedCategoriesList: DatabaseFeedCategory[];
     customViews: ApplicationView[];
     customViewCategoryIds: Set<number>;
+    customViewFeedIds: Set<number>;
     buildFeedIdToViewIds?: boolean;
   },
 ): Promise<PublishViewFeedsResult> {
@@ -643,6 +685,7 @@ async function publishViewFeedsChunks(
     feedCategoriesList,
     customViews,
     customViewCategoryIds,
+    customViewFeedIds,
     buildFeedIdToViewIds,
   } = params;
 
@@ -660,6 +703,7 @@ async function publishViewFeedsChunks(
       customViews,
       customViewCategoryIds,
       feedCategoriesMap,
+      customViewFeedIds,
     );
 
     await publisher.publish(channel, {
@@ -749,6 +793,7 @@ export const requestInitialData = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -773,6 +818,7 @@ export const requestInitialData = protectedProcedure
         feedCategoriesList,
         customViews,
         customViewCategoryIds,
+        customViewFeedIds,
         buildFeedIdToViewIds: true,
       });
       feedIdToViewIds = result.feedIdToViewIds!;
@@ -801,6 +847,7 @@ export const requestInitialData = protectedProcedure
         customViews,
         customViewCategoryIds,
         feedCategoriesMap,
+        customViewFeedIds,
       );
       feedIdsByView.set(view.id, new Set(feedIdsForView));
     }
@@ -962,6 +1009,7 @@ export const requestImportedData = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -982,6 +1030,7 @@ export const requestImportedData = protectedProcedure
       feedCategoriesList,
       customViews,
       customViewCategoryIds,
+      customViewFeedIds,
       buildFeedIdToViewIds: false,
     });
     const firstView = allViews[0];
@@ -1231,6 +1280,7 @@ export const streamingImport = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -1250,6 +1300,7 @@ export const streamingImport = protectedProcedure
       feedCategoriesList,
       customViews,
       customViewCategoryIds,
+      customViewFeedIds,
     });
 
     // Query and publish items for all views (like requestInitialData)
@@ -1451,6 +1502,7 @@ export const requestItemsByVisibility = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -1498,6 +1550,7 @@ export const requestItemsByVisibility = protectedProcedure
           customViewCategoryIds,
           customViews,
           applicationFeeds,
+          customViewFeedIds,
         ),
         buildContentTypeFilter(targetView.contentType, applicationFeeds),
         buildTimeWindowFilter(targetView.daysWindow),
@@ -1874,6 +1927,7 @@ export const getAllByView = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -1911,6 +1965,7 @@ export const getAllByView = protectedProcedure
           customViews,
           customViewCategoryIds,
           feedCategoriesMap,
+          customViewFeedIds,
         );
 
         yield {
@@ -2000,6 +2055,7 @@ export const revalidateView = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -2024,6 +2080,7 @@ export const revalidateView = protectedProcedure
         customViews,
         customViewCategoryIds,
         feedCategoriesMap,
+        customViewFeedIds,
       );
 
       yield {
@@ -2184,6 +2241,7 @@ export const getItemsByVisibility = protectedProcedure
       customViews,
       allViews,
       customViewCategoryIds,
+      customViewFeedIds,
       applicationFeeds,
       feedsById,
       feedIds,
@@ -2225,6 +2283,7 @@ export const getItemsByVisibility = protectedProcedure
           customViewCategoryIds,
           customViews,
           applicationFeeds,
+          customViewFeedIds,
         ),
         buildContentTypeFilter(targetView.contentType, applicationFeeds),
         buildTimeWindowFilter(targetView.daysWindow),

@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
+import { ChipCombobox } from "~/components/ui/chip-combobox";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Switch } from "~/components/ui/switch";
@@ -29,6 +30,13 @@ import {
   useSetFeedActiveMutation,
 } from "~/lib/data/feeds/mutations";
 import { useSubscription } from "~/lib/data/subscription";
+import { useViews } from "~/lib/data/views";
+import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
+import { useViewFeeds } from "~/lib/data/view-feeds";
+import {
+  useBulkAssignViewFeedMutation,
+  useBulkRemoveViewFeedMutation,
+} from "~/lib/data/view-feeds/mutations";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
 
 function useFeedManagementShortcuts({
@@ -36,6 +44,7 @@ function useFeedManagementShortcuts({
   onSelectAll,
   onEditCategories,
   onClearCategories,
+  onEditViews,
   onDelete,
   isDialogOpen,
   hasSelection,
@@ -44,6 +53,7 @@ function useFeedManagementShortcuts({
   onSelectAll: () => void;
   onEditCategories: () => void;
   onClearCategories: () => void;
+  onEditViews: () => void;
   onDelete: () => void;
   isDialogOpen: boolean;
   hasSelection: boolean;
@@ -78,6 +88,11 @@ function useFeedManagementShortcuts({
             onClearCategories();
           }
           break;
+        case "v":
+          if (!isDialogOpen && hasSelection) {
+            onEditViews();
+          }
+          break;
         case "d":
           if (!isDialogOpen && hasSelection) {
             onDelete();
@@ -94,6 +109,7 @@ function useFeedManagementShortcuts({
     onClearCategories,
     onDelete,
     onEditCategories,
+    onEditViews,
     onEscape,
     onSelectAll,
   ]);
@@ -145,6 +161,8 @@ function ManageFeedsPage() {
   const { feeds } = useFeeds();
   const { feedCategories } = useFeedCategories();
   const { contentCategories } = useContentCategories();
+  const { views } = useViews();
+  const { viewFeeds } = useViewFeeds();
   const { launchDialog } = useDialogStore();
   const { billingEnabled, activeFeeds, maxActiveFeeds, planName } =
     useSubscription();
@@ -191,6 +209,8 @@ function ManageFeedsPage() {
   const [showEditCategoriesDialog, setShowEditCategoriesDialog] =
     useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [showEditViewsDialog, setShowEditViewsDialog] = useState(false);
+  const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
 
   const { mutateAsync: bulkDeleteFeeds, isPending: isDeletingFeeds } =
     useBulkDeleteFeedsMutation();
@@ -198,6 +218,10 @@ function ManageFeedsPage() {
     useBulkAssignFeedCategoryMutation();
   const { mutateAsync: bulkRemoveCategory, isPending: isRemovingCategory } =
     useBulkRemoveFeedCategoryMutation();
+  const { mutateAsync: bulkAssignView, isPending: isAssigningView } =
+    useBulkAssignViewFeedMutation();
+  const { mutateAsync: bulkRemoveView, isPending: isRemovingView } =
+    useBulkRemoveViewFeedMutation();
 
   const feedCategoriesMap = useMemo(() => {
     const map = new Map<number, number[]>();
@@ -209,6 +233,16 @@ function ManageFeedsPage() {
     return map;
   }, [feedCategories]);
 
+  const feedViewsMap = useMemo(() => {
+    const map = new Map<number, number[]>();
+    viewFeeds.forEach((vf) => {
+      const existing = map.get(vf.feedId) ?? [];
+      existing.push(vf.viewId);
+      map.set(vf.feedId, existing);
+    });
+    return map;
+  }, [viewFeeds]);
+
   const categoryNamesMap = useMemo(() => {
     const map = new Map<number, string>();
     contentCategories.forEach((c) => {
@@ -216,6 +250,22 @@ function ManageFeedsPage() {
     });
     return map;
   }, [contentCategories]);
+
+  const viewNamesMap = useMemo(() => {
+    const map = new Map<number, string>();
+    views
+      .filter((v) => v.id !== INBOX_VIEW_ID)
+      .forEach((v) => {
+        map.set(v.id, v.name);
+      });
+    return map;
+  }, [views]);
+
+  const customViewOptions = useMemo(() => {
+    return views
+      .filter((v) => v.id !== INBOX_VIEW_ID)
+      .map((v) => ({ id: v.id, label: v.name }));
+  }, [views]);
 
   const filteredFeeds = useMemo(() => {
     const sorted = [...feeds].sort((a, b) => a.name.localeCompare(b.name));
@@ -284,9 +334,24 @@ function ManageFeedsPage() {
     );
   };
 
+  const getSharedViews = () => {
+    const feedIds = Array.from(selectedFeedIds);
+    if (feedIds.length === 0) return [];
+
+    const firstFeedViews = feedViewsMap.get(feedIds[0]!) ?? [];
+    return firstFeedViews.filter((viewId) =>
+      feedIds.every((feedId) => feedViewsMap.get(feedId)?.includes(viewId)),
+    );
+  };
+
   const openEditCategoriesDialog = () => {
     setSelectedCategoryIds(getSharedCategories());
     setShowEditCategoriesDialog(true);
+  };
+
+  const openEditViewsDialog = () => {
+    setSelectedViewIds(getSharedViews());
+    setShowEditViewsDialog(true);
   };
 
   const handleClearCategories = () => {
@@ -318,8 +383,10 @@ function ManageFeedsPage() {
     onSelectAll: toggleSelectAll,
     onEditCategories: openEditCategoriesDialog,
     onClearCategories: handleClearCategories,
+    onEditViews: openEditViewsDialog,
     onDelete: () => setShowDeleteDialog(true),
-    isDialogOpen: showDeleteDialog || showEditCategoriesDialog,
+    isDialogOpen:
+      showDeleteDialog || showEditCategoriesDialog || showEditViewsDialog,
     hasSelection: selectedCount > 0,
   });
 
@@ -357,6 +424,40 @@ function ManageFeedsPage() {
       loading: `Updating categories for ${count} feed${count > 1 ? "s" : ""}...`,
       success: `Updated categories for ${count} feed${count > 1 ? "s" : ""}!`,
       error: "Failed to update categories",
+    });
+  };
+
+  const handleEditViews = () => {
+    const feedIds = Array.from(selectedFeedIds);
+    const count = feedIds.length;
+    const sharedViews = getSharedViews();
+
+    const viewsToAdd = selectedViewIds;
+    const viewsToRemove = sharedViews.filter(
+      (id) => !selectedViewIds.includes(id),
+    );
+
+    const promises: Array<Promise<void>> = [];
+
+    viewsToAdd.forEach((viewId) => {
+      promises.push(bulkAssignView({ feedIds, viewId }));
+    });
+
+    viewsToRemove.forEach((viewId) => {
+      promises.push(bulkRemoveView({ feedIds, viewId }));
+    });
+
+    setSelectedViewIds([]);
+    setShowEditViewsDialog(false);
+
+    if (promises.length === 0) {
+      return;
+    }
+
+    toast.promise(Promise.all(promises), {
+      loading: `Updating views for ${count} feed${count > 1 ? "s" : ""}...`,
+      success: `Updated views for ${count} feed${count > 1 ? "s" : ""}!`,
+      error: "Failed to update views",
     });
   };
 
@@ -460,6 +561,7 @@ function ManageFeedsPage() {
           {filteredFeeds.map((feed) => {
             const isSelected = selectedFeedIds.has(feed.id);
             const feedCategoryIds = feedCategoriesMap.get(feed.id) ?? [];
+            const feedViewIds = feedViewsMap.get(feed.id) ?? [];
 
             return (
               <button
@@ -487,8 +589,17 @@ function ManageFeedsPage() {
                     const categoryName = categoryNamesMap.get(categoryId);
                     if (!categoryName) return null;
                     return (
-                      <Badge key={categoryId} variant="outline">
+                      <Badge key={`cat-${categoryId}`} variant="outline">
                         {categoryName}
+                      </Badge>
+                    );
+                  })}
+                  {feedViewIds.map((viewId) => {
+                    const viewName = viewNamesMap.get(viewId);
+                    if (!viewName) return null;
+                    return (
+                      <Badge key={`view-${viewId}`} variant="default">
+                        {viewName}
                       </Badge>
                     );
                   })}
@@ -548,6 +659,16 @@ function ManageFeedsPage() {
               >
                 Clear Categories
               </ButtonWithShortcut>
+              {customViewOptions.length > 0 && (
+                <ButtonWithShortcut
+                  variant="outline"
+                  onClick={openEditViewsDialog}
+                  disabled={isAssigningView || isRemovingView}
+                  shortcut="v"
+                >
+                  Edit Views
+                </ButtonWithShortcut>
+              )}
             </div>
             <ButtonWithShortcut
               variant="destructive"
@@ -612,6 +733,43 @@ function ManageFeedsPage() {
               disabled={isAssigningCategory || isRemovingCategory}
             >
               {isAssigningCategory || isRemovingCategory ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </div>
+      </ControlledResponsiveDialog>
+
+      <ControlledResponsiveDialog
+        open={showEditViewsDialog}
+        onOpenChange={setShowEditViewsDialog}
+        title="Edit Views"
+        description={`Select views for ${selectedCount} feed${selectedCount > 1 ? "s" : ""}.`}
+      >
+        <div className="grid gap-4">
+          <ChipCombobox
+            label="Views"
+            placeholder="Search views..."
+            options={customViewOptions}
+            selectedIds={selectedViewIds}
+            onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
+            onRemove={(id) =>
+              setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+            }
+            badgeVariant="default"
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowEditViewsDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleEditViews}
+              disabled={isAssigningView || isRemovingView}
+            >
+              {isAssigningView || isRemovingView ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>

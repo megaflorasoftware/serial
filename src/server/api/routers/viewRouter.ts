@@ -11,6 +11,7 @@ import {
   deleteViewSchema,
   updateViewSchema,
   viewCategories,
+  viewFeeds,
   views,
 } from "~/server/db/schema";
 
@@ -47,6 +48,17 @@ export const create = protectedProcedure
         );
       }
 
+      if (input.feedIds) {
+        await Promise.all(
+          input.feedIds.map(async (feedId) => {
+            await tx.insert(viewFeeds).values({
+              viewId: view.id,
+              feedId,
+            });
+          }),
+        );
+      }
+
       return view;
     });
   });
@@ -71,28 +83,61 @@ export const update = protectedProcedure
 
       const view = viewsResult[0];
 
-      if (input.categoryIds.length === 0 || !view) return;
+      if (!view) return;
 
-      await tx
-        .delete(viewCategories)
-        .where(
-          and(
-            eq(viewCategories.viewId, view.id),
-            notInArray(viewCategories.categoryId, input.categoryIds),
-          ),
+      // Sync categories
+      if (input.categoryIds.length === 0) {
+        await tx
+          .delete(viewCategories)
+          .where(eq(viewCategories.viewId, view.id));
+      } else {
+        await tx
+          .delete(viewCategories)
+          .where(
+            and(
+              eq(viewCategories.viewId, view.id),
+              notInArray(viewCategories.categoryId, input.categoryIds),
+            ),
+          );
+
+        await Promise.all(
+          input.categoryIds.map(async (categoryId) => {
+            await tx
+              .insert(viewCategories)
+              .values({
+                viewId: view.id,
+                categoryId,
+              })
+              .onConflictDoNothing();
+          }),
         );
+      }
 
-      return await Promise.all(
-        input.categoryIds.map(async (categoryId) => {
-          await tx
-            .insert(viewCategories)
-            .values({
-              viewId: view.id,
-              categoryId,
-            })
-            .onConflictDoNothing();
-        }),
-      );
+      // Sync directly assigned feeds
+      if (input.feedIds.length === 0) {
+        await tx.delete(viewFeeds).where(eq(viewFeeds.viewId, view.id));
+      } else {
+        await tx
+          .delete(viewFeeds)
+          .where(
+            and(
+              eq(viewFeeds.viewId, view.id),
+              notInArray(viewFeeds.feedId, input.feedIds),
+            ),
+          );
+
+        await Promise.all(
+          input.feedIds.map(async (feedId) => {
+            await tx
+              .insert(viewFeeds)
+              .values({
+                viewId: view.id,
+                feedId,
+              })
+              .onConflictDoNothing();
+          }),
+        );
+      }
     });
   });
 
@@ -145,15 +190,21 @@ export const getAll = protectedProcedure.handler(async ({ context }) => {
       .where(eq(contentCategories.userId, context.user.id)),
   ]);
 
-  // Fetch view categories filtered by user's views
+  // Fetch view categories and view feeds filtered by user's views
   const userViewIds = viewsList.map((v) => v.id);
-  const viewCategoriesList =
+  const [viewCategoriesList, viewFeedsList] =
     userViewIds.length > 0
-      ? await context.db
-          .select()
-          .from(viewCategories)
-          .where(inArray(viewCategories.viewId, userViewIds))
-      : [];
+      ? await Promise.all([
+          context.db
+            .select()
+            .from(viewCategories)
+            .where(inArray(viewCategories.viewId, userViewIds)),
+          context.db
+            .select()
+            .from(viewFeeds)
+            .where(inArray(viewFeeds.viewId, userViewIds)),
+        ])
+      : [[], []];
 
   const customViews: ApplicationView[] = viewsList.map((view) => ({
     ...view,
@@ -162,6 +213,9 @@ export const getAll = protectedProcedure.handler(async ({ context }) => {
       .filter((category) => category.viewId === view.id)
       .map((category) => category.categoryId)
       .filter((id) => id !== null),
+    feedIds: viewFeedsList
+      .filter((vf) => vf.viewId === view.id)
+      .map((vf) => vf.feedId),
   }));
 
   const inboxView = buildUncategorizedView(

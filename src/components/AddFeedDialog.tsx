@@ -16,6 +16,7 @@ import {
   useFeedDiscovery,
 } from "./feed-discovery";
 import { Button } from "./ui/button";
+import { ChipCombobox } from "./ui/chip-combobox";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ControlledResponsiveDialog } from "./ui/responsive-dropdown";
@@ -35,10 +36,21 @@ import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { getAssumedFeedPlatform } from "~/server/rss/validateFeedUrl";
 import { useDialogStore } from "~/components/feed/dialogStore";
+import { useViews } from "~/lib/data/views";
+import { useViewFeeds } from "~/lib/data/view-feeds";
+import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
+
+function useViewOptions() {
+  const { views } = useViews();
+  return views
+    .filter((v) => v.id !== INBOX_VIEW_ID)
+    .map((v) => ({ id: v.id, label: v.name }));
+}
 
 export function AddFeedDialog() {
   const [isAddingFeed, setIsAddingFeed] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
 
   const discovery = useFeedDiscovery();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
@@ -57,11 +69,13 @@ export function AddFeedDialog() {
 
     if (!open) {
       setSelectedCategories([]);
+      setSelectedViewIds([]);
       discovery.reset();
     }
   };
 
   const feedPlatform = getAssumedFeedPlatform(discovery.feedUrl);
+  const viewOptions = useViewOptions();
 
   return (
     <ControlledResponsiveDialog
@@ -101,6 +115,19 @@ export function AddFeedDialog() {
               selectedCategories={selectedCategories}
               setSelectedCategories={setSelectedCategories}
             />
+            {viewOptions.length > 0 && (
+              <ChipCombobox
+                label="Views"
+                placeholder="Search views..."
+                options={viewOptions}
+                selectedIds={selectedViewIds}
+                onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
+                onRemove={(id) =>
+                  setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+                }
+                badgeVariant="default"
+              />
+            )}
             <Button
               disabled={isAddingFeed}
               onClick={async () => {
@@ -110,6 +137,7 @@ export function AddFeedDialog() {
                   const createFeedPromise = createFeed({
                     url: discovery.feedUrl,
                     categoryIds: selectedCategories,
+                    viewIds: selectedViewIds,
                   });
                   toast.promise(createFeedPromise, {
                     loading: "Adding feed...",
@@ -208,6 +236,7 @@ export function EditFeedDialog({
 
   const [name, setName] = useState<string>("");
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
   const [selectedOpenLocation, setSelectedOpenLocation] =
     useState<FeedOpenLocation>("serial");
 
@@ -215,6 +244,8 @@ export function EditFeedDialog({
 
   const { feeds } = useFeeds();
   const { feedCategories } = useFeedCategories();
+  const { viewFeeds } = useViewFeeds();
+  const viewOptions = useViewOptions();
 
   useEffect(() => {
     if (selectedFeedId == null) return;
@@ -227,10 +258,15 @@ export function EditFeedDialog({
       .map((category) => category.categoryId)
       .filter((id) => typeof id === "number");
 
+    const _feedViewIds = viewFeeds
+      .filter((vf) => vf.feedId === feed.id)
+      .map((vf) => vf.viewId);
+
     setName(feed.name);
     setSelectedCategories(_feedCategories);
+    setSelectedViewIds(_feedViewIds);
     setSelectedOpenLocation(feed.openLocation);
-  }, [feedCategories, selectedFeedId, feeds]);
+  }, [feedCategories, viewFeeds, selectedFeedId, feeds]);
 
   const feed = feeds.find((v) => v.id === selectedFeedId);
 
@@ -334,6 +370,19 @@ export function EditFeedDialog({
           selectedCategories={selectedCategories}
           setSelectedCategories={setSelectedCategories}
         />
+        {viewOptions.length > 0 && (
+          <ChipCombobox
+            label="Views"
+            placeholder="Search views..."
+            options={viewOptions}
+            selectedIds={selectedViewIds}
+            onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
+            onRemove={(id) =>
+              setSelectedViewIds(selectedViewIds.filter((v) => v !== id))
+            }
+            badgeVariant="default"
+          />
+        )}
         <FeedOpenLocationToggleGroup
           feedPlatform={feed?.platform ?? "youtube"}
           openLocation={selectedOpenLocation}
@@ -379,6 +428,7 @@ export function EditFeedDialog({
                 await editFeed({
                   feedId: selectedFeedId,
                   categoryIds: selectedCategories,
+                  viewIds: selectedViewIds,
                   openLocation: selectedOpenLocation,
                 });
                 toast.success("Feed updated!");
