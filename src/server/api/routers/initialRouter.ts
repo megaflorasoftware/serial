@@ -1120,9 +1120,11 @@ export const streamingImport = protectedProcedure
           categories: z.string().array(),
         })
         .array(),
+      importMode: z.enum(["tags", "views", "ignore"]).optional(),
     }),
   )
   .handler(async ({ context, input }) => {
+    const importMode = input.importMode ?? "tags";
     const channel = getUserChannel(context.user.id);
     const BATCH_SIZE = 4;
 
@@ -1141,9 +1143,14 @@ export const streamingImport = protectedProcedure
     );
     const deactivatedCount = Math.max(0, input.feeds.length - remainingSlots);
 
-    // Pre-calculate which feeds should be active
+    // Pre-calculate which feeds should be active. Strip categories for any
+    // mode other than "tags" — we only want to create category links when
+    // the user explicitly chose to import sections as tags. The original
+    // categories list is preserved on the side for "views" mode below.
     const feedsWithActivation = input.feeds.map((feed, index) => ({
-      ...feed,
+      feedUrl: feed.feedUrl,
+      categories: importMode === "tags" ? feed.categories : [],
+      originalCategories: feed.categories,
       shouldBeActive: index < remainingSlots,
     }));
 
@@ -1170,6 +1177,7 @@ export const streamingImport = protectedProcedure
     const successfulFeeds: Array<{
       feedId: number;
       feed: typeof feeds.$inferSelect;
+      sectionNames: string[];
     }> = [];
 
     // Worker function: insert feed + fetch RSS content
@@ -1223,6 +1231,7 @@ export const streamingImport = protectedProcedure
         successfulFeeds.push({
           feedId: insertResult.feedId,
           feed: insertResult.feed as typeof feeds.$inferSelect,
+          sectionNames: feedInput.originalCategories,
         });
 
         // 3. Immediately fetch RSS content for this feed
@@ -1270,6 +1279,64 @@ export const streamingImport = protectedProcedure
     // Consume the iterator - results are published via side effects in processFeed
     while (!(await workerIterator.next()).done) {
       // Results stream as each feed completes
+    }
+
+    // For "views" mode: create (or reuse) a view per unique section name and
+    // link successfully-imported feeds to those views via the viewFeeds table.
+    if (importMode === "views" && successfulFeeds.length > 0) {
+      const sectionNames = new Set<string>();
+      for (const sf of successfulFeeds) {
+        for (const name of sf.sectionNames) {
+          if (name) sectionNames.add(name);
+        }
+      }
+
+      if (sectionNames.size > 0) {
+        await context.db.transaction(async (tx) => {
+          // Look up existing views by name for this user
+          const existingViews = await tx
+            .select()
+            .from(views)
+            .where(eq(views.userId, context.user.id));
+          const existingByName = new Map(existingViews.map((v) => [v.name, v]));
+
+          // Insert any missing views with default settings
+          const namesToCreate = [...sectionNames].filter(
+            (name) => !existingByName.has(name),
+          );
+          if (namesToCreate.length > 0) {
+            const inserted = await tx
+              .insert(views)
+              .values(
+                namesToCreate.map((name) => ({
+                  userId: context.user.id,
+                  name,
+                })),
+              )
+              .returning();
+            for (const v of inserted) {
+              existingByName.set(v.name, v);
+            }
+          }
+
+          // Build viewFeeds rows
+          const viewFeedRows: Array<{ viewId: number; feedId: number }> = [];
+          for (const sf of successfulFeeds) {
+            for (const name of sf.sectionNames) {
+              const view = existingByName.get(name);
+              if (!view) continue;
+              viewFeedRows.push({ viewId: view.id, feedId: sf.feedId });
+            }
+          }
+
+          if (viewFeedRows.length > 0) {
+            await tx
+              .insert(viewFeeds)
+              .values(viewFeedRows)
+              .onConflictDoNothing();
+          }
+        });
+      }
     }
 
     // After all feeds complete, publish updated prerequisite data

@@ -13,6 +13,7 @@ type CardRadioGroupProps<T extends string> = {
   value: T;
   onValueChange: (value: T) => void;
   options: Array<CardRadioOption<T>>;
+  orientation?: "responsive" | "vertical";
   className?: string;
 };
 
@@ -20,13 +21,18 @@ export function CardRadioGroup<T extends string>({
   value,
   onValueChange,
   options,
+  orientation = "responsive",
   className,
 }: CardRadioGroupProps<T>) {
   return (
     <RadioGroup
       value={value}
       onValueChange={(v) => onValueChange(v as T)}
-      className={cn("grid gap-3 sm:grid-cols-2", className)}
+      className={cn(
+        "grid gap-3",
+        orientation === "responsive" && "sm:grid-cols-2",
+        className,
+      )}
     >
       {options.map((option) => {
         const isSelected = option.value === value;
