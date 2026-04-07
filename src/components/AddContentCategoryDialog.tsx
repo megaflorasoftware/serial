@@ -28,7 +28,7 @@ function CategoryNameInput({
         id="name"
         type="text"
         value={name}
-        placeholder="My Category"
+        placeholder="My Tag"
         onChange={(e) => {
           setName(e.target.value);
         }}
@@ -65,7 +65,7 @@ export function AddContentCategoryDialog() {
     <ControlledResponsiveDialog
       open={dialog === "add-content-category"}
       onOpenChange={onOpenChange}
-      title="Add Category"
+      title="Add Tag"
     >
       <div className="grid gap-6">
         <CategoryNameInput name={name} setName={setName} />
@@ -80,12 +80,12 @@ export function AddContentCategoryDialog() {
                 feedCategorizations: updatedFeedIdCategorizations,
               });
               toast.promise(addCategoryPromise, {
-                loading: "Creating category...",
+                loading: "Creating tag...",
                 success: () => {
-                  return "Category created!";
+                  return "Tag created!";
                 },
                 error: () => {
-                  return "Something went wrong creating your category.";
+                  return "Something went wrong creating your tag.";
                 },
               });
               onOpenChange(false);
@@ -96,7 +96,7 @@ export function AddContentCategoryDialog() {
             setIsAddingContentCategory(false);
           }}
         >
-          {isAddingContentCategory ? "Adding..." : "Add Category"}
+          {isAddingContentCategory ? "Adding..." : "Add Tag"}
         </Button>
       </div>
     </ControlledResponsiveDialog>
@@ -143,7 +143,7 @@ export function EditContentCategoryDialog({
     <ControlledResponsiveDialog
       open={selectedContentCategoryId !== null}
       onOpenChange={onClose}
-      title="Edit Category"
+      title="Edit Tag"
     >
       <div className="grid gap-6">
         <CategoryNameInput name={name} setName={setName} />
@@ -161,12 +161,12 @@ export function EditContentCategoryDialog({
                   id: selectedContentCategoryId,
                 });
                 toast.promise(deleteCategoryPromise, {
-                  loading: "Deleting category...",
+                  loading: "Deleting tag...",
                   success: () => {
-                    return "Category deleted!";
+                    return "Tag deleted!";
                   },
                   error: () => {
-                    return "Something went wrong deleting your category.";
+                    return "Something went wrong deleting your tag.";
                   },
                 });
                 onClose();
@@ -192,12 +192,12 @@ export function EditContentCategoryDialog({
                   feedCategorizations: updatedFeedIdCategorizations,
                 });
                 toast.promise(updateCategoryPromise, {
-                  loading: "Updating category...",
+                  loading: "Updating tag...",
                   success: () => {
-                    return "Category updated!";
+                    return "Tag updated!";
                   },
                   error: () => {
-                    return "Something went wrong updating your category.";
+                    return "Something went wrong updating your tag.";
                   },
                 });
                 onClose();

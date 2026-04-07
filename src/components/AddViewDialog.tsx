@@ -197,8 +197,8 @@ export function ViewCategoriesInput({
 
   return (
     <ChipCombobox
-      label="Categories"
-      placeholder="Search categories..."
+      label="Tags"
+      placeholder="Search tags..."
       options={categoryOptions}
       selectedIds={selectedCategories}
       onAdd={(id) => setSelectedCategories([...selectedCategories, id])}
@@ -215,10 +215,10 @@ export function ViewCategoriesInput({
             setSelectedCategories([...selectedCategories, created.id]);
           }
         } catch {
-          toast.error("Failed to create category.");
+          toast.error("Failed to create tag.");
         }
       }}
-      createLabel="Create category"
+      createLabel="Create tag"
     />
   );
 }

@@ -93,7 +93,7 @@ export function SidebarCategories() {
       />
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
         <SidebarGroupLabel className="pr-0 pb-2">
-          <span className="inline-block flex-1">Categories</span>
+          <span className="inline-block flex-1">Tags</span>
           <div className="flex w-fit items-center justify-end">
             <SidebarMenuButton
               onClick={() => launchDialog("add-content-category")}
