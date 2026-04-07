@@ -163,9 +163,9 @@ test.describe("full user lifecycle", () => {
     // Select Scary Pockets and assign "Music"
     await mainContent.getByRole("button", { name: /Scary Pockets/ }).click();
 
-    await page.getByRole("button", { name: /edit categories/i }).click();
+    await page.getByRole("button", { name: /^edit$/i }).click();
     await expect(
-      page.getByRole("heading", { name: "Edit Categories" }),
+      page.getByRole("heading", { name: "Edit Feeds" }),
     ).toBeVisible();
 
     // Open the categories combobox and select "Music"
@@ -201,9 +201,9 @@ test.describe("full user lifecycle", () => {
     await mainContent.getByRole("button", { name: /Scary Pockets/ }).click(); // deselect
     await mainContent.getByRole("button", { name: /Fireship/ }).click();
 
-    await page.getByRole("button", { name: /edit categories/i }).click();
+    await page.getByRole("button", { name: /^edit$/i }).click();
     await expect(
-      page.getByRole("heading", { name: "Edit Categories" }),
+      page.getByRole("heading", { name: "Edit Feeds" }),
     ).toBeVisible();
 
     // Open the categories combobox and select "Tech"

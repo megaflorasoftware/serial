@@ -111,10 +111,6 @@ export function AddFeedDialog() {
         )}
         {discovery.isLocked && (
           <>
-            <ViewCategoriesInput
-              selectedCategories={selectedCategories}
-              setSelectedCategories={setSelectedCategories}
-            />
             {viewOptions.length > 0 && (
               <ChipCombobox
                 label="Views"
@@ -128,6 +124,10 @@ export function AddFeedDialog() {
                 badgeVariant="default"
               />
             )}
+            <ViewCategoriesInput
+              selectedCategories={selectedCategories}
+              setSelectedCategories={setSelectedCategories}
+            />
             <Button
               disabled={isAddingFeed}
               onClick={async () => {
@@ -366,10 +366,6 @@ export function EditFeedDialog({
             </Tooltip>
           </div>
         </div>
-        <ViewCategoriesInput
-          selectedCategories={selectedCategories}
-          setSelectedCategories={setSelectedCategories}
-        />
         {viewOptions.length > 0 && (
           <ChipCombobox
             label="Views"
@@ -383,6 +379,10 @@ export function EditFeedDialog({
             badgeVariant="default"
           />
         )}
+        <ViewCategoriesInput
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+        />
         <FeedOpenLocationToggleGroup
           feedPlatform={feed?.platform ?? "youtube"}
           openLocation={selectedOpenLocation}

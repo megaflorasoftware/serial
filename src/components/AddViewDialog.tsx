@@ -269,13 +269,13 @@ export function AddViewDialog() {
     >
       <div className="grid gap-6">
         <ViewNameInput name={name} setName={setName} />
-        <ViewCategoriesInput
-          selectedCategories={selectedCategories}
-          setSelectedCategories={setSelectedCategories}
-        />
         <ViewFeedsInput
           selectedFeedIds={selectedFeedIds}
           setSelectedFeedIds={setSelectedFeedIds}
+        />
+        <ViewCategoriesInput
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
         />
         <ViewTimeInput
           daysWindow={daysTimeWindow}
@@ -378,13 +378,13 @@ export function EditViewDialog({
     >
       <div className="grid gap-6">
         <ViewNameInput name={name} setName={setName} />
-        <ViewCategoriesInput
-          selectedCategories={selectedCategories}
-          setSelectedCategories={setSelectedCategories}
-        />
         <ViewFeedsInput
           selectedFeedIds={selectedFeedIds}
           setSelectedFeedIds={setSelectedFeedIds}
+        />
+        <ViewCategoriesInput
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
         />
         <ViewTimeInput
           daysWindow={daysTimeWindow}

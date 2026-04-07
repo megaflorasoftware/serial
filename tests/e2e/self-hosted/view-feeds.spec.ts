@@ -105,23 +105,23 @@ test.describe("view-feed direct assignment CRUD", () => {
       .filter({ hasText: "Test Blog" });
     await feedRow.click();
 
-    // Click "Edit Views" button in the action bar
-    const editViewsBtn = page.getByRole("button", { name: /edit views/i });
-    await expect(editViewsBtn).toBeVisible({ timeout: 5000 });
-    await editViewsBtn.click();
+    // Click "Edit" button in the action bar
+    const editBtn = page.getByRole("button", { name: /^edit$/i });
+    await expect(editBtn).toBeVisible({ timeout: 5000 });
+    await editBtn.click();
 
-    // The Edit Views dialog should appear
-    const editViewsDialog = page.locator('[role="dialog"]');
-    await expect(editViewsDialog.getByText("Edit Views")).toBeVisible({
+    // The Edit Feeds dialog should appear
+    const editDialog = page.locator('[role="dialog"]');
+    await expect(editDialog.getByText("Edit Feeds")).toBeVisible({
       timeout: 5000,
     });
 
     // "Test Direct View" should already be selected (shown as a chip)
-    await expect(editViewsDialog.getByText("Test Direct View")).toBeVisible({
+    await expect(editDialog.getByText("Test Direct View")).toBeVisible({
       timeout: 3000,
     });
 
     // Save without changes
-    await editViewsDialog.getByRole("button", { name: /save/i }).click();
+    await editDialog.getByRole("button", { name: /save/i }).click();
   });
 });
