@@ -24,6 +24,7 @@ import {
 } from "~/lib/data/content-categories/mutations";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
+import { useShortcut } from "~/lib/hooks/useShortcut";
 
 export const Route = createFileRoute("/_app/tags")({
   component: ManageTagsPage,
@@ -34,6 +35,10 @@ function ManageTagsPage() {
   const { feedCategories } = useFeedCategories();
   const { feeds } = useFeeds();
   const { launchDialog } = useDialogStore();
+  useShortcut("a", (event) => {
+    event.preventDefault();
+    launchDialog("add-content-category");
+  });
 
   const { mutateAsync: updateContentCategory } =
     useUpdateContentCategoryMutation();

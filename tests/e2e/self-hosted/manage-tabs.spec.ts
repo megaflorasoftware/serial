@@ -6,6 +6,23 @@ import {
 } from "../fixtures/ports";
 import { cleanupUser, seedArticleData } from "../fixtures/seed-db";
 import { signIn } from "../fixtures/auth";
+import type { Page } from "@playwright/test";
+
+/**
+ * Some shadcn/Radix interactions leave focus on a Link or button. In headless
+ * Chrome that focus state can swallow window-level keyboard shortcuts. Reset
+ * focus to the body before pressing any global shortcut keys.
+ */
+async function pressGlobalShortcut(page: Page, key: string) {
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.body.focus();
+  });
+  await page.waitForTimeout(150);
+  await page.keyboard.press(key);
+}
+
+test.describe.configure({ mode: "serial" });
 
 test.describe("manage feeds/views/tags tabs", () => {
   test.use({ viewport: { width: 1920, height: 1080 } });
@@ -54,15 +71,15 @@ test.describe("manage feeds/views/tags tabs", () => {
     await expect(tagsTab).toHaveAttribute("data-state", "active");
 
     // Press "1" to go to /feeds
-    await page.keyboard.press("1");
+    await pressGlobalShortcut(page, "1");
     await expect(page).toHaveURL(/\/feeds$/);
 
     // Press "2" to go to /views
-    await page.keyboard.press("2");
+    await pressGlobalShortcut(page, "2");
     await expect(page).toHaveURL(/\/views$/);
 
     // Press "3" to go to /tags
-    await page.keyboard.press("3");
+    await pressGlobalShortcut(page, "3");
     await expect(page).toHaveURL(/\/tags$/);
   });
 
@@ -86,14 +103,10 @@ test.describe("manage feeds/views/tags tabs", () => {
       page.getByRole("tab", { name: /views/i, selected: true }),
     ).toBeVisible({ timeout: 10000 });
 
-    // Click + to add a view
-    const addBtn = page
-      .locator("button")
-      .filter({ has: page.locator("svg.lucide-plus") })
-      .first();
-    await addBtn.click();
-
     const dialog = page.locator('[role="dialog"]');
+
+    // Use the "a" keyboard shortcut to open the Add View dialog
+    await pressGlobalShortcut(page, "a");
     await expect(dialog.getByRole("heading", { name: "Add View" })).toBeVisible(
       { timeout: 5000 },
     );
@@ -105,7 +118,7 @@ test.describe("manage feeds/views/tags tabs", () => {
     await expect(page.getByText("View added!")).toBeVisible({ timeout: 10000 });
 
     // Add a second view
-    await addBtn.click();
+    await pressGlobalShortcut(page, "a");
     await expect(dialog.getByRole("heading", { name: "Add View" })).toBeVisible(
       { timeout: 5000 },
     );
@@ -115,12 +128,18 @@ test.describe("manage feeds/views/tags tabs", () => {
     await dialog.getByRole("button", { name: /add view/i }).click();
     await expect(page.getByText("View added!")).toBeVisible({ timeout: 10000 });
 
-    // Both views should be visible in the list
-    await expect(page.getByText("Bulk View A")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("Bulk View B")).toBeVisible({ timeout: 5000 });
+    // Both views should be visible in the list (scope to inner main, the
+    // sidebar also lists them)
+    const mainContent = page.locator("main main");
+    await expect(
+      mainContent.getByText("Bulk View A", { exact: true }),
+    ).toBeVisible({ timeout: 5000 });
+    await expect(
+      mainContent.getByText("Bulk View B", { exact: true }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Edit single view via pencil button
-    const rowA = page
+    const rowA = mainContent
       .locator("button[type='button']")
       .filter({ hasText: "Bulk View A" });
     await rowA.locator("button").last().click(); // pencil button
@@ -132,15 +151,11 @@ test.describe("manage feeds/views/tags tabs", () => {
     // Close the dialog
     await page.keyboard.press("Escape");
 
-    // Select All via "s" shortcut, then bulk delete via "d"
-    await page.keyboard.press("s");
-    // Bulk Edit dialog button should be visible
-    await expect(
-      page.getByRole("button", { name: /^edit/i }).first(),
-    ).toBeVisible({ timeout: 5000 });
+    // Select All via "s" shortcut
+    await pressGlobalShortcut(page, "s");
 
     // Open bulk edit dialog with "e"
-    await page.keyboard.press("e");
+    await pressGlobalShortcut(page, "e");
     await expect(
       page.locator('[role="dialog"]').getByRole("heading", {
         name: "Edit Views",
@@ -152,9 +167,8 @@ test.describe("manage feeds/views/tags tabs", () => {
       .getByRole("button", { name: /cancel/i })
       .click();
 
-    // Re-select all and delete
-    await page.keyboard.press("s");
-    await page.keyboard.press("d");
+    // Selection is preserved after cancel — just press "d" to delete
+    await pressGlobalShortcut(page, "d");
     const deleteDialog = page.locator('[role="dialog"]').filter({
       hasText: "Delete Views",
     });
@@ -164,13 +178,13 @@ test.describe("manage feeds/views/tags tabs", () => {
       timeout: 10000,
     });
 
-    // Both views should be gone
-    await expect(page.getByText("Bulk View A")).toHaveCount(0, {
-      timeout: 10000,
-    });
-    await expect(page.getByText("Bulk View B")).toHaveCount(0, {
-      timeout: 10000,
-    });
+    // Both views should be gone from the main list
+    await expect(
+      mainContent.getByText("Bulk View A", { exact: true }),
+    ).toHaveCount(0, { timeout: 10000 });
+    await expect(
+      mainContent.getByText("Bulk View B", { exact: true }),
+    ).toHaveCount(0, { timeout: 10000 });
   });
 
   test("create tag with feed assignment via dialog and verify on /feeds", async ({
@@ -195,12 +209,8 @@ test.describe("manage feeds/views/tags tabs", () => {
       page.getByRole("tab", { name: /tags/i, selected: true }),
     ).toBeVisible({ timeout: 10000 });
 
-    // Click + to add a tag
-    const addBtn = page
-      .locator("button")
-      .filter({ has: page.locator("svg.lucide-plus") })
-      .first();
-    await addBtn.click();
+    // Use the "a" keyboard shortcut to open the Add Tag dialog
+    await pressGlobalShortcut(page, "a");
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog.getByRole("heading", { name: "Add Tag" })).toBeVisible({
@@ -239,7 +249,7 @@ test.describe("manage feeds/views/tags tabs", () => {
     ).toBeVisible({ timeout: 5000 });
 
     // Navigate to /feeds and verify the tag chip on the feed row
-    await page.keyboard.press("1");
+    await pressGlobalShortcut(page, "1");
     await expect(page).toHaveURL(/\/feeds$/);
 
     await expect(
@@ -269,15 +279,11 @@ test.describe("manage feeds/views/tags tabs", () => {
       page.getByRole("tab", { name: /tags/i, selected: true }),
     ).toBeVisible({ timeout: 10000 });
 
-    // Create two tags (without feeds)
-    const addBtn = page
-      .locator("button")
-      .filter({ has: page.locator("svg.lucide-plus") })
-      .first();
+    // Create two tags (without feeds) using the "a" shortcut
     const dialog = page.locator('[role="dialog"]');
 
     for (const tagName of ["Tag Alpha", "Tag Beta"]) {
-      await addBtn.click();
+      await pressGlobalShortcut(page, "a");
       await expect(
         dialog.getByRole("heading", { name: "Add Tag" }),
       ).toBeVisible({ timeout: 5000 });
@@ -291,8 +297,8 @@ test.describe("manage feeds/views/tags tabs", () => {
     }
 
     // Select all tags and use Assign Feeds bulk action
-    await page.keyboard.press("s");
-    await page.keyboard.press("e"); // opens "Assign Feeds" bulk dialog
+    await pressGlobalShortcut(page, "s");
+    await pressGlobalShortcut(page, "e"); // opens "Assign Feeds" bulk dialog
 
     const assignDialog = page.locator('[role="dialog"]').filter({
       hasText: "Assign Feeds",
@@ -332,7 +338,7 @@ test.describe("manage feeds/views/tags tabs", () => {
     });
 
     // Verify on /feeds: the feed row should show both tag chips
-    await page.keyboard.press("1");
+    await pressGlobalShortcut(page, "1");
     await expect(page).toHaveURL(/\/feeds$/);
     await expect(
       page.locator("main").locator('[data-slot="badge"]').filter({

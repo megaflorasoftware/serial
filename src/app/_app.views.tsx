@@ -25,6 +25,7 @@ import {
   useDeleteViewMutation,
   useEditViewMutation,
 } from "~/lib/data/views/mutations";
+import { useShortcut } from "~/lib/hooks/useShortcut";
 import { VIEW_READ_STATUS } from "~/server/db/constants";
 
 export const Route = createFileRoute("/_app/views")({
@@ -36,6 +37,10 @@ function ManageViewsPage() {
   const { feeds } = useFeeds();
   const { contentCategories } = useContentCategories();
   const { launchDialog } = useDialogStore();
+  useShortcut("a", (event) => {
+    event.preventDefault();
+    launchDialog("add-view");
+  });
 
   const { mutateAsync: editView } = useEditViewMutation();
   const { mutateAsync: deleteView, isPending: isDeletingView } =

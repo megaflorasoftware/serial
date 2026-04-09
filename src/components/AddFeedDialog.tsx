@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { ViewCategoriesInput } from "./AddViewDialog";
 import {
   FeedDiscoveryInput,
@@ -61,8 +61,17 @@ export function AddFeedDialog() {
   const dialog = useDialogStore((store) => store.dialog);
   const onDialogOpenChange = useDialogStore((store) => store.onOpenChange);
 
+  // Global "a" shortcut: opens the Add Feed dialog from anywhere except the
+  // /views and /tags routes, which register their own "a" shortcuts.
   const launchDialog = useDialogStore((store) => store.launchDialog);
+  const location = useLocation();
   useShortcut("a", (event) => {
+    if (
+      location.pathname.startsWith("/views") ||
+      location.pathname.startsWith("/tags")
+    ) {
+      return;
+    }
     event.preventDefault();
     launchDialog("add-feed");
   });

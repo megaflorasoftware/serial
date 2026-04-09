@@ -44,9 +44,11 @@ test.describe("view-feed direct assignment CRUD", () => {
       hasText: "Views",
     });
     await expect(viewsSection).toBeVisible({ timeout: 10000 });
+    // The group label has two menu buttons: the gear icon (links to /views)
+    // and the plus icon (opens the Add View dialog). Pick the plus button.
     const addViewBtn = viewsSection
-      .locator('[data-sidebar="menu-button"]')
-      .first();
+      .locator('[data-sidebar="group-label"] [data-sidebar="menu-button"]')
+      .nth(1);
     await addViewBtn.evaluate((el: HTMLElement) => el.click());
 
     // Wait for Add View dialog

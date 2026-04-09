@@ -149,7 +149,9 @@ test.describe("full user lifecycle", () => {
 
     // ── 4. Assign Categories to Feeds ───────────────────────────────
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible({
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible({
       timeout: 10000,
     });
 
@@ -389,7 +391,9 @@ test.describe("full user lifecycle", () => {
 
     // ── 7. Bulk Delete All Feeds ────────────────────────────────────
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible({
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible({
       timeout: 10000,
     });
 

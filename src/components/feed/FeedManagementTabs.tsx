@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
@@ -31,17 +31,23 @@ export function FeedManagementTabs({ value }: { value: FeedManagementTab }) {
   return (
     <Tabs value={value}>
       <TabsList variant="line">
-        <TabsTrigger value="feeds" onClick={() => goTo("feeds")}>
-          Feeds
-          <KeyboardShortcutDisplay shortcut="1" position="right" />
+        <TabsTrigger value="feeds" asChild>
+          <Link to="/feeds">
+            Feeds
+            <KeyboardShortcutDisplay shortcut="1" position="right" />
+          </Link>
         </TabsTrigger>
-        <TabsTrigger value="views" onClick={() => goTo("views")}>
-          Views
-          <KeyboardShortcutDisplay shortcut="2" position="right" />
+        <TabsTrigger value="views" asChild>
+          <Link to="/views">
+            Views
+            <KeyboardShortcutDisplay shortcut="2" position="right" />
+          </Link>
         </TabsTrigger>
-        <TabsTrigger value="tags" onClick={() => goTo("tags")}>
-          Tags
-          <KeyboardShortcutDisplay shortcut="3" position="right" />
+        <TabsTrigger value="tags" asChild>
+          <Link to="/tags">
+            Tags
+            <KeyboardShortcutDisplay shortcut="3" position="right" />
+          </Link>
         </TabsTrigger>
       </TabsList>
     </Tabs>

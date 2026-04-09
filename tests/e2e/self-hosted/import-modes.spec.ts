@@ -125,7 +125,9 @@ test.describe("import categorization modes", () => {
 
     // Verify the feed-to-view assignment via the /feeds page badges
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible();
     const main = page.locator("main");
     await expect(
       main
@@ -190,7 +192,9 @@ test.describe("import categorization modes", () => {
 
     // Verify the feed-to-tag assignment via the /feeds page badges
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible();
     const main = page.locator("main");
     await expect(
       main
@@ -252,7 +256,9 @@ test.describe("import categorization modes", () => {
 
     // Verify no badges on /feeds page either
     await page.goto("/feeds");
-    await expect(page.getByText("Manage Feeds")).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: /feeds/i, selected: true }),
+    ).toBeVisible();
     const main = page.locator("main");
     await expect(
       main
