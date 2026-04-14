@@ -1,5 +1,4 @@
 import { render } from "@react-email/components";
-import sendgrid from "@sendgrid/mail";
 import { betterAuth } from "better-auth";
 import { admin, emailOTP, genericOAuth } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -27,6 +26,7 @@ import {
   isPublicSignupEnabled,
 } from "~/lib/constants";
 import { isOAuthConfigured } from "~/server/auth/constants";
+import { IS_EMAIL_ENABLED, sendEmail } from "~/server/email";
 import { env } from "~/env";
 
 export const authMiddleware = createMiddleware().server(
@@ -202,20 +202,27 @@ export const auth = betterAuth({
     enabled: true,
     maxPasswordLength: 64,
     async sendResetPassword(data) {
-      sendgrid.setApiKey(import.meta.env.SENDGRID_API_KEY ?? "");
+      try {
+        const html = await render(
+          <ResetPasswordEmail
+            resetUrl={data.url}
+            supportEmail={import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}
+          />,
+        );
 
-      const forgotPasswordEmailHtml = await render(
-        <ResetPasswordEmail resetUrl={data.url} />,
-      );
-
-      const options = {
-        from: "hey@serial.tube",
-        to: data.user.email,
-        subject: "Reset your password for Serial",
-        html: forgotPasswordEmailHtml,
-      };
-
-      await sendgrid.send(options);
+        await sendEmail({
+          to: data.user.email,
+          subject: "Reset your password for Serial",
+          html,
+        });
+        console.log(`[auth] Reset password email sent to ${data.user.email}`);
+      } catch (error) {
+        console.error(
+          `[auth] Failed to send reset password email to ${data.user.email}:`,
+          error,
+        );
+        throw error;
+      }
     },
   },
   plugins: [
@@ -223,19 +230,33 @@ export const auth = betterAuth({
     tanstackStartCookies(),
     ...buildPolarPlugin(),
     ...buildGenericOAuthPlugin(),
-    ...(import.meta.env.SENDGRID_API_KEY
+    ...(IS_EMAIL_ENABLED
       ? [
           emailOTP({
             async sendVerificationOTP({ email, otp, type }) {
               if (type === "email-verification") {
-                sendgrid.setApiKey(import.meta.env.SENDGRID_API_KEY ?? "");
-                const html = await render(<VerifyEmailEmail otp={otp} />);
-                await sendgrid.send({
-                  from: "hey@serial.tube",
-                  to: email,
-                  subject: "Verify your email for Serial",
-                  html,
-                });
+                try {
+                  const html = await render(
+                    <VerifyEmailEmail
+                      otp={otp}
+                      supportEmail={
+                        import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS
+                      }
+                    />,
+                  );
+                  await sendEmail({
+                    to: email,
+                    subject: "Verify your email for Serial",
+                    html,
+                  });
+                  console.log(`[auth] Verification email sent to ${email}`);
+                } catch (error) {
+                  console.error(
+                    `[auth] Failed to send verification email to ${email}:`,
+                    error,
+                  );
+                  throw error;
+                }
               }
             },
             sendVerificationOnSignUp: true,

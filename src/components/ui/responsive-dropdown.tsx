@@ -114,6 +114,7 @@ interface ControlledResponsiveDialogProps {
   children: React.ReactNode;
   title?: string;
   description?: string;
+  className?: string;
   onBack?: () => void;
   headerRight?: React.ReactNode;
   onOpenAutoFocus?: (event: Event) => void;
@@ -126,6 +127,7 @@ export function ControlledResponsiveDialog({
   description,
   onBack,
   headerRight,
+  className,
   onOpenAutoFocus,
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");
@@ -133,7 +135,11 @@ export function ControlledResponsiveDialog({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent hideClose onOpenAutoFocus={onOpenAutoFocus}>
+        <DialogContent
+          hideClose
+          className={className}
+          onOpenAutoFocus={onOpenAutoFocus}
+        >
           <DialogHeader>
             {onBack && (
               <button

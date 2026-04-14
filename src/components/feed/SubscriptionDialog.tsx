@@ -9,6 +9,7 @@ import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
+import { Skeleton } from "~/components/ui/skeleton";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { authClient, useSession } from "~/lib/auth-client";
@@ -18,18 +19,21 @@ function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${dollars}` : `$${dollars.toFixed(2)}`;
 }
 
-function formatRefreshInterval(ms: number | null): string {
-  if (ms == null) return "Manual refresh only";
-  const minutes = ms / (60 * 1000);
-  if (minutes < 60) return `Background refresh every ${minutes} min`;
-  const hours = minutes / 60;
-  return `Background refresh every ${hours} hr`;
-}
-
 function getPlanFeatures(plan: PlanConfig): string[] {
   const features: string[] = [];
   features.push(`Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`);
-  features.push(formatRefreshInterval(plan.backgroundRefreshIntervalMs));
+
+  if (plan.id === "free") {
+    features.push("Refresh up to once an hour");
+    features.push("Manual refresh only");
+  } else {
+    features.push(
+      plan.id === "pro"
+        ? "Refreshes once every 5 min"
+        : "Refreshes once every 15 min",
+    );
+    features.push("Automatically refresh in background");
+  }
 
   return features;
 }
@@ -132,7 +136,7 @@ export function SubscriptionDialog({
 
   const emailVerified = session?.user?.emailVerified ?? false;
 
-  const { data: products } = useQuery({
+  const { data: products, isLoading: isLoadingProducts } = useQuery({
     ...orpc.subscription.getProducts.queryOptions(),
     enabled: open,
     staleTime: 5 * 60 * 1000,
@@ -184,10 +188,13 @@ export function SubscriptionDialog({
       onOpenChange={onOpenChange}
       title="Subscription"
       description="Choose a plan that fits your needs."
+      className="lg:max-w-4xl"
     >
-      <div className="grid gap-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         {showVerification && !emailVerified && (
-          <EmailVerificationBanner onVerified={handleVerified} />
+          <div className="lg:col-span-3">
+            <EmailVerificationBanner onVerified={handleVerified} />
+          </div>
         )}
         {PLAN_IDS.map((id) => {
           const plan = PLANS[id];
@@ -215,7 +222,9 @@ export function SubscriptionDialog({
                     </span>
                   )}
                 </h3>
-                {hasPrice ? (
+                {isPaid && isLoadingProducts ? (
+                  <Skeleton className="mt-1 h-4 w-28" />
+                ) : hasPrice ? (
                   <p className="text-muted-foreground text-sm">
                     {monthlyPrice != null && `${formatPrice(monthlyPrice)}/mo`}
                     {monthlyPrice != null && annualPrice != null && " · "}

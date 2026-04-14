@@ -14,6 +14,10 @@ import { ViewFilterChips } from "~/components/feed/ViewFilterChips";
 import { useUpdateViewFilter } from "~/lib/data/views";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
+import { useFeeds } from "~/lib/data/feeds";
+import { useHasInitialData } from "~/lib/data/store";
+import FeedLoading from "~/components/loading";
+import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
 
 export const Route = createFileRoute("/_app/")({
   component: Home,
@@ -89,6 +93,21 @@ function Home() {
     const nextIndex = currentIndex >= views.length - 1 ? 0 : currentIndex + 1;
     updateViewFilter(views[nextIndex]!.id);
   });
+
+  const hasInitialData = useHasInitialData();
+  const { feeds, hasFetchedFeeds } = useFeeds();
+
+  if (!hasInitialData) {
+    return <FeedLoading />;
+  }
+
+  if (hasFetchedFeeds && !feeds.length) {
+    return (
+      <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center lg:pb-18">
+        <FeedEmptyState />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center lg:pb-18">

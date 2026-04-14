@@ -6,6 +6,7 @@ import { getUserPlanLimits } from "~/server/subscriptions/helpers";
 import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import { PLANS } from "~/server/subscriptions/plans";
 import { user } from "~/server/db/schema";
+import { IS_EMAIL_ENABLED } from "~/server/email";
 
 const BASE_URL = process.env.BETTER_AUTH_BASE_URL ?? "http://localhost:3000";
 
@@ -135,7 +136,7 @@ export const createCheckout = protectedProcedure
       return { url: null, error: null };
     }
 
-    if (process.env.SENDGRID_API_KEY) {
+    if (IS_EMAIL_ENABLED) {
       const currentUser = await context.db
         .select({ emailVerified: user.emailVerified })
         .from(user)
