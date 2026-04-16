@@ -20,6 +20,11 @@ import { ChipCombobox } from "~/components/ui/chip-combobox";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Switch } from "~/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import {
@@ -29,6 +34,7 @@ import {
 import { useFeeds } from "~/lib/data/feeds";
 import {
   useBulkDeleteFeedsMutation,
+  useBulkSetActiveMutation,
   useSetFeedActiveMutation,
 } from "~/lib/data/feeds/mutations";
 import { useSubscription } from "~/lib/data/subscription";
@@ -94,6 +100,7 @@ function ManageFeedsPage() {
     useSubscription();
   const { mutate: setFeedActive, isPending: isTogglingActive } =
     useSetFeedActiveMutation();
+  const { mutateAsync: bulkSetActive } = useBulkSetActiveMutation();
 
   const [selectedFeedIds, setSelectedFeedIds] = useState<Set<number>>(
     new Set(),
@@ -135,6 +142,7 @@ function ManageFeedsPage() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
+  const [bulkActiveState, setBulkActiveState] = useState(false);
 
   const { mutateAsync: bulkDeleteFeeds, isPending: isDeletingFeeds } =
     useBulkDeleteFeedsMutation();
@@ -294,6 +302,11 @@ function ManageFeedsPage() {
   const openEditDialog = () => {
     setSelectedCategoryIds(getSharedCategories());
     setSelectedViewIds(getSharedViews());
+    // If all selected feeds are active, show active; otherwise show deactivated
+    const allActive = Array.from(selectedFeedIds).every(
+      (id) => feeds.find((f) => f.id === id)?.isActive,
+    );
+    setBulkActiveState(allActive);
     setShowEditDialog(true);
   };
 
@@ -349,7 +362,38 @@ function ManageFeedsPage() {
     const sharedCategories = getSharedCategories();
     const sharedViews = getSharedViews();
 
+    // Active state
+    const feedsToToggle = feedIds.filter((id) => {
+      const feed = feeds.find((f) => f.id === id);
+      return feed && feed.isActive !== bulkActiveState;
+    });
+
+    if (bulkActiveState && feedsToToggle.length > 0 && maxActiveFeeds >= 0) {
+      const wouldBeActive = activeFeeds + feedsToToggle.length;
+
+      if (wouldBeActive > maxActiveFeeds) {
+        const overLimit = wouldBeActive - maxActiveFeeds;
+        toast.warning(
+          `${overLimit} feed${overLimit > 1 ? "s would" : " would"} exceed your plan limit. To unlock more active feeds, you can switch to a higher plan.`,
+          {
+            action: {
+              label: "Upgrade",
+              onClick: () => launchDialog("subscription"),
+            },
+          },
+        );
+        return;
+      }
+    }
+
     const promises: Array<Promise<void>> = [];
+
+    // Bulk active state toggle
+    if (feedsToToggle.length > 0) {
+      promises.push(
+        bulkSetActive({ feedIds: feedsToToggle, isActive: bulkActiveState }),
+      );
+    }
 
     // Categories
     const categoriesToAdd = selectedCategoryIds;
@@ -655,6 +699,21 @@ function ManageFeedsPage() {
         onOpenChange={setShowEditDialog}
         title="Edit Feeds"
         description={`Edit ${selectedCount} feed${selectedCount > 1 ? "s" : ""}.`}
+        headerRight={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <Switch
+                  checked={bulkActiveState}
+                  onCheckedChange={setBulkActiveState}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              {bulkActiveState ? "Feeds active" : "Feeds inactive"}
+            </TooltipContent>
+          </Tooltip>
+        }
       >
         <div className="grid gap-4">
           <ChipCombobox

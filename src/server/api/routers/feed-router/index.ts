@@ -522,6 +522,45 @@ export const setActive = protectedProcedure
     return feedsSchema.parse(updatedFeed);
   });
 
+export const bulkSetActive = protectedProcedure
+  .input(z.object({ feedIds: z.number().array(), isActive: z.boolean() }))
+  .handler(async ({ context, input }) => {
+    if (input.feedIds.length === 0) return;
+
+    if (input.isActive) {
+      const { remainingSlots } = await getFeedsActivationBudget(
+        context.db,
+        context.user.id,
+      );
+
+      // Count how many of the requested feeds are currently inactive
+      const currentFeeds = await context.db.query.feeds.findMany({
+        where: and(
+          inArray(feeds.id, input.feedIds),
+          eq(feeds.userId, context.user.id),
+          eq(feeds.isActive, false),
+        ),
+        columns: { id: true },
+      });
+
+      if (currentFeeds.length > remainingSlots) {
+        throw new Error(
+          "Feed limit reached. Upgrade your plan to activate more feeds.",
+        );
+      }
+    }
+
+    await context.db
+      .update(feeds)
+      .set({ isActive: input.isActive })
+      .where(
+        and(
+          inArray(feeds.id, input.feedIds),
+          eq(feeds.userId, context.user.id),
+        ),
+      );
+  });
+
 export const discoverFeeds = protectedProcedure
   .input(z.object({ url: z.string().url() }))
   .handler(async ({ input }) => {

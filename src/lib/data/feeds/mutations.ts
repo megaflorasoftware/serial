@@ -207,3 +207,19 @@ export function useSetFeedActiveMutation() {
     }),
   );
 }
+
+export function useBulkSetActiveMutation() {
+  const fetchFeeds = useFetchFeeds();
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    orpc.feed.bulkSetActive.mutationOptions({
+      onSuccess: () => {
+        void fetchFeeds();
+        void queryClient.invalidateQueries({
+          queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
+        });
+      },
+    }),
+  );
+}
