@@ -46,6 +46,7 @@ import {
   useBulkAssignViewFeedMutation,
   useBulkRemoveViewFeedMutation,
 } from "~/lib/data/view-feeds/mutations";
+import { useShiftSelect } from "~/lib/hooks/useShiftSelect";
 
 export const Route = createFileRoute("/_app/feeds")({
   component: ManageFeedsPage,
@@ -232,21 +233,15 @@ function ManageFeedsPage() {
     viewNamesMap,
   ]);
 
+  const filteredFeedIds = useMemo(
+    () => filteredFeeds.map((f) => f.id),
+    [filteredFeeds],
+  );
+  const handleFeedSelect = useShiftSelect(filteredFeedIds, setSelectedFeedIds);
+
   const selectedCount = selectedFeedIds.size;
   const allSelected =
     filteredFeeds.length > 0 && selectedCount === filteredFeeds.length;
-
-  const toggleFeedSelection = (feedId: number) => {
-    setSelectedFeedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(feedId)) {
-        next.delete(feedId);
-      } else {
-        next.add(feedId);
-      }
-      return next;
-    });
-  };
 
   const selectAll = () => {
     setSelectedFeedIds(new Set(filteredFeeds.map((f) => f.id)));
@@ -553,12 +548,12 @@ function ManageFeedsPage() {
                 className={`hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-colors ${
                   !feed.isActive ? "opacity-50" : ""
                 }`}
-                onClick={() => toggleFeedSelection(feed.id)}
+                onClick={(e) => handleFeedSelect(feed.id, e)}
               >
                 <Checkbox
                   id={`feed-${feed.id}`}
                   checked={isSelected}
-                  onCheckedChange={() => toggleFeedSelection(feed.id)}
+                  onCheckedChange={() => handleFeedSelect(feed.id)}
                   onClick={(e) => e.stopPropagation()}
                 />
                 <FeedImage
