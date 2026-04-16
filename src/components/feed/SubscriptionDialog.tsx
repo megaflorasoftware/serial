@@ -19,7 +19,7 @@ import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { authClient, useSession } from "~/lib/auth-client";
 
-const PLAN_ICONS = {
+export const PLAN_ICONS = {
   free: SproutIcon,
   standard: TreeDeciduousIcon,
   pro: TreesIcon,
@@ -30,7 +30,7 @@ function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${dollars}` : `$${dollars.toFixed(2)}`;
 }
 
-function getPlanFeatures(plan: PlanConfig): string[] {
+export function getPlanFeatures(plan: PlanConfig): string[] {
   const features: string[] = [];
   features.push(`Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`);
 
@@ -246,11 +246,7 @@ export function SubscriptionDialog({
                     {monthlyPrice != null && annualPrice != null && " · "}
                     {annualPrice != null && `${formatPrice(annualPrice)}/yr`}
                   </p>
-                ) : (
-                  <p className="text-muted-foreground text-base">
-                    {isPaid ? "" : "Free"}
-                  </p>
-                )}
+                ) : null}
               </div>
               <ul className="mt-2 space-y-1">
                 {features.map((feature) => (

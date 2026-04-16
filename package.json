@@ -13,6 +13,7 @@
     "dev:test:self-hosted": "concurrently --kill-others \"pnpm dev:db:test:self-hosted\" \"pnpm dev:migrate:test:self-hosted && DATABASE_URL=http://127.0.0.1:8082 BETTER_AUTH_SECRET=test-secret-key-for-self-hosted-tests BETTER_AUTH_BASE_URL=http://localhost:3001 VITE_PUBLIC_IS_MAIN_INSTANCE=false vite dev --port 3001\"",
     "dev:migrate": "pnpm schema:migrate",
     "dev:atomic": "vite dev",
+    "dev:polar": "polar listen http://localhost:3000/api/auth/polar/webhooks",
     "dev": "concurrently --kill-others \"pnpm dev:db\" \"pnpm dev:migrate && pnpm dev:atomic\"",
     "dev:email": "email dev --dir ./src/emails --port 4000",
     "prebuild": "pnpm typecheck && pnpm format && pnpm lint",

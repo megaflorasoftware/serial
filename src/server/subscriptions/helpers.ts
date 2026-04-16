@@ -7,7 +7,7 @@ import { feeds } from "~/server/db/schema";
 
 type DB = typeof Database;
 
-const PLAN_CACHE_TTL_MS = 60_000 * 4; // 4 minutes
+const PLAN_CACHE_TTL_MS = 60_000; // 1 minute
 const planCache = new Map<string, { planId: PlanId; expiresAt: number }>();
 
 export async function getActiveFeedCount(db: DB, userId: string) {

@@ -113,6 +113,9 @@ function buildPolarPlugin() {
           secret: process.env.POLAR_WEBHOOK_SECRET ?? "",
           onSubscriptionActive: async (payload) => {
             const externalId = payload.data.customer?.externalId;
+            console.log(
+              `[polar webhook] onSubscriptionActive: user=${externalId ?? "unknown"} subscription=${payload.data.id} product=${payload.data.productId}`,
+            );
             if (!externalId) return;
 
             invalidatePlanCache(externalId);
@@ -123,6 +126,10 @@ function buildPolarPlugin() {
               console.warn(`[polar webhook] Unknown product ID: ${productId}`);
               return;
             }
+
+            console.log(
+              `[polar webhook] Resolved plan="${planId}" for user=${externalId}`,
+            );
 
             const config = PLANS[planId];
             if (config.backgroundRefreshIntervalMs) {
@@ -161,9 +168,15 @@ function buildPolarPlugin() {
             }
           },
           onSubscriptionCanceled: async (payload) => {
+            console.log(
+              `[polar webhook] onSubscriptionCanceled: user=${payload.data.customer?.externalId ?? "unknown"} subscription=${payload.data.id}`,
+            );
             await handleSubscriptionEnd(payload);
           },
           onSubscriptionRevoked: async (payload) => {
+            console.log(
+              `[polar webhook] onSubscriptionRevoked: user=${payload.data.customer?.externalId ?? "unknown"} subscription=${payload.data.id}`,
+            );
             await handleSubscriptionEnd(payload);
           },
         }),

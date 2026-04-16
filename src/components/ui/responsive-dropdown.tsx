@@ -167,7 +167,9 @@ export function ControlledResponsiveDialog({
             </div>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto py-1">{children}</div>
+          <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6 py-1">
+            {children}
+          </div>
           {footer && <div className="shrink-0 border-t pt-4">{footer}</div>}
         </DialogContent>
       </Dialog>
