@@ -12,6 +12,7 @@ import type {
   DropdownMenuContentProps,
   DropdownMenuItemProps,
 } from "@radix-ui/react-dropdown-menu";
+import { cn } from "~/lib/utils";
 import {
   Dialog,
   DialogClose,
@@ -118,6 +119,7 @@ interface ControlledResponsiveDialogProps {
   headerClassName?: string;
   onBack?: () => void;
   headerRight?: React.ReactNode;
+  footer?: React.ReactNode;
   onOpenAutoFocus?: (event: Event) => void;
 }
 export function ControlledResponsiveDialog({
@@ -130,6 +132,7 @@ export function ControlledResponsiveDialog({
   headerRight,
   className,
   headerClassName,
+  footer,
   onOpenAutoFocus,
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");
@@ -139,10 +142,10 @@ export function ControlledResponsiveDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideClose
-          className={className}
+          className={cn("flex max-h-[calc(100vh-6rem)] flex-col", className)}
           onOpenAutoFocus={onOpenAutoFocus}
         >
-          <DialogHeader className={headerClassName}>
+          <DialogHeader className={cn("shrink-0", headerClassName)}>
             {onBack && (
               <button
                 onClick={onBack}
@@ -164,7 +167,8 @@ export function ControlledResponsiveDialog({
             </div>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
-          {children}
+          <div className="min-h-0 flex-1 overflow-y-auto py-1">{children}</div>
+          {footer && <div className="shrink-0 border-t pt-4">{footer}</div>}
         </DialogContent>
       </Dialog>
     );
@@ -172,8 +176,8 @@ export function ControlledResponsiveDialog({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader className="text-left">
+      <DrawerContent className="max-h-[calc(100vh-6rem)]">
+        <DrawerHeader className="shrink-0 text-left">
           {onBack && (
             <button
               onClick={onBack}
@@ -189,7 +193,13 @@ export function ControlledResponsiveDialog({
           </div>
           <DrawerDescription>{description}</DrawerDescription>
         </DrawerHeader>
-        <div className="px-4 pb-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-1">
+          {children}
+        </div>
+        {footer && (
+          <div className="shrink-0 border-t px-4 pt-4 pb-4">{footer}</div>
+        )}
+        {!footer && <div className="pb-4" />}
       </DrawerContent>
     </Drawer>
   );

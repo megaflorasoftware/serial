@@ -709,6 +709,34 @@ function ManageFeedsPage() {
             </TooltipContent>
           </Tooltip>
         }
+        footer={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowEditDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleEditSave}
+              disabled={
+                isAssigningCategory ||
+                isRemovingCategory ||
+                isAssigningView ||
+                isRemovingView
+              }
+            >
+              {isAssigningCategory ||
+              isRemovingCategory ||
+              isAssigningView ||
+              isRemovingView
+                ? "Saving..."
+                : "Save"}
+            </Button>
+          </div>
+        }
       >
         <div className="grid gap-4">
           <ChipCombobox
@@ -736,32 +764,6 @@ function ManageFeedsPage() {
             selectedCategories={selectedCategoryIds}
             setSelectedCategories={setSelectedCategoryIds}
           />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setShowEditDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={handleEditSave}
-              disabled={
-                isAssigningCategory ||
-                isRemovingCategory ||
-                isAssigningView ||
-                isRemovingView
-              }
-            >
-              {isAssigningCategory ||
-              isRemovingCategory ||
-              isAssigningView ||
-              isRemovingView
-                ? "Saving..."
-                : "Save"}
-            </Button>
-          </div>
         </div>
       </ControlledResponsiveDialog>
     </div>

@@ -292,7 +292,7 @@ export function SubscriptionDialog({
           );
         })}
       </div>
-      <p className="text-muted-foreground pt-3 text-base lg:text-center">
+      <p className="text-muted-foreground pt-5 text-base lg:text-center">
         Price too high?{" "}
         <a
           href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
