@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckIcon } from "lucide-react";
+import {
+  CheckIcon,
+  SproutIcon,
+  TreeDeciduousIcon,
+  TreesIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { PlanConfig } from "~/server/subscriptions/plans";
 import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
@@ -13,6 +18,12 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { authClient, useSession } from "~/lib/auth-client";
+
+const PLAN_ICONS = {
+  free: SproutIcon,
+  standard: TreeDeciduousIcon,
+  pro: TreesIcon,
+} as const;
 
 function formatPrice(cents: number): string {
   const dollars = cents / 100;
@@ -32,7 +43,7 @@ function getPlanFeatures(plan: PlanConfig): string[] {
         ? "Refreshes once every 5 min"
         : "Refreshes once every 15 min",
     );
-    features.push("Automatically refresh in background");
+    features.push("Refresh in background");
   }
 
   return features;
@@ -189,8 +200,9 @@ export function SubscriptionDialog({
       title="Subscription"
       description="Choose a plan that fits your needs."
       className="lg:max-w-4xl"
+      headerClassName="lg:text-center"
     >
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="mt-2 grid gap-3 lg:grid-cols-3">
         {showVerification && !emailVerified && (
           <div className="lg:col-span-3">
             <EmailVerificationBanner onVerified={handleVerified} />
@@ -209,29 +221,33 @@ export function SubscriptionDialog({
           return (
             <div
               key={id}
-              className={`rounded-lg border p-4 ${
+              className={`relative rounded-lg border p-4 ${
                 isCurrent ? "border-primary bg-primary/5" : "border-border"
               }`}
             >
-              <div>
-                <h3 className="font-medium">
-                  {plan.name}
-                  {isCurrent && (
-                    <span className="text-muted-foreground ml-2 text-xs">
-                      Current
-                    </span>
-                  )}
-                </h3>
+              {isCurrent && (
+                <span className="bg-foreground text-background absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-medium">
+                  Current
+                </span>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const Icon = PLAN_ICONS[id];
+                    return <Icon size={20} className="shrink-0" />;
+                  })()}
+                  <h3 className="font-medium">{plan.name}</h3>
+                </div>
                 {isPaid && isLoadingProducts ? (
-                  <Skeleton className="mt-1 h-4 w-28" />
+                  <Skeleton className="h-4 w-28" />
                 ) : hasPrice ? (
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-base">
                     {monthlyPrice != null && `${formatPrice(monthlyPrice)}/mo`}
                     {monthlyPrice != null && annualPrice != null && " · "}
                     {annualPrice != null && `${formatPrice(annualPrice)}/yr`}
                   </p>
                 ) : (
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-base">
                     {isPaid ? "" : "Free"}
                   </p>
                 )}
@@ -240,7 +256,7 @@ export function SubscriptionDialog({
                 {features.map((feature) => (
                   <li
                     key={feature}
-                    className="text-muted-foreground flex items-center gap-2 text-xs"
+                    className="text-muted-foreground flex items-center gap-2 text-sm"
                   >
                     <CheckIcon size={12} />
                     {feature}
@@ -276,6 +292,17 @@ export function SubscriptionDialog({
           );
         })}
       </div>
+      <p className="text-muted-foreground pt-3 text-base lg:text-center">
+        Price too high?{" "}
+        <a
+          href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          Learn how to self-host Serial
+        </a>
+      </p>
     </ControlledResponsiveDialog>
   );
 }

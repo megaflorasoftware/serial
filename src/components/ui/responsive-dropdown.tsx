@@ -115,6 +115,7 @@ interface ControlledResponsiveDialogProps {
   title?: string;
   description?: string;
   className?: string;
+  headerClassName?: string;
   onBack?: () => void;
   headerRight?: React.ReactNode;
   onOpenAutoFocus?: (event: Event) => void;
@@ -128,6 +129,7 @@ export function ControlledResponsiveDialog({
   onBack,
   headerRight,
   className,
+  headerClassName,
   onOpenAutoFocus,
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");
@@ -140,7 +142,7 @@ export function ControlledResponsiveDialog({
           className={className}
           onOpenAutoFocus={onOpenAutoFocus}
         >
-          <DialogHeader>
+          <DialogHeader className={headerClassName}>
             {onBack && (
               <button
                 onClick={onBack}
@@ -150,9 +152,9 @@ export function ControlledResponsiveDialog({
                 <span>Back</span>
               </button>
             )}
-            <div className="flex items-center justify-between">
-              <DialogTitle>{title}</DialogTitle>
-              <div className="flex items-center gap-3">
+            <div className="relative flex items-center justify-between">
+              <DialogTitle className="flex-1">{title}</DialogTitle>
+              <div className="absolute right-0 flex items-center gap-3">
                 {headerRight}
                 <DialogClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
                   <XIcon className="h-4 w-4" />
