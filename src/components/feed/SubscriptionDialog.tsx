@@ -24,7 +24,7 @@ import { env } from "~/env";
 export const PLAN_ICONS = {
   free: SproutIcon,
   standard: TreeDeciduousIcon,
-  pro: TreesIcon,
+  daily: TreesIcon,
 } as const;
 
 function formatPrice(cents: number): string {
@@ -34,17 +34,21 @@ function formatPrice(cents: number): string {
 
 export function getPlanFeatures(plan: PlanConfig): string[] {
   const features: string[] = [];
-  features.push(`Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`);
+
+  if (plan.maxActiveFeeds === Infinity) {
+    features.push("Unlimited active feeds");
+  } else {
+    features.push(`Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`);
+  }
 
   if (plan.id === "free") {
     features.push("Refresh up to once an hour");
     features.push("Manual refresh only");
-  } else {
-    features.push(
-      plan.id === "pro"
-        ? "Refreshes once every 5 min"
-        : "Refreshes once every 15 min",
-    );
+  } else if (plan.id === "standard") {
+    features.push("Refreshes once every 15 min");
+    features.push("Refresh in background");
+  } else if (plan.id === "daily") {
+    features.push("Refreshes once every 5 min");
     features.push("Refresh in background");
   }
 
@@ -230,9 +234,9 @@ export function SubscriptionDialog({
   const { data: session, refetch: refetchSession } = useSession();
   const queryClient = useQueryClient();
   const [showVerification, setShowVerification] = useState(false);
-  const [pendingPlanId, setPendingPlanId] = useState<"standard" | "pro" | null>(
-    null,
-  );
+  const [pendingPlanId, setPendingPlanId] = useState<
+    "standard" | "daily" | null
+  >(null);
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
   );
@@ -308,7 +312,15 @@ export function SubscriptionDialog({
 
   const isSubscribed = planId !== "free";
 
-  function handleSubscribeClick(id: "standard" | "pro") {
+  // Only show paid plans that have products configured (or are the user's current plan)
+  const visiblePlanIds = PLAN_IDS.filter((id) => {
+    if (id === "free") return true;
+    if (id === planId) return true;
+    if (isLoadingProducts) return true;
+    return products?.some((p) => p.planId === id);
+  });
+
+  function handleSubscribeClick(id: "standard" | "daily") {
     setPendingPlanId(id);
     if (isSubscribed) {
       // Already subscribed — show switch confirmation
@@ -358,16 +370,24 @@ export function SubscriptionDialog({
       onOpenChange={onOpenChange}
       title="Subscription"
       description="Choose a plan that fits your needs."
-      className="lg:max-w-4xl"
+      className={visiblePlanIds.length <= 3 ? "lg:max-w-4xl" : "lg:max-w-5xl"}
       headerClassName="lg:text-center"
     >
-      <div className="mt-2 grid gap-3 lg:grid-cols-3">
+      <div
+        className={`mt-2 grid gap-3 ${
+          visiblePlanIds.length <= 2
+            ? "lg:grid-cols-2"
+            : visiblePlanIds.length === 3
+              ? "lg:grid-cols-3"
+              : "lg:grid-cols-4"
+        }`}
+      >
         {showVerification && !emailVerified && (
-          <div className="lg:col-span-3">
+          <div className="col-span-full">
             <EmailVerificationBanner onVerified={handleVerified} />
           </div>
         )}
-        {PLAN_IDS.map((id) => {
+        {visiblePlanIds.map((id) => {
           const plan = PLANS[id];
           const isCurrent = id === planId;
           const isPaid = id !== "free";
@@ -449,26 +469,28 @@ export function SubscriptionDialog({
           );
         })}
       </div>
-      <p className="text-muted-foreground pt-5 text-base lg:text-center">
-        Price too high?{" "}
-        <a
-          href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          Let us know
-        </a>{" "}
-        or{" "}
-        <a
-          href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          learn how to self-host
-        </a>{" "}
-        Serial
+      <p className="text-muted-foreground flex flex-col pt-5 text-center lg:text-center">
+        Price too high or need higher limits?{" "}
+        <span>
+          <a
+            href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Let us know
+          </a>{" "}
+          or{" "}
+          <a
+            href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            learn how to self-host
+          </a>{" "}
+          Serial
+        </span>
       </p>
     </ControlledResponsiveDialog>
   );

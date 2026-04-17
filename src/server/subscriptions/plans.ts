@@ -1,6 +1,6 @@
 import { IS_BILLING_ENABLED } from "./polar";
 
-export const PLAN_IDS = ["free", "standard", "pro"] as const;
+export const PLAN_IDS = ["free", "standard", "daily"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
 export type PlanConfig = {
@@ -16,7 +16,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   free: {
     id: "free",
     name: "Free",
-    maxActiveFeeds: 100,
+    maxActiveFeeds: 40,
     backgroundRefreshIntervalMs: null,
     polarMonthlyProductId: null,
     polarAnnualProductId: null,
@@ -24,25 +24,25 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   standard: {
     id: "standard",
     name: "Standard",
-    maxActiveFeeds: 500,
+    maxActiveFeeds: 400,
     backgroundRefreshIntervalMs: 4 * 60 * 60 * 1000, // 4 hours
     polarMonthlyProductId:
       process.env.POLAR_STANDARD_MONTHLY_PRODUCT_ID ?? null,
     polarAnnualProductId: process.env.POLAR_STANDARD_ANNUAL_PRODUCT_ID ?? null,
   },
-  pro: {
-    id: "pro",
-    name: "Pro",
-    maxActiveFeeds: 2000,
+  daily: {
+    id: "daily",
+    name: "Daily",
+    maxActiveFeeds: 1000,
     backgroundRefreshIntervalMs: 15 * 60 * 1000, // 15 minutes
-    polarMonthlyProductId: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID ?? null,
+    polarMonthlyProductId: process.env.POLAR_DAILY_MONTHLY_PRODUCT_ID ?? null,
+    polarAnnualProductId: process.env.POLAR_DAILY_ANNUAL_PRODUCT_ID ?? null,
   },
 };
 
 const UNLIMITED_CONFIG: PlanConfig = {
-  id: "pro",
-  name: "Pro",
+  id: "daily",
+  name: "Daily",
   maxActiveFeeds: Infinity,
   backgroundRefreshIntervalMs: 5 * 60 * 1000,
   polarMonthlyProductId: null,

@@ -3,8 +3,8 @@ import { signUp } from "../fixtures/auth";
 import { MAIN_RSS_SERVER_PORT, MAIN_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
 
-const TOTAL_FEEDS = 110;
-const MAX_ACTIVE = 100;
+const TOTAL_FEEDS = 50;
+const MAX_ACTIVE = 40;
 const EXPECTED_INACTIVE = TOTAL_FEEDS - MAX_ACTIVE;
 
 function generateOpml(count: number): Buffer {
@@ -30,7 +30,7 @@ test.describe("feed limit for free plan", () => {
     }
   });
 
-  test("importing 110 feeds limits active to 100 and shows upgrade CTA", async ({
+  test("importing 50 feeds limits active to 40 and shows upgrade CTA", async ({
     page,
   }) => {
     test.setTimeout(180_000);

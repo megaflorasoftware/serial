@@ -72,8 +72,8 @@ export const getProducts = protectedProcedure.handler(async () => {
   const productIds = [
     PLANS.standard.polarMonthlyProductId,
     PLANS.standard.polarAnnualProductId,
-    PLANS.pro.polarMonthlyProductId,
-    PLANS.pro.polarAnnualProductId,
+    PLANS.daily.polarMonthlyProductId,
+    PLANS.daily.polarAnnualProductId,
   ].filter(Boolean);
 
   if (productIds.length === 0) {
@@ -83,8 +83,12 @@ export const getProducts = protectedProcedure.handler(async () => {
   try {
     const results: PlanProduct[] = [];
 
-    for (const planId of ["standard", "pro"] as const) {
+    for (const planId of ["standard", "daily"] as const) {
       const plan = PLANS[planId];
+
+      // Skip plans that have no Polar product IDs configured
+      if (!plan.polarMonthlyProductId && !plan.polarAnnualProductId) continue;
+
       let monthlyPrice: number | null = null;
       let annualPrice: number | null = null;
 
@@ -144,7 +148,7 @@ export const getProducts = protectedProcedure.handler(async () => {
 export const createCheckout = protectedProcedure
   .input(
     z.object({
-      planId: z.enum(["standard", "pro"]),
+      planId: z.enum(["standard", "daily"]),
       returnPath: z.string().optional(),
     }),
   )
@@ -193,7 +197,7 @@ export const createCheckout = protectedProcedure
   });
 
 export const previewPlanSwitch = protectedProcedure
-  .input(z.object({ planId: z.enum(["standard", "pro"]) }))
+  .input(z.object({ planId: z.enum(["standard", "daily"]) }))
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
       return null;

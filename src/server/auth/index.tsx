@@ -84,16 +84,16 @@ function buildPolarPlugin() {
           slug: "standard-annual",
         }
       : null,
-    process.env.POLAR_PRO_MONTHLY_PRODUCT_ID
+    process.env.POLAR_DAILY_MONTHLY_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID,
-          slug: "pro-monthly",
+          productId: process.env.POLAR_DAILY_MONTHLY_PRODUCT_ID,
+          slug: "daily-monthly",
         }
       : null,
-    process.env.POLAR_PRO_ANNUAL_PRODUCT_ID
+    process.env.POLAR_DAILY_ANNUAL_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
-          slug: "pro-annual",
+          productId: process.env.POLAR_DAILY_ANNUAL_PRODUCT_ID,
+          slug: "daily-annual",
         }
       : null,
   ].filter(Boolean);
