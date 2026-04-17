@@ -15,6 +15,7 @@ import { ImpersonationBanner } from "~/components/ImpersonationBanner";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
+import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
 import { useAltKeyHeld } from "~/lib/hooks/useAltKeyHeld";
 import { authMiddleware } from "~/server/auth";
@@ -39,9 +40,9 @@ export const Route = createFileRoute("/_app")({
 
 function useCheckoutSuccess() {
   const queryClient = useQueryClient();
-  const [showDialog, setShowDialog] = useState(false);
   const [awaitingUpgrade, setAwaitingUpgrade] = useState(false);
   const { planId } = useSubscription();
+  const openPlanSuccess = usePlanSuccessStore((s) => s.openDialog);
 
   // Detect checkout_success query param on mount
   useEffect(() => {
@@ -65,7 +66,7 @@ function useCheckoutSuccess() {
     if (planId !== "free") {
       // Webhook has been processed — plan is upgraded
       setAwaitingUpgrade(false);
-      setShowDialog(true);
+      openPlanSuccess();
       return;
     }
 
@@ -77,9 +78,7 @@ function useCheckoutSuccess() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [awaitingUpgrade, planId, queryClient]);
-
-  return { showDialog, setShowDialog };
+  }, [awaitingUpgrade, planId, queryClient, openPlanSuccess]);
 }
 
 function CheckoutSuccessDialog({
@@ -126,10 +125,9 @@ function CheckoutSuccessDialog({
 function RootLayout() {
   const { mostRecentRelease } = Route.useLoaderData();
   useAltKeyHeld();
-  const {
-    showDialog: showCheckoutSuccess,
-    setShowDialog: setShowCheckoutSuccess,
-  } = useCheckoutSuccess();
+  useCheckoutSuccess();
+  const showPlanSuccess = usePlanSuccessStore((s) => s.showDialog);
+  const closePlanSuccess = usePlanSuccessStore((s) => s.closeDialog);
 
   return (
     // <ApplyColorTheme>
@@ -153,8 +151,8 @@ function RootLayout() {
               </div>
               <AppDialogs />
               <CheckoutSuccessDialog
-                open={showCheckoutSuccess}
-                onOpenChange={setShowCheckoutSuccess}
+                open={showPlanSuccess}
+                onOpenChange={closePlanSuccess}
               />
             </main>
             <ReleaseNotifier mostRecentRelease={mostRecentRelease} />

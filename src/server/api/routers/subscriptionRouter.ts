@@ -4,7 +4,10 @@ import type { PlanId } from "~/server/subscriptions/plans";
 import { protectedProcedure } from "~/server/orpc/base";
 import { getUserPlanLimits } from "~/server/subscriptions/helpers";
 import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
-import { PLANS } from "~/server/subscriptions/plans";
+import {
+  determinePlanFromProductId,
+  PLANS,
+} from "~/server/subscriptions/plans";
 import { user } from "~/server/db/schema";
 import { IS_EMAIL_ENABLED } from "~/server/email";
 
@@ -168,6 +171,112 @@ export const createCheckout = protectedProcedure
     });
 
     return { url: checkout.url, error: null };
+  });
+
+export const previewPlanSwitch = protectedProcedure
+  .input(z.object({ planId: z.enum(["standard", "pro"]) }))
+  .handler(async ({ context, input }) => {
+    if (!IS_BILLING_ENABLED || !polarClient) {
+      return null;
+    }
+
+    // Find current active subscription
+    const subscriptions = await polarClient.subscriptions.list({
+      externalCustomerId: [context.user.id],
+      active: true,
+    });
+
+    const currentSub = subscriptions.result?.items?.[0];
+    if (!currentSub) return null;
+
+    const currentPlanId = determinePlanFromProductId(currentSub.productId);
+    if (!currentPlanId || currentPlanId === input.planId) return null;
+
+    const newPlan = PLANS[input.planId];
+    const isMonthly = currentSub.recurringInterval === "month";
+    const newProductId = isMonthly
+      ? newPlan.polarMonthlyProductId
+      : newPlan.polarAnnualProductId;
+
+    if (!newProductId) return null;
+
+    // Get the new product price
+    let newAmount: number | null = null;
+    try {
+      const product = await polarClient.products.get({ id: newProductId });
+      const price = product.prices?.[0];
+      if (price && "amountType" in price && price.amountType === "fixed") {
+        newAmount = (price as { priceAmount: number }).priceAmount;
+      }
+    } catch {
+      return null;
+    }
+
+    // Calculate proration
+    const now = Date.now();
+    const periodStart = new Date(currentSub.currentPeriodStart).getTime();
+    const periodEnd = new Date(currentSub.currentPeriodEnd).getTime();
+    const totalPeriod = periodEnd - periodStart;
+    const elapsed = now - periodStart;
+    const remaining = Math.max(0, 1 - elapsed / totalPeriod);
+
+    const currentCredit = Math.round(currentSub.amount * remaining);
+    const newCharge = Math.round((newAmount ?? 0) * remaining);
+    const proratedAmount = Math.max(0, newCharge - currentCredit);
+
+    return {
+      currentPlanId,
+      currentPlanName: PLANS[currentPlanId].name,
+      currentAmount: currentSub.amount,
+      newPlanId: input.planId,
+      newPlanName: newPlan.name,
+      newAmount: newAmount ?? 0,
+      proratedAmount,
+      currency: currentSub.currency,
+      billingInterval: currentSub.recurringInterval as "month" | "year",
+      subscriptionId: currentSub.id,
+      newProductId,
+    };
+  });
+
+export const switchPlan = protectedProcedure
+  .input(
+    z.object({
+      subscriptionId: z.string(),
+      newProductId: z.string(),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    if (!IS_BILLING_ENABLED || !polarClient) {
+      return { success: false };
+    }
+
+    // Verify the subscription belongs to this user
+    const subscriptions = await polarClient.subscriptions.list({
+      externalCustomerId: [context.user.id],
+      active: true,
+    });
+
+    const sub = subscriptions.result?.items?.find(
+      (s) => s.id === input.subscriptionId,
+    );
+    if (!sub) {
+      throw new Error("Subscription not found");
+    }
+
+    await polarClient.subscriptions.update({
+      id: input.subscriptionId,
+      subscriptionUpdate: {
+        productId: input.newProductId,
+        prorationBehavior: "prorate",
+      },
+    });
+
+    console.log(
+      `[polar] Plan switched for user=${context.user.id} subscription=${input.subscriptionId} newProduct=${input.newProductId}`,
+    );
+
+    return { success: true };
   });
 
 export const createPortalSession = protectedProcedure.handler(

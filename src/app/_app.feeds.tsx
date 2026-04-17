@@ -13,6 +13,7 @@ import { FeedManagementTabs } from "~/components/feed/FeedManagementTabs";
 import { useFeedManagementShortcuts } from "~/components/feed/useManagementShortcuts";
 import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Progress } from "~/components/ui/progress";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -453,11 +454,6 @@ function ManageFeedsPage() {
         <div className="flex items-center justify-between">
           <div>
             <FeedManagementTabs value="feeds" />
-            {billingEnabled && maxActiveFeeds > 0 && (
-              <p className="text-muted-foreground mt-1 text-sm">
-                {activeFeeds} / {maxActiveFeeds} feeds active
-              </p>
-            )}
           </div>
           <ButtonWithShortcut
             variant="outline"
@@ -468,6 +464,18 @@ function ManageFeedsPage() {
             <PlusIcon size={16} />
           </ButtonWithShortcut>
         </div>
+        {billingEnabled && maxActiveFeeds > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-muted-foreground text-sm">
+                {activeFeeds} / {maxActiveFeeds} feeds active
+              </p>
+            </div>
+            <Progress
+              value={Math.min(100, (activeFeeds / maxActiveFeeds) * 100)}
+            />
+          </div>
+        )}
         {billingEnabled &&
           maxActiveFeeds > 0 &&
           activeFeeds >= maxActiveFeeds && (

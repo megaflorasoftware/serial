@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckIcon,
   SproutIcon,
@@ -15,6 +15,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Skeleton } from "~/components/ui/skeleton";
+import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { authClient, useSession } from "~/lib/auth-client";
@@ -131,6 +132,92 @@ function EmailVerificationBanner({ onVerified }: { onVerified: () => void }) {
   );
 }
 
+type SwitchPreview = {
+  currentPlanId: string;
+  currentPlanName: string;
+  currentAmount: number;
+  newPlanId: string;
+  newPlanName: string;
+  newAmount: number;
+  proratedAmount: number;
+  currency: string;
+  billingInterval: "month" | "year";
+  subscriptionId: string;
+  newProductId: string;
+};
+
+function PlanSwitchConfirmation({
+  preview,
+  onBack,
+  onConfirm,
+  isPending,
+}: {
+  preview: SwitchPreview;
+  onBack: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const newPlan = PLANS[preview.newPlanId as keyof typeof PLANS];
+  const features = getPlanFeatures(newPlan);
+  const Icon = PLAN_ICONS[preview.newPlanId as keyof typeof PLAN_ICONS];
+  const intervalLabel = preview.billingInterval === "month" ? "mo" : "yr";
+
+  return (
+    <ControlledResponsiveDialog
+      open
+      onOpenChange={() => onBack()}
+      title="Switch Plan"
+      description={`Switch from ${preview.currentPlanName} to ${preview.newPlanName}`}
+      onBack={onBack}
+      footer={
+        <Button className="w-full" onClick={onConfirm} disabled={isPending}>
+          {isPending
+            ? "Switching..."
+            : `Confirm Switch to ${preview.newPlanName}`}
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-lg border p-4">
+          <Icon size={20} className="shrink-0" />
+          <div className="flex-1">
+            <h3 className="font-medium">{preview.newPlanName} Plan</h3>
+            <p className="text-muted-foreground text-sm">
+              {formatPrice(preview.newAmount)}/{intervalLabel}
+            </p>
+          </div>
+        </div>
+        <ul className="space-y-2">
+          {features.map((feature) => (
+            <li
+              key={feature}
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+            >
+              <CheckIcon size={14} className="shrink-0" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+        {preview.proratedAmount > 0 && (
+          <div className="rounded-lg border p-4">
+            <p className="text-sm">
+              <span className="text-muted-foreground">
+                Due today (prorated):
+              </span>{" "}
+              <span className="font-medium">
+                {formatPrice(preview.proratedAmount)}
+              </span>
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              You&apos;ll be credited for the unused time on your current plan.
+            </p>
+          </div>
+        )}
+      </div>
+    </ControlledResponsiveDialog>
+  );
+}
+
 export function SubscriptionDialog({
   open,
   onOpenChange,
@@ -140,8 +227,12 @@ export function SubscriptionDialog({
 }) {
   const { planId } = useSubscription();
   const { data: session, refetch: refetchSession } = useSession();
+  const queryClient = useQueryClient();
   const [showVerification, setShowVerification] = useState(false);
   const [pendingPlanId, setPendingPlanId] = useState<"standard" | "pro" | null>(
+    null,
+  );
+  const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
   );
 
@@ -168,6 +259,42 @@ export function SubscriptionDialog({
     }),
   );
 
+  const previewMutation = useMutation(
+    orpc.subscription.previewPlanSwitch.mutationOptions({
+      onSuccess: (result) => {
+        if (result) {
+          setSwitchPreview(result);
+        } else {
+          toast.error("Unable to preview plan switch");
+        }
+      },
+    }),
+  );
+
+  const openPlanSuccess = usePlanSuccessStore((s) => s.openDialog);
+
+  const switchMutation = useMutation(
+    orpc.subscription.switchPlan.mutationOptions({
+      onSuccess: (result) => {
+        if (result.success) {
+          setSwitchPreview(null);
+          onOpenChange(false);
+          // Invalidate and then show success dialog
+          void queryClient
+            .invalidateQueries({
+              queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
+            })
+            .then(() => {
+              openPlanSuccess();
+            });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to switch plan. Please try again.");
+      },
+    }),
+  );
+
   const portalMutation = useMutation(
     orpc.subscription.createPortalSession.mutationOptions({
       onSuccess: (result) => {
@@ -182,15 +309,40 @@ export function SubscriptionDialog({
 
   function handleSubscribeClick(id: "standard" | "pro") {
     setPendingPlanId(id);
-    checkoutMutation.mutate({ planId: id });
+    if (isSubscribed) {
+      // Already subscribed — show switch confirmation
+      previewMutation.mutate({ planId: id });
+    } else {
+      checkoutMutation.mutate({ planId: id });
+    }
   }
 
   async function handleVerified() {
     await refetchSession();
     setShowVerification(false);
     if (pendingPlanId) {
-      checkoutMutation.mutate({ planId: pendingPlanId });
+      if (isSubscribed) {
+        previewMutation.mutate({ planId: pendingPlanId });
+      } else {
+        checkoutMutation.mutate({ planId: pendingPlanId });
+      }
     }
+  }
+
+  if (switchPreview) {
+    return (
+      <PlanSwitchConfirmation
+        preview={switchPreview}
+        onBack={() => setSwitchPreview(null)}
+        onConfirm={() =>
+          switchMutation.mutate({
+            subscriptionId: switchPreview.subscriptionId,
+            newProductId: switchPreview.newProductId,
+          })
+        }
+        isPending={switchMutation.isPending}
+      />
+    );
   }
 
   return (
@@ -277,10 +429,12 @@ export function SubscriptionDialog({
                   <Button
                     size="sm"
                     className="w-full"
-                    disabled={checkoutMutation.isPending}
+                    disabled={
+                      checkoutMutation.isPending || previewMutation.isPending
+                    }
                     onClick={() => handleSubscribeClick(id)}
                   >
-                    Subscribe
+                    {isSubscribed ? "Switch" : "Subscribe"}
                   </Button>
                 </div>
               )}
