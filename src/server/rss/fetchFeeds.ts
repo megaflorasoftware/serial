@@ -69,8 +69,13 @@ type FeedResult =
       id: number;
     }
   | {
-      status: "empty" | "error" | "skipped";
+      status: "empty" | "skipped";
       id: number;
+    }
+  | {
+      status: "error";
+      id: number;
+      error: unknown;
     };
 
 export async function* fetchAndInsertFeedData(
@@ -114,6 +119,9 @@ export async function* fetchAndInsertFeedData(
         return {
           status: "error",
           id: feed.id,
+          error: new Error(
+            `No feed data returned for platform: ${feed.platform}`,
+          ),
         };
       }
 
@@ -260,10 +268,11 @@ export async function* fetchAndInsertFeedData(
         feedItems: applicationFeedItems,
         id: feed.id,
       };
-    } catch {
+    } catch (e) {
       return {
         status: "error",
         id: feed.id,
+        error: e,
       };
     }
   });

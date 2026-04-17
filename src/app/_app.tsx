@@ -20,7 +20,7 @@ import { useSubscription } from "~/lib/data/subscription";
 import { useAltKeyHeld } from "~/lib/hooks/useAltKeyHeld";
 import { authMiddleware } from "~/server/auth";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
-import { orpc } from "~/lib/orpc";
+import { orpc, orpcRouterClient } from "~/lib/orpc";
 import { PLANS } from "~/server/subscriptions/plans";
 import {
   getPlanFeatures,
@@ -59,26 +59,39 @@ function useCheckoutSuccess() {
     setAwaitingUpgrade(true);
   }, []);
 
-  // Poll subscription status until the plan upgrades
+  // Poll subscription status until the plan upgrades, using refreshStatus
+  // to bypass the server-side plan cache on each attempt
   useEffect(() => {
     if (!awaitingUpgrade) return;
 
     if (planId !== "free") {
-      // Webhook has been processed — plan is upgraded
+      // Plan is upgraded
       setAwaitingUpgrade(false);
       openPlanSuccess();
       return;
     }
 
-    // Plan still shows free — keep polling
-    const interval = setInterval(() => {
-      void queryClient.invalidateQueries({
-        queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
-      });
-    }, 2000);
+    // Force-refresh from Polar (cache-busting) every 2s
+    const poll = async () => {
+      try {
+        const result = await orpcRouterClient.subscription.refreshStatus();
+        // Update the getStatus query data with the fresh result
+        queryClient.setQueryData(
+          orpc.subscription.getStatus.queryOptions().queryKey,
+          result,
+        );
+      } catch {
+        // Ignore errors, will retry on next interval
+      }
+    };
+
+    void poll(); // Immediately on first run
+    const interval = setInterval(() => void poll(), 2000);
 
     return () => clearInterval(interval);
   }, [awaitingUpgrade, planId, queryClient, openPlanSuccess]);
+
+  return { awaitingUpgrade };
 }
 
 function CheckoutSuccessDialog({
@@ -125,9 +138,13 @@ function CheckoutSuccessDialog({
 function RootLayout() {
   const { mostRecentRelease } = Route.useLoaderData();
   useAltKeyHeld();
-  useCheckoutSuccess();
+  const { awaitingUpgrade } = useCheckoutSuccess();
   const showPlanSuccess = usePlanSuccessStore((s) => s.showDialog);
   const closePlanSuccess = usePlanSuccessStore((s) => s.closeDialog);
+
+  if (awaitingUpgrade) {
+    return <FeedLoading />;
+  }
 
   return (
     // <ApplyColorTheme>

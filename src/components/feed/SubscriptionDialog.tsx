@@ -313,7 +313,10 @@ export function SubscriptionDialog({
       // Already subscribed — show switch confirmation
       previewMutation.mutate({ planId: id });
     } else {
-      checkoutMutation.mutate({ planId: id });
+      checkoutMutation.mutate({
+        planId: id,
+        returnPath: window.location.pathname,
+      });
     }
   }
 
@@ -324,7 +327,10 @@ export function SubscriptionDialog({
       if (isSubscribed) {
         previewMutation.mutate({ planId: pendingPlanId });
       } else {
-        checkoutMutation.mutate({ planId: pendingPlanId });
+        checkoutMutation.mutate({
+          planId: pendingPlanId,
+          returnPath: window.location.pathname,
+        });
       }
     }
   }

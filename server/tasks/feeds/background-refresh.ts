@@ -73,6 +73,14 @@ export default defineTask({
     let emptyCount = 0;
     let errorCount = 0;
 
+    // Map feed ID → name for error logging
+    const feedNameMap = new Map<number, string>();
+    for (const userFeeds of feedsByUser.values()) {
+      for (const feed of userFeeds) {
+        feedNameMap.set(feed.id, feed.name);
+      }
+    }
+
     for (const [userId, userFeeds] of feedsByUser) {
       try {
         // Fetch and insert feed data
@@ -86,6 +94,14 @@ export default defineTask({
             emptyCount++;
           } else if (result.status === "error") {
             errorCount++;
+            const feedName = feedNameMap.get(result.id) ?? "unknown";
+            const errMsg =
+              result.error instanceof Error
+                ? result.error.message
+                : String(result.error);
+            console.error(
+              `[background-refresh] Error refreshing feed "${feedName}" (id=${result.id}, user=${userId}): ${errMsg}`,
+            );
           }
         }
       } catch (e) {

@@ -2,7 +2,10 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import type { PlanId } from "~/server/subscriptions/plans";
 import { protectedProcedure } from "~/server/orpc/base";
-import { getUserPlanLimits } from "~/server/subscriptions/helpers";
+import {
+  getUserPlanLimits,
+  invalidatePlanCache,
+} from "~/server/subscriptions/helpers";
 import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import {
   determinePlanFromProductId,
@@ -47,6 +50,12 @@ let productsCache: CachedProducts | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export const getStatus = protectedProcedure.handler(async ({ context }) => {
+  return getUserPlanLimits(context.db, context.user.id);
+});
+
+/** Force-refresh the plan from Polar, bypassing the server cache. */
+export const refreshStatus = protectedProcedure.handler(async ({ context }) => {
+  invalidatePlanCache(context.user.id);
   return getUserPlanLimits(context.db, context.user.id);
 });
 
@@ -133,7 +142,12 @@ export const getProducts = protectedProcedure.handler(async () => {
 });
 
 export const createCheckout = protectedProcedure
-  .input(z.object({ planId: z.enum(["standard", "pro"]) }))
+  .input(
+    z.object({
+      planId: z.enum(["standard", "pro"]),
+      returnPath: z.string().optional(),
+    }),
+  )
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
       return { url: null, error: null };
@@ -162,12 +176,17 @@ export const createCheckout = protectedProcedure
     }
 
     const origin = getValidatedOrigin(context.headers);
+    // Ensure returnPath starts with / and doesn't contain query params that could break the URL
+    const safePath = input.returnPath?.startsWith("/")
+      ? input.returnPath.split("?")[0]!
+      : "/";
+    const separator = safePath.includes("?") ? "&" : "?";
     const checkout = await polarClient.checkouts.create({
       externalCustomerId: context.user.id,
       customerEmail: context.user.email,
       products: productIds,
-      successUrl: `${origin}/?checkout_success=true`,
-      returnUrl: `${origin}/`,
+      successUrl: `${origin}${safePath}${separator}checkout_success=true`,
+      returnUrl: `${origin}${safePath}`,
     });
 
     return { url: checkout.url, error: null };
