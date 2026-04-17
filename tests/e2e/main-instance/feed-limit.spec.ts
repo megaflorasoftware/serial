@@ -85,9 +85,9 @@ test.describe("feed limit for free plan", () => {
 
     // Click "Upgrade" in the toast to open subscription dialog
     await page.getByRole("button", { name: "Upgrade" }).click();
-    await expect(
-      page.getByText("Choose a plan that fits your needs."),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("All prices are taxes-included.")).toBeVisible({
+      timeout: 5000,
+    });
     await page.keyboard.press("Escape");
 
     // Navigate to /feeds and verify the counter
@@ -101,9 +101,9 @@ test.describe("feed limit for free plan", () => {
 
     // Click "Upgrade your plan" button and verify subscription dialog opens
     await page.getByRole("button", { name: /upgrade your plan/i }).click();
-    await expect(
-      page.getByText("Choose a plan that fits your needs."),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("All prices are taxes-included.")).toBeVisible({
+      timeout: 5000,
+    });
     await page.keyboard.press("Escape");
 
     // Verify exactly 10 inactive feed rows (opacity-50 class)

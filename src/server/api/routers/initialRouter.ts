@@ -23,7 +23,10 @@ import type {
 } from "~/server/db/schema";
 import type { ORPCContext } from "~/server/orpc/base";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
-import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
+import {
+  checkUserRefreshEligibility,
+  getFeedsActivationBudget,
+} from "~/server/subscriptions/helpers";
 import { visibilityFilterSchema } from "~/lib/data/atoms";
 import {
   buildContentTypeFilter,
@@ -1409,6 +1412,24 @@ export const requestNewData = protectedProcedure
   .handler(async ({ context, input }) => {
     const channel = getUserChannel(context.user.id);
     const newerThanTimestamp = input.newerThan;
+
+    // Check user-level refresh rate limit
+    const eligibility = await checkUserRefreshEligibility(
+      context.db,
+      context.user.id,
+    );
+    if (!eligibility.eligible) {
+      await publisher.publish(channel, {
+        source: "new-data",
+        chunk: {
+          type: "error",
+          message: `You can refresh again at ${eligibility.nextFetchAt.toLocaleTimeString()}`,
+          phase: "initial-fetch",
+          viewId: -1,
+        },
+      });
+      return { status: "rate-limited" };
+    }
 
     // Fetch prerequisite data
     let prerequisiteData: PrerequisiteData;

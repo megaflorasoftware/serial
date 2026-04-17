@@ -114,7 +114,7 @@ interface ControlledResponsiveDialogProps {
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
   title?: string;
-  description?: string;
+  description?: React.ReactNode;
   className?: string;
   headerClassName?: string;
   onBack?: () => void;

@@ -1,32 +1,48 @@
 "use client";
 
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckIcon,
+  CircleHelpIcon,
   CrownIcon,
   SproutIcon,
   TreeDeciduousIcon,
   TreesIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import type { PlanConfig } from "~/server/subscriptions/plans";
-import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
+import { env } from "~/env";
+import { authClient, useSession } from "~/lib/auth-client";
+import { useFeeds } from "~/lib/data/feeds/store";
 import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
-import { authClient, useSession } from "~/lib/auth-client";
-import { env } from "~/env";
+import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 
 export const PLAN_ICONS = {
   free: SproutIcon,
   standard: TreeDeciduousIcon,
   daily: TreesIcon,
   pro: CrownIcon,
+} as const;
+
+const RECOMMENDATION_MESSAGES = {
+  currentFree:
+    "You're just getting started with Serial, so no need to give us money just yet! Consider upgrading later when you have more feeds, or if you want feeds to refresh while you're away.",
+  currentPaid:
+    "This plan is just right for the number of feeds you have. Good choice!",
+  upgrade:
+    "We think this plan is right for you, as it will allow you to keep all your feeds active.",
 } as const;
 
 function formatPrice(cents: number): string {
@@ -317,6 +333,21 @@ export function SubscriptionDialog({
   );
 
   const isSubscribed = planId !== "free";
+  const feeds = useFeeds();
+
+  // Recommend the smallest plan that fits the user's feed count,
+  // but never recommend a lower-tier plan than the user's current plan
+  const currentPlanIndex = PLAN_IDS.indexOf(planId);
+  const recommendedPlanId = (() => {
+    const totalFeeds = feeds.length;
+    const bestFit = PLAN_IDS.find(
+      (id) => PLANS[id].maxActiveFeeds >= totalFeeds,
+    );
+    if (!bestFit) return null;
+    const bestFitIndex = PLAN_IDS.indexOf(bestFit);
+    if (bestFitIndex < currentPlanIndex) return null;
+    return bestFit;
+  })();
 
   // Only show paid plans that have products configured (or are the user's current plan)
   const visiblePlanIds = PLAN_IDS.filter((id) => {
@@ -374,8 +405,8 @@ export function SubscriptionDialog({
     <ControlledResponsiveDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Subscription"
-      description="Choose a plan that fits your needs."
+      title="Subscribe to Serial"
+      description="All prices are taxes-included."
       className="md:max-w-2xl xl:max-w-6xl"
       headerClassName="lg:text-center"
     >
@@ -399,13 +430,46 @@ export function SubscriptionDialog({
             <div
               key={id}
               className={`relative flex flex-col rounded-lg border p-4 ${
-                isCurrent ? "border-primary bg-primary/5" : "border-border"
+                isCurrent && id === recommendedPlanId
+                  ? "border-sidebar-accent bg-sidebar-accent/5"
+                  : isCurrent
+                    ? "border-foreground bg-foreground/5"
+                    : id === recommendedPlanId
+                      ? "border-sidebar-accent bg-sidebar-accent/5"
+                      : "border-border"
               }`}
             >
-              {isCurrent && (
-                <span className="bg-foreground text-background absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-medium">
-                  Current
-                </span>
+              {(isCurrent || id === recommendedPlanId) && (
+                <div
+                  className={`absolute -top-3 flex gap-1.5 ${
+                    isCurrent && id === recommendedPlanId
+                      ? "left-1/2 -translate-x-1/2"
+                      : "left-1/2 -translate-x-1/2"
+                  }`}
+                >
+                  {isCurrent && (
+                    <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+                      Current
+                    </span>
+                  )}
+                  {id === recommendedPlanId && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
+                          Recommended
+                          <CircleHelpIcon size={12} />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-64">
+                        {isCurrent && id === "free"
+                          ? RECOMMENDATION_MESSAGES.currentFree
+                          : isCurrent
+                            ? RECOMMENDATION_MESSAGES.currentPaid
+                            : RECOMMENDATION_MESSAGES.upgrade}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               )}
               <div className="flex flex-col gap-1 xl:flex-row xl:items-center xl:justify-between xl:gap-2">
                 <div className="flex items-center gap-2">
@@ -421,7 +485,18 @@ export function SubscriptionDialog({
                   <p className="text-muted-foreground text-base">
                     {monthlyPrice != null && `${formatPrice(monthlyPrice)}/mo`}
                     {monthlyPrice != null && annualPrice != null && " · "}
-                    {annualPrice != null && `${formatPrice(annualPrice)}/yr`}
+                    {annualPrice != null && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-default underline decoration-dotted underline-offset-4">
+                            {formatPrice(annualPrice)}/yr
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {formatPrice(Math.round(annualPrice / 12))}/mo
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </p>
                 ) : null}
               </div>

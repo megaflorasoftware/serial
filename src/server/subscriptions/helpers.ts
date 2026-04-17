@@ -3,7 +3,7 @@ import { determinePlanFromProductId, getEffectivePlanConfig } from "./plans";
 import { IS_BILLING_ENABLED, polarClient } from "./polar";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
-import { feeds } from "~/server/db/schema";
+import { feeds, user } from "~/server/db/schema";
 
 type DB = typeof Database;
 
@@ -95,9 +95,40 @@ export async function getUserPlanLimits(db: DB, userId: string) {
     maxActiveFeeds:
       config.maxActiveFeeds === Infinity ? -1 : config.maxActiveFeeds,
     activeFeeds,
+    refreshIntervalMs: config.refreshIntervalMs,
     backgroundRefreshIntervalMs: config.backgroundRefreshIntervalMs,
     billingEnabled: IS_BILLING_ENABLED,
   };
+}
+
+/**
+ * Check if the user is eligible to refresh based on their plan's refresh interval.
+ * Returns the next eligible fetch time if they are rate-limited, or null if they can refresh now.
+ */
+export async function checkUserRefreshEligibility(
+  db: DB,
+  userId: string,
+): Promise<{ eligible: true } | { eligible: false; nextFetchAt: Date }> {
+  const planId = await getUserPlanId(userId);
+  const config = getEffectivePlanConfig(planId);
+
+  const userRow = await db
+    .select({ nextFetchAt: user.nextFetchAt })
+    .from(user)
+    .where(eq(user.id, userId))
+    .get();
+
+  const now = new Date();
+
+  if (userRow?.nextFetchAt && userRow.nextFetchAt > now) {
+    return { eligible: false, nextFetchAt: userRow.nextFetchAt };
+  }
+
+  // Update user's nextFetchAt for the next refresh window
+  const nextFetchAt = new Date(now.getTime() + config.refreshIntervalMs);
+  await db.update(user).set({ nextFetchAt }).where(eq(user.id, userId));
+
+  return { eligible: true };
 }
 
 export async function deactivateExcessFeeds(

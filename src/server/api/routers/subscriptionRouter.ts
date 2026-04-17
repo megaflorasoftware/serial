@@ -47,7 +47,7 @@ type PlanProduct = {
 };
 
 let productsCache: CachedProducts | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 export const getStatus = protectedProcedure.handler(async ({ context }) => {
   return getUserPlanLimits(context.db, context.user.id);
