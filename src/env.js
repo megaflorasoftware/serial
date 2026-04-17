@@ -2,6 +2,14 @@ import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
 export const env = createEnv({
+  clientPrefix: "VITE_PUBLIC_",
+  /**
+   * Specify your client-side environment variables schema here.
+   * These are exposed to the browser via Vite's VITE_PUBLIC_ prefix.
+   */
+  client: {
+    VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: z.string().optional(),
+  },
   /**
    * Specify your server-side environment variables schema here. This way you can ensure the app
    * isn't built with invalid env vars.
@@ -48,6 +56,8 @@ export const env = createEnv({
    * middlewares) or client-side so we need to destruct manually.
    */
   runtimeEnv: {
+    VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: import.meta.env
+      .VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS,
     DATABASE_URL: process.env.DATABASE_URL,
     DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN,
     NODE_ENV: process.env.NODE_ENV,

@@ -19,6 +19,7 @@ import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { authClient, useSession } from "~/lib/auth-client";
+import { env } from "~/env";
 
 export const PLAN_ICONS = {
   free: SproutIcon,
@@ -451,13 +452,23 @@ export function SubscriptionDialog({
       <p className="text-muted-foreground pt-5 text-base lg:text-center">
         Price too high?{" "}
         <a
+          href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          Let us know
+        </a>{" "}
+        or{" "}
+        <a
           href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
           target="_blank"
           rel="noopener noreferrer"
           className="underline"
         >
-          Learn how to self-host Serial
-        </a>
+          learn how to self-host
+        </a>{" "}
+        Serial
       </p>
     </ControlledResponsiveDialog>
   );
