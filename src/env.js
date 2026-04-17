@@ -35,6 +35,8 @@ export const env = createEnv({
     POLAR_STANDARD_ANNUAL_PRODUCT_ID: z.string().optional(),
     POLAR_DAILY_MONTHLY_PRODUCT_ID: z.string().optional(),
     POLAR_DAILY_ANNUAL_PRODUCT_ID: z.string().optional(),
+    POLAR_PRO_MONTHLY_PRODUCT_ID: z.string().optional(),
+    POLAR_PRO_ANNUAL_PRODUCT_ID: z.string().optional(),
     BACKGROUND_REFRESH_ENABLED: z.string().optional().default("true"),
     OAUTH_PROVIDER_ID: z.string().optional(),
     OAUTH_PROVIDER_NAME: z.string().optional(),
@@ -56,8 +58,8 @@ export const env = createEnv({
    * middlewares) or client-side so we need to destruct manually.
    */
   runtimeEnv: {
-    VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: import.meta.env
-      .VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS,
+    VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS:
+      process.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS,
     DATABASE_URL: process.env.DATABASE_URL,
     DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN,
     NODE_ENV: process.env.NODE_ENV,
@@ -75,6 +77,8 @@ export const env = createEnv({
       process.env.POLAR_STANDARD_ANNUAL_PRODUCT_ID,
     POLAR_DAILY_MONTHLY_PRODUCT_ID: process.env.POLAR_DAILY_MONTHLY_PRODUCT_ID,
     POLAR_DAILY_ANNUAL_PRODUCT_ID: process.env.POLAR_DAILY_ANNUAL_PRODUCT_ID,
+    POLAR_PRO_MONTHLY_PRODUCT_ID: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID,
+    POLAR_PRO_ANNUAL_PRODUCT_ID: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
     BACKGROUND_REFRESH_ENABLED: process.env.BACKGROUND_REFRESH_ENABLED,
     OAUTH_PROVIDER_ID: process.env.OAUTH_PROVIDER_ID,
     OAUTH_PROVIDER_NAME: process.env.OAUTH_PROVIDER_NAME,

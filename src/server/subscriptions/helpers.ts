@@ -20,7 +20,7 @@ export async function getActiveFeedCount(db: DB, userId: string) {
 }
 
 export async function getUserPlanId(userId: string): Promise<PlanId> {
-  if (!IS_BILLING_ENABLED) return "daily";
+  if (!IS_BILLING_ENABLED) return "pro";
 
   const cached = planCache.get(userId);
   if (cached && Date.now() < cached.expiresAt) {

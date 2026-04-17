@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckIcon,
+  CrownIcon,
   SproutIcon,
   TreeDeciduousIcon,
   TreesIcon,
@@ -25,6 +26,7 @@ export const PLAN_ICONS = {
   free: SproutIcon,
   standard: TreeDeciduousIcon,
   daily: TreesIcon,
+  pro: CrownIcon,
 } as const;
 
 function formatPrice(cents: number): string {
@@ -50,6 +52,10 @@ export function getPlanFeatures(plan: PlanConfig): string[] {
   } else if (plan.id === "daily") {
     features.push("Refreshes once every 5 min");
     features.push("Refresh in background");
+  } else if (plan.id === "pro") {
+    features.push("Refreshes every minute");
+    features.push("Refresh in background");
+    features.push("Priority support");
   }
 
   return features;
@@ -235,7 +241,7 @@ export function SubscriptionDialog({
   const queryClient = useQueryClient();
   const [showVerification, setShowVerification] = useState(false);
   const [pendingPlanId, setPendingPlanId] = useState<
-    "standard" | "daily" | null
+    "standard" | "daily" | "pro" | null
   >(null);
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
@@ -320,7 +326,7 @@ export function SubscriptionDialog({
     return products?.some((p) => p.planId === id);
   });
 
-  function handleSubscribeClick(id: "standard" | "daily") {
+  function handleSubscribeClick(id: "standard" | "daily" | "pro") {
     setPendingPlanId(id);
     if (isSubscribed) {
       // Already subscribed — show switch confirmation
@@ -370,18 +376,10 @@ export function SubscriptionDialog({
       onOpenChange={onOpenChange}
       title="Subscription"
       description="Choose a plan that fits your needs."
-      className={visiblePlanIds.length <= 3 ? "lg:max-w-4xl" : "lg:max-w-5xl"}
+      className="md:max-w-2xl xl:max-w-6xl"
       headerClassName="lg:text-center"
     >
-      <div
-        className={`mt-2 grid gap-3 ${
-          visiblePlanIds.length <= 2
-            ? "lg:grid-cols-2"
-            : visiblePlanIds.length === 3
-              ? "lg:grid-cols-3"
-              : "lg:grid-cols-4"
-        }`}
-      >
+      <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {showVerification && !emailVerified && (
           <div className="col-span-full">
             <EmailVerificationBanner onVerified={handleVerified} />
@@ -400,7 +398,7 @@ export function SubscriptionDialog({
           return (
             <div
               key={id}
-              className={`relative rounded-lg border p-4 ${
+              className={`relative flex flex-col rounded-lg border p-4 ${
                 isCurrent ? "border-primary bg-primary/5" : "border-border"
               }`}
             >
@@ -409,7 +407,7 @@ export function SubscriptionDialog({
                   Current
                 </span>
               )}
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-1 xl:flex-row xl:items-center xl:justify-between xl:gap-2">
                 <div className="flex items-center gap-2">
                   {(() => {
                     const Icon = PLAN_ICONS[id];
@@ -439,7 +437,7 @@ export function SubscriptionDialog({
                 ))}
               </ul>
               {isCurrent && isSubscribed && (
-                <div className="mt-3">
+                <div className="mt-auto pt-3">
                   <Button
                     variant="outline"
                     size="sm"
@@ -452,7 +450,7 @@ export function SubscriptionDialog({
                 </div>
               )}
               {!isCurrent && id !== "free" && (
-                <div className="mt-3">
+                <div className="mt-auto pt-3">
                   <Button
                     size="sm"
                     className="w-full"
