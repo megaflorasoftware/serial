@@ -85,28 +85,40 @@ function buildPolarPlugin() {
   if (!process.env.POLAR_WEBHOOK_SECRET) return [];
 
   const products = [
-    process.env.POLAR_STANDARD_MONTHLY_PRODUCT_ID
+    process.env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_STANDARD_MONTHLY_PRODUCT_ID,
-          slug: "standard-monthly",
+          productId: process.env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID,
+          slug: "standard-small-monthly",
         }
       : null,
-    process.env.POLAR_STANDARD_ANNUAL_PRODUCT_ID
+    process.env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_STANDARD_ANNUAL_PRODUCT_ID,
-          slug: "standard-annual",
+          productId: process.env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID,
+          slug: "standard-small-annual",
         }
       : null,
-    process.env.POLAR_DAILY_MONTHLY_PRODUCT_ID
+    process.env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_DAILY_MONTHLY_PRODUCT_ID,
-          slug: "daily-monthly",
+          productId: process.env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID,
+          slug: "standard-medium-monthly",
         }
       : null,
-    process.env.POLAR_DAILY_ANNUAL_PRODUCT_ID
+    process.env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_DAILY_ANNUAL_PRODUCT_ID,
-          slug: "daily-annual",
+          productId: process.env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID,
+          slug: "standard-medium-annual",
+        }
+      : null,
+    process.env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID
+      ? {
+          productId: process.env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID,
+          slug: "standard-large-monthly",
+        }
+      : null,
+    process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID
+      ? {
+          productId: process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID,
+          slug: "standard-large-annual",
         }
       : null,
     process.env.POLAR_PRO_MONTHLY_PRODUCT_ID
@@ -115,9 +127,9 @@ function buildPolarPlugin() {
           slug: "pro-monthly",
         }
       : null,
-    process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID
+    process.env.POLAR_PRO_ANNUAL_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID,
+          productId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
           slug: "pro-annual",
         }
       : null,

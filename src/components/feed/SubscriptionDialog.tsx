@@ -8,6 +8,7 @@ import {
   SproutIcon,
   TreeDeciduousIcon,
   TreePineIcon,
+  TreesIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -31,10 +32,28 @@ import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 
 export const PLAN_ICONS = {
   free: SproutIcon,
-  standard: ShrubIcon,
-  daily: TreeDeciduousIcon,
-  pro: TreePineIcon,
+  "standard-small": ShrubIcon,
+  "standard-medium": TreeDeciduousIcon,
+  "standard-large": TreePineIcon,
+  pro: TreesIcon,
 } as const;
+
+const QUOTA_DISPLAY_NAMES = {
+  "standard-small": "Small",
+  "standard-medium": "Medium",
+  "standard-large": "Large",
+} as const;
+
+const STANDARD_FEATURES = [
+  "Refreshes once every 15 min",
+  "Refresh in background",
+] as const;
+
+const STANDARD_PLAN_IDS = [
+  "standard-small",
+  "standard-medium",
+  "standard-large",
+] as const;
 
 const RECOMMENDATION_MESSAGES = {
   currentFree:
@@ -62,11 +81,12 @@ export function getPlanFeatures(plan: PlanConfig): string[] {
   if (plan.id === "free") {
     features.push("Refresh up to once an hour");
     features.push("Manual refresh only");
-  } else if (plan.id === "standard") {
+  } else if (
+    plan.id === "standard-small" ||
+    plan.id === "standard-medium" ||
+    plan.id === "standard-large"
+  ) {
     features.push("Refreshes once every 15 min");
-    features.push("Refresh in background");
-  } else if (plan.id === "daily") {
-    features.push("Refreshes once every 5 min");
     features.push("Refresh in background");
   } else if (plan.id === "pro") {
     features.push("Refreshes every minute");
@@ -172,6 +192,212 @@ type SwitchPreview = {
   newProductId: string;
 };
 
+function FreePlanCard({
+  planId,
+  recommendedPlanId,
+}: {
+  planId: string;
+  recommendedPlanId: string | null;
+}) {
+  const plan = PLANS.free;
+  const isCurrent = planId === "free";
+  const isRecommended = recommendedPlanId === "free";
+  const features = getPlanFeatures(plan);
+  const Icon = PLAN_ICONS.free;
+
+  return (
+    <div
+      className={`relative flex flex-col rounded-lg border p-4 ${
+        isCurrent && isRecommended
+          ? "border-sidebar-accent bg-sidebar-accent/5"
+          : isCurrent
+            ? "border-foreground bg-foreground/5"
+            : isRecommended
+              ? "border-sidebar-accent bg-sidebar-accent/5"
+              : "border-border"
+      }`}
+    >
+      {(isCurrent || isRecommended) && (
+        <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+          {isCurrent && (
+            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+              Current
+            </span>
+          )}
+          {isRecommended && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
+                  Recommended
+                  <CircleHelpIcon size={12} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">
+                {isCurrent
+                  ? RECOMMENDATION_MESSAGES.currentFree
+                  : RECOMMENDATION_MESSAGES.upgrade}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Icon size={20} className="shrink-0" />
+        <h3 className="font-medium">{plan.name}</h3>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {features.map((feature) => (
+          <li
+            key={feature}
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+          >
+            <CheckIcon size={12} />
+            {feature}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ProPlanCard({
+  planId,
+  recommendedPlanId,
+  products,
+  isLoadingProducts,
+  isSubscribed,
+  onSubscribeClick,
+  portalMutation,
+  checkoutMutation,
+  previewMutation,
+}: {
+  planId: string;
+  recommendedPlanId: string | null;
+  products:
+    | Array<{
+        planId: string;
+        monthlyPrice: number | null;
+        annualPrice: number | null;
+      }>
+    | undefined;
+  isLoadingProducts: boolean;
+  isSubscribed: boolean;
+  onSubscribeClick: (id: "pro") => void;
+  portalMutation: any;
+  checkoutMutation: any;
+  previewMutation: any;
+}) {
+  const plan = PLANS.pro;
+  const isCurrent = planId === "pro";
+  const isRecommended = recommendedPlanId === "pro";
+  const features = getPlanFeatures(plan);
+  const Icon = PLAN_ICONS.pro;
+  const product = products?.find((p) => p.planId === "pro");
+  const monthlyPrice = product?.monthlyPrice ?? null;
+  const annualPrice = product?.annualPrice ?? null;
+  const hasPrice = monthlyPrice != null || annualPrice != null;
+
+  return (
+    <div
+      className={`relative flex flex-col rounded-lg border p-4 ${
+        isCurrent && isRecommended
+          ? "border-sidebar-accent bg-sidebar-accent/5"
+          : isCurrent
+            ? "border-foreground bg-foreground/5"
+            : isRecommended
+              ? "border-sidebar-accent bg-sidebar-accent/5"
+              : "border-border"
+      }`}
+    >
+      {(isCurrent || isRecommended) && (
+        <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+          {isCurrent && (
+            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+              Current
+            </span>
+          )}
+          {isRecommended && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
+                  Recommended
+                  <CircleHelpIcon size={12} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">
+                {isCurrent
+                  ? RECOMMENDATION_MESSAGES.currentPaid
+                  : RECOMMENDATION_MESSAGES.upgrade}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Icon size={20} className="shrink-0" />
+          <h3 className="font-medium">{plan.name}</h3>
+        </div>
+        {isLoadingProducts ? (
+          <Skeleton className="h-4 w-28" />
+        ) : hasPrice ? (
+          <p className="text-muted-foreground text-base">
+            {monthlyPrice != null && `${formatPrice(monthlyPrice)}/mo`}
+            {monthlyPrice != null && annualPrice != null && " · "}
+            {annualPrice != null && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default underline decoration-dotted underline-offset-4">
+                    {formatPrice(annualPrice)}/yr
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {formatPrice(Math.round(annualPrice / 12))}/mo
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </p>
+        ) : null}
+      </div>
+      <ul className="mt-2 space-y-1">
+        {features.map((feature) => (
+          <li
+            key={feature}
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+          >
+            <CheckIcon size={12} />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      {isCurrent && isSubscribed ? (
+        <div className="mt-auto pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={portalMutation.isPending}
+            onClick={() => portalMutation.mutate({})}
+          >
+            Manage
+          </Button>
+        </div>
+      ) : !isCurrent ? (
+        <div className="mt-auto pt-3">
+          <Button
+            size="sm"
+            className="w-full"
+            disabled={checkoutMutation.isPending || previewMutation.isPending}
+            onClick={() => onSubscribeClick("pro")}
+          >
+            {isSubscribed ? "Switch" : "Subscribe"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PlanSwitchConfirmation({
   preview,
   onBack,
@@ -244,6 +470,17 @@ function PlanSwitchConfirmation({
   );
 }
 
+function getRecommendedPlanId(
+  totalFeeds: number,
+  currentPlanIndex: number,
+): string | null {
+  const bestFit = PLAN_IDS.find((id) => PLANS[id].maxActiveFeeds >= totalFeeds);
+  if (!bestFit) return null;
+  const bestFitIndex = PLAN_IDS.indexOf(bestFit);
+  if (bestFitIndex < currentPlanIndex) return null;
+  return bestFit;
+}
+
 export function SubscriptionDialog({
   open,
   onOpenChange,
@@ -256,7 +493,7 @@ export function SubscriptionDialog({
   const queryClient = useQueryClient();
   const [showVerification, setShowVerification] = useState(false);
   const [pendingPlanId, setPendingPlanId] = useState<
-    "standard" | "daily" | "pro" | null
+    "standard-small" | "standard-medium" | "standard-large" | "pro" | null
   >(null);
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
@@ -267,7 +504,6 @@ export function SubscriptionDialog({
   const { data: products, isLoading: isLoadingProducts } = useQuery({
     ...orpc.subscription.getProducts.queryOptions(),
     enabled: open,
-    staleTime: 5 * 60 * 1000,
   });
 
   const checkoutMutation = useMutation(
@@ -337,26 +573,14 @@ export function SubscriptionDialog({
   // Recommend the smallest plan that fits the user's feed count,
   // but never recommend a lower-tier plan than the user's current plan
   const currentPlanIndex = PLAN_IDS.indexOf(planId);
-  const recommendedPlanId = (() => {
-    const totalFeeds = feeds.length;
-    const bestFit = PLAN_IDS.find(
-      (id) => PLANS[id].maxActiveFeeds >= totalFeeds,
-    );
-    if (!bestFit) return null;
-    const bestFitIndex = PLAN_IDS.indexOf(bestFit);
-    if (bestFitIndex < currentPlanIndex) return null;
-    return bestFit;
-  })();
+  const recommendedPlanId = getRecommendedPlanId(
+    feeds.length,
+    currentPlanIndex,
+  );
 
-  // Only show paid plans that have products configured (or are the user's current plan)
-  const visiblePlanIds = PLAN_IDS.filter((id) => {
-    if (id === "free") return true;
-    if (id === planId) return true;
-    if (isLoadingProducts) return true;
-    return products?.some((p) => p.planId === id);
-  });
-
-  function handleSubscribeClick(id: "standard" | "daily" | "pro") {
+  function handleSubscribeClick(
+    id: "standard-small" | "standard-medium" | "standard-large" | "pro",
+  ) {
     setPendingPlanId(id);
     if (isSubscribed) {
       // Already subscribed — show switch confirmation
@@ -406,8 +630,8 @@ export function SubscriptionDialog({
       onOpenChange={onOpenChange}
       title="Subscribe to Serial"
       description="All prices are taxes-included."
-      className="md:max-w-2xl xl:max-w-6xl"
-      headerClassName="md:text-center"
+      className="lg:max-w-5xl xl:max-w-6xl"
+      headerClassName="lg:text-center"
       footerBorder={false}
       footer={
         <p className="text-muted-foreground flex flex-col text-center text-sm">
@@ -435,137 +659,152 @@ export function SubscriptionDialog({
         </p>
       }
     >
-      <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_1.5fr_1fr] lg:gap-5 xl:grid-cols-[1fr_2fr_1fr]">
         {showVerification && !emailVerified && (
           <div className="col-span-full">
             <EmailVerificationBanner onVerified={handleVerified} />
           </div>
         )}
-        {visiblePlanIds.map((id) => {
-          const plan = PLANS[id];
-          const isCurrent = id === planId;
-          const isPaid = id !== "free";
-          const product = products?.find((p) => p.planId === id);
-          const monthlyPrice = product?.monthlyPrice ?? null;
-          const annualPrice = product?.annualPrice ?? null;
-          const hasPrice = monthlyPrice != null || annualPrice != null;
-          const features = getPlanFeatures(plan);
 
-          return (
-            <div
-              key={id}
-              className={`relative flex flex-col rounded-lg border p-4 ${
-                isCurrent && id === recommendedPlanId
-                  ? "border-sidebar-accent bg-sidebar-accent/5"
-                  : isCurrent
-                    ? "border-foreground bg-foreground/5"
-                    : id === recommendedPlanId
-                      ? "border-sidebar-accent bg-sidebar-accent/5"
-                      : "border-border"
-              }`}
-            >
-              {(isCurrent || id === recommendedPlanId) && (
+        {/* Free plan */}
+        <FreePlanCard planId={planId} recommendedPlanId={recommendedPlanId} />
+
+        {/* Paid plans */}
+        <div className="border-border rounded-lg border p-4">
+          <div className="flex items-center gap-2">
+            <TreeDeciduousIcon size={20} className="shrink-0" />
+            <h3 className="font-medium">Standard</h3>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {STANDARD_FEATURES.map((feature) => (
+              <li
+                key={feature}
+                className="text-muted-foreground flex items-center gap-2 text-sm"
+              >
+                <CheckIcon size={12} />
+                {feature}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex flex-col gap-2">
+            {STANDARD_PLAN_IDS.map((id) => {
+              const plan = PLANS[id];
+              const isCurrent = id === planId;
+              const isRecommended = id === recommendedPlanId;
+              const product = products?.find((p) => p.planId === id);
+              const monthlyPrice = product?.monthlyPrice ?? null;
+              const annualPrice = product?.annualPrice ?? null;
+              const hasPrice = monthlyPrice != null || annualPrice != null;
+              const feedsLabel = `Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`;
+
+              return (
                 <div
-                  className={`absolute -top-3 flex gap-1.5 ${
-                    isCurrent && id === recommendedPlanId
-                      ? "left-1/2 -translate-x-1/2"
-                      : "left-1/2 -translate-x-1/2"
+                  key={id}
+                  className={`relative rounded-lg border p-3 ${
+                    isCurrent && isRecommended
+                      ? "border-sidebar-accent bg-sidebar-accent/5"
+                      : isCurrent
+                        ? "border-foreground bg-foreground/5"
+                        : isRecommended
+                          ? "border-sidebar-accent bg-sidebar-accent/5"
+                          : "border-border"
                   }`}
                 >
-                  {isCurrent && (
-                    <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
-                      Current
-                    </span>
-                  )}
-                  {id === recommendedPlanId && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
-                          Recommended
-                          <CircleHelpIcon size={12} />
+                  {(isCurrent || isRecommended) && (
+                    <div className="absolute -top-3 left-4 flex gap-1.5">
+                      {isCurrent && (
+                        <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+                          Current
                         </span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-64">
-                        {isCurrent && id === "free"
-                          ? RECOMMENDATION_MESSAGES.currentFree
-                          : isCurrent
-                            ? RECOMMENDATION_MESSAGES.currentPaid
-                            : RECOMMENDATION_MESSAGES.upgrade}
-                      </TooltipContent>
-                    </Tooltip>
+                      )}
+                      {isRecommended && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
+                              Recommended
+                              <CircleHelpIcon size={12} />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-64">
+                            {isCurrent
+                              ? RECOMMENDATION_MESSAGES.currentPaid
+                              : RECOMMENDATION_MESSAGES.upgrade}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-              <div className="flex flex-col gap-1 xl:flex-row xl:items-center xl:justify-between xl:gap-2">
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    const Icon = PLAN_ICONS[id];
-                    return <Icon size={20} className="shrink-0" />;
-                  })()}
-                  <h3 className="font-medium">{plan.name}</h3>
-                </div>
-                {isPaid && isLoadingProducts ? (
-                  <Skeleton className="h-4 w-28" />
-                ) : hasPrice ? (
-                  <p className="text-muted-foreground text-base">
-                    {monthlyPrice != null && `${formatPrice(monthlyPrice)}/mo`}
-                    {monthlyPrice != null && annualPrice != null && " · "}
-                    {annualPrice != null && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-default underline decoration-dotted underline-offset-4">
-                            {formatPrice(annualPrice)}/yr
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {formatPrice(Math.round(annualPrice / 12))}/mo
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">
+                      {QUOTA_DISPLAY_NAMES[id]}
+                    </span>
+                    <div className="ml-auto flex items-center gap-3">
+                      {isLoadingProducts ? (
+                        <Skeleton className="h-4 w-20" />
+                      ) : hasPrice ? (
+                        <span className="text-muted-foreground text-sm">
+                          {monthlyPrice != null &&
+                            `${formatPrice(monthlyPrice)}/mo`}
+                          {monthlyPrice != null && annualPrice != null && " · "}
+                          {annualPrice != null && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-default underline decoration-dotted underline-offset-4">
+                                  {formatPrice(annualPrice)}/yr
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {formatPrice(Math.round(annualPrice / 12))}
+                                /mo
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </span>
+                      ) : null}
+                      {isCurrent && isSubscribed ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={portalMutation.isPending}
+                          onClick={() => portalMutation.mutate({})}
+                        >
+                          Manage
+                        </Button>
+                      ) : !isCurrent ? (
+                        <Button
+                          size="sm"
+                          disabled={
+                            checkoutMutation.isPending ||
+                            previewMutation.isPending
+                          }
+                          onClick={() => handleSubscribeClick(id)}
+                        >
+                          {isSubscribed ? "Switch" : "Subscribe"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {feedsLabel}
                   </p>
-                ) : null}
-              </div>
-              <ul className="mt-2 space-y-1">
-                {features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="text-muted-foreground flex items-center gap-2 text-sm"
-                  >
-                    <CheckIcon size={12} />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              {isCurrent && isSubscribed && (
-                <div className="mt-auto pt-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    disabled={portalMutation.isPending}
-                    onClick={() => portalMutation.mutate({})}
-                  >
-                    Manage
-                  </Button>
                 </div>
-              )}
-              {!isCurrent && id !== "free" && (
-                <div className="mt-auto pt-3">
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    disabled={
-                      checkoutMutation.isPending || previewMutation.isPending
-                    }
-                    onClick={() => handleSubscribeClick(id)}
-                  >
-                    {isSubscribed ? "Switch" : "Subscribe"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Pro plan */}
+        <ProPlanCard
+          planId={planId}
+          recommendedPlanId={recommendedPlanId}
+          products={products}
+          isLoadingProducts={isLoadingProducts}
+          isSubscribed={isSubscribed}
+          onSubscribeClick={handleSubscribeClick}
+          portalMutation={portalMutation}
+          checkoutMutation={checkoutMutation}
+          previewMutation={previewMutation}
+        />
       </div>
     </ControlledResponsiveDialog>
   );

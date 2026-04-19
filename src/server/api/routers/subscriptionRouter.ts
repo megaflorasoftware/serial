@@ -51,7 +51,7 @@ type PlanProduct = {
 };
 
 let productsCache: CachedProducts | null = null;
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds
+const CACHE_TTL_MS = 5 * 1000; // 5 seconds
 
 export const getStatus = protectedProcedure.handler(async ({ context }) => {
   return getUserPlanLimits(context.db, context.user.id);
@@ -83,10 +83,12 @@ export const getProducts = protectedProcedure.handler(async () => {
   }
 
   const productIds = [
-    PLANS.standard.polarMonthlyProductId,
-    PLANS.standard.polarAnnualProductId,
-    PLANS.daily.polarMonthlyProductId,
-    PLANS.daily.polarAnnualProductId,
+    PLANS["standard-small"].polarMonthlyProductId,
+    PLANS["standard-small"].polarAnnualProductId,
+    PLANS["standard-medium"].polarMonthlyProductId,
+    PLANS["standard-medium"].polarAnnualProductId,
+    PLANS["standard-large"].polarMonthlyProductId,
+    PLANS["standard-large"].polarAnnualProductId,
     PLANS.pro.polarMonthlyProductId,
     PLANS.pro.polarAnnualProductId,
   ].filter(Boolean);
@@ -98,7 +100,12 @@ export const getProducts = protectedProcedure.handler(async () => {
   try {
     const results: PlanProduct[] = [];
 
-    for (const planId of ["standard", "daily", "pro"] as const) {
+    for (const planId of [
+      "standard-small",
+      "standard-medium",
+      "standard-large",
+      "pro",
+    ] as const) {
       const plan = PLANS[planId];
 
       // Skip plans that have no Polar product IDs configured
@@ -163,7 +170,12 @@ export const getProducts = protectedProcedure.handler(async () => {
 export const createCheckout = protectedProcedure
   .input(
     z.object({
-      planId: z.enum(["standard", "daily", "pro"]),
+      planId: z.enum([
+        "standard-small",
+        "standard-medium",
+        "standard-large",
+        "pro",
+      ]),
       returnPath: z.string().optional(),
     }),
   )
@@ -218,7 +230,16 @@ export const createCheckout = protectedProcedure
   });
 
 export const previewPlanSwitch = protectedProcedure
-  .input(z.object({ planId: z.enum(["standard", "daily", "pro"]) }))
+  .input(
+    z.object({
+      planId: z.enum([
+        "standard-small",
+        "standard-medium",
+        "standard-large",
+        "pro",
+      ]),
+    }),
+  )
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
       return null;

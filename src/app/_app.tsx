@@ -44,12 +44,13 @@ const SYNC_POLL_INTERVAL_MS = 3_000;
 function useCheckoutSuccess() {
   const queryClient = useQueryClient();
   const [awaitingUpgrade, setAwaitingUpgrade] = useState(false);
-  const { planId } = useSubscription();
+  const { planId, billingEnabled } = useSubscription();
   const openPlanSuccess = usePlanSuccessStore((s) => s.openDialog);
   const previousPlanIdRef = useRef<string | null>(null);
 
   // Detect checkout_success query param on mount
   useEffect(() => {
+    if (!billingEnabled) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("checkout_success") !== "true") return;
 
@@ -131,7 +132,7 @@ function useCheckoutSuccess() {
     };
   }, [awaitingUpgrade, planId, queryClient, openPlanSuccess]);
 
-  return { awaitingUpgrade };
+  return { awaitingUpgrade, billingEnabled };
 }
 
 function CheckoutSuccessDialog({
@@ -178,7 +179,7 @@ function CheckoutSuccessDialog({
 function RootLayout() {
   const { mostRecentRelease } = Route.useLoaderData();
   useAltKeyHeld();
-  const { awaitingUpgrade } = useCheckoutSuccess();
+  const { awaitingUpgrade, billingEnabled } = useCheckoutSuccess();
   const showPlanSuccess = usePlanSuccessStore((s) => s.showDialog);
   const closePlanSuccess = usePlanSuccessStore((s) => s.closeDialog);
 
@@ -207,10 +208,12 @@ function RootLayout() {
                 <Outlet />
               </div>
               <AppDialogs />
-              <CheckoutSuccessDialog
-                open={showPlanSuccess}
-                onOpenChange={closePlanSuccess}
-              />
+              {billingEnabled && (
+                <CheckoutSuccessDialog
+                  open={showPlanSuccess}
+                  onOpenChange={closePlanSuccess}
+                />
+              )}
             </main>
             <ReleaseNotifier mostRecentRelease={mostRecentRelease} />
           </SidebarInset>
