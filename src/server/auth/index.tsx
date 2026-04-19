@@ -115,9 +115,9 @@ function buildPolarPlugin() {
           slug: "pro-monthly",
         }
       : null,
-    process.env.POLAR_PRO_ANNUAL_PRODUCT_ID
+    process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID
       ? {
-          productId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
+          productId: process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID,
           slug: "pro-annual",
         }
       : null,

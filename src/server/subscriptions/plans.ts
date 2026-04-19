@@ -46,11 +46,12 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   pro: {
     id: "pro",
     name: "Pro",
-    maxActiveFeeds: 2000,
+    maxActiveFeeds: 1000,
     refreshIntervalMs: 1 * 60 * 1000 - 15_000, // 1 minute
     backgroundRefreshIntervalMs: 1 * 60 * 1000, // 1 minute
     polarMonthlyProductId: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID ?? null,
+    polarAnnualProductId:
+      process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
 };
 

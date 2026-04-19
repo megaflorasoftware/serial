@@ -4,10 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckIcon,
   CircleHelpIcon,
-  CrownIcon,
+  ShrubIcon,
   SproutIcon,
   TreeDeciduousIcon,
-  TreesIcon,
+  TreePineIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -31,9 +31,9 @@ import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 
 export const PLAN_ICONS = {
   free: SproutIcon,
-  standard: TreeDeciduousIcon,
-  daily: TreesIcon,
-  pro: CrownIcon,
+  standard: ShrubIcon,
+  daily: TreeDeciduousIcon,
+  pro: TreePineIcon,
 } as const;
 
 const RECOMMENDATION_MESSAGES = {
@@ -407,7 +407,33 @@ export function SubscriptionDialog({
       title="Subscribe to Serial"
       description="All prices are taxes-included."
       className="md:max-w-2xl xl:max-w-6xl"
-      headerClassName="lg:text-center"
+      headerClassName="md:text-center"
+      footerBorder={false}
+      footer={
+        <p className="text-muted-foreground flex flex-col text-center text-sm">
+          Price too high or need higher limits?{" "}
+          <span>
+            <a
+              href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Let us know
+            </a>{" "}
+            or{" "}
+            <a
+              href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              learn how to self-host
+            </a>{" "}
+            Serial
+          </span>
+        </p>
+      }
     >
       <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {showVerification && !emailVerified && (
@@ -541,29 +567,6 @@ export function SubscriptionDialog({
           );
         })}
       </div>
-      <p className="text-muted-foreground flex flex-col pt-5 text-center lg:text-center">
-        Price too high or need higher limits?{" "}
-        <span>
-          <a
-            href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Let us know
-          </a>{" "}
-          or{" "}
-          <a
-            href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            learn how to self-host
-          </a>{" "}
-          Serial
-        </span>
-      </p>
     </ControlledResponsiveDialog>
   );
 }
