@@ -606,6 +606,7 @@ dialog:modal {
   body,
   html {
     @apply bg-background text-foreground;
+    scrollbar-gutter: stable;
   }
 }
 

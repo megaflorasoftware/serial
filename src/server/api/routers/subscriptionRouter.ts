@@ -3,14 +3,18 @@ import { eq } from "drizzle-orm";
 import type { PlanId } from "~/server/subscriptions/plans";
 import { protectedProcedure } from "~/server/orpc/base";
 import {
+  getUserPlanId,
   getUserPlanLimits,
-  invalidatePlanCache,
 } from "~/server/subscriptions/helpers";
 import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import {
   determinePlanFromProductId,
   PLANS,
 } from "~/server/subscriptions/plans";
+import {
+  applySubscriptionSideEffects,
+  syncPolarDataToKV,
+} from "~/server/subscriptions/kv";
 import { user } from "~/server/db/schema";
 import { IS_EMAIL_ENABLED } from "~/server/email";
 
@@ -53,9 +57,18 @@ export const getStatus = protectedProcedure.handler(async ({ context }) => {
   return getUserPlanLimits(context.db, context.user.id);
 });
 
-/** Force-refresh the plan from Polar, bypassing the server cache. */
+/** Force-refresh the plan from Polar, bypassing the KV cache. */
 export const refreshStatus = protectedProcedure.handler(async ({ context }) => {
-  invalidatePlanCache(context.user.id);
+  if (IS_BILLING_ENABLED) {
+    try {
+      await syncPolarDataToKV(context.user.id);
+    } catch (e) {
+      console.warn(
+        `[subscription] refreshStatus sync failed for user ${context.user.id}:`,
+        e,
+      );
+    }
+  }
   return getUserPlanLimits(context.db, context.user.id);
 });
 
@@ -157,6 +170,12 @@ export const createCheckout = protectedProcedure
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
       return { url: null, error: null };
+    }
+
+    // Prevent double-checkout: block if user already has an active paid plan
+    const existingPlan = await getUserPlanId(context.user.id);
+    if (existingPlan !== "free") {
+      return { url: null, error: "already-subscribed" as const };
     }
 
     if (IS_EMAIL_ENABLED) {
@@ -301,8 +320,42 @@ export const switchPlan = protectedProcedure
       `[polar] Plan switched for user=${context.user.id} subscription=${input.subscriptionId} newProduct=${input.newProductId}`,
     );
 
+    // Immediately update KV cache with the new plan
+    try {
+      await syncPolarDataToKV(context.user.id);
+    } catch (e) {
+      console.warn(
+        `[polar] Post-switch sync failed for user=${context.user.id}:`,
+        e,
+      );
+    }
+
     return { success: true };
   });
+
+/**
+ * Eagerly sync subscription state after checkout completes.
+ * Called once from the client on checkout success — replaces the old polling approach.
+ */
+export const syncAfterCheckout = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_BILLING_ENABLED) {
+      return getUserPlanLimits(context.db, context.user.id);
+    }
+
+    try {
+      const data = await syncPolarDataToKV(context.user.id);
+      await applySubscriptionSideEffects(context.db, context.user.id, data);
+    } catch (e) {
+      console.warn(
+        `[subscription] syncAfterCheckout failed for user ${context.user.id}:`,
+        e,
+      );
+    }
+
+    return getUserPlanLimits(context.db, context.user.id);
+  },
+);
 
 export const createPortalSession = protectedProcedure.handler(
   async ({ context }) => {

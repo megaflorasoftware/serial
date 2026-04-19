@@ -71,7 +71,6 @@ export function getPlanFeatures(plan: PlanConfig): string[] {
   } else if (plan.id === "pro") {
     features.push("Refreshes every minute");
     features.push("Refresh in background");
-    features.push("Priority support");
   }
 
   return features;

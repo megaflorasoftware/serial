@@ -7,16 +7,15 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
-import { account, appConfig, feeds, session, user } from "../db/schema";
-import { determinePlanFromProductId, PLANS } from "../subscriptions/plans";
-import {
-  deactivateExcessFeeds,
-  invalidatePlanCache,
-} from "../subscriptions/helpers";
+import { account, appConfig, session, user } from "../db/schema";
 import { polarClient } from "../subscriptions/polar";
+import {
+  applySubscriptionSideEffects,
+  syncPolarDataToKV,
+} from "../subscriptions/kv";
 import ResetPasswordEmail from "~/emails/reset-password";
 import VerifyEmailEmail from "~/emails/verify-email";
 import {
@@ -53,18 +52,32 @@ export const adminMiddleware = createMiddleware().server(async ({ next }) => {
   return await next();
 });
 
-async function handleSubscriptionEnd(payload: {
+async function syncAndApply(userId: string) {
+  try {
+    const data = await syncPolarDataToKV(userId);
+    await applySubscriptionSideEffects(db, userId, data);
+  } catch (e) {
+    console.error(
+      `[polar webhook] Failed to sync subscription for user ${userId}:`,
+      e,
+    );
+  }
+}
+
+async function handleSubscriptionWebhook(payload: {
   data: { customer?: { externalId?: string | null } | null };
 }) {
-  const externalId = payload.data.customer?.externalId;
-  if (!externalId) return;
+  const userId = payload.data.customer?.externalId;
+  if (!userId) return;
+  await syncAndApply(userId);
+}
 
-  invalidatePlanCache(externalId);
-  await deactivateExcessFeeds(db, externalId, PLANS.free.maxActiveFeeds);
-  await db
-    .update(feeds)
-    .set({ nextFetchAt: null })
-    .where(eq(feeds.userId, externalId));
+async function handleCustomerStateChanged(payload: {
+  data: { externalId?: string | null };
+}) {
+  const userId = payload.data.externalId;
+  if (!userId) return;
+  await syncAndApply(userId);
 }
 
 function buildPolarPlugin() {
@@ -123,74 +136,13 @@ function buildPolarPlugin() {
         portal(),
         webhooks({
           secret: process.env.POLAR_WEBHOOK_SECRET ?? "",
-          onSubscriptionActive: async (payload) => {
-            const externalId = payload.data.customer?.externalId;
-            console.log(
-              `[polar webhook] onSubscriptionActive: user=${externalId ?? "unknown"} subscription=${payload.data.id} product=${payload.data.productId}`,
-            );
-            if (!externalId) return;
-
-            invalidatePlanCache(externalId);
-
-            const productId = payload.data.productId;
-            const planId = determinePlanFromProductId(productId);
-            if (!planId) {
-              console.warn(`[polar webhook] Unknown product ID: ${productId}`);
-              return;
-            }
-
-            console.log(
-              `[polar webhook] Resolved plan="${planId}" for user=${externalId}`,
-            );
-
-            const config = PLANS[planId];
-            if (config.backgroundRefreshIntervalMs) {
-              // Stagger nextFetchAt across the refresh interval so feeds
-              // don't all become due at the same instant (thundering herd).
-              const activeFeeds = await db
-                .select({ id: feeds.id })
-                .from(feeds)
-                .where(
-                  and(eq(feeds.userId, externalId), eq(feeds.isActive, true)),
-                )
-                .all();
-
-              const interval = config.backgroundRefreshIntervalMs;
-              const feedCount = activeFeeds.length;
-              if (feedCount > 0) {
-                const nowMs = Date.now();
-                const cases = activeFeeds.map((f, i) => {
-                  const offset =
-                    feedCount > 1 ? Math.round((interval / feedCount) * i) : 0;
-                  const ts = Math.floor((nowMs + offset) / 1000);
-                  return sql`WHEN ${f.id} THEN ${ts}`;
-                });
-                await db
-                  .update(feeds)
-                  .set({
-                    nextFetchAt: sql`(CASE ${feeds.id} ${sql.join(cases, sql` `)} END)`,
-                  })
-                  .where(
-                    inArray(
-                      feeds.id,
-                      activeFeeds.map((f) => f.id),
-                    ),
-                  );
-              }
-            }
-          },
-          onSubscriptionCanceled: async (payload) => {
-            console.log(
-              `[polar webhook] onSubscriptionCanceled: user=${payload.data.customer?.externalId ?? "unknown"} subscription=${payload.data.id}`,
-            );
-            await handleSubscriptionEnd(payload);
-          },
-          onSubscriptionRevoked: async (payload) => {
-            console.log(
-              `[polar webhook] onSubscriptionRevoked: user=${payload.data.customer?.externalId ?? "unknown"} subscription=${payload.data.id}`,
-            );
-            await handleSubscriptionEnd(payload);
-          },
+          onSubscriptionCreated: handleSubscriptionWebhook,
+          onSubscriptionUpdated: handleSubscriptionWebhook,
+          onSubscriptionActive: handleSubscriptionWebhook,
+          onSubscriptionCanceled: handleSubscriptionWebhook,
+          onSubscriptionRevoked: handleSubscriptionWebhook,
+          onSubscriptionUncanceled: handleSubscriptionWebhook,
+          onCustomerStateChanged: handleCustomerStateChanged,
         }),
       ],
     }),

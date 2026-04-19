@@ -3,7 +3,7 @@ import "~/styles/globals.css";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
 import type React from "react";
@@ -38,11 +38,15 @@ export const Route = createFileRoute("/_app")({
   },
 });
 
+const MAX_SYNC_ATTEMPTS = 10;
+const SYNC_POLL_INTERVAL_MS = 3_000;
+
 function useCheckoutSuccess() {
   const queryClient = useQueryClient();
   const [awaitingUpgrade, setAwaitingUpgrade] = useState(false);
   const { planId } = useSubscription();
   const openPlanSuccess = usePlanSuccessStore((s) => s.openDialog);
+  const previousPlanIdRef = useRef<string | null>(null);
 
   // Detect checkout_success query param on mount
   useEffect(() => {
@@ -56,39 +60,75 @@ function useCheckoutSuccess() {
       (params.size > 0 ? `?${params.toString()}` : "");
     window.history.replaceState({}, "", newUrl);
 
+    // Snapshot the current plan so we can detect when it changes
+    previousPlanIdRef.current = planId;
     setAwaitingUpgrade(true);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll subscription status until the plan upgrades, using refreshStatus
-  // to bypass the server-side plan cache on each attempt
+  // Eagerly sync after checkout, then poll if needed
   useEffect(() => {
     if (!awaitingUpgrade) return;
 
-    if (planId !== "free") {
-      // Plan is upgraded
+    const previousPlanId = previousPlanIdRef.current;
+
+    // Check if plan has already changed (e.g. webhook arrived fast)
+    if (previousPlanId !== null && planId !== previousPlanId) {
       setAwaitingUpgrade(false);
       openPlanSuccess();
       return;
     }
 
-    // Force-refresh from Polar (cache-busting) every 2s
-    const poll = async () => {
+    let attempts = 0;
+    let cancelled = false;
+
+    const sync = async (): Promise<boolean> => {
       try {
-        const result = await orpcRouterClient.subscription.refreshStatus();
+        const result = await orpcRouterClient.subscription.syncAfterCheckout();
         // Update the getStatus query data with the fresh result
         queryClient.setQueryData(
           orpc.subscription.getStatus.queryOptions().queryKey,
           result,
         );
+
+        const planChanged =
+          previousPlanId !== null && result.planId !== previousPlanId;
+        if (planChanged) {
+          setAwaitingUpgrade(false);
+          openPlanSuccess();
+          return true;
+        }
       } catch {
-        // Ignore errors, will retry on next interval
+        // Ignore errors, will retry
       }
+      return false;
     };
 
-    void poll(); // Immediately on first run
-    const interval = setInterval(() => void poll(), 2000);
+    // First attempt immediately, then poll with interval
+    void sync().then((done) => {
+      if (done || cancelled) return;
 
-    return () => clearInterval(interval);
+      const interval = setInterval(() => {
+        if (cancelled) {
+          clearInterval(interval);
+          return;
+        }
+
+        attempts++;
+        void sync().then((done) => {
+          if (done || attempts >= MAX_SYNC_ATTEMPTS) {
+            clearInterval(interval);
+            if (!done) {
+              // Give up gracefully — user will see the upgrade on next load
+              setAwaitingUpgrade(false);
+            }
+          }
+        });
+      }, SYNC_POLL_INTERVAL_MS);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [awaitingUpgrade, planId, queryClient, openPlanSuccess]);
 
   return { awaitingUpgrade };
