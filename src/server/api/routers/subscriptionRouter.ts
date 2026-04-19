@@ -9,6 +9,7 @@ import {
 import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import {
   determinePlanFromProductId,
+  getAllKnownProductIds,
   PLANS,
 } from "~/server/subscriptions/plans";
 import {
@@ -51,7 +52,7 @@ type PlanProduct = {
 };
 
 let productsCache: CachedProducts | null = null;
-const CACHE_TTL_MS = 5 * 1000; // 5 seconds
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 export const getStatus = protectedProcedure.handler(async ({ context }) => {
   return getUserPlanLimits(context.db, context.user.id);
@@ -213,16 +214,24 @@ export const createCheckout = protectedProcedure
     }
 
     const origin = getValidatedOrigin(context.headers);
-    // Ensure returnPath starts with / and doesn't contain query params that could break the URL
-    const safePath = input.returnPath?.startsWith("/")
-      ? input.returnPath.split("?")[0]!
-      : "/";
-    const separator = safePath.includes("?") ? "&" : "?";
+    // Validate returnPath: resolve against origin and verify it stays on the same host.
+    // This prevents open-redirect via protocol-relative paths (//evil.com) or traversal (/../).
+    let safePath = "/";
+    if (input.returnPath) {
+      try {
+        const resolved = new URL(input.returnPath, origin);
+        if (resolved.origin === origin) {
+          safePath = resolved.pathname;
+        }
+      } catch {
+        // Malformed path, fall back to "/"
+      }
+    }
     const checkout = await polarClient.checkouts.create({
       externalCustomerId: context.user.id,
       customerEmail: context.user.email,
       products: productIds,
-      successUrl: `${origin}${safePath}${separator}checkout_success=true`,
+      successUrl: `${origin}${safePath}?checkout_success=true`,
       returnUrl: `${origin}${safePath}`,
     });
 
@@ -314,6 +323,12 @@ export const switchPlan = protectedProcedure
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
       return { success: false };
+    }
+
+    // Verify the new product ID belongs to a known plan
+    const knownProductIds = getAllKnownProductIds();
+    if (!knownProductIds.has(input.newProductId)) {
+      throw new Error("Invalid product ID");
     }
 
     // Verify the subscription belongs to this user

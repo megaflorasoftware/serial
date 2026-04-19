@@ -282,9 +282,9 @@ function ProPlanCard({
   isLoadingProducts: boolean;
   isSubscribed: boolean;
   onSubscribeClick: (id: "pro") => void;
-  portalMutation: any;
-  checkoutMutation: any;
-  previewMutation: any;
+  portalMutation: { isPending: boolean; mutate: (args: object) => void };
+  checkoutMutation: { isPending: boolean };
+  previewMutation: { isPending: boolean };
 }) {
   const plan = PLANS.pro;
   const isCurrent = planId === "pro";
@@ -453,14 +453,15 @@ function PlanSwitchConfirmation({
           <div className="rounded-lg border p-4">
             <p className="text-sm">
               <span className="text-muted-foreground">
-                Due today (prorated):
+                Estimated charge today:
               </span>{" "}
               <span className="font-medium">
-                {formatPrice(preview.proratedAmount)}
+                ~{formatPrice(preview.proratedAmount)}
               </span>
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
               You&apos;ll be credited for the unused time on your current plan.
+              The final amount may differ slightly.
             </p>
           </div>
         )}

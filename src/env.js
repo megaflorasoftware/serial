@@ -8,7 +8,7 @@ export const env = createEnv({
    * These are exposed to the browser via Vite's VITE_PUBLIC_ prefix.
    */
   client: {
-    VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: z.string().optional(),
+    VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: z.string().email().optional(),
   },
   /**
    * Specify your server-side environment variables schema here. This way you can ensure the app
@@ -26,7 +26,7 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string(),
     RESEND_API_KEY: z.string().optional(),
     SENDGRID_API_KEY: z.string().optional(),
-    FROM_EMAIL_ADDRESS: z.string().optional(),
+    FROM_EMAIL_ADDRESS: z.string().email().optional(),
     INSTAPAPER_OAUTH_ID: z.string().optional(),
     INSTAPAPER_OAUTH_SECRET: z.string().optional(),
     POLAR_ACCESS_TOKEN: z.string().optional(),

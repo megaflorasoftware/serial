@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { getEffectivePlanConfig } from "./plans";
 import { IS_BILLING_ENABLED } from "./polar";
 import { getSubscriptionFromKV, syncPolarDataToKV } from "./kv";
@@ -77,7 +77,7 @@ export async function getUserPlanLimits(db: DB, userId: string) {
 
 /**
  * Check if the user is eligible to refresh based on their plan's refresh interval.
- * Returns the next eligible fetch time if they are rate-limited, or null if they can refresh now.
+ * Uses an atomic compare-and-swap UPDATE to avoid TOCTOU races under concurrent requests.
  */
 export async function checkUserRefreshEligibility(
   db: DB,
@@ -86,23 +86,38 @@ export async function checkUserRefreshEligibility(
   const planId = await getUserPlanId(userId);
   const config = getEffectivePlanConfig(planId);
 
+  const now = new Date();
+  const nowEpoch = Math.floor(now.getTime() / 1000);
+  const nextFetchAt = new Date(now.getTime() + config.refreshIntervalMs);
+
+  // Atomic: only update nextFetchAt if the current value is null or in the past.
+  // If a concurrent request already claimed this window, rowsAffected will be 0.
+  const result = await db
+    .update(user)
+    .set({ nextFetchAt })
+    .where(
+      and(
+        eq(user.id, userId),
+        sql`(${user.nextFetchAt} IS NULL OR ${user.nextFetchAt} <= ${nowEpoch})`,
+      ),
+    );
+
+  const rowsAffected = result.rowsAffected ?? 0;
+  if (rowsAffected > 0) {
+    return { eligible: true };
+  }
+
+  // Rate-limited — read back the current nextFetchAt to report to the user
   const userRow = await db
     .select({ nextFetchAt: user.nextFetchAt })
     .from(user)
     .where(eq(user.id, userId))
     .get();
 
-  const now = new Date();
-
-  if (userRow?.nextFetchAt && userRow.nextFetchAt > now) {
-    return { eligible: false, nextFetchAt: userRow.nextFetchAt };
-  }
-
-  // Update user's nextFetchAt for the next refresh window
-  const nextFetchAt = new Date(now.getTime() + config.refreshIntervalMs);
-  await db.update(user).set({ nextFetchAt }).where(eq(user.id, userId));
-
-  return { eligible: true };
+  return {
+    eligible: false,
+    nextFetchAt: userRow?.nextFetchAt ?? nextFetchAt,
+  };
 }
 
 export async function deactivateExcessFeeds(

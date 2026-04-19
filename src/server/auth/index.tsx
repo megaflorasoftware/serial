@@ -12,6 +12,7 @@ import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
 import { account, appConfig, session, user } from "../db/schema";
 import { polarClient } from "../subscriptions/polar";
+import { PLANS } from "../subscriptions/plans";
 import {
   applySubscriptionSideEffects,
   syncPolarDataToKV,
@@ -84,56 +85,23 @@ function buildPolarPlugin() {
   if (!polarClient) return [];
   if (!process.env.POLAR_WEBHOOK_SECRET) return [];
 
-  const products = [
-    process.env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID,
-          slug: "standard-small-monthly",
-        }
-      : null,
-    process.env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID,
-          slug: "standard-small-annual",
-        }
-      : null,
-    process.env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID,
-          slug: "standard-medium-monthly",
-        }
-      : null,
-    process.env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID,
-          slug: "standard-medium-annual",
-        }
-      : null,
-    process.env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID,
-          slug: "standard-large-monthly",
-        }
-      : null,
-    process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID,
-          slug: "standard-large-annual",
-        }
-      : null,
-    process.env.POLAR_PRO_MONTHLY_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID,
-          slug: "pro-monthly",
-        }
-      : null,
-    process.env.POLAR_PRO_ANNUAL_PRODUCT_ID
-      ? {
-          productId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
-          slug: "pro-annual",
-        }
-      : null,
-  ].filter(Boolean);
+  // Build products list from plan config — each plan can have a monthly and/or annual product.
+  const products = Object.values(PLANS).flatMap((plan) => {
+    const entries: Array<{ productId: string; slug: string }> = [];
+    if (plan.polarMonthlyProductId) {
+      entries.push({
+        productId: plan.polarMonthlyProductId,
+        slug: `${plan.id}-monthly`,
+      });
+    }
+    if (plan.polarAnnualProductId) {
+      entries.push({
+        productId: plan.polarAnnualProductId,
+        slug: `${plan.id}-annual`,
+      });
+    }
+    return entries;
+  });
 
   return [
     polar({
