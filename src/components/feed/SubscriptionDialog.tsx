@@ -22,7 +22,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { env } from "~/env";
 import { authClient, useSession } from "~/lib/auth-client";
 import { useFeeds } from "~/lib/data/feeds/store";
 import { usePlanSuccessStore } from "~/lib/data/plan-success";
@@ -638,7 +637,7 @@ export function SubscriptionDialog({
           Price too high or need higher limits?{" "}
           <span>
             <a
-              href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
+              href={`mailto:${import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
