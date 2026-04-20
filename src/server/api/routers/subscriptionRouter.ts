@@ -10,6 +10,7 @@ import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import {
   determinePlanFromProductId,
   getAllKnownProductIds,
+  PLAN_IDS,
   PLANS,
 } from "~/server/subscriptions/plans";
 import {
@@ -247,6 +248,7 @@ export const previewPlanSwitch = protectedProcedure
         "standard-large",
         "pro",
       ]),
+      billingInterval: z.enum(["month", "year"]).optional(),
     }),
   )
   .handler(async ({ context, input }) => {
@@ -267,7 +269,8 @@ export const previewPlanSwitch = protectedProcedure
     if (!currentPlanId || currentPlanId === input.planId) return null;
 
     const newPlan = PLANS[input.planId];
-    const isMonthly = currentSub.recurringInterval === "month";
+    const interval = input.billingInterval ?? currentSub.recurringInterval;
+    const isMonthly = interval === "month";
     const newProductId = isMonthly
       ? newPlan.polarMonthlyProductId
       : newPlan.polarAnnualProductId;
@@ -286,17 +289,25 @@ export const previewPlanSwitch = protectedProcedure
       return null;
     }
 
-    // Calculate proration
-    const now = Date.now();
-    const periodStart = new Date(currentSub.currentPeriodStart).getTime();
-    const periodEnd = new Date(currentSub.currentPeriodEnd).getTime();
-    const totalPeriod = periodEnd - periodStart;
-    const elapsed = now - periodStart;
-    const remaining = Math.max(0, 1 - elapsed / totalPeriod);
+    // Determine upgrade vs downgrade by plan tier order
+    const currentPlanIndex = PLAN_IDS.indexOf(currentPlanId);
+    const newPlanIndex = PLAN_IDS.indexOf(input.planId);
+    const isDowngrade = newPlanIndex < currentPlanIndex;
 
-    const currentCredit = Math.round(currentSub.amount * remaining);
-    const newCharge = Math.round((newAmount ?? 0) * remaining);
-    const proratedAmount = Math.max(0, newCharge - currentCredit);
+    // Calculate proration (only meaningful for upgrades)
+    let proratedAmount = 0;
+    if (!isDowngrade) {
+      const now = Date.now();
+      const periodStart = new Date(currentSub.currentPeriodStart).getTime();
+      const periodEnd = new Date(currentSub.currentPeriodEnd).getTime();
+      const totalPeriod = periodEnd - periodStart;
+      const elapsed = now - periodStart;
+      const remaining = Math.max(0, 1 - elapsed / totalPeriod);
+
+      const currentCredit = Math.round(currentSub.amount * remaining);
+      const newCharge = Math.round((newAmount ?? 0) * remaining);
+      proratedAmount = Math.max(0, newCharge - currentCredit);
+    }
 
     return {
       currentPlanId,
@@ -306,8 +317,10 @@ export const previewPlanSwitch = protectedProcedure
       newPlanName: newPlan.name,
       newAmount: newAmount ?? 0,
       proratedAmount,
+      isDowngrade,
+      periodEnd: new Date(currentSub.currentPeriodEnd).toISOString(),
       currency: currentSub.currency,
-      billingInterval: currentSub.recurringInterval as "month" | "year",
+      billingInterval: interval as "month" | "year",
       subscriptionId: currentSub.id,
       newProductId,
     };
@@ -344,11 +357,20 @@ export const switchPlan = protectedProcedure
       throw new Error("Subscription not found");
     }
 
+    // Determine upgrade vs downgrade to choose proration strategy:
+    // - Upgrades: "invoice" — charge the prorated difference immediately
+    // - Downgrades: "next_period" — defer the switch to the next billing cycle
+    const currentPlanId = determinePlanFromProductId(sub.productId);
+    const newPlanId = determinePlanFromProductId(input.newProductId);
+    const currentIndex = currentPlanId ? PLAN_IDS.indexOf(currentPlanId) : -1;
+    const newIndex = newPlanId ? PLAN_IDS.indexOf(newPlanId) : -1;
+    const isDowngrade = newIndex < currentIndex;
+
     await polarClient.subscriptions.update({
       id: input.subscriptionId,
       subscriptionUpdate: {
         productId: input.newProductId,
-        prorationBehavior: "prorate",
+        prorationBehavior: isDowngrade ? "next_period" : "invoice",
       },
     });
 
@@ -390,6 +412,104 @@ export const syncAfterCheckout = protectedProcedure.handler(
     }
 
     return getUserPlanLimits(context.db, context.user.id);
+  },
+);
+
+export const getPendingSwitch = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_BILLING_ENABLED || !polarClient) return null;
+
+    const subscriptions = await polarClient.subscriptions.list({
+      externalCustomerId: [context.user.id],
+      active: true,
+    });
+
+    const sub = subscriptions.result?.items?.[0];
+    if (!sub) return null;
+
+    // Subscription set to cancel at period end → user reverts to free
+    if (sub.cancelAtPeriodEnd && sub.currentPeriodEnd) {
+      return {
+        planId: "free" as const,
+        appliesAt: new Date(sub.currentPeriodEnd).toISOString(),
+      };
+    }
+
+    if (!sub.pendingUpdate?.productId) return null;
+
+    const pendingPlanId = determinePlanFromProductId(
+      sub.pendingUpdate.productId,
+    );
+    if (!pendingPlanId) return null;
+
+    return {
+      planId: pendingPlanId,
+      appliesAt: new Date(sub.pendingUpdate.appliesAt).toISOString(),
+    };
+  },
+);
+
+export const previewDowngrade = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_BILLING_ENABLED || !polarClient) return null;
+
+    const subscriptions = await polarClient.subscriptions.list({
+      externalCustomerId: [context.user.id],
+      active: true,
+    });
+
+    const sub = subscriptions.result?.items?.[0];
+    if (!sub) return null;
+
+    const currentPlanId = determinePlanFromProductId(sub.productId);
+    if (!currentPlanId || currentPlanId === "free") return null;
+
+    return {
+      currentPlanId,
+      currentPlanName: PLANS[currentPlanId].name,
+      periodEnd: new Date(sub.currentPeriodEnd).toISOString(),
+      subscriptionId: sub.id,
+    };
+  },
+);
+
+export const cancelSubscription = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_BILLING_ENABLED || !polarClient) {
+      return { success: false };
+    }
+
+    const subscriptions = await polarClient.subscriptions.list({
+      externalCustomerId: [context.user.id],
+      active: true,
+    });
+
+    const sub = subscriptions.result?.items?.[0];
+    if (!sub) {
+      throw new Error("No active subscription found");
+    }
+
+    await polarClient.subscriptions.update({
+      id: sub.id,
+      subscriptionUpdate: {
+        cancelAtPeriodEnd: true,
+      },
+    });
+
+    console.log(
+      `[polar] Subscription cancelled at period end for user=${context.user.id} subscription=${sub.id}`,
+    );
+
+    try {
+      await syncPolarDataToKV(context.user.id);
+    } catch (e) {
+      console.warn(
+        `[polar] Post-cancel sync failed for user=${context.user.id}:`,
+        e,
+      );
+    }
+
+    return { success: true };
   },
 );
 

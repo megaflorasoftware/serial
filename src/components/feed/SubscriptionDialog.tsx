@@ -13,7 +13,9 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import type { PlanConfig } from "~/server/subscriptions/plans";
+import type { CardRadioOption } from "~/components/ui/card-radio-group";
 import { Button } from "~/components/ui/button";
+import { CardRadioGroup } from "~/components/ui/card-radio-group";
 import { Input } from "~/components/ui/input";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -63,9 +65,24 @@ const RECOMMENDATION_MESSAGES = {
     "We think this plan is right for you, as it will allow you to keep all your feeds active.",
 } as const;
 
+type BillingInterval = "month" | "year";
+
+const INTERVAL_LABELS: Record<BillingInterval, string> = {
+  month: "mo",
+  year: "yr",
+};
+
 function formatPrice(cents: number): string {
   const dollars = cents / 100;
   return cents % 100 === 0 ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function getPlanFeatures(plan: PlanConfig): string[] {
@@ -185,21 +202,105 @@ type SwitchPreview = {
   newPlanName: string;
   newAmount: number;
   proratedAmount: number;
+  isDowngrade: boolean;
+  periodEnd: string;
   currency: string;
   billingInterval: "month" | "year";
   subscriptionId: string;
   newProductId: string;
 };
 
+type DowngradePreview = {
+  currentPlanId: string;
+  currentPlanName: string;
+  periodEnd: string;
+  subscriptionId: string;
+};
+
+function DowngradeConfirmation({
+  preview,
+  onBack,
+  onConfirm,
+  isPending,
+}: {
+  preview: DowngradePreview;
+  onBack: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const freePlan = PLANS.free;
+  const features = getPlanFeatures(freePlan);
+  const Icon = PLAN_ICONS.free;
+
+  return (
+    <ControlledResponsiveDialog
+      open
+      onOpenChange={() => onBack()}
+      title="Downgrade Plan"
+      description={`Downgrade from ${preview.currentPlanName} to Free`}
+      onBack={onBack}
+      footer={
+        <Button className="w-full" onClick={onConfirm} disabled={isPending}>
+          {isPending ? "Downgrading..." : "Confirm Downgrade to Free"}
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-lg border p-4">
+          <Icon size={20} className="shrink-0" />
+          <div className="flex-1">
+            <h3 className="font-medium">{freePlan.name} Plan</h3>
+            <p className="text-muted-foreground text-sm">Free</p>
+          </div>
+        </div>
+        <ul className="space-y-2">
+          {features.map((feature) => (
+            <li
+              key={feature}
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+            >
+              <CheckIcon size={14} className="shrink-0" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+        <div className="rounded-lg border p-4">
+          <p className="text-sm font-medium">
+            Your plan will change on {formatDate(preview.periodEnd)}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            You&apos;ll keep your current {preview.currentPlanName} plan
+            features until the end of your billing period. After that,
+            you&apos;ll be switched to the Free plan automatically.
+          </p>
+        </div>
+      </div>
+    </ControlledResponsiveDialog>
+  );
+}
+
 function FreePlanCard({
   planId,
   recommendedPlanId,
+  chosenPlanId,
+  pendingDate,
+  hasAnyPending,
+  isSubscribed,
+  onDowngradeClick,
+  isDowngradeLoading,
 }: {
   planId: string;
   recommendedPlanId: string | null;
+  chosenPlanId: string;
+  pendingDate: string | null;
+  hasAnyPending: boolean;
+  isSubscribed: boolean;
+  onDowngradeClick: () => void;
+  isDowngradeLoading: boolean;
 }) {
   const plan = PLANS.free;
   const isCurrent = planId === "free";
+  const isPending = pendingDate != null;
   const isRecommended = recommendedPlanId === "free";
   const features = getPlanFeatures(plan);
   const Icon = PLAN_ICONS.free;
@@ -216,11 +317,22 @@ function FreePlanCard({
               : "border-border"
       }`}
     >
-      {(isCurrent || isRecommended) && (
+      {(isCurrent || isRecommended || isPending) && (
         <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
           {isCurrent && (
-            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+            <span
+              className={
+                hasAnyPending
+                  ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
+                  : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
+              }
+            >
               Current
+            </span>
+          )}
+          {isPending && (
+            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium whitespace-nowrap">
+              Starting {formatDate(pendingDate)}
             </span>
           )}
           {isRecommended && (
@@ -232,7 +344,7 @@ function FreePlanCard({
                 </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-64">
-                {isCurrent
+                {chosenPlanId === "free"
                   ? RECOMMENDATION_MESSAGES.currentFree
                   : RECOMMENDATION_MESSAGES.upgrade}
               </TooltipContent>
@@ -255,6 +367,19 @@ function FreePlanCard({
           </li>
         ))}
       </ul>
+      {!isCurrent && isSubscribed && (
+        <div className="mt-auto pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={isDowngradeLoading}
+            onClick={onDowngradeClick}
+          >
+            Downgrade
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -262,6 +387,8 @@ function FreePlanCard({
 function ProPlanCard({
   planId,
   recommendedPlanId,
+  chosenPlanId,
+  hasAnyPending,
   products,
   isLoadingProducts,
   isSubscribed,
@@ -272,6 +399,8 @@ function ProPlanCard({
 }: {
   planId: string;
   recommendedPlanId: string | null;
+  chosenPlanId: string;
+  hasAnyPending: boolean;
   products:
     | Array<{
         planId: string;
@@ -311,7 +440,13 @@ function ProPlanCard({
       {(isCurrent || isRecommended) && (
         <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
           {isCurrent && (
-            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+            <span
+              className={
+                hasAnyPending
+                  ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
+                  : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
+              }
+            >
               Current
             </span>
           )}
@@ -324,7 +459,7 @@ function ProPlanCard({
                 </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-64">
-                {isCurrent
+                {chosenPlanId === "pro"
                   ? RECOMMENDATION_MESSAGES.currentPaid
                   : RECOMMENDATION_MESSAGES.upgrade}
               </TooltipContent>
@@ -402,16 +537,50 @@ function PlanSwitchConfirmation({
   onBack,
   onConfirm,
   isPending,
+  onIntervalChange,
+  isLoadingPreview,
+  monthlyPrice,
+  annualPrice,
 }: {
   preview: SwitchPreview;
   onBack: () => void;
   onConfirm: () => void;
   isPending: boolean;
+  onIntervalChange: (interval: BillingInterval) => void;
+  isLoadingPreview: boolean;
+  monthlyPrice: number | null;
+  annualPrice: number | null;
 }) {
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>(
+    preview.billingInterval,
+  );
+
   const newPlan = PLANS[preview.newPlanId as keyof typeof PLANS];
   const features = getPlanFeatures(newPlan);
   const Icon = PLAN_ICONS[preview.newPlanId as keyof typeof PLAN_ICONS];
-  const intervalLabel = preview.billingInterval === "month" ? "mo" : "yr";
+  const intervalLabel = INTERVAL_LABELS[selectedInterval];
+
+  const hasBothIntervals = monthlyPrice != null && annualPrice != null;
+
+  const intervalOptions: Array<CardRadioOption<BillingInterval>> = [];
+  if (monthlyPrice != null) {
+    intervalOptions.push({
+      value: "month",
+      title: `Monthly — ${formatPrice(monthlyPrice)}/mo`,
+    });
+  }
+  if (annualPrice != null) {
+    intervalOptions.push({
+      value: "year",
+      title: `Annual — ${formatPrice(annualPrice)}/yr`,
+      description: `${formatPrice(Math.round(annualPrice / 12))}/mo`,
+    });
+  }
+
+  function handleIntervalChange(interval: BillingInterval) {
+    setSelectedInterval(interval);
+    onIntervalChange(interval);
+  }
 
   return (
     <ControlledResponsiveDialog
@@ -421,7 +590,11 @@ function PlanSwitchConfirmation({
       description={`Switch from ${preview.currentPlanName} to ${preview.newPlanName}`}
       onBack={onBack}
       footer={
-        <Button className="w-full" onClick={onConfirm} disabled={isPending}>
+        <Button
+          className="w-full"
+          onClick={onConfirm}
+          disabled={isPending || isLoadingPreview}
+        >
           {isPending
             ? "Switching..."
             : `Confirm Switch to ${preview.newPlanName}`}
@@ -438,6 +611,14 @@ function PlanSwitchConfirmation({
             </p>
           </div>
         </div>
+        {hasBothIntervals && (
+          <CardRadioGroup
+            value={selectedInterval}
+            onValueChange={handleIntervalChange}
+            options={intervalOptions}
+            orientation="vertical"
+          />
+        )}
         <ul className="space-y-2">
           {features.map((feature) => (
             <li
@@ -449,22 +630,35 @@ function PlanSwitchConfirmation({
             </li>
           ))}
         </ul>
-        {preview.proratedAmount > 0 && (
+        {preview.isDowngrade ? (
+          <div className="rounded-lg border p-4">
+            <p className="text-sm font-medium">
+              Your plan will change on {formatDate(preview.periodEnd)}
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              You&apos;ll keep your current {preview.currentPlanName} plan
+              features until the end of your billing period. After that,
+              you&apos;ll be switched to the {preview.newPlanName} plan
+              automatically.
+            </p>
+          </div>
+        ) : preview.proratedAmount > 0 ? (
           <div className="rounded-lg border p-4">
             <p className="text-sm">
               <span className="text-muted-foreground">
                 Estimated charge today:
               </span>{" "}
               <span className="font-medium">
-                ~{formatPrice(preview.proratedAmount)}
+                {formatPrice(preview.proratedAmount)}
               </span>
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
               You&apos;ll be credited for the unused time on your current plan.
-              The final amount may differ slightly.
+              The final amount may differ slightly based on your local tax
+              rates.
             </p>
           </div>
-        )}
+        ) : null}
       </div>
     </ControlledResponsiveDialog>
   );
@@ -498,11 +692,18 @@ export function SubscriptionDialog({
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
   );
+  const [downgradePreview, setDowngradePreview] =
+    useState<DowngradePreview | null>(null);
 
   const emailVerified = session?.user?.emailVerified ?? false;
 
   const { data: products, isLoading: isLoadingProducts } = useQuery({
     ...orpc.subscription.getProducts.queryOptions(),
+    enabled: open,
+  });
+
+  const { data: pendingSwitch } = useQuery({
+    ...orpc.subscription.getPendingSwitch.queryOptions(),
     enabled: open,
   });
 
@@ -567,6 +768,42 @@ export function SubscriptionDialog({
     }),
   );
 
+  const downgradePreviewMutation = useMutation(
+    orpc.subscription.previewDowngrade.mutationOptions({
+      onSuccess: (result) => {
+        if (result) {
+          setDowngradePreview(result);
+        } else {
+          toast.error("Unable to preview downgrade");
+        }
+      },
+    }),
+  );
+
+  const cancelMutation = useMutation(
+    orpc.subscription.cancelSubscription.mutationOptions({
+      onSuccess: (result) => {
+        if (result.success) {
+          setDowngradePreview(null);
+          onOpenChange(false);
+          toast.success(
+            "Your subscription will be cancelled at the end of your billing period.",
+          );
+          void queryClient.invalidateQueries({
+            queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
+          });
+          void queryClient.invalidateQueries({
+            queryKey:
+              orpc.subscription.getPendingSwitch.queryOptions().queryKey,
+          });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to cancel subscription. Please try again.");
+      },
+    }),
+  );
+
   const isSubscribed = planId !== "free";
   const feeds = useFeeds();
 
@@ -577,6 +814,8 @@ export function SubscriptionDialog({
     feeds.length,
     currentPlanIndex,
   );
+  const hasAnyPending = pendingSwitch != null;
+  const chosenPlanId = pendingSwitch?.planId ?? planId;
 
   function handleSubscribeClick(
     id: "standard-small" | "standard-medium" | "standard-large" | "pro",
@@ -608,7 +847,22 @@ export function SubscriptionDialog({
     }
   }
 
+  if (downgradePreview) {
+    return (
+      <DowngradeConfirmation
+        preview={downgradePreview}
+        onBack={() => setDowngradePreview(null)}
+        onConfirm={() => cancelMutation.mutate({})}
+        isPending={cancelMutation.isPending}
+      />
+    );
+  }
+
   if (switchPreview) {
+    const newPlanProduct = products?.find(
+      (p) => p.planId === switchPreview.newPlanId,
+    );
+
     return (
       <PlanSwitchConfirmation
         preview={switchPreview}
@@ -620,6 +874,19 @@ export function SubscriptionDialog({
           })
         }
         isPending={switchMutation.isPending}
+        isLoadingPreview={previewMutation.isPending}
+        onIntervalChange={(interval) =>
+          previewMutation.mutate({
+            planId: switchPreview.newPlanId as
+              | "standard-small"
+              | "standard-medium"
+              | "standard-large"
+              | "pro",
+            billingInterval: interval,
+          })
+        }
+        monthlyPrice={newPlanProduct?.monthlyPrice ?? null}
+        annualPrice={newPlanProduct?.annualPrice ?? null}
       />
     );
   }
@@ -667,7 +934,18 @@ export function SubscriptionDialog({
         )}
 
         {/* Free plan */}
-        <FreePlanCard planId={planId} recommendedPlanId={recommendedPlanId} />
+        <FreePlanCard
+          planId={planId}
+          recommendedPlanId={recommendedPlanId}
+          chosenPlanId={chosenPlanId}
+          pendingDate={
+            pendingSwitch?.planId === "free" ? pendingSwitch.appliesAt : null
+          }
+          hasAnyPending={hasAnyPending}
+          isSubscribed={isSubscribed}
+          onDowngradeClick={() => downgradePreviewMutation.mutate({})}
+          isDowngradeLoading={downgradePreviewMutation.isPending}
+        />
 
         {/* Paid plans */}
         <div className="border-border rounded-lg border p-4">
@@ -686,10 +964,12 @@ export function SubscriptionDialog({
               </li>
             ))}
           </ul>
-          <div className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 flex flex-col gap-4">
             {STANDARD_PLAN_IDS.map((id) => {
               const plan = PLANS[id];
               const isCurrent = id === planId;
+              const isPending = pendingSwitch?.planId === id;
+              const pendingDate = isPending ? pendingSwitch.appliesAt : null;
               const isRecommended = id === recommendedPlanId;
               const product = products?.find((p) => p.planId === id);
               const monthlyPrice = product?.monthlyPrice ?? null;
@@ -710,11 +990,22 @@ export function SubscriptionDialog({
                           : "border-border"
                   }`}
                 >
-                  {(isCurrent || isRecommended) && (
+                  {(isCurrent || isPending || isRecommended) && (
                     <div className="absolute -top-3 left-4 flex gap-1.5">
                       {isCurrent && (
-                        <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
+                        <span
+                          className={
+                            hasAnyPending
+                              ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
+                              : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
+                          }
+                        >
                           Current
+                        </span>
+                      )}
+                      {pendingDate && (
+                        <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium whitespace-nowrap">
+                          Starting {formatDate(pendingDate)}
                         </span>
                       )}
                       {isRecommended && (
@@ -726,7 +1017,7 @@ export function SubscriptionDialog({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-64">
-                            {isCurrent
+                            {chosenPlanId === id
                               ? RECOMMENDATION_MESSAGES.currentPaid
                               : RECOMMENDATION_MESSAGES.upgrade}
                           </TooltipContent>
@@ -797,6 +1088,8 @@ export function SubscriptionDialog({
         <ProPlanCard
           planId={planId}
           recommendedPlanId={recommendedPlanId}
+          chosenPlanId={chosenPlanId}
+          hasAnyPending={hasAnyPending}
           products={products}
           isLoadingProducts={isLoadingProducts}
           isSubscribed={isSubscribed}

@@ -42,11 +42,16 @@ export function CardRadioGroup<T extends string>({
             key={option.value}
             htmlFor={id}
             className={cn(
-              "bg-card text-card-foreground hover:bg-accent/30 flex cursor-pointer items-start gap-3 rounded-xl border p-4 shadow-sm transition-colors",
+              "bg-card text-card-foreground hover:bg-accent/30 flex cursor-pointer gap-3 rounded-xl border p-4 shadow-sm transition-colors",
+              option.description ? "items-start" : "items-center",
               isSelected && "border-primary ring-primary/30 ring-1",
             )}
           >
-            <RadioGroupItem id={id} value={option.value} className="mt-1" />
+            <RadioGroupItem
+              id={id}
+              value={option.value}
+              className={option.description ? "mt-1" : undefined}
+            />
             <div className="grid gap-1">
               <span className="text-sm leading-none font-semibold">
                 {option.title}
