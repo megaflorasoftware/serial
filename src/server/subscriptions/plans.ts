@@ -1,5 +1,4 @@
-import { IS_BILLING_ENABLED } from "./polar";
-import { env } from "~/env";
+import { IS_MAIN_INSTANCE } from "~/lib/constants";
 
 export const PLAN_IDS = [
   "free",
@@ -17,8 +16,6 @@ export type PlanConfig = {
   /** Minimum interval between user-initiated refreshes (server-enforced). */
   refreshIntervalMs: number;
   backgroundRefreshIntervalMs: number | null;
-  polarMonthlyProductId: string | null;
-  polarAnnualProductId: string | null;
 };
 
 /**
@@ -39,8 +36,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxActiveFeeds: 40,
     refreshIntervalMs: 60 * 60 * 1000 - REFRESH_PERIOD_BUFFER, // ~1 hour
     backgroundRefreshIntervalMs: null,
-    polarMonthlyProductId: null,
-    polarAnnualProductId: null,
   },
   "standard-small": {
     id: "standard-small",
@@ -48,10 +43,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxActiveFeeds: 200,
     refreshIntervalMs: STANDARD_REFRESH_MS,
     backgroundRefreshIntervalMs: STANDARD_BACKGROUND_REFRESH_MS,
-    polarMonthlyProductId:
-      env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId:
-      env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
   "standard-medium": {
     id: "standard-medium",
@@ -59,10 +50,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxActiveFeeds: 500,
     refreshIntervalMs: STANDARD_REFRESH_MS,
     backgroundRefreshIntervalMs: STANDARD_BACKGROUND_REFRESH_MS,
-    polarMonthlyProductId:
-      env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId:
-      env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
   "standard-large": {
     id: "standard-large",
@@ -70,10 +57,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxActiveFeeds: 1000,
     refreshIntervalMs: STANDARD_REFRESH_MS,
     backgroundRefreshIntervalMs: STANDARD_BACKGROUND_REFRESH_MS,
-    polarMonthlyProductId:
-      env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId:
-      env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
   pro: {
     id: "pro",
@@ -81,8 +64,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxActiveFeeds: 2500,
     refreshIntervalMs: PRO_REFRESH_MS,
     backgroundRefreshIntervalMs: PRO_BACKGROUND_REFRESH_MS,
-    polarMonthlyProductId: env.POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId: env.POLAR_PRO_ANNUAL_PRODUCT_ID ?? null,
   },
 };
 
@@ -92,33 +73,9 @@ const UNLIMITED_CONFIG: PlanConfig = {
   maxActiveFeeds: Infinity,
   refreshIntervalMs: PRO_REFRESH_MS,
   backgroundRefreshIntervalMs: PRO_BACKGROUND_REFRESH_MS,
-  polarMonthlyProductId: null,
-  polarAnnualProductId: null,
 };
 
 export function getEffectivePlanConfig(planId: PlanId): PlanConfig {
-  if (!IS_BILLING_ENABLED) return UNLIMITED_CONFIG;
+  if (!IS_MAIN_INSTANCE) return UNLIMITED_CONFIG;
   return PLANS[planId];
-}
-
-export function determinePlanFromProductId(productId: string): PlanId | null {
-  for (const plan of Object.values(PLANS)) {
-    if (
-      plan.polarMonthlyProductId === productId ||
-      plan.polarAnnualProductId === productId
-    ) {
-      return plan.id;
-    }
-  }
-  return null;
-}
-
-/** Returns the set of all configured Polar product IDs across every plan. */
-export function getAllKnownProductIds(): Set<string> {
-  const ids = new Set<string>();
-  for (const plan of Object.values(PLANS)) {
-    if (plan.polarMonthlyProductId) ids.add(plan.polarMonthlyProductId);
-    if (plan.polarAnnualProductId) ids.add(plan.polarAnnualProductId);
-  }
-  return ids;
 }

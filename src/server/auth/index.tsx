@@ -11,7 +11,7 @@ import { asc, count, eq } from "drizzle-orm";
 import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
 import { account, appConfig, session, user } from "../db/schema";
-import { polarClient } from "../subscriptions/polar";
+import { getPolarProductIds, polarClient } from "../subscriptions/polar";
 import { PLANS } from "../subscriptions/plans";
 import {
   applySubscriptionSideEffects,
@@ -87,18 +87,16 @@ function buildPolarPlugin() {
 
   // Build products list from plan config — each plan can have a monthly and/or annual product.
   const products = Object.values(PLANS).flatMap((plan) => {
+    const productIds = getPolarProductIds(plan.id);
     const entries: Array<{ productId: string; slug: string }> = [];
-    if (plan.polarMonthlyProductId) {
+    if (productIds.monthly) {
       entries.push({
-        productId: plan.polarMonthlyProductId,
+        productId: productIds.monthly,
         slug: `${plan.id}-monthly`,
       });
     }
-    if (plan.polarAnnualProductId) {
-      entries.push({
-        productId: plan.polarAnnualProductId,
-        slug: `${plan.id}-annual`,
-      });
+    if (productIds.annual) {
+      entries.push({ productId: productIds.annual, slug: `${plan.id}-annual` });
     }
     return entries;
   });

@@ -6,13 +6,14 @@ import {
   getUserPlanId,
   getUserPlanLimits,
 } from "~/server/subscriptions/helpers";
-import { IS_BILLING_ENABLED, polarClient } from "~/server/subscriptions/polar";
 import {
   determinePlanFromProductId,
   getAllKnownProductIds,
-  PLAN_IDS,
-  PLANS,
-} from "~/server/subscriptions/plans";
+  getPolarProductIds,
+  IS_BILLING_ENABLED,
+  polarClient,
+} from "~/server/subscriptions/polar";
+import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import {
   applySubscriptionSideEffects,
   getSubscriptionFromKV,
@@ -85,16 +86,14 @@ export const getProducts = protectedProcedure.handler(async () => {
     return productsCache.data;
   }
 
-  const productIds = [
-    PLANS["standard-small"].polarMonthlyProductId,
-    PLANS["standard-small"].polarAnnualProductId,
-    PLANS["standard-medium"].polarMonthlyProductId,
-    PLANS["standard-medium"].polarAnnualProductId,
-    PLANS["standard-large"].polarMonthlyProductId,
-    PLANS["standard-large"].polarAnnualProductId,
-    PLANS.pro.polarMonthlyProductId,
-    PLANS.pro.polarAnnualProductId,
-  ].filter(Boolean);
+  const productIds = (
+    ["standard-small", "standard-medium", "standard-large", "pro"] as const
+  )
+    .flatMap((planId) => {
+      const ids = getPolarProductIds(planId);
+      return [ids.monthly, ids.annual];
+    })
+    .filter(Boolean);
 
   if (productIds.length === 0) {
     return [];
@@ -110,17 +109,18 @@ export const getProducts = protectedProcedure.handler(async () => {
       "pro",
     ] as const) {
       const plan = PLANS[planId];
+      const planProductIds = getPolarProductIds(planId);
 
       // Skip plans that have no Polar product IDs configured
-      if (!plan.polarMonthlyProductId && !plan.polarAnnualProductId) continue;
+      if (!planProductIds.monthly && !planProductIds.annual) continue;
 
       let monthlyPrice: number | null = null;
       let annualPrice: number | null = null;
 
-      if (plan.polarMonthlyProductId) {
+      if (planProductIds.monthly) {
         try {
           const product = await polarClient.products.get({
-            id: plan.polarMonthlyProductId,
+            id: planProductIds.monthly,
           });
           const price = product.prices?.[0];
           if (price && "amountType" in price && price.amountType === "fixed") {
@@ -131,10 +131,10 @@ export const getProducts = protectedProcedure.handler(async () => {
         }
       }
 
-      if (plan.polarAnnualProductId) {
+      if (planProductIds.annual) {
         try {
           const product = await polarClient.products.get({
-            id: plan.polarAnnualProductId,
+            id: planProductIds.annual,
           });
           const price = product.prices?.[0];
           if (price && "amountType" in price && price.amountType === "fixed") {
@@ -153,8 +153,8 @@ export const getProducts = protectedProcedure.handler(async () => {
         planName: plan.name,
         monthlyPrice,
         annualPrice,
-        monthlyProductId: plan.polarMonthlyProductId,
-        annualProductId: plan.polarAnnualProductId,
+        monthlyProductId: planProductIds.monthly,
+        annualProductId: planProductIds.annual,
       });
     }
 
@@ -205,11 +205,10 @@ export const createCheckout = protectedProcedure
       }
     }
 
-    const plan = PLANS[input.planId];
-    const productIds = [
-      plan.polarMonthlyProductId,
-      plan.polarAnnualProductId,
-    ].filter((id): id is string => id != null);
+    const planProductIds = getPolarProductIds(input.planId);
+    const productIds = [planProductIds.monthly, planProductIds.annual].filter(
+      (id): id is string => id != null,
+    );
 
     if (productIds.length === 0) {
       return { url: null, error: null };
@@ -277,11 +276,12 @@ export const previewPlanSwitch = protectedProcedure
     if (isSamePlan && isSameInterval) return null;
 
     const newPlan = PLANS[input.planId];
+    const newPlanProductIds = getPolarProductIds(input.planId);
     const interval = input.billingInterval ?? currentSub.recurringInterval;
     const isMonthly = interval === "month";
     const newProductId = isMonthly
-      ? newPlan.polarMonthlyProductId
-      : newPlan.polarAnnualProductId;
+      ? newPlanProductIds.monthly
+      : newPlanProductIds.annual;
 
     if (!newProductId) return null;
 
@@ -379,9 +379,8 @@ export const switchPlan = protectedProcedure
     const newPlanId = determinePlanFromProductId(input.newProductId);
     const currentIndex = currentPlanId ? PLAN_IDS.indexOf(currentPlanId) : -1;
     const newIndex = newPlanId ? PLAN_IDS.indexOf(newPlanId) : -1;
-    const newPlanConfig = newPlanId ? PLANS[newPlanId] : null;
-    const isNewMonthly =
-      newPlanConfig?.polarMonthlyProductId === input.newProductId;
+    const newPlanProductIds = newPlanId ? getPolarProductIds(newPlanId) : null;
+    const isNewMonthly = newPlanProductIds?.monthly === input.newProductId;
     const isSamePlanAnnualToMonthly =
       currentPlanId === newPlanId &&
       sub.recurringInterval === "year" &&
@@ -466,9 +465,9 @@ export const getPendingSwitch = protectedProcedure.handler(
     if (!pendingPlanId) return null;
 
     // Determine billing interval of the pending product
-    const pendingPlanConfig = PLANS[pendingPlanId];
+    const pendingPlanProductIds = getPolarProductIds(pendingPlanId);
     const pendingBillingInterval: "month" | "year" =
-      pendingPlanConfig.polarMonthlyProductId === sub.pendingUpdate.productId
+      pendingPlanProductIds.monthly === sub.pendingUpdate.productId
         ? "month"
         : "year";
 
