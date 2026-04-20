@@ -51,9 +51,12 @@ test.describe("feed limit for free plan", () => {
 
     const dropzone = page.getByText(/drag and drop/i);
     await expect(dropzone).toBeVisible();
+    await page.locator('input[data-ready="true"]').waitFor({ timeout: 10000 });
 
-    // Upload the 50-feed OPML directly to the file input
-    await page.locator('input[type="file"]').setInputFiles({
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await dropzone.click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
       name: "subscriptions.opml",
       mimeType: "application/xml",
       buffer: generateOpml(TOTAL_FEEDS),
