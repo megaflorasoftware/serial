@@ -7,6 +7,7 @@ export type CardRadioOption<T extends string> = {
   value: T;
   title: string;
   description?: string;
+  disabled?: boolean;
 };
 
 type CardRadioGroupProps<T extends string> = {
@@ -36,20 +37,27 @@ export function CardRadioGroup<T extends string>({
     >
       {options.map((option) => {
         const isSelected = option.value === value;
+        const isDisabled = option.disabled === true;
         const id = `card-radio-${option.value}`;
         return (
           <label
             key={option.value}
             htmlFor={id}
             className={cn(
-              "bg-card text-card-foreground hover:bg-accent/30 flex cursor-pointer gap-3 rounded-xl border p-4 shadow-sm transition-colors",
+              "bg-card text-card-foreground flex gap-3 rounded-xl border p-4 shadow-sm transition-colors",
               option.description ? "items-start" : "items-center",
-              isSelected && "border-primary ring-primary/30 ring-1",
+              isDisabled
+                ? "cursor-not-allowed opacity-50"
+                : "hover:bg-accent/30 cursor-pointer",
+              isSelected &&
+                !isDisabled &&
+                "border-primary ring-primary/30 ring-1",
             )}
           >
             <RadioGroupItem
               id={id}
               value={option.value}
+              disabled={isDisabled}
               className={option.description ? "mt-1" : undefined}
             />
             <div className="grid gap-1">

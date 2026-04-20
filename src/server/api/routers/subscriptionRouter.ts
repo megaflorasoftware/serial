@@ -15,6 +15,7 @@ import {
 } from "~/server/subscriptions/plans";
 import {
   applySubscriptionSideEffects,
+  getSubscriptionFromKV,
   syncPolarDataToKV,
 } from "~/server/subscriptions/kv";
 import { user } from "~/server/db/schema";
@@ -266,7 +267,14 @@ export const previewPlanSwitch = protectedProcedure
     if (!currentSub) return null;
 
     const currentPlanId = determinePlanFromProductId(currentSub.productId);
-    if (!currentPlanId || currentPlanId === input.planId) return null;
+    if (!currentPlanId) return null;
+
+    // Block if same plan AND same (or unspecified) billing interval
+    const isSamePlan = currentPlanId === input.planId;
+    const isSameInterval =
+      !input.billingInterval ||
+      input.billingInterval === currentSub.recurringInterval;
+    if (isSamePlan && isSameInterval) return null;
 
     const newPlan = PLANS[input.planId];
     const interval = input.billingInterval ?? currentSub.recurringInterval;
@@ -289,10 +297,16 @@ export const previewPlanSwitch = protectedProcedure
       return null;
     }
 
-    // Determine upgrade vs downgrade by plan tier order
+    // Determine upgrade vs downgrade by plan tier order.
+    // Same-plan annual→monthly is also treated as a downgrade (deferred switch).
     const currentPlanIndex = PLAN_IDS.indexOf(currentPlanId);
     const newPlanIndex = PLAN_IDS.indexOf(input.planId);
-    const isDowngrade = newPlanIndex < currentPlanIndex;
+    const isSamePlanAnnualToMonthly =
+      currentPlanId === input.planId &&
+      currentSub.recurringInterval === "year" &&
+      interval === "month";
+    const isDowngrade =
+      newPlanIndex < currentPlanIndex || isSamePlanAnnualToMonthly;
 
     // Calculate proration (only meaningful for upgrades)
     let proratedAmount = 0;
@@ -360,11 +374,19 @@ export const switchPlan = protectedProcedure
     // Determine upgrade vs downgrade to choose proration strategy:
     // - Upgrades: "invoice" — charge the prorated difference immediately
     // - Downgrades: "next_period" — defer the switch to the next billing cycle
+    // Same-plan annual→monthly is also treated as a downgrade (deferred switch).
     const currentPlanId = determinePlanFromProductId(sub.productId);
     const newPlanId = determinePlanFromProductId(input.newProductId);
     const currentIndex = currentPlanId ? PLAN_IDS.indexOf(currentPlanId) : -1;
     const newIndex = newPlanId ? PLAN_IDS.indexOf(newPlanId) : -1;
-    const isDowngrade = newIndex < currentIndex;
+    const newPlanConfig = newPlanId ? PLANS[newPlanId] : null;
+    const isNewMonthly =
+      newPlanConfig?.polarMonthlyProductId === input.newProductId;
+    const isSamePlanAnnualToMonthly =
+      currentPlanId === newPlanId &&
+      sub.recurringInterval === "year" &&
+      isNewMonthly;
+    const isDowngrade = newIndex < currentIndex || isSamePlanAnnualToMonthly;
 
     await polarClient.subscriptions.update({
       id: input.subscriptionId,
@@ -431,6 +453,7 @@ export const getPendingSwitch = protectedProcedure.handler(
     if (sub.cancelAtPeriodEnd && sub.currentPeriodEnd) {
       return {
         planId: "free" as const,
+        billingInterval: null as "month" | "year" | null,
         appliesAt: new Date(sub.currentPeriodEnd).toISOString(),
       };
     }
@@ -442,10 +465,71 @@ export const getPendingSwitch = protectedProcedure.handler(
     );
     if (!pendingPlanId) return null;
 
+    // Determine billing interval of the pending product
+    const pendingPlanConfig = PLANS[pendingPlanId];
+    const pendingBillingInterval: "month" | "year" =
+      pendingPlanConfig.polarMonthlyProductId === sub.pendingUpdate.productId
+        ? "month"
+        : "year";
+
     return {
       planId: pendingPlanId,
+      billingInterval: pendingBillingInterval as "month" | "year" | null,
       appliesAt: new Date(sub.pendingUpdate.appliesAt).toISOString(),
     };
+  },
+);
+
+export const revertPendingChange = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_BILLING_ENABLED || !polarClient) {
+      return { success: false };
+    }
+
+    const subscriptions = await polarClient.subscriptions.list({
+      externalCustomerId: [context.user.id],
+      active: true,
+    });
+
+    const sub = subscriptions.result?.items?.[0];
+    if (!sub) {
+      throw new Error("No active subscription found");
+    }
+
+    if (sub.cancelAtPeriodEnd) {
+      // Undo scheduled cancellation — reactivate
+      await polarClient.subscriptions.update({
+        id: sub.id,
+        subscriptionUpdate: {
+          cancelAtPeriodEnd: false,
+        },
+      });
+    } else if (sub.pendingUpdate?.productId) {
+      // Undo pending product switch — revert to current product
+      await polarClient.subscriptions.update({
+        id: sub.id,
+        subscriptionUpdate: {
+          productId: sub.productId,
+        },
+      });
+    } else {
+      return { success: false };
+    }
+
+    console.log(
+      `[polar] Pending change reverted for user=${context.user.id} subscription=${sub.id}`,
+    );
+
+    try {
+      await syncPolarDataToKV(context.user.id);
+    } catch (e) {
+      console.warn(
+        `[polar] Post-revert sync failed for user=${context.user.id}:`,
+        e,
+      );
+    }
+
+    return { success: true };
   },
 );
 
@@ -522,9 +606,37 @@ export const createPortalSession = protectedProcedure.handler(
     const origin = getValidatedOrigin(context.headers);
     const session = await polarClient.customerSessions.create({
       externalCustomerId: context.user.id,
-      returnUrl: `${origin}/`,
+      returnUrl: `${origin}/?subscription=open`,
     });
 
     return { url: session.customerPortalUrl };
+  },
+);
+
+export const getSubscriptionSummary = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!IS_BILLING_ENABLED) return null;
+
+    let cached = await getSubscriptionFromKV(context.user.id);
+
+    if (!cached) {
+      try {
+        cached = await syncPolarDataToKV(context.user.id);
+      } catch {
+        return null;
+      }
+    }
+
+    if (cached.planId === "free" || cached.status === "none") return null;
+
+    const plan = PLANS[cached.planId];
+    return {
+      planId: cached.planId,
+      planName: plan.name,
+      amount: cached.amount,
+      currency: cached.currency,
+      billingInterval: cached.recurringInterval as "month" | "year" | null,
+      currentPeriodEnd: cached.currentPeriodEnd,
+    };
   },
 );

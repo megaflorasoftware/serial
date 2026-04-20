@@ -374,7 +374,8 @@ function ManageFeedsPage() {
           {
             action: {
               label: "Upgrade",
-              onClick: () => launchDialog("subscription"),
+              onClick: () =>
+                launchDialog("subscription", { subscriptionView: "picker" }),
             },
           },
         );
@@ -489,7 +490,9 @@ function ManageFeedsPage() {
                 will receive new content.
                 <Button
                   type="button"
-                  onClick={() => launchDialog("subscription")}
+                  onClick={() =>
+                    launchDialog("subscription", { subscriptionView: "picker" })
+                  }
                   className="mt-4"
                 >
                   Upgrade your plan

@@ -132,7 +132,8 @@ function EditFeedsPage() {
         {
           action: {
             label: "Upgrade",
-            onClick: () => launchDialog("subscription"),
+            onClick: () =>
+              launchDialog("subscription", { subscriptionView: "picker" }),
           },
         },
       );

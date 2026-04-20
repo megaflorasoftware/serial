@@ -10,7 +10,7 @@ import {
   TreePineIcon,
   TreesIcon,
 } from "lucide-react";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { PlanConfig } from "~/server/subscriptions/plans";
 import type { CardRadioOption } from "~/components/ui/card-radio-group";
@@ -30,6 +30,7 @@ import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
+import { useDialogStore } from "~/components/feed/dialogStore";
 
 export const PLAN_ICONS = {
   free: SproutIcon,
@@ -70,6 +71,11 @@ type BillingInterval = "month" | "year";
 const INTERVAL_LABELS: Record<BillingInterval, string> = {
   month: "mo",
   year: "yr",
+};
+
+const BILLING_INTERVAL_DISPLAY: Record<BillingInterval, string> = {
+  month: "Monthly",
+  year: "Annual",
 };
 
 function formatPrice(cents: number): string {
@@ -210,52 +216,134 @@ export type SwitchPreview = {
   newProductId: string;
 };
 
-export type DowngradePreview = {
-  currentPlanId: string;
-  currentPlanName: string;
-  periodEnd: string;
-  subscriptionId: string;
-};
-
-function DowngradeConfirmationContent({
-  preview,
+function CurrentPlanContent({
+  summary,
+  pendingSwitch,
+  onSwitchClick,
+  onCancelPending,
+  isCancelPending,
 }: {
-  preview: DowngradePreview;
+  summary: {
+    planId: string;
+    planName: string;
+    amount: number | null;
+    currency: string | null;
+    billingInterval: "month" | "year" | null;
+    currentPeriodEnd: string | null;
+  };
+  pendingSwitch:
+    | {
+        planId: string;
+        billingInterval: "month" | "year" | null;
+        appliesAt: string;
+      }
+    | null
+    | undefined;
+  onSwitchClick: () => void;
+  onCancelPending: () => void;
+  isCancelPending: boolean;
 }) {
-  const freePlan = PLANS.free;
-  const features = getPlanFeatures(freePlan);
-  const Icon = PLAN_ICONS.free;
+  const plan = PLANS[summary.planId as keyof typeof PLANS];
+  const features = getPlanFeatures(plan);
+  const Icon = PLAN_ICONS[summary.planId as keyof typeof PLAN_ICONS];
+  const intervalLabel = summary.billingInterval
+    ? INTERVAL_LABELS[summary.billingInterval]
+    : null;
+
+  const hasPrice = summary.amount != null && intervalLabel != null;
+  const hasRenewalDate = summary.currentPeriodEnd != null;
+
+  const hasPendingPlanChange =
+    pendingSwitch != null && pendingSwitch.planId !== summary.planId;
+  const hasPendingIntervalChange =
+    pendingSwitch != null &&
+    pendingSwitch.planId === summary.planId &&
+    pendingSwitch.billingInterval != null &&
+    pendingSwitch.billingInterval !== summary.billingInterval;
+  const hasPendingSwitch = hasPendingPlanChange || hasPendingIntervalChange;
+  const pendingPlan = hasPendingSwitch
+    ? PLANS[pendingSwitch.planId as keyof typeof PLANS]
+    : null;
+  const PendingIcon = hasPendingSwitch
+    ? PLAN_ICONS[pendingSwitch.planId as keyof typeof PLAN_ICONS]
+    : null;
+  const pendingFeatures = pendingPlan ? getPlanFeatures(pendingPlan) : [];
+  const pendingIntervalLabel =
+    hasPendingIntervalChange && pendingSwitch.billingInterval
+      ? BILLING_INTERVAL_DISPLAY[pendingSwitch.billingInterval]
+      : null;
 
   return (
     <div className="space-y-4">
+      {hasPendingSwitch && pendingPlan && PendingIcon && (
+        <>
+          <div className="flex items-center gap-3 rounded-lg border border-dashed p-4">
+            <PendingIcon size={20} className="shrink-0" />
+            <div className="min-w-0 flex-1">
+              <h3 className="font-medium">
+                {pendingPlan.name} Plan
+                {pendingIntervalLabel && ` · ${pendingIntervalLabel}`}
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                Starting {formatDate(pendingSwitch.appliesAt)}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isCancelPending}
+              onClick={onCancelPending}
+            >
+              {isCancelPending ? "Canceling..." : "Cancel"}
+            </Button>
+          </div>
+          <ul className="space-y-2">
+            {pendingFeatures.map((feature) => (
+              <li
+                key={feature}
+                className="text-muted-foreground flex items-center gap-2 text-sm"
+              >
+                <CheckIcon size={14} className="shrink-0" />
+                {feature}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <div className="flex items-center gap-3 rounded-lg border p-4">
         <Icon size={20} className="shrink-0" />
-        <div className="flex-1">
-          <h3 className="font-medium">{freePlan.name} Plan</h3>
-          <p className="text-muted-foreground text-sm">Free</p>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium">
+            {hasPendingSwitch
+              ? `${summary.planName} Plan (Current)`
+              : `${summary.planName} Plan`}
+          </h3>
+          <p className="text-muted-foreground text-sm">
+            {hasPrice && `${formatPrice(summary.amount!)}/${intervalLabel}`}
+            {hasPrice && hasRenewalDate && " · "}
+            {hasRenewalDate &&
+              (hasPendingSwitch
+                ? `Until ${formatDate(summary.currentPeriodEnd!)}`
+                : `Renews ${formatDate(summary.currentPeriodEnd!)}`)}
+          </p>
         </div>
+        <Button variant="outline" size="sm" onClick={onSwitchClick}>
+          Switch
+        </Button>
       </div>
-      <ul className="space-y-2">
-        {features.map((feature) => (
-          <li
-            key={feature}
-            className="text-muted-foreground flex items-center gap-2 text-sm"
-          >
-            <CheckIcon size={14} className="shrink-0" />
-            {feature}
-          </li>
-        ))}
-      </ul>
-      <div className="rounded-lg border p-4">
-        <p className="text-sm font-medium">
-          Your plan will change on {formatDate(preview.periodEnd)}
-        </p>
-        <p className="text-muted-foreground mt-1 text-xs">
-          You&apos;ll keep your current {preview.currentPlanName} plan features
-          until the end of your billing period. After that, you&apos;ll be
-          switched to the Free plan automatically.
-        </p>
-      </div>
+      {!hasPendingSwitch && (
+        <ul className="space-y-2">
+          {features.map((feature) => (
+            <li
+              key={feature}
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+            >
+              <CheckIcon size={14} className="shrink-0" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -266,10 +354,9 @@ function FreePlanCard() {
     recommendedPlanId,
     chosenPlanId,
     pendingSwitch,
-    hasAnyPending,
     isSubscribed,
-    onDowngradeClick,
-    isDowngradeLoading,
+    onSwitchToFreeClick,
+    isSwitchToFreeLoading,
   } = useSubscriptionDialogContext();
 
   const plan = PLANS.free;
@@ -296,18 +383,12 @@ function FreePlanCard() {
       {(isCurrent || isRecommended || isPending) && (
         <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
           {isCurrent && (
-            <span
-              className={
-                hasAnyPending
-                  ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
-                  : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
-              }
-            >
+            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
               Current
             </span>
           )}
           {isPending && (
-            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium whitespace-nowrap">
+            <span className="bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium whitespace-nowrap">
               Starting {formatDate(pendingDate)}
             </span>
           )}
@@ -346,13 +427,12 @@ function FreePlanCard() {
       {!isCurrent && isSubscribed && (
         <div className="mt-auto pt-3">
           <Button
-            variant="outline"
             size="sm"
             className="w-full"
-            disabled={isDowngradeLoading}
-            onClick={onDowngradeClick}
+            disabled={isSwitchToFreeLoading}
+            onClick={onSwitchToFreeClick}
           >
-            Downgrade
+            Switch
           </Button>
         </div>
       )}
@@ -365,12 +445,12 @@ function ProPlanCard() {
     planId,
     recommendedPlanId,
     chosenPlanId,
-    hasAnyPending,
     products,
     isLoadingProducts,
     isSubscribed,
+    currentBillingInterval,
+    onBillingCycleSwitch,
     onSubscribeClick,
-    portalMutation,
     checkoutMutation,
     previewMutation,
   } = useSubscriptionDialogContext();
@@ -383,6 +463,8 @@ function ProPlanCard() {
   const monthlyPrice = product?.monthlyPrice ?? null;
   const annualPrice = product?.annualPrice ?? null;
   const hasPrice = monthlyPrice != null || annualPrice != null;
+
+  const showBillingCycleSwitch = isCurrent && currentBillingInterval != null;
 
   return (
     <div
@@ -399,13 +481,7 @@ function ProPlanCard() {
       {(isCurrent || isRecommended) && (
         <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
           {isCurrent && (
-            <span
-              className={
-                hasAnyPending
-                  ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
-                  : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
-              }
-            >
+            <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
               Current
             </span>
           )}
@@ -463,19 +539,16 @@ function ProPlanCard() {
           </li>
         ))}
       </ul>
-      {isCurrent && isSubscribed ? (
+      {showBillingCycleSwitch && (
         <div className="mt-auto pt-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            disabled={portalMutation.isPending}
-            onClick={() => portalMutation.mutate({})}
-          >
-            Manage
-          </Button>
+          <BillingCycleSwitchButton
+            currentInterval={currentBillingInterval}
+            onSwitch={onBillingCycleSwitch}
+            isPending={previewMutation.isPending}
+          />
         </div>
-      ) : !isCurrent ? (
+      )}
+      {!isCurrent && (
         <div className="mt-auto pt-3">
           <Button
             size="sm"
@@ -486,7 +559,7 @@ function ProPlanCard() {
             {isSubscribed ? "Switch" : "Subscribe"}
           </Button>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -496,11 +569,13 @@ function PlanSwitchConfirmationContent({
   onIntervalChange,
   monthlyPrice,
   annualPrice,
+  currentBillingInterval,
 }: {
   preview: SwitchPreview;
   onIntervalChange: (interval: BillingInterval) => void;
   monthlyPrice: number | null;
   annualPrice: number | null;
+  currentBillingInterval: BillingInterval | null;
 }) {
   const [selectedInterval, setSelectedInterval] = useState<BillingInterval>(
     preview.billingInterval,
@@ -509,15 +584,19 @@ function PlanSwitchConfirmationContent({
   const newPlan = PLANS[preview.newPlanId as keyof typeof PLANS];
   const features = getPlanFeatures(newPlan);
   const Icon = PLAN_ICONS[preview.newPlanId as keyof typeof PLAN_ICONS];
-  const intervalLabel = INTERVAL_LABELS[selectedInterval];
+  const isFreePlan = preview.newPlanId === "free";
+  const intervalLabel = isFreePlan ? null : INTERVAL_LABELS[selectedInterval];
 
-  const hasBothIntervals = monthlyPrice != null && annualPrice != null;
+  const isSamePlanSwitch = preview.currentPlanId === preview.newPlanId;
+  const hasBothIntervals =
+    !isFreePlan && monthlyPrice != null && annualPrice != null;
 
   const intervalOptions: Array<CardRadioOption<BillingInterval>> = [];
   if (monthlyPrice != null) {
     intervalOptions.push({
       value: "month",
       title: `Monthly — ${formatPrice(monthlyPrice)}/mo`,
+      disabled: isSamePlanSwitch && currentBillingInterval === "month",
     });
   }
   if (annualPrice != null) {
@@ -525,6 +604,7 @@ function PlanSwitchConfirmationContent({
       value: "year",
       title: `Annual — ${formatPrice(annualPrice)}/yr`,
       description: `${formatPrice(Math.round(annualPrice / 12))}/mo`,
+      disabled: isSamePlanSwitch && currentBillingInterval === "year",
     });
   }
 
@@ -540,7 +620,9 @@ function PlanSwitchConfirmationContent({
         <div className="flex-1">
           <h3 className="font-medium">{preview.newPlanName} Plan</h3>
           <p className="text-muted-foreground text-sm">
-            {formatPrice(preview.newAmount)}/{intervalLabel}
+            {isFreePlan
+              ? "Free"
+              : `${formatPrice(preview.newAmount)}/${intervalLabel}`}
           </p>
         </div>
       </div>
@@ -610,7 +692,7 @@ type SubscriptionDialogContextValue = {
   planId: string;
   recommendedPlanId: string | null;
   chosenPlanId: string;
-  hasAnyPending: boolean;
+
   isSubscribed: boolean;
   products:
     | Array<{
@@ -620,12 +702,21 @@ type SubscriptionDialogContextValue = {
       }>
     | undefined;
   isLoadingProducts: boolean;
-  pendingSwitch: { planId: string; appliesAt: string } | null | undefined;
+  pendingSwitch:
+    | {
+        planId: string;
+        billingInterval: "month" | "year" | null;
+        appliesAt: string;
+      }
+    | null
+    | undefined;
   onSubscribeClick: (
     id: "standard-small" | "standard-medium" | "standard-large" | "pro",
   ) => void;
-  onDowngradeClick: () => void;
-  isDowngradeLoading: boolean;
+  onSwitchToFreeClick: () => void;
+  isSwitchToFreeLoading: boolean;
+  currentBillingInterval: BillingInterval | null;
+  onBillingCycleSwitch: (interval: BillingInterval) => void;
   portalMutation: { isPending: boolean; mutate: (args: object) => void };
   checkoutMutation: { isPending: boolean };
   previewMutation: { isPending: boolean };
@@ -644,18 +735,41 @@ function useSubscriptionDialogContext() {
   return ctx;
 }
 
+function BillingCycleSwitchButton({
+  currentInterval,
+  onSwitch,
+  isPending,
+}: {
+  currentInterval: BillingInterval;
+  onSwitch: (interval: BillingInterval) => void;
+  isPending: boolean;
+}) {
+  const alternateInterval: BillingInterval =
+    currentInterval === "month" ? "year" : "month";
+
+  return (
+    <Button
+      size="sm"
+      disabled={isPending}
+      onClick={() => onSwitch(alternateInterval)}
+    >
+      Switch
+    </Button>
+  );
+}
+
 function StandardPlanCards() {
   const {
     planId,
     recommendedPlanId,
     chosenPlanId,
-    hasAnyPending,
     isSubscribed,
     products,
     isLoadingProducts,
     pendingSwitch,
+    currentBillingInterval,
+    onBillingCycleSwitch,
     onSubscribeClick,
-    portalMutation,
     checkoutMutation,
     previewMutation,
   } = useSubscriptionDialogContext();
@@ -706,18 +820,12 @@ function StandardPlanCards() {
               {(isCurrent || isPending || isRecommended) && (
                 <div className="absolute -top-3 left-4 flex gap-1.5">
                   {isCurrent && (
-                    <span
-                      className={
-                        hasAnyPending
-                          ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
-                          : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
-                      }
-                    >
+                    <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium">
                       Current
                     </span>
                   )}
                   {pendingDate && (
-                    <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium whitespace-nowrap">
+                    <span className="bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium whitespace-nowrap">
                       Starting {formatDate(pendingDate)}
                     </span>
                   )}
@@ -744,7 +852,7 @@ function StandardPlanCards() {
                   {isLoadingProducts ? (
                     <Skeleton className="h-4 w-20" />
                   ) : hasPrice ? (
-                    <span className="text-muted-foreground text-sm">
+                    <span className="text-muted-foreground text-base">
                       {monthlyPrice != null &&
                         `${formatPrice(monthlyPrice)}/mo`}
                       {monthlyPrice != null && annualPrice != null && " · "}
@@ -763,16 +871,14 @@ function StandardPlanCards() {
                       )}
                     </span>
                   ) : null}
-                  {isCurrent && isSubscribed ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={portalMutation.isPending}
-                      onClick={() => portalMutation.mutate({})}
-                    >
-                      Manage
-                    </Button>
-                  ) : !isCurrent ? (
+                  {isCurrent && currentBillingInterval && (
+                    <BillingCycleSwitchButton
+                      currentInterval={currentBillingInterval}
+                      onSwitch={onBillingCycleSwitch}
+                      isPending={previewMutation.isPending}
+                    />
+                  )}
+                  {!isCurrent && (
                     <Button
                       size="sm"
                       disabled={
@@ -782,7 +888,7 @@ function StandardPlanCards() {
                     >
                       {isSubscribed ? "Switch" : "Subscribe"}
                     </Button>
-                  ) : null}
+                  )}
                 </div>
               </div>
               <p className="text-muted-foreground mt-1 text-sm">{feedsLabel}</p>
@@ -811,10 +917,22 @@ export function SubscriptionDialog({
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
   );
-  const [downgradePreview, setDowngradePreview] =
-    useState<DowngradePreview | null>(null);
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
+  const subscriptionView = useDialogStore((s) => s.subscriptionView);
+  const prevOpenRef = useRef(false);
+
+  // Reset dialog state when it opens, respecting the requested view
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setSwitchPreview(null);
+      setShowVerification(false);
+      setShowPlanPicker(subscriptionView === "picker");
+    }
+    prevOpenRef.current = open;
+  }, [open, subscriptionView]);
 
   const emailVerified = session?.user?.emailVerified ?? false;
+  const isSubscribed = planId !== "free";
 
   const { data: products, isLoading: isLoadingProducts } = useQuery({
     ...orpc.subscription.getProducts.queryOptions(),
@@ -824,6 +942,11 @@ export function SubscriptionDialog({
   const { data: pendingSwitch } = useQuery({
     ...orpc.subscription.getPendingSwitch.queryOptions(),
     enabled: open,
+  });
+
+  const { data: subscriptionSummary, isLoading: isLoadingSummary } = useQuery({
+    ...orpc.subscription.getSubscriptionSummary.queryOptions(),
+    enabled: open && isSubscribed,
   });
 
   const checkoutMutation = useMutation(
@@ -887,13 +1010,51 @@ export function SubscriptionDialog({
     }),
   );
 
+  const revertPendingMutation = useMutation(
+    orpc.subscription.revertPendingChange.mutationOptions({
+      onSuccess: (result) => {
+        if (result.success) {
+          toast.success("Pending change cancelled.");
+          void queryClient.invalidateQueries({
+            queryKey:
+              orpc.subscription.getPendingSwitch.queryOptions().queryKey,
+          });
+          void queryClient.invalidateQueries({
+            queryKey:
+              orpc.subscription.getSubscriptionSummary.queryOptions().queryKey,
+          });
+          void queryClient.invalidateQueries({
+            queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
+          });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to cancel pending change. Please try again.");
+      },
+    }),
+  );
+
   const downgradePreviewMutation = useMutation(
     orpc.subscription.previewDowngrade.mutationOptions({
       onSuccess: (result) => {
         if (result) {
-          setDowngradePreview(result);
+          setSwitchPreview({
+            currentPlanId: result.currentPlanId,
+            currentPlanName: result.currentPlanName,
+            currentAmount: 0,
+            newPlanId: "free",
+            newPlanName: PLANS.free.name,
+            newAmount: 0,
+            proratedAmount: 0,
+            isDowngrade: true,
+            periodEnd: result.periodEnd,
+            currency: "usd",
+            billingInterval: "month",
+            subscriptionId: result.subscriptionId,
+            newProductId: "",
+          });
         } else {
-          toast.error("Unable to preview downgrade");
+          toast.error("Unable to preview switch");
         }
       },
     }),
@@ -903,10 +1064,10 @@ export function SubscriptionDialog({
     orpc.subscription.cancelSubscription.mutationOptions({
       onSuccess: (result) => {
         if (result.success) {
-          setDowngradePreview(null);
+          setSwitchPreview(null);
           onOpenChange(false);
           toast.success(
-            "Your subscription will be cancelled at the end of your billing period.",
+            "Your plan will switch at the end of your billing period.",
           );
           void queryClient.invalidateQueries({
             queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
@@ -923,7 +1084,6 @@ export function SubscriptionDialog({
     }),
   );
 
-  const isSubscribed = planId !== "free";
   const feeds = useFeeds();
 
   // Recommend the smallest plan that fits the user's feed count,
@@ -933,7 +1093,6 @@ export function SubscriptionDialog({
     feeds.length,
     currentPlanIndex,
   );
-  const hasAnyPending = pendingSwitch != null;
   const chosenPlanId = pendingSwitch?.planId ?? planId;
 
   function handleSubscribeClick(
@@ -970,46 +1129,62 @@ export function SubscriptionDialog({
     planId,
     recommendedPlanId,
     chosenPlanId,
-    hasAnyPending,
     isSubscribed,
     products,
     isLoadingProducts,
     pendingSwitch,
     onSubscribeClick: handleSubscribeClick,
-    onDowngradeClick: () => downgradePreviewMutation.mutate({}),
-    isDowngradeLoading: downgradePreviewMutation.isPending,
+    onSwitchToFreeClick: () => downgradePreviewMutation.mutate({}),
+    isSwitchToFreeLoading: downgradePreviewMutation.isPending,
+    currentBillingInterval:
+      (subscriptionSummary?.billingInterval as BillingInterval | null) ?? null,
+    onBillingCycleSwitch: (interval: BillingInterval) => {
+      if (!subscriptionSummary) return;
+      const paidPlanId = subscriptionSummary.planId;
+      previewMutation.mutate({ planId: paidPlanId, billingInterval: interval });
+    },
     portalMutation,
     checkoutMutation,
     previewMutation,
   };
 
-  const isSubView = downgradePreview != null || switchPreview != null;
+  // Determine current view
+  const showOverview =
+    isSubscribed &&
+    !showPlanPicker &&
+    !switchPreview &&
+    (isLoadingSummary || subscriptionSummary != null);
+  const isPlanPickerView = !switchPreview && !showOverview;
+  const isSwitchToFree = switchPreview?.newPlanId === "free";
 
   let dialogTitle: string;
   let dialogDescription: string;
   let dialogFooter: React.ReactNode;
   let dialogOnBack: (() => void) | undefined;
 
-  if (downgradePreview) {
-    dialogTitle = "Downgrade Plan";
-    dialogDescription = `Downgrade from ${downgradePreview.currentPlanName} to Free`;
-    dialogOnBack = () => setDowngradePreview(null);
-    dialogFooter = (
+  const isBillingCycleSwitch =
+    switchPreview != null &&
+    switchPreview.currentPlanId === switchPreview.newPlanId;
+
+  if (switchPreview) {
+    const billingCycleLabel =
+      BILLING_INTERVAL_DISPLAY[switchPreview.billingInterval];
+    dialogTitle = "Switch Plan";
+    dialogDescription = isBillingCycleSwitch
+      ? `Switch to ${billingCycleLabel} plan`
+      : `Switch from ${switchPreview.currentPlanName} to ${switchPreview.newPlanName}`;
+    dialogOnBack = () => setSwitchPreview(null);
+    dialogFooter = isSwitchToFree ? (
       <Button
         className="w-full"
         onClick={() => cancelMutation.mutate({})}
         disabled={cancelMutation.isPending}
       >
         {cancelMutation.isPending
-          ? "Downgrading..."
-          : "Confirm Downgrade to Free"}
+          ? "Switching..."
+          : `Confirm Switch to ${switchPreview.newPlanName}`}
       </Button>
-    );
-  } else if (switchPreview) {
-    dialogTitle = "Switch Plan";
-    dialogDescription = `Switch from ${switchPreview.currentPlanName} to ${switchPreview.newPlanName}`;
-    dialogOnBack = () => setSwitchPreview(null);
-    dialogFooter = (
+    ) : (
       <Button
         className="w-full"
         onClick={() =>
@@ -1025,9 +1200,22 @@ export function SubscriptionDialog({
           : `Confirm Switch to ${switchPreview.newPlanName}`}
       </Button>
     );
+  } else if (showOverview) {
+    dialogTitle = "Your Plan";
+    dialogDescription = "Manage your current subscription.";
+    dialogFooter = (
+      <Button
+        className="w-full"
+        disabled={portalMutation.isPending}
+        onClick={() => portalMutation.mutate({})}
+      >
+        {portalMutation.isPending ? "Loading..." : "Open Billing Portal"}
+      </Button>
+    );
   } else {
     dialogTitle = "Subscribe to Serial";
     dialogDescription = "All prices are taxes-included.";
+    dialogOnBack = isSubscribed ? () => setShowPlanPicker(false) : undefined;
     dialogFooter = (
       <p className="text-muted-foreground flex flex-col text-center text-sm">
         Price too high or need higher limits?{" "}
@@ -1056,9 +1244,17 @@ export function SubscriptionDialog({
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen && isSubView) {
-      setDowngradePreview(null);
-      setSwitchPreview(null);
+    if (!nextOpen) {
+      if (switchPreview) {
+        setSwitchPreview(null);
+        return;
+      }
+      if (showPlanPicker && isSubscribed) {
+        setShowPlanPicker(false);
+        return;
+      }
+      setShowPlanPicker(false);
+      onOpenChange(false);
       return;
     }
     onOpenChange(nextOpen);
@@ -1075,15 +1271,12 @@ export function SubscriptionDialog({
         onOpenChange={handleOpenChange}
         title={dialogTitle}
         description={dialogDescription}
-        className={isSubView ? undefined : "lg:max-w-5xl xl:max-w-6xl"}
-        headerClassName={isSubView ? undefined : "lg:text-center"}
-        footerBorder={isSubView}
+        className={isPlanPickerView ? "lg:max-w-5xl xl:max-w-6xl" : undefined}
+        headerClassName={isPlanPickerView ? "lg:text-center" : undefined}
         onBack={dialogOnBack}
         footer={dialogFooter}
       >
-        {downgradePreview ? (
-          <DowngradeConfirmationContent preview={downgradePreview} />
-        ) : switchPreview ? (
+        {switchPreview ? (
           <PlanSwitchConfirmationContent
             preview={switchPreview}
             onIntervalChange={(interval) =>
@@ -1098,7 +1291,30 @@ export function SubscriptionDialog({
             }
             monthlyPrice={newPlanProduct?.monthlyPrice ?? null}
             annualPrice={newPlanProduct?.annualPrice ?? null}
+            currentBillingInterval={
+              (subscriptionSummary?.billingInterval as BillingInterval | null) ??
+              null
+            }
           />
+        ) : showOverview ? (
+          isLoadingSummary ? (
+            <div className="space-y-4">
+              <Skeleton className="h-[72px] w-full rounded-lg" />
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-5 w-44" />
+              </div>
+            </div>
+          ) : subscriptionSummary ? (
+            <CurrentPlanContent
+              summary={subscriptionSummary}
+              pendingSwitch={pendingSwitch}
+              onSwitchClick={() => setShowPlanPicker(true)}
+              onCancelPending={() => revertPendingMutation.mutate({})}
+              isCancelPending={revertPendingMutation.isPending}
+            />
+          ) : null
         ) : (
           <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_1.5fr_1fr] lg:gap-5 xl:grid-cols-[1fr_2fr_1fr]">
             {showVerification && !emailVerified && (

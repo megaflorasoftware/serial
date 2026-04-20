@@ -11,6 +11,7 @@ import FeedLoading from "~/components/loading";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { Button } from "~/components/ui/button";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
+import { useDialogStore } from "~/components/feed/dialogStore";
 import { ImpersonationBanner } from "~/components/ImpersonationBanner";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
@@ -135,6 +136,28 @@ function useCheckoutSuccess() {
   return { awaitingUpgrade, billingEnabled };
 }
 
+/**
+ * Detect ?subscription=open query param (set by the Polar portal return URL)
+ * and re-open the subscription dialog.
+ */
+function usePortalReturn() {
+  const launchDialog = useDialogStore((s) => s.launchDialog);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("subscription") !== "open") return;
+
+    // Clean the query param from the URL
+    params.delete("subscription");
+    const newUrl =
+      window.location.pathname +
+      (params.size > 0 ? `?${params.toString()}` : "");
+    window.history.replaceState({}, "", newUrl);
+
+    launchDialog("subscription");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 function CheckoutSuccessDialog({
   open,
   onOpenChange,
@@ -179,6 +202,7 @@ function CheckoutSuccessDialog({
 function RootLayout() {
   const { mostRecentRelease } = Route.useLoaderData();
   useAltKeyHeld();
+  usePortalReturn();
   const { awaitingUpgrade, billingEnabled } = useCheckoutSuccess();
   const showPlanSuccess = usePlanSuccessStore((s) => s.showDialog);
   const closePlanSuccess = usePlanSuccessStore((s) => s.closeDialog);

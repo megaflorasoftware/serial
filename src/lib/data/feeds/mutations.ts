@@ -46,7 +46,9 @@ export function useCreateFeedMutation() {
               action: {
                 label: "Upgrade",
                 onClick: () =>
-                  useDialogStore.getState().launchDialog("subscription"),
+                  useDialogStore.getState().launchDialog("subscription", {
+                    subscriptionView: "picker",
+                  }),
               },
             },
           );

@@ -134,7 +134,7 @@ export function ControlledResponsiveDialog({
   className,
   headerClassName,
   footer,
-  footerBorder = true,
+  footerBorder = false,
   onOpenAutoFocus,
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");

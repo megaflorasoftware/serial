@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
-import type { DowngradePreview, SwitchPreview } from "./SubscriptionDialog";
+import type { SwitchPreview } from "./SubscriptionDialog";
 
 type MutationResult<T> = UseMutationResult<T, Error, any, unknown>;
 
@@ -28,8 +28,12 @@ interface SubscriptionDialogContextValue {
 
   // Preview states
   switchPreview: SwitchPreview | null;
-  downgradePreview: DowngradePreview | null;
-  pendingSwitch: { planId: string; appliesAt: string } | null;
+  downgradePreview: SwitchPreview | null;
+  pendingSwitch: {
+    planId: string;
+    billingInterval: "month" | "year" | null;
+    appliesAt: string;
+  } | null;
   pendingPlanId:
     | "standard-small"
     | "standard-medium"
@@ -42,13 +46,13 @@ interface SubscriptionDialogContextValue {
   previewMutation: MutationResult<SwitchPreview | null>;
   switchMutation: MutationResult<{ success: boolean }>;
   portalMutation: MutationResult<{ url?: string }>;
-  downgradePreviewMutation: MutationResult<DowngradePreview | null>;
+  downgradePreviewMutation: MutationResult<SwitchPreview | null>;
   cancelMutation: MutationResult<{ success: boolean }>;
 
   // Actions
   setShowVerification: (show: boolean) => void;
   setSwitchPreview: (preview: SwitchPreview | null) => void;
-  setDowngradePreview: (preview: DowngradePreview | null) => void;
+  setDowngradePreview: (preview: SwitchPreview | null) => void;
   setPendingPlanId: (
     id: "standard-small" | "standard-medium" | "standard-large" | "pro" | null,
   ) => void;
