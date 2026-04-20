@@ -104,14 +104,11 @@ export async function* fetchAndInsertFeedData(
 
       if (feed.platform === "youtube") {
         feedData = await fetchYouTubeFeedData(feed, cached);
-      }
-      if (feed.platform === "peertube") {
+      } else if (feed.platform === "peertube") {
         feedData = await fetchPeerTubeFeedData(feed, cached);
-      }
-      if (feed.platform === "nebula") {
+      } else if (feed.platform === "nebula") {
         feedData = await fetchNebulaFeedData(feed, cached);
-      }
-      if (feed.platform === "website") {
+      } else if (feed.platform === "website") {
         feedData = await fetchWebsiteFeedData(feed, cached);
       }
 

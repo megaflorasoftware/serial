@@ -82,23 +82,23 @@ export async function getUserPlanLimits(db: DB, userId: string) {
 export async function checkUserRefreshEligibility(
   db: DB,
   userId: string,
-): Promise<{ eligible: true } | { eligible: false; nextFetchAt: Date }> {
+): Promise<{ eligible: true } | { eligible: false; nextRefreshAt: Date }> {
   const planId = await getUserPlanId(userId);
   const config = getEffectivePlanConfig(planId);
 
   const now = new Date();
   const nowEpoch = Math.floor(now.getTime() / 1000);
-  const nextFetchAt = new Date(now.getTime() + config.refreshIntervalMs);
+  const nextRefreshAt = new Date(now.getTime() + config.refreshIntervalMs);
 
-  // Atomic: only update nextFetchAt if the current value is null or in the past.
+  // Atomic: only update nextRefreshAt if the current value is null or in the past.
   // If a concurrent request already claimed this window, rowsAffected will be 0.
   const result = await db
     .update(user)
-    .set({ nextFetchAt })
+    .set({ nextRefreshAt })
     .where(
       and(
         eq(user.id, userId),
-        sql`(${user.nextFetchAt} IS NULL OR ${user.nextFetchAt} <= ${nowEpoch})`,
+        sql`(${user.nextRefreshAt} IS NULL OR ${user.nextRefreshAt} <= ${nowEpoch})`,
       ),
     );
 
@@ -107,16 +107,16 @@ export async function checkUserRefreshEligibility(
     return { eligible: true };
   }
 
-  // Rate-limited — read back the current nextFetchAt to report to the user
+  // Rate-limited — read back the current nextRefreshAt to report to the user
   const userRow = await db
-    .select({ nextFetchAt: user.nextFetchAt })
+    .select({ nextRefreshAt: user.nextRefreshAt })
     .from(user)
     .where(eq(user.id, userId))
     .get();
 
   return {
     eligible: false,
-    nextFetchAt: userRow?.nextFetchAt ?? nextFetchAt,
+    nextRefreshAt: userRow?.nextRefreshAt ?? nextRefreshAt,
   };
 }
 

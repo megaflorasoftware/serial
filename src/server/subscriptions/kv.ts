@@ -10,6 +10,7 @@ import { deactivateExcessFeeds } from "./helpers";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
 import { feeds } from "~/server/db/schema";
+import { env } from "~/env";
 
 type DB = typeof Database;
 
@@ -19,14 +20,13 @@ type DB = typeof Database;
 // ---------------------------------------------------------------------------
 
 const hasUpstashCredentials =
-  !!process.env.UPSTASH_REDIS_REST_URL &&
-  !!process.env.UPSTASH_REDIS_REST_TOKEN;
+  !!env.UPSTASH_REDIS_REST_URL && !!env.UPSTASH_REDIS_REST_TOKEN;
 
 export const redis =
   IS_BILLING_ENABLED && hasUpstashCredentials
     ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL!,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        url: env.UPSTASH_REDIS_REST_URL!,
+        token: env.UPSTASH_REDIS_REST_TOKEN!,
       })
     : null;
 

@@ -24,7 +24,9 @@ import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import {
   canActivateFeed,
   getFeedsActivationBudget,
+  getUserPlanId,
 } from "~/server/subscriptions/helpers";
+import { getEffectivePlanConfig } from "~/server/subscriptions/plans";
 
 type BulkImportFromFileSuccess = {
   feedUrl: string;
@@ -527,38 +529,54 @@ export const bulkSetActive = protectedProcedure
   .handler(async ({ context, input }) => {
     if (input.feedIds.length === 0) return;
 
-    if (input.isActive) {
-      const { remainingSlots } = await getFeedsActivationBudget(
-        context.db,
-        context.user.id,
-      );
+    // Resolve the plan limit outside the transaction (no db needed)
+    const planId = await getUserPlanId(context.user.id);
+    const planConfig = getEffectivePlanConfig(planId);
 
-      // Count how many of the requested feeds are currently inactive
-      const currentFeeds = await context.db.query.feeds.findMany({
-        where: and(
-          inArray(feeds.id, input.feedIds),
-          eq(feeds.userId, context.user.id),
-          eq(feeds.isActive, false),
-        ),
-        columns: { id: true },
-      });
-
-      if (currentFeeds.length > remainingSlots) {
-        throw new Error(
-          "Feed limit reached. Upgrade your plan to activate more feeds.",
+    await context.db.transaction(async (tx) => {
+      if (input.isActive) {
+        // Count active feeds inside the transaction so the read is
+        // consistent with the subsequent update, preventing TOCTOU races.
+        const activeCountResult = await tx
+          .select({ count: sql<number>`count(*)` })
+          .from(feeds)
+          .where(
+            and(eq(feeds.userId, context.user.id), eq(feeds.isActive, true)),
+          )
+          .get();
+        const activeCount = activeCountResult?.count ?? 0;
+        const remainingSlots = Math.max(
+          0,
+          planConfig.maxActiveFeeds - activeCount,
         );
-      }
-    }
 
-    await context.db
-      .update(feeds)
-      .set({ isActive: input.isActive })
-      .where(
-        and(
-          inArray(feeds.id, input.feedIds),
-          eq(feeds.userId, context.user.id),
-        ),
-      );
+        // Count how many of the requested feeds are currently inactive
+        const currentFeeds = await tx.query.feeds.findMany({
+          where: and(
+            inArray(feeds.id, input.feedIds),
+            eq(feeds.userId, context.user.id),
+            eq(feeds.isActive, false),
+          ),
+          columns: { id: true },
+        });
+
+        if (currentFeeds.length > remainingSlots) {
+          throw new Error(
+            "Feed limit reached. Upgrade your plan to activate more feeds.",
+          );
+        }
+      }
+
+      await tx
+        .update(feeds)
+        .set({ isActive: input.isActive })
+        .where(
+          and(
+            inArray(feeds.id, input.feedIds),
+            eq(feeds.userId, context.user.id),
+          ),
+        );
+    });
   });
 
 export const discoverFeeds = protectedProcedure

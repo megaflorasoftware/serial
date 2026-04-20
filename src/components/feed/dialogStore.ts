@@ -30,6 +30,6 @@ export const useDialogStore = create<DialogStore>((set) => ({
       dialog,
       subscriptionView: options?.subscriptionView ?? "overview",
     }),
-  closeDialog: () => set({ dialog: null }),
-  onOpenChange: () => set({ dialog: null }),
+  closeDialog: () => set({ dialog: null, subscriptionView: "overview" }),
+  onOpenChange: () => set({ dialog: null, subscriptionView: "overview" }),
 }));

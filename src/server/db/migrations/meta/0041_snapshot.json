@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "06b1ab17-f6c5-4730-9fc2-4d62dbe6afda",
+  "id": "78a07af0-2bfd-4788-9011-290b9cbe4c4d",
   "prevId": "5a595e3a-9acc-4f14-89d2-7cd327e05c38",
   "tables": {
     "serial_account": {
@@ -927,8 +927,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "next_fetch_at": {
-          "name": "next_fetch_at",
+        "next_refresh_at": {
+          "name": "next_refresh_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

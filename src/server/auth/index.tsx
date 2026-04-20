@@ -34,7 +34,7 @@ export const authMiddleware = createMiddleware().server(
     const headers = getRequestHeaders() as Headers;
     const session = await auth.api.getSession({ headers });
     if (!session) {
-      if (!pathname.includes("auth")) {
+      if (!pathname.startsWith("/auth")) {
         throw redirect({ to: BASE_SIGNED_OUT_URL });
       }
     }
@@ -83,7 +83,7 @@ async function handleCustomerStateChanged(payload: {
 
 function buildPolarPlugin() {
   if (!polarClient) return [];
-  if (!process.env.POLAR_WEBHOOK_SECRET) return [];
+  if (!env.POLAR_WEBHOOK_SECRET) return [];
 
   // Build products list from plan config — each plan can have a monthly and/or annual product.
   const products = Object.values(PLANS).flatMap((plan) => {
@@ -115,7 +115,7 @@ function buildPolarPlugin() {
         }),
         portal(),
         webhooks({
-          secret: process.env.POLAR_WEBHOOK_SECRET ?? "",
+          secret: env.POLAR_WEBHOOK_SECRET ?? "",
           onSubscriptionCreated: handleSubscriptionWebhook,
           onSubscriptionUpdated: handleSubscriptionWebhook,
           onSubscriptionActive: handleSubscriptionWebhook,

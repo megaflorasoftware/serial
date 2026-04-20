@@ -51,13 +51,9 @@ test.describe("feed limit for free plan", () => {
 
     const dropzone = page.getByText(/drag and drop/i);
     await expect(dropzone).toBeVisible();
-    await page.waitForTimeout(1000);
 
-    // Upload the 110-feed OPML
-    const fileChooserPromise = page.waitForEvent("filechooser");
-    await dropzone.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles({
+    // Upload the 50-feed OPML directly to the file input
+    await page.locator('input[type="file"]').setInputFiles({
       name: "subscriptions.opml",
       mimeType: "application/xml",
       buffer: generateOpml(TOTAL_FEEDS),
@@ -90,14 +86,11 @@ test.describe("feed limit for free plan", () => {
     });
     await page.keyboard.press("Escape");
 
-    // Navigate to /feeds and verify the counter
+    // Navigate to /feeds and verify the "max reached" alert (quota bar is hidden at the limit)
     await page.goto("/feeds");
-    await expect(
-      page.getByText(`${MAX_ACTIVE} / ${MAX_ACTIVE} feeds active`),
-    ).toBeVisible({ timeout: 15000 });
-
-    // Verify "Max active feeds reached" alert
-    await expect(page.getByText("Max active feeds reached")).toBeVisible();
+    await expect(page.getByText("Max active feeds reached")).toBeVisible({
+      timeout: 15000,
+    });
 
     // Click "Upgrade your plan" button and verify subscription dialog opens
     await page.getByRole("button", { name: /upgrade your plan/i }).click();

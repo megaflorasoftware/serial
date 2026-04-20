@@ -1,9 +1,10 @@
 import { defineTask } from "nitro/task";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { fetchAndInsertFeedData } from "../../../src/server/rss/fetchFeeds";
 import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
+import { env } from "../../../src/env";
 
 export default defineTask({
   meta: {
@@ -11,8 +12,7 @@ export default defineTask({
     description: "Background refresh of active feeds for paid users",
   },
   async run() {
-    const backgroundRefreshEnabled =
-      process.env.BACKGROUND_REFRESH_ENABLED !== "false";
+    const backgroundRefreshEnabled = env.BACKGROUND_REFRESH_ENABLED !== "false";
 
     if (!backgroundRefreshEnabled) {
       console.log(
@@ -37,11 +37,17 @@ export default defineTask({
       adminUserIds = new Set(admins.map((a) => a.id));
     }
 
-    // Fetch all active feeds that need refreshing in a single query
+    // Fetch all active feeds that need refreshing in a single query.
+    // On non-main (self-hosted) instances, also include feeds where nextFetchAt
+    // is NULL — these have never been scheduled and should still be refreshed.
+    const fetchAtCondition = IS_MAIN_INSTANCE
+      ? lte(feeds.nextFetchAt, now)
+      : or(lte(feeds.nextFetchAt, now), isNull(feeds.nextFetchAt));
+
     const allFeedsDue = await db
       .select()
       .from(feeds)
-      .where(and(eq(feeds.isActive, true), lte(feeds.nextFetchAt, now)))
+      .where(and(eq(feeds.isActive, true), fetchAtCondition))
       .all();
 
     // Filter to admin users if on main instance

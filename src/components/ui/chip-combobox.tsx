@@ -178,7 +178,7 @@ export function ChipCombobox({
     }
 
     setVisibleCount(count);
-  });
+  }, [offset, totalCount]);
 
   const goForward = useCallback(() => {
     prevOffsets.current.push(offset);

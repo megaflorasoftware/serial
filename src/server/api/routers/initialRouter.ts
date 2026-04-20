@@ -1423,7 +1423,7 @@ export const requestNewData = protectedProcedure
         source: "new-data",
         chunk: {
           type: "error",
-          message: `You can refresh again at ${eligibility.nextFetchAt.toLocaleTimeString()}`,
+          message: `You can refresh again at ${eligibility.nextRefreshAt.toLocaleTimeString()}`,
           phase: "initial-fetch",
           viewId: -1,
         },

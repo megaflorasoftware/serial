@@ -26,7 +26,7 @@ import { PLANS } from "~/server/subscriptions/plans";
 import {
   getPlanFeatures,
   PLAN_ICONS,
-} from "~/components/feed/SubscriptionDialog";
+} from "~/components/feed/subscription-dialog";
 
 export const Route = createFileRoute("/_app")({
   component: RootLayout,
@@ -48,12 +48,17 @@ function useCheckoutSuccess() {
   const { planId, billingEnabled } = useSubscription();
   const openPlanSuccess = usePlanSuccessStore((s) => s.openDialog);
   const previousPlanIdRef = useRef<string | null>(null);
+  const hasProcessedCheckout = useRef(false);
 
-  // Detect checkout_success query param on mount
+  // Detect checkout_success query param (waits for billingEnabled to resolve)
   useEffect(() => {
     if (!billingEnabled) return;
+    if (hasProcessedCheckout.current) return;
+
     const params = new URLSearchParams(window.location.search);
     if (params.get("checkout_success") !== "true") return;
+
+    hasProcessedCheckout.current = true;
 
     // Remove the query param from the URL
     params.delete("checkout_success");
@@ -65,7 +70,7 @@ function useCheckoutSuccess() {
     // Snapshot the current plan so we can detect when it changes
     previousPlanIdRef.current = planId;
     setAwaitingUpgrade(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [billingEnabled, planId]);
 
   // Eagerly sync after checkout, then poll if needed
   useEffect(() => {
@@ -80,12 +85,18 @@ function useCheckoutSuccess() {
       return;
     }
 
+    const controller = new AbortController();
     let attempts = 0;
-    let cancelled = false;
+    let isSyncing = false;
 
     const sync = async (): Promise<boolean> => {
+      if (isSyncing) return false;
+      isSyncing = true;
       try {
         const result = await orpcRouterClient.subscription.syncAfterCheckout();
+
+        if (controller.signal.aborted) return false;
+
         // Update the getStatus query data with the fresh result
         queryClient.setQueryData(
           orpc.subscription.getStatus.queryOptions().queryKey,
@@ -101,16 +112,18 @@ function useCheckoutSuccess() {
         }
       } catch {
         // Ignore errors, will retry
+      } finally {
+        isSyncing = false;
       }
       return false;
     };
 
     // First attempt immediately, then poll with interval
     void sync().then((done) => {
-      if (done || cancelled) return;
+      if (done || controller.signal.aborted) return;
 
       const interval = setInterval(() => {
-        if (cancelled) {
+        if (controller.signal.aborted) {
           clearInterval(interval);
           return;
         }
@@ -129,7 +142,7 @@ function useCheckoutSuccess() {
     });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [awaitingUpgrade, planId, queryClient, openPlanSuccess]);
 

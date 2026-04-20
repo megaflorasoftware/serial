@@ -1,5 +1,5 @@
 import { useDialogStore } from "./dialogStore";
-import { SubscriptionDialog } from "./SubscriptionDialog";
+import { SubscriptionDialog } from "./subscription-dialog";
 import { UserProfileEditDialog } from "./UserProfileEditDialog";
 import { AddContentCategoryDialog } from "~/components/AddContentCategoryDialog";
 import { AddFeedDialog } from "~/components/AddFeedDialog";

@@ -1,4 +1,5 @@
 import { IS_BILLING_ENABLED } from "./polar";
+import { env } from "~/env";
 
 export const PLAN_IDS = [
   "free",
@@ -48,9 +49,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     refreshIntervalMs: STANDARD_REFRESH_MS,
     backgroundRefreshIntervalMs: STANDARD_BACKGROUND_REFRESH_MS,
     polarMonthlyProductId:
-      process.env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID ?? null,
+      env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID ?? null,
     polarAnnualProductId:
-      process.env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID ?? null,
+      env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
   "standard-medium": {
     id: "standard-medium",
@@ -59,9 +60,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     refreshIntervalMs: STANDARD_REFRESH_MS,
     backgroundRefreshIntervalMs: STANDARD_BACKGROUND_REFRESH_MS,
     polarMonthlyProductId:
-      process.env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID ?? null,
+      env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID ?? null,
     polarAnnualProductId:
-      process.env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID ?? null,
+      env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
   "standard-large": {
     id: "standard-large",
@@ -70,9 +71,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     refreshIntervalMs: STANDARD_REFRESH_MS,
     backgroundRefreshIntervalMs: STANDARD_BACKGROUND_REFRESH_MS,
     polarMonthlyProductId:
-      process.env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID ?? null,
+      env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID ?? null,
     polarAnnualProductId:
-      process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID ?? null,
+      env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID ?? null,
   },
   pro: {
     id: "pro",
@@ -80,8 +81,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxActiveFeeds: 2500,
     refreshIntervalMs: PRO_REFRESH_MS,
     backgroundRefreshIntervalMs: PRO_BACKGROUND_REFRESH_MS,
-    polarMonthlyProductId: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
-    polarAnnualProductId: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID ?? null,
+    polarMonthlyProductId: env.POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
+    polarAnnualProductId: env.POLAR_PRO_ANNUAL_PRODUCT_ID ?? null,
   },
 };
 

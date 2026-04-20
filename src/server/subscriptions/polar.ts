@@ -1,29 +1,27 @@
 import { Polar } from "@polar-sh/sdk";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
-
-const REQUIRED_POLAR_ENV_VARS = [
-  "POLAR_ACCESS_TOKEN",
-  "POLAR_WEBHOOK_SECRET",
-  "POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID",
-  "POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID",
-  "POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID",
-  "POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID",
-  "POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID",
-  "POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID",
-  "POLAR_PRO_MONTHLY_PRODUCT_ID",
-  "POLAR_PRO_ANNUAL_PRODUCT_ID",
-] as const;
+import { env } from "~/env";
 
 function hasAllPolarCredentials(): boolean {
-  return REQUIRED_POLAR_ENV_VARS.every((key) => !!process.env[key]);
+  return !!(
+    env.POLAR_ACCESS_TOKEN &&
+    env.POLAR_WEBHOOK_SECRET &&
+    env.POLAR_STANDARD_SMALL_QUOTA_MONTHLY_PRODUCT_ID &&
+    env.POLAR_STANDARD_SMALL_QUOTA_ANNUAL_PRODUCT_ID &&
+    env.POLAR_STANDARD_MEDIUM_QUOTA_MONTHLY_PRODUCT_ID &&
+    env.POLAR_STANDARD_MEDIUM_QUOTA_ANNUAL_PRODUCT_ID &&
+    env.POLAR_STANDARD_LARGE_QUOTA_MONTHLY_PRODUCT_ID &&
+    env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID &&
+    env.POLAR_PRO_MONTHLY_PRODUCT_ID &&
+    env.POLAR_PRO_ANNUAL_PRODUCT_ID
+  );
 }
 
 export const polarClient =
   IS_MAIN_INSTANCE && hasAllPolarCredentials()
     ? new Polar({
-        accessToken: process.env.POLAR_ACCESS_TOKEN!,
-        server:
-          process.env.NODE_ENV === "production" ? "production" : "sandbox",
+        accessToken: env.POLAR_ACCESS_TOKEN!,
+        server: env.NODE_ENV === "production" ? "production" : "sandbox",
       })
     : null;
 
