@@ -10,7 +10,7 @@ import {
   TreePineIcon,
   TreesIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { toast } from "sonner";
 import type { PlanConfig } from "~/server/subscriptions/plans";
 import type { CardRadioOption } from "~/components/ui/card-radio-group";
@@ -194,7 +194,7 @@ function EmailVerificationBanner({ onVerified }: { onVerified: () => void }) {
   );
 }
 
-type SwitchPreview = {
+export type SwitchPreview = {
   currentPlanId: string;
   currentPlanName: string;
   currentAmount: number;
@@ -210,96 +210,72 @@ type SwitchPreview = {
   newProductId: string;
 };
 
-type DowngradePreview = {
+export type DowngradePreview = {
   currentPlanId: string;
   currentPlanName: string;
   periodEnd: string;
   subscriptionId: string;
 };
 
-function DowngradeConfirmation({
+function DowngradeConfirmationContent({
   preview,
-  onBack,
-  onConfirm,
-  isPending,
 }: {
   preview: DowngradePreview;
-  onBack: () => void;
-  onConfirm: () => void;
-  isPending: boolean;
 }) {
   const freePlan = PLANS.free;
   const features = getPlanFeatures(freePlan);
   const Icon = PLAN_ICONS.free;
 
   return (
-    <ControlledResponsiveDialog
-      open
-      onOpenChange={() => onBack()}
-      title="Downgrade Plan"
-      description={`Downgrade from ${preview.currentPlanName} to Free`}
-      onBack={onBack}
-      footer={
-        <Button className="w-full" onClick={onConfirm} disabled={isPending}>
-          {isPending ? "Downgrading..." : "Confirm Downgrade to Free"}
-        </Button>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-lg border p-4">
-          <Icon size={20} className="shrink-0" />
-          <div className="flex-1">
-            <h3 className="font-medium">{freePlan.name} Plan</h3>
-            <p className="text-muted-foreground text-sm">Free</p>
-          </div>
-        </div>
-        <ul className="space-y-2">
-          {features.map((feature) => (
-            <li
-              key={feature}
-              className="text-muted-foreground flex items-center gap-2 text-sm"
-            >
-              <CheckIcon size={14} className="shrink-0" />
-              {feature}
-            </li>
-          ))}
-        </ul>
-        <div className="rounded-lg border p-4">
-          <p className="text-sm font-medium">
-            Your plan will change on {formatDate(preview.periodEnd)}
-          </p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            You&apos;ll keep your current {preview.currentPlanName} plan
-            features until the end of your billing period. After that,
-            you&apos;ll be switched to the Free plan automatically.
-          </p>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 rounded-lg border p-4">
+        <Icon size={20} className="shrink-0" />
+        <div className="flex-1">
+          <h3 className="font-medium">{freePlan.name} Plan</h3>
+          <p className="text-muted-foreground text-sm">Free</p>
         </div>
       </div>
-    </ControlledResponsiveDialog>
+      <ul className="space-y-2">
+        {features.map((feature) => (
+          <li
+            key={feature}
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+          >
+            <CheckIcon size={14} className="shrink-0" />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      <div className="rounded-lg border p-4">
+        <p className="text-sm font-medium">
+          Your plan will change on {formatDate(preview.periodEnd)}
+        </p>
+        <p className="text-muted-foreground mt-1 text-xs">
+          You&apos;ll keep your current {preview.currentPlanName} plan features
+          until the end of your billing period. After that, you&apos;ll be
+          switched to the Free plan automatically.
+        </p>
+      </div>
+    </div>
   );
 }
 
-function FreePlanCard({
-  planId,
-  recommendedPlanId,
-  chosenPlanId,
-  pendingDate,
-  hasAnyPending,
-  isSubscribed,
-  onDowngradeClick,
-  isDowngradeLoading,
-}: {
-  planId: string;
-  recommendedPlanId: string | null;
-  chosenPlanId: string;
-  pendingDate: string | null;
-  hasAnyPending: boolean;
-  isSubscribed: boolean;
-  onDowngradeClick: () => void;
-  isDowngradeLoading: boolean;
-}) {
+function FreePlanCard() {
+  const {
+    planId,
+    recommendedPlanId,
+    chosenPlanId,
+    pendingSwitch,
+    hasAnyPending,
+    isSubscribed,
+    onDowngradeClick,
+    isDowngradeLoading,
+  } = useSubscriptionDialogContext();
+
   const plan = PLANS.free;
   const isCurrent = planId === "free";
+  const pendingDate =
+    pendingSwitch?.planId === "free" ? pendingSwitch.appliesAt : null;
   const isPending = pendingDate != null;
   const isRecommended = recommendedPlanId === "free";
   const features = getPlanFeatures(plan);
@@ -384,37 +360,20 @@ function FreePlanCard({
   );
 }
 
-function ProPlanCard({
-  planId,
-  recommendedPlanId,
-  chosenPlanId,
-  hasAnyPending,
-  products,
-  isLoadingProducts,
-  isSubscribed,
-  onSubscribeClick,
-  portalMutation,
-  checkoutMutation,
-  previewMutation,
-}: {
-  planId: string;
-  recommendedPlanId: string | null;
-  chosenPlanId: string;
-  hasAnyPending: boolean;
-  products:
-    | Array<{
-        planId: string;
-        monthlyPrice: number | null;
-        annualPrice: number | null;
-      }>
-    | undefined;
-  isLoadingProducts: boolean;
-  isSubscribed: boolean;
-  onSubscribeClick: (id: "pro") => void;
-  portalMutation: { isPending: boolean; mutate: (args: object) => void };
-  checkoutMutation: { isPending: boolean };
-  previewMutation: { isPending: boolean };
-}) {
+function ProPlanCard() {
+  const {
+    planId,
+    recommendedPlanId,
+    chosenPlanId,
+    hasAnyPending,
+    products,
+    isLoadingProducts,
+    isSubscribed,
+    onSubscribeClick,
+    portalMutation,
+    checkoutMutation,
+    previewMutation,
+  } = useSubscriptionDialogContext();
   const plan = PLANS.pro;
   const isCurrent = planId === "pro";
   const isRecommended = recommendedPlanId === "pro";
@@ -532,22 +491,14 @@ function ProPlanCard({
   );
 }
 
-function PlanSwitchConfirmation({
+function PlanSwitchConfirmationContent({
   preview,
-  onBack,
-  onConfirm,
-  isPending,
   onIntervalChange,
-  isLoadingPreview,
   monthlyPrice,
   annualPrice,
 }: {
   preview: SwitchPreview;
-  onBack: () => void;
-  onConfirm: () => void;
-  isPending: boolean;
   onIntervalChange: (interval: BillingInterval) => void;
-  isLoadingPreview: boolean;
   monthlyPrice: number | null;
   annualPrice: number | null;
 }) {
@@ -583,84 +534,64 @@ function PlanSwitchConfirmation({
   }
 
   return (
-    <ControlledResponsiveDialog
-      open
-      onOpenChange={() => onBack()}
-      title="Switch Plan"
-      description={`Switch from ${preview.currentPlanName} to ${preview.newPlanName}`}
-      onBack={onBack}
-      footer={
-        <Button
-          className="w-full"
-          onClick={onConfirm}
-          disabled={isPending || isLoadingPreview}
-        >
-          {isPending
-            ? "Switching..."
-            : `Confirm Switch to ${preview.newPlanName}`}
-        </Button>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-lg border p-4">
-          <Icon size={20} className="shrink-0" />
-          <div className="flex-1">
-            <h3 className="font-medium">{preview.newPlanName} Plan</h3>
-            <p className="text-muted-foreground text-sm">
-              {formatPrice(preview.newAmount)}/{intervalLabel}
-            </p>
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 rounded-lg border p-4">
+        <Icon size={20} className="shrink-0" />
+        <div className="flex-1">
+          <h3 className="font-medium">{preview.newPlanName} Plan</h3>
+          <p className="text-muted-foreground text-sm">
+            {formatPrice(preview.newAmount)}/{intervalLabel}
+          </p>
         </div>
-        {hasBothIntervals && (
-          <CardRadioGroup
-            value={selectedInterval}
-            onValueChange={handleIntervalChange}
-            options={intervalOptions}
-            orientation="vertical"
-          />
-        )}
-        <ul className="space-y-2">
-          {features.map((feature) => (
-            <li
-              key={feature}
-              className="text-muted-foreground flex items-center gap-2 text-sm"
-            >
-              <CheckIcon size={14} className="shrink-0" />
-              {feature}
-            </li>
-          ))}
-        </ul>
-        {preview.isDowngrade ? (
-          <div className="rounded-lg border p-4">
-            <p className="text-sm font-medium">
-              Your plan will change on {formatDate(preview.periodEnd)}
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              You&apos;ll keep your current {preview.currentPlanName} plan
-              features until the end of your billing period. After that,
-              you&apos;ll be switched to the {preview.newPlanName} plan
-              automatically.
-            </p>
-          </div>
-        ) : preview.proratedAmount > 0 ? (
-          <div className="rounded-lg border p-4">
-            <p className="text-sm">
-              <span className="text-muted-foreground">
-                Estimated charge today:
-              </span>{" "}
-              <span className="font-medium">
-                {formatPrice(preview.proratedAmount)}
-              </span>
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              You&apos;ll be credited for the unused time on your current plan.
-              The final amount may differ slightly based on your local tax
-              rates.
-            </p>
-          </div>
-        ) : null}
       </div>
-    </ControlledResponsiveDialog>
+      {hasBothIntervals && (
+        <CardRadioGroup
+          value={selectedInterval}
+          onValueChange={handleIntervalChange}
+          options={intervalOptions}
+          orientation="vertical"
+        />
+      )}
+      <ul className="space-y-2">
+        {features.map((feature) => (
+          <li
+            key={feature}
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+          >
+            <CheckIcon size={14} className="shrink-0" />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      {preview.isDowngrade ? (
+        <div className="rounded-lg border p-4">
+          <p className="text-sm font-medium">
+            Your plan will change on {formatDate(preview.periodEnd)}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            You&apos;ll keep your current {preview.currentPlanName} plan
+            features until the end of your billing period. After that,
+            you&apos;ll be switched to the {preview.newPlanName} plan
+            automatically.
+          </p>
+        </div>
+      ) : preview.proratedAmount > 0 ? (
+        <div className="rounded-lg border p-4">
+          <p className="text-sm">
+            <span className="text-muted-foreground">
+              Estimated charge today:
+            </span>{" "}
+            <span className="font-medium">
+              {formatPrice(preview.proratedAmount)}
+            </span>
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            You&apos;ll be credited for the unused time on your current plan.
+            The final amount may differ slightly based on your local tax rates.
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -673,6 +604,194 @@ function getRecommendedPlanId(
   const bestFitIndex = PLAN_IDS.indexOf(bestFit);
   if (bestFitIndex < currentPlanIndex) return null;
   return bestFit;
+}
+
+type SubscriptionDialogContextValue = {
+  planId: string;
+  recommendedPlanId: string | null;
+  chosenPlanId: string;
+  hasAnyPending: boolean;
+  isSubscribed: boolean;
+  products:
+    | Array<{
+        planId: string;
+        monthlyPrice: number | null;
+        annualPrice: number | null;
+      }>
+    | undefined;
+  isLoadingProducts: boolean;
+  pendingSwitch: { planId: string; appliesAt: string } | null | undefined;
+  onSubscribeClick: (
+    id: "standard-small" | "standard-medium" | "standard-large" | "pro",
+  ) => void;
+  onDowngradeClick: () => void;
+  isDowngradeLoading: boolean;
+  portalMutation: { isPending: boolean; mutate: (args: object) => void };
+  checkoutMutation: { isPending: boolean };
+  previewMutation: { isPending: boolean };
+};
+
+const SubscriptionDialogContext =
+  createContext<SubscriptionDialogContextValue | null>(null);
+
+function useSubscriptionDialogContext() {
+  const ctx = useContext(SubscriptionDialogContext);
+  if (!ctx) {
+    throw new Error(
+      "useSubscriptionDialogContext must be used within SubscriptionDialogProvider",
+    );
+  }
+  return ctx;
+}
+
+function StandardPlanCards() {
+  const {
+    planId,
+    recommendedPlanId,
+    chosenPlanId,
+    hasAnyPending,
+    isSubscribed,
+    products,
+    isLoadingProducts,
+    pendingSwitch,
+    onSubscribeClick,
+    portalMutation,
+    checkoutMutation,
+    previewMutation,
+  } = useSubscriptionDialogContext();
+
+  return (
+    <div className="border-border rounded-lg border p-4">
+      <div className="flex items-center gap-2">
+        <TreeDeciduousIcon size={20} className="shrink-0" />
+        <h3 className="font-medium">Standard</h3>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {STANDARD_FEATURES.map((feature) => (
+          <li
+            key={feature}
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+          >
+            <CheckIcon size={12} />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex flex-col gap-4">
+        {STANDARD_PLAN_IDS.map((id) => {
+          const plan = PLANS[id];
+          const isCurrent = id === planId;
+          const isPending = pendingSwitch?.planId === id;
+          const pendingDate = isPending ? pendingSwitch.appliesAt : null;
+          const isRecommended = id === recommendedPlanId;
+          const product = products?.find((p) => p.planId === id);
+          const monthlyPrice = product?.monthlyPrice ?? null;
+          const annualPrice = product?.annualPrice ?? null;
+          const hasPrice = monthlyPrice != null || annualPrice != null;
+          const feedsLabel = `Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`;
+
+          return (
+            <div
+              key={id}
+              className={`relative rounded-lg border p-3 ${
+                isCurrent && isRecommended
+                  ? "border-sidebar-accent bg-sidebar-accent/5"
+                  : isCurrent
+                    ? "border-foreground bg-foreground/5"
+                    : isRecommended
+                      ? "border-sidebar-accent bg-sidebar-accent/5"
+                      : "border-border"
+              }`}
+            >
+              {(isCurrent || isPending || isRecommended) && (
+                <div className="absolute -top-3 left-4 flex gap-1.5">
+                  {isCurrent && (
+                    <span
+                      className={
+                        hasAnyPending
+                          ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
+                          : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
+                      }
+                    >
+                      Current
+                    </span>
+                  )}
+                  {pendingDate && (
+                    <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium whitespace-nowrap">
+                      Starting {formatDate(pendingDate)}
+                    </span>
+                  )}
+                  {isRecommended && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
+                          Recommended
+                          <CircleHelpIcon size={12} />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-64">
+                        {chosenPlanId === id
+                          ? RECOMMENDATION_MESSAGES.currentPaid
+                          : RECOMMENDATION_MESSAGES.upgrade}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{QUOTA_DISPLAY_NAMES[id]}</span>
+                <div className="ml-auto flex items-center gap-3">
+                  {isLoadingProducts ? (
+                    <Skeleton className="h-4 w-20" />
+                  ) : hasPrice ? (
+                    <span className="text-muted-foreground text-sm">
+                      {monthlyPrice != null &&
+                        `${formatPrice(monthlyPrice)}/mo`}
+                      {monthlyPrice != null && annualPrice != null && " · "}
+                      {annualPrice != null && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-default underline decoration-dotted underline-offset-4">
+                              {formatPrice(annualPrice)}/yr
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {formatPrice(Math.round(annualPrice / 12))}
+                            /mo
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </span>
+                  ) : null}
+                  {isCurrent && isSubscribed ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={portalMutation.isPending}
+                      onClick={() => portalMutation.mutate({})}
+                    >
+                      Manage
+                    </Button>
+                  ) : !isCurrent ? (
+                    <Button
+                      size="sm"
+                      disabled={
+                        checkoutMutation.isPending || previewMutation.isPending
+                      }
+                      onClick={() => onSubscribeClick(id)}
+                    >
+                      {isSubscribed ? "Switch" : "Subscribe"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <p className="text-muted-foreground mt-1 text-sm">{feedsLabel}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function SubscriptionDialog({
@@ -847,258 +966,158 @@ export function SubscriptionDialog({
     }
   }
 
+  const contextValue: SubscriptionDialogContextValue = {
+    planId,
+    recommendedPlanId,
+    chosenPlanId,
+    hasAnyPending,
+    isSubscribed,
+    products,
+    isLoadingProducts,
+    pendingSwitch,
+    onSubscribeClick: handleSubscribeClick,
+    onDowngradeClick: () => downgradePreviewMutation.mutate({}),
+    isDowngradeLoading: downgradePreviewMutation.isPending,
+    portalMutation,
+    checkoutMutation,
+    previewMutation,
+  };
+
+  const isSubView = downgradePreview != null || switchPreview != null;
+
+  let dialogTitle: string;
+  let dialogDescription: string;
+  let dialogFooter: React.ReactNode;
+  let dialogOnBack: (() => void) | undefined;
+
   if (downgradePreview) {
-    return (
-      <DowngradeConfirmation
-        preview={downgradePreview}
-        onBack={() => setDowngradePreview(null)}
-        onConfirm={() => cancelMutation.mutate({})}
-        isPending={cancelMutation.isPending}
-      />
+    dialogTitle = "Downgrade Plan";
+    dialogDescription = `Downgrade from ${downgradePreview.currentPlanName} to Free`;
+    dialogOnBack = () => setDowngradePreview(null);
+    dialogFooter = (
+      <Button
+        className="w-full"
+        onClick={() => cancelMutation.mutate({})}
+        disabled={cancelMutation.isPending}
+      >
+        {cancelMutation.isPending
+          ? "Downgrading..."
+          : "Confirm Downgrade to Free"}
+      </Button>
     );
-  }
-
-  if (switchPreview) {
-    const newPlanProduct = products?.find(
-      (p) => p.planId === switchPreview.newPlanId,
-    );
-
-    return (
-      <PlanSwitchConfirmation
-        preview={switchPreview}
-        onBack={() => setSwitchPreview(null)}
-        onConfirm={() =>
+  } else if (switchPreview) {
+    dialogTitle = "Switch Plan";
+    dialogDescription = `Switch from ${switchPreview.currentPlanName} to ${switchPreview.newPlanName}`;
+    dialogOnBack = () => setSwitchPreview(null);
+    dialogFooter = (
+      <Button
+        className="w-full"
+        onClick={() =>
           switchMutation.mutate({
             subscriptionId: switchPreview.subscriptionId,
             newProductId: switchPreview.newProductId,
           })
         }
-        isPending={switchMutation.isPending}
-        isLoadingPreview={previewMutation.isPending}
-        onIntervalChange={(interval) =>
-          previewMutation.mutate({
-            planId: switchPreview.newPlanId as
-              | "standard-small"
-              | "standard-medium"
-              | "standard-large"
-              | "pro",
-            billingInterval: interval,
-          })
-        }
-        monthlyPrice={newPlanProduct?.monthlyPrice ?? null}
-        annualPrice={newPlanProduct?.annualPrice ?? null}
-      />
+        disabled={switchMutation.isPending || previewMutation.isPending}
+      >
+        {switchMutation.isPending
+          ? "Switching..."
+          : `Confirm Switch to ${switchPreview.newPlanName}`}
+      </Button>
+    );
+  } else {
+    dialogTitle = "Subscribe to Serial";
+    dialogDescription = "All prices are taxes-included.";
+    dialogFooter = (
+      <p className="text-muted-foreground flex flex-col text-center text-sm">
+        Price too high or need higher limits?{" "}
+        <span>
+          <a
+            href={`mailto:${import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Let us know
+          </a>{" "}
+          or{" "}
+          <a
+            href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            learn how to self-host
+          </a>{" "}
+          Serial
+        </span>
+      </p>
     );
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && isSubView) {
+      setDowngradePreview(null);
+      setSwitchPreview(null);
+      return;
+    }
+    onOpenChange(nextOpen);
+  }
+
+  const newPlanProduct = switchPreview
+    ? products?.find((p) => p.planId === switchPreview.newPlanId)
+    : undefined;
+
   return (
-    <ControlledResponsiveDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Subscribe to Serial"
-      description="All prices are taxes-included."
-      className="lg:max-w-5xl xl:max-w-6xl"
-      headerClassName="lg:text-center"
-      footerBorder={false}
-      footer={
-        <p className="text-muted-foreground flex flex-col text-center text-sm">
-          Price too high or need higher limits?{" "}
-          <span>
-            <a
-              href={`mailto:${import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Let us know
-            </a>{" "}
-            or{" "}
-            <a
-              href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              learn how to self-host
-            </a>{" "}
-            Serial
-          </span>
-        </p>
-      }
-    >
-      <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_1.5fr_1fr] lg:gap-5 xl:grid-cols-[1fr_2fr_1fr]">
-        {showVerification && !emailVerified && (
-          <div className="col-span-full">
-            <EmailVerificationBanner onVerified={handleVerified} />
+    <SubscriptionDialogContext.Provider value={contextValue}>
+      <ControlledResponsiveDialog
+        open={open}
+        onOpenChange={handleOpenChange}
+        title={dialogTitle}
+        description={dialogDescription}
+        className={isSubView ? undefined : "lg:max-w-5xl xl:max-w-6xl"}
+        headerClassName={isSubView ? undefined : "lg:text-center"}
+        footerBorder={isSubView}
+        onBack={dialogOnBack}
+        footer={dialogFooter}
+      >
+        {downgradePreview ? (
+          <DowngradeConfirmationContent preview={downgradePreview} />
+        ) : switchPreview ? (
+          <PlanSwitchConfirmationContent
+            preview={switchPreview}
+            onIntervalChange={(interval) =>
+              previewMutation.mutate({
+                planId: switchPreview.newPlanId as
+                  | "standard-small"
+                  | "standard-medium"
+                  | "standard-large"
+                  | "pro",
+                billingInterval: interval,
+              })
+            }
+            monthlyPrice={newPlanProduct?.monthlyPrice ?? null}
+            annualPrice={newPlanProduct?.annualPrice ?? null}
+          />
+        ) : (
+          <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_1.5fr_1fr] lg:gap-5 xl:grid-cols-[1fr_2fr_1fr]">
+            {showVerification && !emailVerified && (
+              <div className="col-span-full">
+                <EmailVerificationBanner onVerified={handleVerified} />
+              </div>
+            )}
+
+            {/* Free plan */}
+            <FreePlanCard />
+
+            {/* Paid plans */}
+            <StandardPlanCards />
+
+            {/* Pro plan */}
+            <ProPlanCard />
           </div>
         )}
-
-        {/* Free plan */}
-        <FreePlanCard
-          planId={planId}
-          recommendedPlanId={recommendedPlanId}
-          chosenPlanId={chosenPlanId}
-          pendingDate={
-            pendingSwitch?.planId === "free" ? pendingSwitch.appliesAt : null
-          }
-          hasAnyPending={hasAnyPending}
-          isSubscribed={isSubscribed}
-          onDowngradeClick={() => downgradePreviewMutation.mutate({})}
-          isDowngradeLoading={downgradePreviewMutation.isPending}
-        />
-
-        {/* Paid plans */}
-        <div className="border-border rounded-lg border p-4">
-          <div className="flex items-center gap-2">
-            <TreeDeciduousIcon size={20} className="shrink-0" />
-            <h3 className="font-medium">Standard</h3>
-          </div>
-          <ul className="mt-2 space-y-1">
-            {STANDARD_FEATURES.map((feature) => (
-              <li
-                key={feature}
-                className="text-muted-foreground flex items-center gap-2 text-sm"
-              >
-                <CheckIcon size={12} />
-                {feature}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-3 flex flex-col gap-4">
-            {STANDARD_PLAN_IDS.map((id) => {
-              const plan = PLANS[id];
-              const isCurrent = id === planId;
-              const isPending = pendingSwitch?.planId === id;
-              const pendingDate = isPending ? pendingSwitch.appliesAt : null;
-              const isRecommended = id === recommendedPlanId;
-              const product = products?.find((p) => p.planId === id);
-              const monthlyPrice = product?.monthlyPrice ?? null;
-              const annualPrice = product?.annualPrice ?? null;
-              const hasPrice = monthlyPrice != null || annualPrice != null;
-              const feedsLabel = `Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`;
-
-              return (
-                <div
-                  key={id}
-                  className={`relative rounded-lg border p-3 ${
-                    isCurrent && isRecommended
-                      ? "border-sidebar-accent bg-sidebar-accent/5"
-                      : isCurrent
-                        ? "border-foreground bg-foreground/5"
-                        : isRecommended
-                          ? "border-sidebar-accent bg-sidebar-accent/5"
-                          : "border-border"
-                  }`}
-                >
-                  {(isCurrent || isPending || isRecommended) && (
-                    <div className="absolute -top-3 left-4 flex gap-1.5">
-                      {isCurrent && (
-                        <span
-                          className={
-                            hasAnyPending
-                              ? "bg-background border-foreground/70 text-foreground rounded-full border border-dashed px-3 py-0.5 text-xs font-medium"
-                              : "bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium"
-                          }
-                        >
-                          Current
-                        </span>
-                      )}
-                      {pendingDate && (
-                        <span className="bg-foreground text-background rounded-full px-3 py-0.5 text-xs font-medium whitespace-nowrap">
-                          Starting {formatDate(pendingDate)}
-                        </span>
-                      )}
-                      {isRecommended && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="bg-background border-sidebar-accent text-sidebar-accent-foreground inline-flex cursor-default items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-medium">
-                              Recommended
-                              <CircleHelpIcon size={12} />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-64">
-                            {chosenPlanId === id
-                              ? RECOMMENDATION_MESSAGES.currentPaid
-                              : RECOMMENDATION_MESSAGES.upgrade}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      {QUOTA_DISPLAY_NAMES[id]}
-                    </span>
-                    <div className="ml-auto flex items-center gap-3">
-                      {isLoadingProducts ? (
-                        <Skeleton className="h-4 w-20" />
-                      ) : hasPrice ? (
-                        <span className="text-muted-foreground text-sm">
-                          {monthlyPrice != null &&
-                            `${formatPrice(monthlyPrice)}/mo`}
-                          {monthlyPrice != null && annualPrice != null && " · "}
-                          {annualPrice != null && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="cursor-default underline decoration-dotted underline-offset-4">
-                                  {formatPrice(annualPrice)}/yr
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {formatPrice(Math.round(annualPrice / 12))}
-                                /mo
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </span>
-                      ) : null}
-                      {isCurrent && isSubscribed ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={portalMutation.isPending}
-                          onClick={() => portalMutation.mutate({})}
-                        >
-                          Manage
-                        </Button>
-                      ) : !isCurrent ? (
-                        <Button
-                          size="sm"
-                          disabled={
-                            checkoutMutation.isPending ||
-                            previewMutation.isPending
-                          }
-                          onClick={() => handleSubscribeClick(id)}
-                        >
-                          {isSubscribed ? "Switch" : "Subscribe"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {feedsLabel}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Pro plan */}
-        <ProPlanCard
-          planId={planId}
-          recommendedPlanId={recommendedPlanId}
-          chosenPlanId={chosenPlanId}
-          hasAnyPending={hasAnyPending}
-          products={products}
-          isLoadingProducts={isLoadingProducts}
-          isSubscribed={isSubscribed}
-          onSubscribeClick={handleSubscribeClick}
-          portalMutation={portalMutation}
-          checkoutMutation={checkoutMutation}
-          previewMutation={previewMutation}
-        />
-      </div>
-    </ControlledResponsiveDialog>
+      </ControlledResponsiveDialog>
+    </SubscriptionDialogContext.Provider>
   );
 }
