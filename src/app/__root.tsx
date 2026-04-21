@@ -9,6 +9,7 @@ import { SproutIcon } from "lucide-react";
 import { ThemeProvider } from "~/components/ThemeProvider";
 import { Toaster } from "~/components/ui/sonner";
 import { QueryProvider } from "~/lib/query-provider";
+import { initializeSentry } from "~/lib/sentry";
 
 import { ReloadPrompt } from "~/components/pwa/ReloadPrompt";
 import { Button } from "~/components/ui/button";
@@ -19,6 +20,11 @@ import appCss from "~/styles/globals.css?url";
 
 import "@fontsource-variable/outfit";
 import "@fontsource-variable/noto-serif";
+
+// Initialize Sentry as early as possible
+if (typeof window !== "undefined") {
+  initializeSentry();
+}
 
 const title = "Serial";
 const description =
