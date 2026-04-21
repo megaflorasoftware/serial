@@ -4,12 +4,16 @@ import { CheckIcon, CircleHelpIcon, TreeDeciduousIcon } from "lucide-react";
 import {
   QUOTA_DISPLAY_NAMES,
   RECOMMENDATION_MESSAGES,
-  STANDARD_FEATURES,
   STANDARD_PLAN_IDS,
 } from "./constants";
 import { useSubscriptionDialogContext } from "./context";
 import { BillingCycleSwitchButton } from "./BillingCycleSwitchButton";
-import { formatDate, formatPrice, getPlanCardBorderClasses } from "./utils";
+import {
+  formatDate,
+  formatPrice,
+  getPlanCardBorderClasses,
+  getPlanFeatures,
+} from "./utils";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
@@ -35,6 +39,12 @@ export function StandardPlanCards() {
     previewMutation,
   } = useSubscriptionDialogContext();
 
+  // Derive shared features from the first standard plan config (all standard
+  // plans share the same refresh interval and background refresh capability).
+  const sharedFeatures = getPlanFeatures(PLANS["standard-small"]).filter(
+    (f) => !f.startsWith("Up to"),
+  );
+
   return (
     <div className="border-border rounded-lg border p-4">
       <div className="flex items-center gap-2">
@@ -42,7 +52,7 @@ export function StandardPlanCards() {
         <h3 className="font-medium">Standard</h3>
       </div>
       <ul className="mt-2 space-y-1">
-        {STANDARD_FEATURES.map((feature) => (
+        {sharedFeatures.map((feature) => (
           <li
             key={feature}
             className="text-muted-foreground flex items-center gap-2 text-sm"

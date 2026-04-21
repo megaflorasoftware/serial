@@ -14,6 +14,19 @@ export function formatDate(iso: string): string {
   });
 }
 
+function formatRefreshInterval(ms: number): string {
+  const minutes = Math.round(ms / (60 * 1000));
+  if (minutes < 60) {
+    return minutes === 1
+      ? "Refreshes every minute"
+      : `Refreshes once every ${minutes} min`;
+  }
+  const hours = Math.round(minutes / 60);
+  return hours === 1
+    ? "Refresh up to once an hour"
+    : `Refresh up to once every ${hours} hours`;
+}
+
 export function getPlanFeatures(plan: PlanConfig): string[] {
   const features: string[] = [];
 
@@ -23,19 +36,12 @@ export function getPlanFeatures(plan: PlanConfig): string[] {
     features.push(`Up to ${plan.maxActiveFeeds.toLocaleString()} active feeds`);
   }
 
-  if (plan.id === "free") {
-    features.push("Refresh up to once an hour");
+  features.push(formatRefreshInterval(plan.refreshIntervalMs));
+
+  if (plan.backgroundRefreshIntervalMs != null) {
+    features.push("Refresh in background");
+  } else {
     features.push("Manual refresh only");
-  } else if (
-    plan.id === "standard-small" ||
-    plan.id === "standard-medium" ||
-    plan.id === "standard-large"
-  ) {
-    features.push("Refreshes once every 15 min");
-    features.push("Refresh in background");
-  } else if (plan.id === "pro") {
-    features.push("Refreshes every minute");
-    features.push("Refresh in background");
   }
 
   return features;

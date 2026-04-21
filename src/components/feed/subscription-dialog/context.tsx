@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { BillingInterval } from "./constants";
+import type { PaidPlanId } from "~/server/subscriptions/plans";
 
 export type SubscriptionDialogContextValue = {
   planId: string;
@@ -23,9 +24,7 @@ export type SubscriptionDialogContextValue = {
       }
     | null
     | undefined;
-  onSubscribeClick: (
-    id: "standard-small" | "standard-medium" | "standard-large" | "pro",
-  ) => void;
+  onSubscribeClick: (id: PaidPlanId) => void;
   onSwitchToFreeClick: () => void;
   isSwitchToFreeLoading: boolean;
   currentBillingInterval: BillingInterval | null;

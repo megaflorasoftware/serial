@@ -181,7 +181,7 @@ function CheckoutSuccessDialog({
   const { planId } = useSubscription();
   const plan = PLANS[planId];
   const features = getPlanFeatures(plan);
-  const Icon = PLAN_ICONS[planId];
+  const Icon = PLAN_ICONS[planId] ?? PLAN_ICONS.free;
 
   return (
     <ControlledResponsiveDialog

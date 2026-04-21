@@ -8,6 +8,14 @@ export const PLAN_IDS = [
   "pro",
 ] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
+export type PaidPlanId = Exclude<PlanId, "free">;
+
+export const PAID_PLAN_IDS = [
+  "standard-small",
+  "standard-medium",
+  "standard-large",
+  "pro",
+] as const satisfies readonly PaidPlanId[];
 
 export type PlanConfig = {
   id: PlanId;

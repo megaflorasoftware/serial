@@ -15,6 +15,7 @@ import { getRecommendedPlanId } from "./utils";
 import type { BillingInterval } from "./constants";
 import type { SubscriptionDialogContextValue } from "./context";
 import type { SwitchPreview } from "./types";
+import type { PaidPlanId } from "~/server/subscriptions/plans";
 import { Button } from "~/components/ui/button";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -25,6 +26,7 @@ import { useSubscription } from "~/lib/data/subscription";
 import { orpc } from "~/lib/orpc";
 import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import { useDialogStore } from "~/components/feed/dialogStore";
+import { env } from "~/env";
 
 export function SubscriptionDialog({
   open,
@@ -37,9 +39,7 @@ export function SubscriptionDialog({
   const { data: session, refetch: refetchSession } = useSession();
   const queryClient = useQueryClient();
   const [showVerification, setShowVerification] = useState(false);
-  const [pendingPlanId, setPendingPlanId] = useState<
-    "standard-small" | "standard-medium" | "standard-large" | "pro" | null
-  >(null);
+  const [pendingPlanId, setPendingPlanId] = useState<PaidPlanId | null>(null);
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
   );
@@ -221,9 +221,7 @@ export function SubscriptionDialog({
   );
   const chosenPlanId = pendingSwitch?.planId ?? planId;
 
-  function handleSubscribeClick(
-    id: "standard-small" | "standard-medium" | "standard-large" | "pro",
-  ) {
+  function handleSubscribeClick(id: PaidPlanId) {
     setPendingPlanId(id);
     if (isSubscribed) {
       // Already subscribed — show switch confirmation
@@ -347,7 +345,7 @@ export function SubscriptionDialog({
         Price too high or need higher limits?{" "}
         <span>
           <a
-            href={`mailto:${import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
+            href={`mailto:${env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}`}
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
@@ -407,11 +405,7 @@ export function SubscriptionDialog({
             preview={switchPreview}
             onIntervalChange={(interval) =>
               previewMutation.mutate({
-                planId: switchPreview.newPlanId as
-                  | "standard-small"
-                  | "standard-medium"
-                  | "standard-large"
-                  | "pro",
+                planId: switchPreview.newPlanId as PaidPlanId,
                 billingInterval: interval,
               })
             }

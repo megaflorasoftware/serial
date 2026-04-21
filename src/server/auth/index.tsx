@@ -34,7 +34,7 @@ export const authMiddleware = createMiddleware().server(
     const headers = getRequestHeaders() as Headers;
     const session = await auth.api.getSession({ headers });
     if (!session) {
-      if (!pathname.startsWith("/auth")) {
+      if (!pathname.startsWith("/auth/") && pathname !== "/auth") {
         throw redirect({ to: BASE_SIGNED_OUT_URL });
       }
     }
@@ -161,7 +161,7 @@ export const auth = betterAuth({
         const html = await render(
           <ResetPasswordEmail
             resetUrl={data.url}
-            supportEmail={import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}
+            supportEmail={env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}
           />,
         );
 
@@ -194,9 +194,7 @@ export const auth = betterAuth({
                   const html = await render(
                     <VerifyEmailEmail
                       otp={otp}
-                      supportEmail={
-                        import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS
-                      }
+                      supportEmail={env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS}
                     />,
                   );
                   await sendEmail({

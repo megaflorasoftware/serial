@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import type { PlanId } from "~/server/subscriptions/plans";
+import type { PaidPlanId } from "~/server/subscriptions/plans";
 import { protectedProcedure } from "~/server/orpc/base";
 import {
   getUserPlanId,
@@ -13,10 +13,11 @@ import {
   IS_BILLING_ENABLED,
   polarClient,
 } from "~/server/subscriptions/polar";
-import { PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
+import { PAID_PLAN_IDS, PLAN_IDS, PLANS } from "~/server/subscriptions/plans";
 import {
   applySubscriptionSideEffects,
   getSubscriptionFromKV,
+  redis,
   syncPolarDataToKV,
 } from "~/server/subscriptions/kv";
 import { user } from "~/server/db/schema";
@@ -46,7 +47,7 @@ type CachedProducts = {
 };
 
 type PlanProduct = {
-  planId: PlanId;
+  planId: PaidPlanId;
   planName: string;
   monthlyPrice: number | null;
   annualPrice: number | null;
@@ -55,7 +56,10 @@ type PlanProduct = {
 };
 
 let productsCache: CachedProducts | null = null;
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+/** Cooldown window for syncAfterCheckout per user (seconds). */
+const SYNC_COOLDOWN_SECONDS = 30;
 
 export const getStatus = protectedProcedure.handler(async ({ context }) => {
   return getUserPlanLimits(context.db, context.user.id);
@@ -86,14 +90,10 @@ export const getProducts = protectedProcedure.handler(async () => {
     return productsCache.data;
   }
 
-  const productIds = (
-    ["standard-small", "standard-medium", "standard-large", "pro"] as const
-  )
-    .flatMap((planId) => {
-      const ids = getPolarProductIds(planId);
-      return [ids.monthly, ids.annual];
-    })
-    .filter(Boolean);
+  const productIds = PAID_PLAN_IDS.flatMap((planId) => {
+    const ids = getPolarProductIds(planId);
+    return [ids.monthly, ids.annual];
+  }).filter(Boolean);
 
   if (productIds.length === 0) {
     return [];
@@ -102,12 +102,7 @@ export const getProducts = protectedProcedure.handler(async () => {
   try {
     const results: PlanProduct[] = [];
 
-    for (const planId of [
-      "standard-small",
-      "standard-medium",
-      "standard-large",
-      "pro",
-    ] as const) {
+    for (const planId of PAID_PLAN_IDS) {
       const plan = PLANS[planId];
       const planProductIds = getPolarProductIds(planId);
 
@@ -173,18 +168,13 @@ export const getProducts = protectedProcedure.handler(async () => {
 export const createCheckout = protectedProcedure
   .input(
     z.object({
-      planId: z.enum([
-        "standard-small",
-        "standard-medium",
-        "standard-large",
-        "pro",
-      ]),
+      planId: z.enum(PAID_PLAN_IDS),
       returnPath: z.string().optional(),
     }),
   )
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
-      return { url: null, error: null };
+      return { url: null, error: "billing-disabled" as const };
     }
 
     // Prevent double-checkout: block if user already has an active paid plan
@@ -211,7 +201,7 @@ export const createCheckout = protectedProcedure
     );
 
     if (productIds.length === 0) {
-      return { url: null, error: null };
+      return { url: null, error: "no-products" as const };
     }
 
     const origin = getValidatedOrigin(context.headers);
@@ -242,12 +232,7 @@ export const createCheckout = protectedProcedure
 export const previewPlanSwitch = protectedProcedure
   .input(
     z.object({
-      planId: z.enum([
-        "standard-small",
-        "standard-medium",
-        "standard-large",
-        "pro",
-      ]),
+      planId: z.enum(PAID_PLAN_IDS),
       billingInterval: z.enum(["month", "year"]).optional(),
     }),
   )
@@ -349,13 +334,13 @@ export const switchPlan = protectedProcedure
   )
   .handler(async ({ context, input }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
-      return { success: false };
+      return { success: false as const, error: "billing-disabled" as const };
     }
 
     // Verify the new product ID belongs to a known plan
     const knownProductIds = getAllKnownProductIds();
     if (!knownProductIds.has(input.newProductId)) {
-      throw new Error("Invalid product ID");
+      return { success: false as const, error: "invalid-product" as const };
     }
 
     // Verify the subscription belongs to this user
@@ -368,7 +353,10 @@ export const switchPlan = protectedProcedure
       (s) => s.id === input.subscriptionId,
     );
     if (!sub) {
-      throw new Error("Subscription not found");
+      return {
+        success: false as const,
+        error: "subscription-not-found" as const,
+      };
     }
 
     // Determine upgrade vs downgrade to choose proration strategy:
@@ -409,17 +397,31 @@ export const switchPlan = protectedProcedure
       );
     }
 
-    return { success: true };
+    return { success: true as const, error: null };
   });
 
 /**
  * Eagerly sync subscription state after checkout completes.
  * Called once from the client on checkout success — replaces the old polling approach.
+ * Rate-limited per user via KV to prevent abuse.
  */
 export const syncAfterCheckout = protectedProcedure.handler(
   async ({ context }) => {
     if (!IS_BILLING_ENABLED) {
       return getUserPlanLimits(context.db, context.user.id);
+    }
+
+    // Per-user rate limit: one sync per SYNC_COOLDOWN_SECONDS
+    const lockKey = `sync-checkout-lock:${context.user.id}`;
+    if (redis) {
+      const acquired = await redis.set(lockKey, "1", {
+        nx: true,
+        ex: SYNC_COOLDOWN_SECONDS,
+      });
+      if (!acquired) {
+        // Cooldown active — return current state without re-syncing
+        return getUserPlanLimits(context.db, context.user.id);
+      }
     }
 
     try {
@@ -482,7 +484,7 @@ export const getPendingSwitch = protectedProcedure.handler(
 export const revertPendingChange = protectedProcedure.handler(
   async ({ context }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
-      return { success: false };
+      return { success: false as const, error: "billing-disabled" as const };
     }
 
     const subscriptions = await polarClient.subscriptions.list({
@@ -492,7 +494,7 @@ export const revertPendingChange = protectedProcedure.handler(
 
     const sub = subscriptions.result?.items?.[0];
     if (!sub) {
-      throw new Error("No active subscription found");
+      return { success: false as const, error: "no-subscription" as const };
     }
 
     if (sub.cancelAtPeriodEnd) {
@@ -512,7 +514,7 @@ export const revertPendingChange = protectedProcedure.handler(
         },
       });
     } else {
-      return { success: false };
+      return { success: false as const, error: "no-pending-change" as const };
     }
 
     console.log(
@@ -528,7 +530,7 @@ export const revertPendingChange = protectedProcedure.handler(
       );
     }
 
-    return { success: true };
+    return { success: true as const, error: null };
   },
 );
 
@@ -559,7 +561,7 @@ export const previewDowngrade = protectedProcedure.handler(
 export const cancelSubscription = protectedProcedure.handler(
   async ({ context }) => {
     if (!IS_BILLING_ENABLED || !polarClient) {
-      return { success: false };
+      return { success: false as const, error: "billing-disabled" as const };
     }
 
     const subscriptions = await polarClient.subscriptions.list({
@@ -569,7 +571,7 @@ export const cancelSubscription = protectedProcedure.handler(
 
     const sub = subscriptions.result?.items?.[0];
     if (!sub) {
-      throw new Error("No active subscription found");
+      return { success: false as const, error: "no-subscription" as const };
     }
 
     await polarClient.subscriptions.update({
@@ -592,7 +594,7 @@ export const cancelSubscription = protectedProcedure.handler(
       );
     }
 
-    return { success: true };
+    return { success: true as const, error: null };
   },
 );
 

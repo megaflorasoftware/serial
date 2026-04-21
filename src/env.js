@@ -63,6 +63,7 @@ export const env = createEnv({
    */
   runtimeEnv: {
     VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS:
+      import.meta.env?.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS ??
       process.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS,
     DATABASE_URL: process.env.DATABASE_URL,
     DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN,

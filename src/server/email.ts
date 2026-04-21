@@ -19,6 +19,13 @@ export function isEmailProvider(
   return EMAIL_PROVIDER === provider;
 }
 
+// Module-level singletons — avoids recreating SDK clients on every send
+const resendClient = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
+
+if (env.SENDGRID_API_KEY) {
+  sendgrid.setApiKey(env.SENDGRID_API_KEY);
+}
+
 interface SendEmailOptions {
   to: string;
   subject: string;
@@ -33,10 +40,8 @@ export async function sendEmail(opts: SendEmailOptions) {
   const fullOpts = { ...opts, from: env.FROM_EMAIL_ADDRESS! };
 
   if (isEmailProvider("resend")) {
-    const resend = new Resend(env.RESEND_API_KEY);
-    await resend.emails.send(fullOpts);
+    await resendClient!.emails.send(fullOpts);
   } else if (isEmailProvider("sendgrid")) {
-    sendgrid.setApiKey(env.SENDGRID_API_KEY!);
     await sendgrid.send(fullOpts);
   }
 }

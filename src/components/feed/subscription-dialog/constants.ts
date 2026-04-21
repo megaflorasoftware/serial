@@ -20,11 +20,6 @@ export const QUOTA_DISPLAY_NAMES = {
   "standard-large": "Large",
 } as const;
 
-export const STANDARD_FEATURES = [
-  "Refreshes once every 15 min",
-  "Refresh in background",
-] as const;
-
 export const STANDARD_PLAN_IDS = [
   "standard-small",
   "standard-medium",
