@@ -9,8 +9,7 @@ export const env = createEnv({
    */
   client: {
     VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: z.string().email().optional(),
-    VITE_PUBLIC_SENTRY_DSN_WEB: z.string().optional(),
-    VITE_PUBLIC_SENTRY_SECURITY_ENDPOINT_WEB: z.string().optional(),
+    VITE_PUBLIC_SENTRY_DSN_WEB: z.string().url().optional(),
   },
   /**
    * Specify your server-side environment variables schema here. This way you can ensure the app
@@ -54,8 +53,8 @@ export const env = createEnv({
     OAUTH_USER_INFO_URL: z.string().optional(),
     OAUTH_SCOPES: z.string().optional(),
     OAUTH_PKCE: z.string().optional(),
-    SENTRY_DSN_BACKEND: z.string().optional(),
-    SENTRY_SECURITY_ENDPOINT_BACKEND: z.string().optional(),
+    SENTRY_DSN_BACKEND: z.string().url().optional(),
+    SENTRY_AUTH_TOKEN: z.string().optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -72,9 +71,6 @@ export const env = createEnv({
     VITE_PUBLIC_SENTRY_DSN_WEB:
       import.meta.env?.VITE_PUBLIC_SENTRY_DSN_WEB ??
       process.env.VITE_PUBLIC_SENTRY_DSN_WEB,
-    VITE_PUBLIC_SENTRY_SECURITY_ENDPOINT_WEB:
-      import.meta.env?.VITE_PUBLIC_SENTRY_SECURITY_ENDPOINT_WEB ??
-      process.env.VITE_PUBLIC_SENTRY_SECURITY_ENDPOINT_WEB,
     DATABASE_URL: process.env.DATABASE_URL,
     DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN,
     NODE_ENV: process.env.NODE_ENV,
@@ -114,8 +110,7 @@ export const env = createEnv({
     OAUTH_SCOPES: process.env.OAUTH_SCOPES,
     OAUTH_PKCE: process.env.OAUTH_PKCE,
     SENTRY_DSN_BACKEND: process.env.SENTRY_DSN_BACKEND,
-    SENTRY_SECURITY_ENDPOINT_BACKEND:
-      process.env.SENTRY_SECURITY_ENDPOINT_BACKEND,
+    SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

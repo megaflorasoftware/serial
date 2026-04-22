@@ -123,6 +123,7 @@ function Home() {
           <ViewFilterChips />
         </div>
       </div>
+
       <RenderViewItems />
       <MarkVisibleAsReadButton />
     </div>
