@@ -22,6 +22,7 @@ import {
 } from "~/server/subscriptions/kv";
 import { user } from "~/server/db/schema";
 import { IS_EMAIL_ENABLED } from "~/server/email";
+import { captureException } from "~/server/logger";
 
 const BASE_URL = process.env.BETTER_AUTH_BASE_URL ?? "http://localhost:3000";
 
@@ -71,6 +72,7 @@ export const refreshStatus = protectedProcedure.handler(async ({ context }) => {
     try {
       await syncPolarDataToKV(context.user.id);
     } catch (e) {
+      captureException(e);
       console.warn(
         `[subscription] refreshStatus sync failed for user ${context.user.id}:`,
         e,
@@ -121,8 +123,8 @@ export const getProducts = protectedProcedure.handler(async () => {
           if (price && "amountType" in price && price.amountType === "fixed") {
             monthlyPrice = (price as { priceAmount: number }).priceAmount;
           }
-        } catch {
-          // Skip if product not found
+        } catch (e) {
+          captureException(e);
         }
       }
 
@@ -136,6 +138,7 @@ export const getProducts = protectedProcedure.handler(async () => {
             annualPrice = (price as { priceAmount: number }).priceAmount;
           }
         } catch (e) {
+          captureException(e);
           console.error(
             `[subscription] Failed to fetch annual product for ${planId}:`,
             e,
@@ -160,6 +163,7 @@ export const getProducts = protectedProcedure.handler(async () => {
 
     return results;
   } catch (e) {
+    captureException(e);
     console.error("[subscription] Failed to fetch products:", e);
     return [];
   }
@@ -391,6 +395,7 @@ export const switchPlan = protectedProcedure
     try {
       await syncPolarDataToKV(context.user.id);
     } catch (e) {
+      captureException(e);
       console.warn(
         `[polar] Post-switch sync failed for user=${context.user.id}:`,
         e,
@@ -428,6 +433,7 @@ export const syncAfterCheckout = protectedProcedure.handler(
       const data = await syncPolarDataToKV(context.user.id);
       await applySubscriptionSideEffects(context.db, context.user.id, data);
     } catch (e) {
+      captureException(e);
       console.warn(
         `[subscription] syncAfterCheckout failed for user ${context.user.id}:`,
         e,
@@ -524,6 +530,7 @@ export const revertPendingChange = protectedProcedure.handler(
     try {
       await syncPolarDataToKV(context.user.id);
     } catch (e) {
+      captureException(e);
       console.warn(
         `[polar] Post-revert sync failed for user=${context.user.id}:`,
         e,
@@ -588,6 +595,7 @@ export const cancelSubscription = protectedProcedure.handler(
     try {
       await syncPolarDataToKV(context.user.id);
     } catch (e) {
+      captureException(e);
       console.warn(
         `[polar] Post-cancel sync failed for user=${context.user.id}:`,
         e,

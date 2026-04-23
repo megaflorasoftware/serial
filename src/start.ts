@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/tanstackstart-react";
 import {
   sentryGlobalFunctionMiddleware,
   sentryGlobalRequestMiddleware,
@@ -6,6 +7,15 @@ import { createStart } from "@tanstack/react-start";
 
 export const startInstance = createStart(() => {
   const dsn = process.env.SENTRY_DSN_BACKEND;
+
+  if (dsn) {
+    Sentry.init({
+      dsn,
+      sendDefaultPii: true,
+      environment:
+        process.env.NODE_ENV === "production" ? "production" : "development",
+    });
+  }
 
   return {
     requestMiddleware: dsn ? [sentryGlobalRequestMiddleware] : [],

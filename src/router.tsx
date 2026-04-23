@@ -14,6 +14,7 @@ export function getRouter() {
       Sentry.init({
         dsn,
         sendDefaultPii: true,
+        environment: import.meta.env.DEV ? "development" : "production",
       });
     }
   }

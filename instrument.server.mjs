@@ -6,5 +6,6 @@ if (dsn) {
   Sentry.init({
     dsn,
     sendDefaultPii: true,
+    environment: process.env.NODE_ENV || "development",
   });
 }

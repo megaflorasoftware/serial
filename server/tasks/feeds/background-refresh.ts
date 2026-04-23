@@ -1,5 +1,6 @@
 import { defineTask } from "nitro/task";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { captureException } from "../../../src/server/logger";
 import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { fetchAndInsertFeedData } from "../../../src/server/rss/fetchFeeds";
@@ -105,12 +106,17 @@ export default defineTask({
               result.error instanceof Error
                 ? result.error.message
                 : String(result.error);
+            captureException(
+              result.error instanceof Error ? result.error : new Error(errMsg),
+              { feedId: result.id, feedName, userId },
+            );
             console.error(
               `[background-refresh] Error refreshing feed "${feedName}" (id=${result.id}, user=${userId}): ${errMsg}`,
             );
           }
         }
       } catch (e) {
+        captureException(e);
         console.error(
           `[background-refresh] Failed to refresh feeds for user ${userId}:`,
           e,

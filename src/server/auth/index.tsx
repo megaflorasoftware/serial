@@ -27,6 +27,7 @@ import {
 } from "~/lib/constants";
 import { isOAuthConfigured } from "~/server/auth/constants";
 import { IS_EMAIL_ENABLED, sendEmail } from "~/server/email";
+import { captureException } from "~/server/logger";
 import { env } from "~/env";
 
 export const authMiddleware = createMiddleware().server(
@@ -58,6 +59,7 @@ async function syncAndApply(userId: string) {
     const data = await syncPolarDataToKV(userId);
     await applySubscriptionSideEffects(db, userId, data);
   } catch (e) {
+    captureException(e);
     console.error(
       `[polar webhook] Failed to sync subscription for user ${userId}:`,
       e,

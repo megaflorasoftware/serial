@@ -6,6 +6,7 @@ import {
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
 } from "./utils";
+import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 import { prepareArrayChunks } from "~/lib/iterators";
@@ -305,11 +306,22 @@ export const createFromSubscriptionImport = protectedProcedure
       );
 
       const chunkResults: BulkImportFromFileResult[] = promiseResults
-        .map((result) => {
+        .map((result, i) => {
           if (result.status === "fulfilled") {
             return result.value;
           }
-          return null;
+          captureException(result.reason, {
+            context: "bulk-feed-import",
+            feedUrl: chunk[i]?.feedUrl,
+          });
+          return {
+            feedUrl: chunk[i]?.feedUrl ?? "unknown",
+            success: false as const,
+            error:
+              result.reason instanceof Error
+                ? result.reason.message
+                : "Import failed",
+          };
         })
         .filter(Boolean);
 
@@ -472,7 +484,8 @@ async function discoverYouTubeFeeds(url: string) {
       title: channelName,
       format: "atom" as const,
     }));
-  } catch {
+  } catch (e) {
+    captureException(e, { context: "youtube-feed-discovery", url });
     return null;
   }
 }
@@ -597,11 +610,21 @@ export const discoverFeeds = protectedProcedure
 
     if (youtubeResult.status === "fulfilled" && youtubeResult.value) {
       discoveredFeeds.push(...youtubeResult.value);
+    } else if (youtubeResult.status === "rejected") {
+      captureException(youtubeResult.reason, {
+        context: "feed-discovery-youtube",
+        url: input.url,
+      });
     }
 
     if (feedscoutResult.status === "fulfilled") {
       const feedscoutFeeds = feedscoutResult.value.filter((f) => f.isValid);
       discoveredFeeds.push(...feedscoutFeeds);
+    } else if (feedscoutResult.status === "rejected") {
+      captureException(feedscoutResult.reason, {
+        context: "feed-discovery-feedscout",
+        url: input.url,
+      });
     }
 
     // Deduplicate by URL and filter out invalid YouTube feeds
