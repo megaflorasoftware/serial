@@ -108,7 +108,7 @@ export default defineTask({
                 : String(result.error);
             captureException(
               result.error instanceof Error ? result.error : new Error(errMsg),
-              { feedId: result.id, feedName, userId },
+              { feedId: result.id, feedName },
             );
             console.error(
               `[background-refresh] Error refreshing feed "${feedName}" (id=${result.id}, user=${userId}): ${errMsg}`,
