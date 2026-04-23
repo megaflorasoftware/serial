@@ -5,7 +5,7 @@ const dsn = process.env.SENTRY_DSN_BACKEND;
 if (dsn) {
   Sentry.init({
     dsn,
-    sendDefaultPii: true,
+    sendDefaultPii: false,
     environment: process.env.NODE_ENV || "development",
   });
 }

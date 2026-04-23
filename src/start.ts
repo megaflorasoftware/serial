@@ -11,7 +11,7 @@ export const startInstance = createStart(() => {
   if (dsn) {
     Sentry.init({
       dsn,
-      sendDefaultPii: true,
+      sendDefaultPii: false,
       environment:
         process.env.NODE_ENV === "production" ? "production" : "development",
     });
