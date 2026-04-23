@@ -1,10 +1,11 @@
 import { defineTask } from "nitro/task";
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { captureException } from "../../../src/server/logger";
 import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { fetchAndInsertFeedData } from "../../../src/server/rss/fetchFeeds";
 import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
+import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
 import { env } from "../../../src/env";
 
 export default defineTask({
@@ -26,40 +27,56 @@ export default defineTask({
 
     console.log("[background-refresh] Running at ", now.toLocaleString());
 
-    // On the main instance, only refresh feeds for admin users.
-    // Paid users' feeds have nextFetchAt managed by subscription webhooks.
-    let adminUserIds: Set<string> | null = null;
-    if (IS_MAIN_INSTANCE) {
+    // Determine eligible users first (cheap query on user table), then only
+    // fetch feeds for those users. This avoids loading thousands of feeds
+    // before knowing which users are actually eligible.
+    let eligibleUserIds: string[] | null = null;
+
+    if (IS_BILLING_ENABLED) {
+      // With billing: only refresh feeds for users whose plan-based
+      // nextRefreshAt has elapsed (or was never set).
+      const eligibleUsers = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(or(lte(user.nextRefreshAt, now), isNull(user.nextRefreshAt)))
+        .all();
+      eligibleUserIds = eligibleUsers.map((u) => u.id);
+    } else if (IS_MAIN_INSTANCE) {
+      // Main instance without billing: only admin users.
       const admins = await db
         .select({ id: user.id })
         .from(user)
         .where(eq(user.role, "admin"))
         .all();
-      adminUserIds = new Set(admins.map((a) => a.id));
+      eligibleUserIds = admins.map((a) => a.id);
     }
 
-    // Fetch all active feeds that need refreshing in a single query.
-    // On non-main (self-hosted) instances, also include feeds where nextFetchAt
-    // is NULL — these have never been scheduled and should still be refreshed.
+    // Early exit if user filtering yielded no eligible users.
+    if (eligibleUserIds !== null && eligibleUserIds.length === 0) {
+      console.log("[background-refresh] No eligible users to refresh");
+      return { result: "no-eligible-users" };
+    }
+
+    // Fetch only feeds belonging to eligible users that are due for refresh.
+    // On self-hosted (eligibleUserIds is null), fetch all active feeds due,
+    // including those with null nextFetchAt (never-scheduled feeds).
     const fetchAtCondition = IS_MAIN_INSTANCE
       ? lte(feeds.nextFetchAt, now)
       : or(lte(feeds.nextFetchAt, now), isNull(feeds.nextFetchAt));
 
-    const allFeedsDue = await db
+    const userCondition =
+      eligibleUserIds !== null
+        ? inArray(feeds.userId, eligibleUserIds)
+        : undefined;
+
+    const feedsToRefresh = await db
       .select()
       .from(feeds)
-      .where(and(eq(feeds.isActive, true), fetchAtCondition))
+      .where(and(eq(feeds.isActive, true), fetchAtCondition, userCondition))
       .all();
 
-    // Filter to admin users if on main instance
-    const feedsToRefresh = adminUserIds
-      ? allFeedsDue.filter((f) => adminUserIds.has(f.userId))
-      : allFeedsDue;
-
     if (feedsToRefresh.length === 0) {
-      console.log(
-        `[background-refresh] No feeds to refresh (${allFeedsDue.length} due, ${adminUserIds ? "filtered to admin users" : "no filter"})`,
-      );
+      console.log("[background-refresh] No feeds to refresh");
       return { result: "no-feeds-to-refresh" };
     }
 
