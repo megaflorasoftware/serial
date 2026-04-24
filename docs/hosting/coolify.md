@@ -43,7 +43,7 @@ If you'd like to support additional features, [see this section](https://github.
 5. Determine the best Serial docker compose file for your needs:
    - Use [`docker-compose.yaml`](https://raw.githubusercontent.com/hfellerhoff/serial/refs/heads/main/docker-compose.yaml) to use a local DB on an x86 architecture (default)
    - Use [`docker-compose.arm.yaml`](https://raw.githubusercontent.com/hfellerhoff/serial/refs/heads/main/docker-compose.arm.yaml) to use a local DB on an ARM architecture
-   - Use [`docker-compose.standalone.yaml`](https://raw.githubusercontent.com/hfellerhoff/serial/refs/heads/main/docker-compose.standalone.yaml) to use a cloud DB on any architecture
+   - Use [`docker-compose.standalone.yaml`](https://raw.githubusercontent.com/hfellerhoff/serial/refs/heads/main/docker-compose.standalone.yaml) for standalone deployments (for plugging in your own cloud services or external DB)
 6. Paste the file content into Coolify
 7. (optional) Add your custom domain:
    - Click `Settings` for the `Serial` service

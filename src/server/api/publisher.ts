@@ -20,9 +20,9 @@ export type PublishedChunk =
 // ---------------------------------------------------------------------------
 // Publisher — picks the best available Redis backend at startup.
 //
-// Tier 1: UpstashRedisPublisher  (cloud — UPSTASH_REDIS_REST_URL set)
-// Tier 2: IORedisPublisher       (Docker self-hosted — REDIS_URL set)
-// Tier 3: MemoryPublisher        (local dev — no Redis configured)
+// - UpstashRedisPublisher  (KV_STORE='upstash')
+// - IORedisPublisher       (KV_STORE='ioredis')
+// - MemoryPublisher        (KV_STORE='none', default)
 // ---------------------------------------------------------------------------
 
 const RESUME_RETENTION_SECONDS = 60 * 2;
