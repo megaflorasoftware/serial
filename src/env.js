@@ -40,6 +40,7 @@ export const env = createEnv({
     POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID: z.string().optional(),
     POLAR_PRO_MONTHLY_PRODUCT_ID: z.string().optional(),
     POLAR_PRO_ANNUAL_PRODUCT_ID: z.string().optional(),
+    POLAR_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),
     KV_STORE: z.enum(["none", "ioredis", "upstash"]).default("none"),
     UPSTASH_REDIS_REST_URL: z
       .string()
@@ -116,6 +117,7 @@ export const env = createEnv({
       process.env.POLAR_STANDARD_LARGE_QUOTA_ANNUAL_PRODUCT_ID,
     POLAR_PRO_MONTHLY_PRODUCT_ID: process.env.POLAR_PRO_MONTHLY_PRODUCT_ID,
     POLAR_PRO_ANNUAL_PRODUCT_ID: process.env.POLAR_PRO_ANNUAL_PRODUCT_ID,
+    POLAR_ENVIRONMENT: process.env.POLAR_ENVIRONMENT,
     KV_STORE: process.env.KV_STORE,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
