@@ -8,7 +8,6 @@ import type {
 } from "./routers/initialRouter";
 import { env } from "~/env";
 
-// Union of all chunk types that can be published
 export type PublishedChunk =
   | { source: "initial"; chunk: GetByViewChunk }
   | { source: "revalidate"; chunk: RevalidateViewChunk }
@@ -16,14 +15,6 @@ export type PublishedChunk =
   | { source: "feed"; chunk: GetItemsByFeedChunk }
   | { source: "category"; chunk: GetItemsByCategoryIdChunk }
   | { source: "new-data"; chunk: GetByViewChunk };
-
-// ---------------------------------------------------------------------------
-// Publisher — picks the best available Redis backend at startup.
-//
-// - UpstashRedisPublisher  (KV_STORE='upstash')
-// - IORedisPublisher       (KV_STORE='ioredis')
-// - MemoryPublisher        (KV_STORE='none', default)
-// ---------------------------------------------------------------------------
 
 const RESUME_RETENTION_SECONDS = 60 * 2;
 const REDIS_KEY_PREFIX = "serial:pub:";
