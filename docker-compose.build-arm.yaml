@@ -1,7 +1,18 @@
 volumes:
   libsql-data:
+  redis-data:
 
 services:
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 2s
   libsql:
     image: ghcr.io/tursodatabase/libsql-server:latest-arm
     volumes:
@@ -24,6 +35,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: http://libsql:8080
+      REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       FROM_EMAIL_ADDRESS: ${FROM_EMAIL_ADDRESS}
       RESEND_API_KEY: ${RESEND_API_KEY}
@@ -33,6 +45,9 @@ services:
       INSTAPAPER_OAUTH_SECRET: ${INSTAPAPER_OAUTH_SECRET}
     depends_on:
       libsql:
+        condition: service_healthy
+        required: false
+      redis:
         condition: service_healthy
         required: false
     ports:
