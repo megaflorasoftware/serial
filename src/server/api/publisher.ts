@@ -31,11 +31,9 @@ const REDIS_KEY_PREFIX = "serial:pub:";
 type PublisherChannelMap = Record<string, PublishedChunk>;
 
 async function createPublisher() {
-  // Tier 1: Upstash (cloud deployments)
-  const hasUpstash =
-    !!env.UPSTASH_REDIS_REST_URL && !!env.UPSTASH_REDIS_REST_TOKEN;
+  const kvStore = env.KV_STORE;
 
-  if (hasUpstash) {
+  if (kvStore === "upstash") {
     const { Redis } = await import("@upstash/redis");
     const { UpstashRedisPublisher } =
       await import("@orpc/experimental-publisher/upstash-redis");
@@ -52,14 +50,13 @@ async function createPublisher() {
     });
   }
 
-  // Tier 2: Local Redis via ioredis (Docker self-hosted)
-  if (env.REDIS_URL) {
+  if (kvStore === "ioredis") {
     const { default: Redis } = await import("ioredis");
     const { IORedisPublisher } =
       await import("@orpc/experimental-publisher/ioredis");
 
-    const commander = new Redis(env.REDIS_URL);
-    const listener = new Redis(env.REDIS_URL, { lazyConnect: true });
+    const commander = new Redis(env.REDIS_URL!);
+    const listener = new Redis(env.REDIS_URL!, { lazyConnect: true });
 
     console.log("[publisher] Using IORedisPublisher");
     return new IORedisPublisher<PublisherChannelMap>({
@@ -70,8 +67,7 @@ async function createPublisher() {
     });
   }
 
-  // Tier 3: In-memory fallback (local dev, no Redis)
-  console.log("[publisher] Using MemoryPublisher (no Redis configured)");
+  console.log("[publisher] Using MemoryPublisher (KV_STORE is 'none')");
   return new MemoryPublisher<PublisherChannelMap>({
     resumeRetentionSeconds: RESUME_RETENTION_SECONDS,
   });

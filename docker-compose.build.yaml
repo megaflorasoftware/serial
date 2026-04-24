@@ -35,6 +35,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: http://libsql:8080
+      KV_STORE: ioredis
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       FROM_EMAIL_ADDRESS: ${FROM_EMAIL_ADDRESS}
