@@ -4,6 +4,10 @@ import { SELF_HOSTED_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
 
 test.describe("invite flow", () => {
+  // Run serially — both tests share the same DB and listInvitations returns
+  // ALL invitations, so parallel execution causes cross-test interference.
+  test.describe.configure({ mode: "serial" });
+
   let adminEmail: string;
   let invitedEmail: string;
   let invitedEmail2: string;
@@ -99,7 +103,15 @@ test.describe("invite flow", () => {
       .locator("#password_confirmation")
       .pressSequentially(password, { delay: 50 });
 
+    // Capture the sign-up request to verify the invitation token is sent
+    const signUpRequestPromise = page.waitForRequest((req) =>
+      req.url().includes("/sign-up/email"),
+    );
     await page.getByRole("button", { name: /create an account/i }).click();
+    const signUpRequest = await signUpRequestPromise;
+    const signUpBody = signUpRequest.postDataJSON();
+    expect(signUpBody.invitationToken).toBeTruthy();
+
     await expect(page).toHaveURL("/", { timeout: 30000 });
 
     // ── 9. Sign out first invited user, sign in as admin ────────────
@@ -108,8 +120,10 @@ test.describe("invite flow", () => {
 
     // ── 10. Verify use count updated to 1, still active ────────────
     await page.goto("/admin/invites");
-    await expect(page.getByText("1 use")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Active")).toBeVisible();
+    await expect(page.getByText("1 use", { exact: false })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByText("Active").first()).toBeVisible();
 
     // ── 11. Sign out admin ─────────────────────────────────────────
     await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
@@ -141,7 +155,7 @@ test.describe("invite flow", () => {
     // ── 14. Verify use count updated to 2, still active ────────────
     await page.goto("/admin/invites");
     await expect(page.getByText("2 uses")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Active")).toBeVisible();
+    await expect(page.getByText("Active").first()).toBeVisible();
   });
 
   test("single-use invite link is rejected after one sign-up", async ({
@@ -204,7 +218,7 @@ test.describe("invite flow", () => {
     }
 
     await expect(page.getByText("0 / 1 uses")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Active")).toBeVisible();
+    await expect(page.getByText("Active").first()).toBeVisible();
 
     // ── 7. Sign out the admin ───────────────────────────────────────
     await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
