@@ -6,12 +6,9 @@ import type { ArticleFontFamily } from "~/lib/constants/article-fonts";
 import { IS_EMAIL_ENABLED } from "~/server/email";
 import { FONT_FAMILY_CSS } from "~/lib/constants/article-fonts";
 import { parseHSL } from "~/server/api/routers/hsl";
+import { queryUserById } from "~/server/api/routers/admin/queries";
 import { db } from "~/server/db";
-import {
-  account as accountTable,
-  userConfig,
-  user as userTable,
-} from "~/server/db/schema";
+import { userConfig } from "~/server/db/schema";
 
 export const fetchIsForgotPasswordEnabled = createServerFn({
   method: "GET",
@@ -85,34 +82,11 @@ export const fetchAdminUserById = createServerFn({ method: "GET" })
       throw new Error("Unauthorized: Admin access required");
     }
 
-    const sessionsResult = await auth.api.listUserSessions({
-      headers,
-      body: { userId },
-    });
+    const result = await queryUserById(userId, headers);
 
-    const foundUser = await db
-      .select()
-      .from(userTable)
-      .where(eq(userTable.id, userId))
-      .get();
-
-    if (!foundUser) {
+    if (!result) {
       throw new Error("User not found");
     }
 
-    // Fetch linked accounts so the detail page can show provider info
-    const accounts = await db
-      .select({
-        providerId: accountTable.providerId,
-        accountId: accountTable.accountId,
-        createdAt: accountTable.createdAt,
-      })
-      .from(accountTable)
-      .where(eq(accountTable.userId, userId))
-      .all();
-
-    return {
-      user: { ...foundUser, accounts },
-      sessions: sessionsResult.sessions,
-    };
+    return result;
   });

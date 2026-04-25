@@ -1,12 +1,10 @@
 import { ORPCError } from "@orpc/server";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { adminProcedure } from "./base";
+import { queryUserById } from "./queries";
 import { protectedProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
-import { account, user } from "~/server/db/schema";
-import { db } from "~/server/db";
 
 // List all users with offset-based pagination
 export const listUsers = adminProcedure
@@ -42,36 +40,13 @@ export const getUserById = adminProcedure
     }),
   )
   .handler(async ({ context, input }) => {
-    const sessionsResult = await auth.api.listUserSessions({
-      headers: context.headers,
-      body: { userId: input.userId },
-    });
+    const result = await queryUserById(input.userId, context.headers);
 
-    const foundUser = await db
-      .select()
-      .from(user)
-      .where(eq(user.id, input.userId))
-      .get();
-
-    if (!foundUser) {
+    if (!result) {
       throw new ORPCError("NOT_FOUND", { message: "User not found" });
     }
 
-    // Fetch linked accounts so the detail page can show provider info
-    const accounts = await db
-      .select({
-        providerId: account.providerId,
-        accountId: account.accountId,
-        createdAt: account.createdAt,
-      })
-      .from(account)
-      .where(eq(account.userId, input.userId))
-      .all();
-
-    return {
-      user: { ...foundUser, accounts },
-      sessions: sessionsResult.sessions,
-    };
+    return result;
   });
 
 // Ban a user

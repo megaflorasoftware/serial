@@ -13,7 +13,7 @@ interface KVStore {
 // ── In-memory fallback ──────────────────────────────────────────────────────
 
 /** How often to sweep expired entries, in milliseconds. */
-const CLEANUP_INTERVAL_MS = 1_000;
+const CLEANUP_INTERVAL_MS = 10_000;
 
 class MemoryKV implements KVStore {
   private store = new Map<string, { value: string; expiresAt: number }>();

@@ -13,8 +13,6 @@ import { invitation, invitationRedemption, user } from "~/server/db/schema";
 import { db } from "~/server/db";
 import { IS_EMAIL_ENABLED, sendEmail } from "~/server/email";
 
-const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
 function getInviteUrl(token: string) {
   return `${env.BETTER_AUTH_BASE_URL}/auth/sign-up?token=${token}`;
 }
@@ -22,18 +20,12 @@ function getInviteUrl(token: string) {
 // Create an invitation link
 export const createInvitation = adminProcedure
   .input(
-    z
-      .object({
-        maxUses: z.number().int().positive().nullish(),
-        expiresAt: z.coerce.date().nullish(),
-      })
-      .optional(),
+    z.object({
+      maxUses: z.number().int().positive().nullable(),
+      expiresAt: z.coerce.date().nullable(),
+    }),
   )
   .handler(async ({ context, input }) => {
-    const expiresAt =
-      input?.expiresAt === null
-        ? null
-        : (input?.expiresAt ?? new Date(Date.now() + INVITATION_EXPIRY_MS));
     const token = randomBytes(32).toString("base64url");
 
     const [created] = await db
@@ -42,8 +34,8 @@ export const createInvitation = adminProcedure
         token,
         inviterId: context.user.id,
         status: "active",
-        maxUses: input?.maxUses ?? null,
-        expiresAt,
+        maxUses: input.maxUses,
+        expiresAt: input.expiresAt,
       })
       .returning();
 
