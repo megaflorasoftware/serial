@@ -2,6 +2,26 @@ import { expect, test } from "@playwright/test";
 import { signIn, signUpAsAdmin } from "../fixtures/auth";
 import { SELF_HOSTED_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
+import type { Page } from "@playwright/test";
+
+/**
+ * Clear the React Query persisted cache from localStorage.
+ *
+ * The app uses PersistQueryClientProvider which caches query results in
+ * localStorage. Combined with a 30-second staleTime, this means navigating
+ * back to a page within 30 seconds serves the persisted (stale) data without
+ * refetching. In tests where we sign out / sign in and expect fresh data, we
+ * must clear this cache to force a server round-trip.
+ */
+async function clearQueryCache(page: Page) {
+  await page.evaluate(() => {
+    try {
+      localStorage.removeItem("REACT_QUERY_OFFLINE_CACHE");
+    } catch {
+      // localStorage may not be available in some contexts
+    }
+  });
+}
 
 test.describe("invite flow", () => {
   // Run serially — both tests share the same DB and listInvitations returns
@@ -119,6 +139,7 @@ test.describe("invite flow", () => {
     await signIn({ page, email: adminEmail, password });
 
     // ── 10. Verify use count updated to 1, still active ────────────
+    await clearQueryCache(page);
     await page.goto("/admin/invites");
     await expect(page.getByText("1 use", { exact: false })).toBeVisible({
       timeout: 10000,
@@ -153,6 +174,7 @@ test.describe("invite flow", () => {
     await signIn({ page, email: adminEmail, password });
 
     // ── 14. Verify use count updated to 2, still active ────────────
+    await clearQueryCache(page);
     await page.goto("/admin/invites");
     await expect(page.getByText("2 uses")).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Active").first()).toBeVisible();
@@ -246,6 +268,7 @@ test.describe("invite flow", () => {
     await signIn({ page, email: adminEmail, password });
 
     // ── 10. Verify use count is 1/1 and status is Exhausted ─────────
+    await clearQueryCache(page);
     await page.goto("/admin/invites");
     await expect(page.getByText("1 / 1 uses")).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Used")).toBeVisible();
