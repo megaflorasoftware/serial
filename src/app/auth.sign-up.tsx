@@ -63,7 +63,9 @@ function SignUp() {
 
   return (
     <>
-      <AuthHeader removePadding={!signupStatus.isFirstUser}>
+      <AuthHeader
+        removePadding={!signupStatus.isFirstUser && !signupStatus.inviterName}
+      >
         {signupStatus.isFirstUser && (
           <div className="text-center">
             <div className="text-center font-semibold">
@@ -71,6 +73,14 @@ function SignUp() {
             </div>
             <div className="text-muted-foreground mx-auto max-w-2xs pt-1">
               Welcome to Serial! Let&apos;s create your first account.
+            </div>
+          </div>
+        )}
+        {!signupStatus.isFirstUser && signupStatus.inviterName && (
+          <div className="text-center">
+            <div className="text-center font-semibold">Welcome!</div>
+            <div className="text-muted-foreground mx-auto max-w-2xs pt-1">
+              {signupStatus.inviterName} has invited you to Serial.
             </div>
           </div>
         )}

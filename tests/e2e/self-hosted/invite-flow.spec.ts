@@ -1,13 +1,17 @@
 import { expect, test } from "@playwright/test";
-import { signUp } from "../fixtures/auth";
+import { signIn, signUpAsAdmin } from "../fixtures/auth";
 import { SELF_HOSTED_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
 
 test.describe("invite flow", () => {
   let adminEmail: string;
   let invitedEmail: string;
+  let invitedEmail2: string;
 
   test.afterEach(async () => {
+    if (invitedEmail2) {
+      await cleanupUser(SELF_HOSTED_TURSO_PORT, invitedEmail2);
+    }
     if (invitedEmail) {
       await cleanupUser(SELF_HOSTED_TURSO_PORT, invitedEmail);
     }
@@ -16,17 +20,19 @@ test.describe("invite flow", () => {
     }
   });
 
-  test("admin creates invite link, invited user signs up with it", async ({
+  test("admin creates invite link, multiple users can sign up with it", async ({
     page,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(180000);
     adminEmail = generateTestEmail();
     invitedEmail = generateTestEmail();
+    invitedEmail2 = generateTestEmail();
     const password = "testpassword123";
 
-    // ── 1. Sign up as the first user (becomes admin) ────────────────
-    await signUp({
+    // ── 1. Seed admin user directly in DB and sign in ────────────────
+    await signUpAsAdmin({
       page,
+      tursoPort: SELF_HOSTED_TURSO_PORT,
       name: "Admin User",
       email: adminEmail,
       password,
@@ -36,22 +42,29 @@ test.describe("invite flow", () => {
     await page.goto("/admin/invites");
     await expect(page.getByText("Invites")).toBeVisible({ timeout: 10000 });
 
-    // ── 3. Public signup should be off by default; click create invite button
+    // ── 3. Click create invite button ──────────────────────────────
+    // Wait for hydration before clicking — the button renders server-side
+    // but the onClick handler is only attached after React hydrates.
+    await page.waitForTimeout(2000);
     const createInviteButton = page.getByRole("button", {
       name: /create invite link/i,
     });
-    await expect(createInviteButton).toBeVisible({ timeout: 10000 });
     await createInviteButton.click();
-    await expect(page.getByText("Invite User")).toBeVisible();
 
-    // ── 4. Click to create the invite link inside the dialog ────────
-    const dialogCreateButton = page
-      .locator("[role=dialog], [data-vaul-drawer]")
-      .getByRole("button", { name: /create invite link/i });
+    // Wait for the dialog or drawer to appear
+    const dialogOrDrawer = page.locator("[role=dialog], [data-vaul-drawer]");
+    await expect(dialogOrDrawer).toBeVisible({ timeout: 10000 });
+
+    // ── 4. Select "Unlimited" usage mode and create the invite link ──
+    await dialogOrDrawer.getByText("Unlimited").click();
+
+    const dialogCreateButton = dialogOrDrawer.getByRole("button", {
+      name: /create invite link/i,
+    });
     await dialogCreateButton.click();
 
     // ── 5. Wait for the invite URL to appear in the <code> block ────
-    const codeBlock = page.locator("pre code");
+    const codeBlock = dialogOrDrawer.locator("code");
     await expect(codeBlock).toBeVisible({ timeout: 10000 });
     const inviteUrl = await codeBlock.textContent();
     expect(inviteUrl).toBeTruthy();
@@ -62,7 +75,6 @@ test.describe("invite flow", () => {
     const invitePath = `${url.pathname}${url.search}`;
 
     // ── 7. Sign out the admin ───────────────────────────────────────
-    // Close the dialog first
     const closeButton = page.locator(
       "[role=dialog] button:has(svg), [data-vaul-drawer] button:has(svg)",
     );
@@ -70,18 +82,14 @@ test.describe("invite flow", () => {
       await closeButton.first().click();
     }
 
-    // Sign out via the API to ensure clean state
     await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
 
-    // ── 8. Visit the invite link as a new user ──────────────────────
+    // ── 8. First invited user signs up ──────────────────────────────
     await page.goto(invitePath);
-
-    // The sign-up form should be visible even though public signup is off
     await expect(
       page.getByRole("button", { name: /create an account/i }),
     ).toBeVisible({ timeout: 10000 });
 
-    // ── 9. Fill in the sign-up form and create the account ──────────
     await page
       .locator("#first-name")
       .pressSequentially("Invited User", { delay: 50 });
@@ -94,14 +102,145 @@ test.describe("invite flow", () => {
     await page.getByRole("button", { name: /create an account/i }).click();
     await expect(page).toHaveURL("/", { timeout: 30000 });
 
-    // ── 10. Verify the invite link is now single-use ────────────────
-    // Sign out the invited user
+    // ── 9. Sign out first invited user, sign in as admin ────────────
+    await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
+    await signIn({ page, email: adminEmail, password });
+
+    // ── 10. Verify use count updated to 1, still active ────────────
+    await page.goto("/admin/invites");
+    await expect(page.getByText("1 use")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Active")).toBeVisible();
+
+    // ── 11. Sign out admin ─────────────────────────────────────────
     await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
 
-    // Try visiting the same invite link again
+    // ── 12. Second invited user signs up with the same link ─────────
     await page.goto(invitePath);
+    await expect(
+      page.getByRole("button", { name: /create an account/i }),
+    ).toBeVisible({ timeout: 10000 });
 
-    // Should see "Sign ups are currently disabled" since the token is used
+    await page
+      .locator("#first-name")
+      .pressSequentially("Second User", { delay: 50 });
+    await page
+      .locator("#email")
+      .pressSequentially(invitedEmail2, { delay: 50 });
+    await page.locator("#password").pressSequentially(password, { delay: 50 });
+    await page
+      .locator("#password_confirmation")
+      .pressSequentially(password, { delay: 50 });
+
+    await page.getByRole("button", { name: /create an account/i }).click();
+    await expect(page).toHaveURL("/", { timeout: 30000 });
+
+    // ── 13. Sign out second user, sign in as admin ──────────────────
+    await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
+    await signIn({ page, email: adminEmail, password });
+
+    // ── 14. Verify use count updated to 2, still active ────────────
+    await page.goto("/admin/invites");
+    await expect(page.getByText("2 uses")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Active")).toBeVisible();
+  });
+
+  test("single-use invite link is rejected after one sign-up", async ({
+    page,
+  }) => {
+    test.setTimeout(180000);
+    adminEmail = generateTestEmail();
+    invitedEmail = generateTestEmail();
+    invitedEmail2 = generateTestEmail();
+    const password = "testpassword123";
+
+    // ── 1. Seed admin user directly in DB and sign in ─────────────────
+    await signUpAsAdmin({
+      page,
+      tursoPort: SELF_HOSTED_TURSO_PORT,
+      name: "Admin User",
+      email: adminEmail,
+      password,
+    });
+
+    // ── 2. Navigate to admin invites page ───────────────────────────
+    await page.goto("/admin/invites");
+    await expect(page.getByText("Invites")).toBeVisible({ timeout: 10000 });
+
+    // ── 3. Open the create invite dialog ────────────────────────────
+    // Wait for hydration before clicking — the button renders server-side
+    // but the onClick handler is only attached after React hydrates.
+    await page.waitForTimeout(2000);
+    const createInviteButton = page.getByRole("button", {
+      name: /create invite link/i,
+    });
+    await createInviteButton.click();
+
+    // Wait for the dialog or drawer to appear
+    const dialogOrDrawer = page.locator("[role=dialog], [data-vaul-drawer]");
+    await expect(dialogOrDrawer).toBeVisible({ timeout: 10000 });
+
+    // ── 4. "One time" is the default usage mode — create the link ───
+    const dialogCreateButton = dialogOrDrawer.getByRole("button", {
+      name: /create invite link/i,
+    });
+    await dialogCreateButton.click();
+
+    // ── 5. Grab the invite URL ──────────────────────────────────────
+    const codeBlock2 = dialogOrDrawer.locator("code");
+    await expect(codeBlock2).toBeVisible({ timeout: 10000 });
+    const inviteUrl2 = await codeBlock2.textContent();
+    expect(inviteUrl2).toBeTruthy();
+    expect(inviteUrl2).toContain("/auth/sign-up?token=");
+
+    const url2 = new URL(inviteUrl2!.trim());
+    const invitePath = `${url2.pathname}${url2.search}`;
+
+    // ── 6. Close dialog, verify initial use count and status ────────
+    const closeButton = page.locator(
+      "[role=dialog] button:has(svg), [data-vaul-drawer] button:has(svg)",
+    );
+    if (await closeButton.first().isVisible()) {
+      await closeButton.first().click();
+    }
+
+    await expect(page.getByText("0 / 1 uses")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Active")).toBeVisible();
+
+    // ── 7. Sign out the admin ───────────────────────────────────────
+    await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
+
+    // ── 8. First user signs up successfully ─────────────────────────
+    await page.goto(invitePath);
+    await expect(
+      page.getByRole("button", { name: /create an account/i }),
+    ).toBeVisible({ timeout: 10000 });
+
+    await page
+      .locator("#first-name")
+      .pressSequentially("Invited User", { delay: 50 });
+    await page.locator("#email").pressSequentially(invitedEmail, { delay: 50 });
+    await page.locator("#password").pressSequentially(password, { delay: 50 });
+    await page
+      .locator("#password_confirmation")
+      .pressSequentially(password, { delay: 50 });
+
+    await page.getByRole("button", { name: /create an account/i }).click();
+    await expect(page).toHaveURL("/", { timeout: 30000 });
+
+    // ── 9. Sign out first user, sign in as admin ────────────────────
+    await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
+    await signIn({ page, email: adminEmail, password });
+
+    // ── 10. Verify use count is 1/1 and status is Exhausted ─────────
+    await page.goto("/admin/invites");
+    await expect(page.getByText("1 / 1 uses")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Used")).toBeVisible();
+
+    // ── 11. Sign out admin ──────────────────────────────────────────
+    await page.goto("/api/auth/sign-out", { waitUntil: "networkidle" });
+
+    // ── 12. Second user sees disabled sign-up ───────────────────────
+    await page.goto(invitePath);
     await expect(
       page.getByText(/sign ups are currently disabled/i),
     ).toBeVisible({ timeout: 10000 });

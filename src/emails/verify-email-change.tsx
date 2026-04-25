@@ -10,33 +10,30 @@ import {
   Text,
 } from "@react-email/components";
 
-interface InviteUserProps {
-  inviteUrl: string;
-  inviterName?: string;
+interface VerifyEmailChangeProps {
+  verificationUrl?: string;
   supportEmail?: string;
 }
 
 const baseUrl = `https://serial.tube`;
 
-export default function InviteUserEmail({
-  inviteUrl,
-  inviterName,
+export default function VerifyEmailChangeEmail({
+  verificationUrl,
   supportEmail,
-}: InviteUserProps) {
+}: VerifyEmailChangeProps) {
   return (
     <Html>
       <Head />
-      <Preview>You&apos;ve been invited to Serial</Preview>
+      <Preview>Verify your new email address for Serial</Preview>
       <Body style={main}>
         <Container style={container}>
-          <Heading style={h1}>You&apos;ve been invited to Serial</Heading>
+          <Heading style={h1}>Verify your new email</Heading>
           <Text style={text}>
-            {inviterName
-              ? `${inviterName} has invited you to join Serial.`
-              : "You've been invited to join Serial."}
+            You requested to change your email address. Click the link below to
+            confirm your new email:
           </Text>
           <Link
-            href={inviteUrl}
+            href={verificationUrl}
             target="_blank"
             style={{
               ...link,
@@ -44,7 +41,7 @@ export default function InviteUserEmail({
               marginBottom: "16px",
             }}
           >
-            Click here to create your account
+            Click here to verify your new email
           </Link>
           <Text
             style={{
@@ -54,8 +51,8 @@ export default function InviteUserEmail({
               marginBottom: "16px",
             }}
           >
-            If you weren&apos;t expecting this invitation, you can safely ignore
-            this email.
+            If you didn&apos;t request this change, you can safely ignore this
+            email.
           </Text>
 
           <Img

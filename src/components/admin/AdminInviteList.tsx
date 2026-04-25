@@ -2,36 +2,55 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { Loader2Icon, MailIcon, Trash2Icon } from "lucide-react";
+import {
+  CheckIcon,
+  CopyIcon,
+  Loader2Icon,
+  SendIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { SendInviteDialog } from "~/components/admin/SendInviteDialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { orpc } from "~/lib/orpc";
 
-type InviteStatus = "pending" | "accepted" | "canceled" | "expired";
+type InviteDisplayStatus = "active" | "disabled" | "expired" | "exhausted";
 
 const STATUS_VARIANTS: Record<
-  InviteStatus,
+  InviteDisplayStatus,
   "default" | "secondary" | "destructive" | "outline"
 > = {
-  pending: "outline",
-  accepted: "secondary",
-  canceled: "destructive",
+  active: "default",
+  disabled: "destructive",
   expired: "destructive",
+  exhausted: "secondary",
 };
 
-const STATUS_LABELS: Record<InviteStatus, string> = {
-  pending: "Pending",
-  accepted: "Accepted",
-  canceled: "Canceled",
+const STATUS_LABELS: Record<InviteDisplayStatus, string> = {
+  active: "Active",
+  disabled: "Disabled",
   expired: "Expired",
+  exhausted: "Used",
 };
 
-function getDisplayStatus(status: string, expiresAt: Date): InviteStatus {
-  if (status === "pending" && new Date(expiresAt) < new Date()) {
-    return "expired";
-  }
-  return status as InviteStatus;
+function getDisplayStatus(
+  status: string,
+  expiresAt: Date | null,
+  maxUses: number | null,
+  useCount: number,
+): InviteDisplayStatus {
+  if (status === "disabled") return "disabled";
+  if (expiresAt && new Date(expiresAt) < new Date()) return "expired";
+  if (maxUses !== null && useCount >= maxUses) return "exhausted";
+  return "active";
+}
+
+function formatUseCount(maxUses: number | null, useCount: number): string {
+  if (maxUses !== null) return `${useCount} / ${maxUses} uses`;
+  if (useCount === 0) return "No uses yet";
+  return `${useCount} ${useCount === 1 ? "use" : "uses"}`;
 }
 
 export function AdminInviteList() {
@@ -74,52 +93,112 @@ export function AdminInviteList() {
 
   return (
     <div className="-mx-3 flex flex-col">
-      {invitations.map((invite) => {
-        const displayStatus = getDisplayStatus(invite.status, invite.expiresAt);
-
-        return (
-          <div
-            key={invite.id}
-            className="flex items-center justify-between gap-3 rounded-lg px-3 py-3"
-          >
-            <div className="flex min-w-0 flex-1 flex-col">
-              <div className="flex items-center gap-2">
-                {invite.email ? (
-                  <span className="flex items-center gap-1.5 truncate font-medium">
-                    <MailIcon
-                      size={14}
-                      className="text-muted-foreground shrink-0"
-                    />
-                    {invite.email}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground truncate font-medium">
-                    No email
-                  </span>
-                )}
-                <Badge variant={STATUS_VARIANTS[displayStatus]}>
-                  {STATUS_LABELS[displayStatus]}
-                </Badge>
-              </div>
-              <span className="text-muted-foreground text-sm">
-                Created {dayjs(invite.createdAt).format("MMM D, YYYY")}
-                {invite.inviterName ? ` by ${invite.inviterName}` : ""}
-                {displayStatus === "pending" &&
-                  ` \u00b7 Expires ${dayjs(invite.expiresAt).format("MMM D, YYYY")}`}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Delete invitation"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate({ invitationId: invite.id })}
-            >
-              <Trash2Icon size={16} className="text-muted-foreground" />
-            </Button>
-          </div>
-        );
-      })}
+      {invitations.map((invite) => (
+        <InviteRow
+          key={invite.id}
+          invite={invite}
+          onDelete={() => deleteMutation.mutate({ invitationId: invite.id })}
+          isDeleting={deleteMutation.isPending}
+        />
+      ))}
     </div>
+  );
+}
+
+function InviteRow({
+  invite,
+  onDelete,
+  isDeleting,
+}: {
+  invite: {
+    id: string;
+    inviteUrl: string;
+    status: string;
+    maxUses: number | null;
+    expiresAt: Date | null;
+    createdAt: Date;
+    inviterName: string | null;
+    useCount: number;
+  };
+  onDelete: () => void;
+  isDeleting: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+
+  const displayStatus = getDisplayStatus(
+    invite.status,
+    invite.expiresAt,
+    invite.maxUses,
+    invite.useCount,
+  );
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(invite.inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      toast.error("Failed to copy to clipboard");
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-3">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-base font-medium">
+            {invite.expiresAt
+              ? `Expires ${dayjs(invite.expiresAt).format("MMM D, YYYY")}`
+              : "Never expires"}
+          </span>
+          <span className="text-muted-foreground text-sm">
+            {formatUseCount(invite.maxUses, invite.useCount)}
+            {" · Created "}
+            {dayjs(invite.createdAt).format("MMM D, YYYY")}
+            {invite.inviterName ? ` by ${invite.inviterName}` : ""}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant={STATUS_VARIANTS[displayStatus]}>
+            {STATUS_LABELS[displayStatus]}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Copy invite link"
+            onClick={handleCopy}
+          >
+            {copied ? (
+              <CheckIcon size={16} className="text-muted-foreground" />
+            ) : (
+              <CopyIcon size={16} className="text-muted-foreground" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Send invite link"
+            onClick={() => setSendDialogOpen(true)}
+          >
+            <SendIcon size={16} className="text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Delete invitation"
+            disabled={isDeleting}
+            onClick={onDelete}
+          >
+            <Trash2Icon size={16} className="text-muted-foreground" />
+          </Button>
+        </div>
+      </div>
+      <SendInviteDialog
+        open={sendDialogOpen}
+        onOpenChange={setSendDialogOpen}
+        invitationId={invite.id}
+      />
+    </>
   );
 }

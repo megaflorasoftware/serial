@@ -7,7 +7,11 @@ import { IS_EMAIL_ENABLED } from "~/server/email";
 import { FONT_FAMILY_CSS } from "~/lib/constants/article-fonts";
 import { parseHSL } from "~/server/api/routers/hsl";
 import { db } from "~/server/db";
-import { userConfig } from "~/server/db/schema";
+import {
+  account as accountTable,
+  userConfig,
+  user as userTable,
+} from "~/server/db/schema";
 
 export const fetchIsForgotPasswordEnabled = createServerFn({
   method: "GET",
@@ -86,22 +90,29 @@ export const fetchAdminUserById = createServerFn({ method: "GET" })
       body: { userId },
     });
 
-    const allUsers = await auth.api.listUsers({
-      headers,
-      query: {
-        limit: 1000,
-        offset: 0,
-      },
-    });
+    const foundUser = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, userId))
+      .get();
 
-    const user = allUsers.users.find((u) => u.id === userId);
-
-    if (!user) {
+    if (!foundUser) {
       throw new Error("User not found");
     }
 
+    // Fetch linked accounts so the detail page can show provider info
+    const accounts = await db
+      .select({
+        providerId: accountTable.providerId,
+        accountId: accountTable.accountId,
+        createdAt: accountTable.createdAt,
+      })
+      .from(accountTable)
+      .where(eq(accountTable.userId, userId))
+      .all();
+
     return {
-      user,
+      user: { ...foundUser, accounts },
       sessions: sessionsResult.sessions,
     };
   });
