@@ -34,6 +34,10 @@ import { Route as ApiAuthSplatRouteImport } from './app/api/auth.$'
 import { Route as WebReleasesSlugRouteImport } from './app/_web.releases.$slug'
 import { Route as AppWatchIdRouteImport } from './app/_app.watch.$id'
 import { Route as AppReadIdRouteImport } from './app/_app.read.$id'
+import { Route as AppAdminUsersRouteImport } from './app/_app.admin.users'
+import { Route as AppAdminStatsRouteImport } from './app/_app.admin.stats'
+import { Route as AppAdminSettingsRouteImport } from './app/_app.admin.settings'
+import { Route as AppAdminInvitesRouteImport } from './app/_app.admin.invites'
 import { Route as AppAdminInfoRouteImport } from './app/_app.admin.info'
 import { Route as AppAdminUserIdRouteImport } from './app/_app.admin.user.$id'
 
@@ -160,6 +164,26 @@ const AppReadIdRoute = AppReadIdRouteImport.update({
   path: '/read/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminStatsRoute = AppAdminStatsRouteImport.update({
+  id: '/admin/stats',
+  path: '/admin/stats',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminSettingsRoute = AppAdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminInvitesRoute = AppAdminInvitesRouteImport.update({
+  id: '/admin/invites',
+  path: '/admin/invites',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdminInfoRoute = AppAdminInfoRouteImport.update({
   id: '/admin/info',
   path: '/admin/info',
@@ -189,6 +213,10 @@ export interface FileRoutesByFullPath {
   '/blog/$slug': typeof BlogSlugRoute
   '/blog/': typeof BlogIndexRoute
   '/admin/info': typeof AppAdminInfoRoute
+  '/admin/invites': typeof AppAdminInvitesRoute
+  '/admin/settings': typeof AppAdminSettingsRoute
+  '/admin/stats': typeof AppAdminStatsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/read/$id': typeof AppReadIdRoute
   '/watch/$id': typeof AppWatchIdRoute
   '/releases/$slug': typeof WebReleasesSlugRoute
@@ -215,6 +243,10 @@ export interface FileRoutesByTo {
   '/blog/$slug': typeof BlogSlugRoute
   '/blog': typeof BlogIndexRoute
   '/admin/info': typeof AppAdminInfoRoute
+  '/admin/invites': typeof AppAdminInvitesRoute
+  '/admin/settings': typeof AppAdminSettingsRoute
+  '/admin/stats': typeof AppAdminStatsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/read/$id': typeof AppReadIdRoute
   '/watch/$id': typeof AppWatchIdRoute
   '/releases/$slug': typeof WebReleasesSlugRoute
@@ -245,6 +277,10 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/_app/admin/info': typeof AppAdminInfoRoute
+  '/_app/admin/invites': typeof AppAdminInvitesRoute
+  '/_app/admin/settings': typeof AppAdminSettingsRoute
+  '/_app/admin/stats': typeof AppAdminStatsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/read/$id': typeof AppReadIdRoute
   '/_app/watch/$id': typeof AppWatchIdRoute
   '/_web/releases/$slug': typeof WebReleasesSlugRoute
@@ -274,6 +310,10 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/blog/'
     | '/admin/info'
+    | '/admin/invites'
+    | '/admin/settings'
+    | '/admin/stats'
+    | '/admin/users'
     | '/read/$id'
     | '/watch/$id'
     | '/releases/$slug'
@@ -300,6 +340,10 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/blog'
     | '/admin/info'
+    | '/admin/invites'
+    | '/admin/settings'
+    | '/admin/stats'
+    | '/admin/users'
     | '/read/$id'
     | '/watch/$id'
     | '/releases/$slug'
@@ -329,6 +373,10 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/blog/'
     | '/_app/admin/info'
+    | '/_app/admin/invites'
+    | '/_app/admin/settings'
+    | '/_app/admin/stats'
+    | '/_app/admin/users'
     | '/_app/read/$id'
     | '/_app/watch/$id'
     | '/_web/releases/$slug'
@@ -528,6 +576,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReadIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin/stats': {
+      id: '/_app/admin/stats'
+      path: '/admin/stats'
+      fullPath: '/admin/stats'
+      preLoaderRoute: typeof AppAdminStatsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin/settings': {
+      id: '/_app/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AppAdminSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin/invites': {
+      id: '/_app/admin/invites'
+      path: '/admin/invites'
+      fullPath: '/admin/invites'
+      preLoaderRoute: typeof AppAdminInvitesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/admin/info': {
       id: '/_app/admin/info'
       path: '/admin/info'
@@ -553,6 +629,10 @@ interface AppRouteChildren {
   AppViewsRoute: typeof AppViewsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAdminInfoRoute: typeof AppAdminInfoRoute
+  AppAdminInvitesRoute: typeof AppAdminInvitesRoute
+  AppAdminSettingsRoute: typeof AppAdminSettingsRoute
+  AppAdminStatsRoute: typeof AppAdminStatsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppReadIdRoute: typeof AppReadIdRoute
   AppWatchIdRoute: typeof AppWatchIdRoute
   AppAdminIndexRoute: typeof AppAdminIndexRoute
@@ -567,6 +647,10 @@ const AppRouteChildren: AppRouteChildren = {
   AppViewsRoute: AppViewsRoute,
   AppIndexRoute: AppIndexRoute,
   AppAdminInfoRoute: AppAdminInfoRoute,
+  AppAdminInvitesRoute: AppAdminInvitesRoute,
+  AppAdminSettingsRoute: AppAdminSettingsRoute,
+  AppAdminStatsRoute: AppAdminStatsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
   AppReadIdRoute: AppReadIdRoute,
   AppWatchIdRoute: AppWatchIdRoute,
   AppAdminIndexRoute: AppAdminIndexRoute,

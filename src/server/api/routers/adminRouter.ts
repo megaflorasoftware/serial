@@ -1,5 +1,7 @@
 import { ORPCError } from "@orpc/server";
-import { and, count, eq, gte, isNull, sql } from "drizzle-orm";
+import { createElement } from "react";
+import { render } from "@react-email/components";
+import { and, count, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { AuthProvider } from "~/lib/constants";
@@ -10,12 +12,21 @@ import {
   getEnabledAuthProviders,
   isPublicSignupEnabled,
 } from "~/lib/constants";
+import InviteUserEmail from "~/emails/invite-user";
 import { isOAuthConfigured } from "~/server/auth/constants";
 import { env } from "~/env";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
-import { account, appConfig, feeds, session, user } from "~/server/db/schema";
+import {
+  account,
+  appConfig,
+  feeds,
+  invitation,
+  session,
+  user,
+} from "~/server/db/schema";
 import { db } from "~/server/db";
+import { IS_EMAIL_ENABLED, sendEmail } from "~/server/email";
 
 // Admin procedure that requires admin role
 const adminProcedure = protectedProcedure.use(({ context, next }) => {
@@ -357,6 +368,145 @@ export const setEnabledSignupProviders = adminProcedure
     return { providers: input.providers };
   });
 
+const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function getInviteUrl(token: string) {
+  return `${env.BETTER_AUTH_BASE_URL}/auth/sign-up?token=${token}`;
+}
+
+// Create an invitation link (no email required)
+export const createInvitation = adminProcedure.handler(async ({ context }) => {
+  const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS);
+
+  const [created] = await db
+    .insert(invitation)
+    .values({
+      inviterId: context.user.id,
+      status: "pending",
+      expiresAt,
+    })
+    .returning();
+
+  if (!created) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to create invitation",
+    });
+  }
+
+  const inviteUrl = getInviteUrl(created.token);
+
+  return { id: created.id, inviteUrl };
+});
+
+// List all invitations
+export const listInvitations = adminProcedure.handler(async () => {
+  const invitations = await db
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      status: invitation.status,
+      expiresAt: invitation.expiresAt,
+      createdAt: invitation.createdAt,
+      inviterName: user.name,
+    })
+    .from(invitation)
+    .leftJoin(user, eq(invitation.inviterId, user.id))
+    .orderBy(desc(invitation.createdAt))
+    .all();
+
+  return { invitations };
+});
+
+// Send an invitation email for an existing invitation
+export const sendInvitationEmail = adminProcedure
+  .input(z.object({ invitationId: z.string(), email: z.string().email() }))
+  .handler(async ({ context, input }) => {
+    if (!IS_EMAIL_ENABLED) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Email sending is not configured. Configure an email provider to send invitations.",
+      });
+    }
+
+    const existingUser = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, input.email))
+      .get();
+
+    if (existingUser) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "A user with this email already exists",
+      });
+    }
+
+    const inv = await db
+      .select()
+      .from(invitation)
+      .where(eq(invitation.id, input.invitationId))
+      .get();
+
+    if (!inv) {
+      throw new ORPCError("NOT_FOUND", { message: "Invitation not found" });
+    }
+
+    if (inv.status !== "pending") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Invitation is no longer pending",
+      });
+    }
+
+    if (inv.expiresAt < new Date()) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Invitation has expired",
+      });
+    }
+
+    // Update the invitation with the email
+    await db
+      .update(invitation)
+      .set({ email: input.email })
+      .where(eq(invitation.id, input.invitationId));
+
+    const inviteUrl = getInviteUrl(inv.token);
+
+    const html = await render(
+      createElement(InviteUserEmail, {
+        inviteUrl,
+        inviterName: context.user.name,
+        inviterEmail: context.user.email,
+        supportEmail: env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS,
+      }),
+    );
+
+    await sendEmail({
+      to: input.email,
+      subject: "You've been invited to Serial",
+      html,
+    });
+
+    return { sent: true };
+  });
+
+// Delete an invitation
+export const deleteInvitation = adminProcedure
+  .input(z.object({ invitationId: z.string() }))
+  .handler(async ({ input }) => {
+    const inv = await db
+      .select({ id: invitation.id })
+      .from(invitation)
+      .where(eq(invitation.id, input.invitationId))
+      .get();
+
+    if (!inv) {
+      throw new ORPCError("NOT_FOUND", { message: "Invitation not found" });
+    }
+
+    await db.delete(invitation).where(eq(invitation.id, input.invitationId));
+
+    return { deleted: true };
+  });
+
 // Public procedure: sign-in page config
 export const getSigninConfig = publicProcedure.handler(async () => {
   const configs = await db.select().from(appConfig).all();
@@ -399,35 +549,63 @@ export const getSigninConfig = publicProcedure.handler(async () => {
 });
 
 // Public procedure: sign-up page config
-export const getSignupConfig = publicProcedure.handler(async () => {
-  const configs = await db.select().from(appConfig).all();
-  const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
-  const signupConfig = configs.find(
-    (c) => c.key === "enabled-signup-providers",
-  );
+export const getSignupConfig = publicProcedure
+  .input(z.object({ token: z.string().optional() }).optional())
+  .handler(async ({ input }) => {
+    const configs = await db.select().from(appConfig).all();
+    const publicSignup = configs.find((c) => c.key === "public-signup-enabled");
+    const signupConfig = configs.find(
+      (c) => c.key === "enabled-signup-providers",
+    );
 
-  const userCount = await db.select({ count: count() }).from(user).get();
-  const isFirstUser = (userCount?.count ?? 0) === 0;
-  const oauthConfigured = isOAuthConfigured();
+    const userCount = await db.select({ count: count() }).from(user).get();
+    const isFirstUser = (userCount?.count ?? 0) === 0;
+    const oauthConfigured = isOAuthConfigured();
 
-  const signupProviders = getAvailableSignupProviders({
-    isFirstUser,
-    publicSignupEnabled: isPublicSignupEnabled(publicSignup?.value),
-    signupProvidersConfig: signupConfig?.value,
-    oauthConfigured,
+    // If a valid invitation token is provided, allow email sign-up
+    if (input?.token) {
+      const inv = await db
+        .select()
+        .from(invitation)
+        .where(
+          and(
+            eq(invitation.token, input.token),
+            eq(invitation.status, "pending"),
+            gte(invitation.expiresAt, new Date()),
+          ),
+        )
+        .get();
+
+      if (inv) {
+        return {
+          enabled: true,
+          isFirstUser: false,
+          signupProviders: ["email" as AuthProvider],
+          isOAuthConfigured: oauthConfigured,
+          oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",
+          oauthProviderId: "",
+        };
+      }
+    }
+
+    const signupProviders = getAvailableSignupProviders({
+      isFirstUser,
+      publicSignupEnabled: isPublicSignupEnabled(publicSignup?.value),
+      signupProvidersConfig: signupConfig?.value,
+      oauthConfigured,
+    });
+
+    return {
+      enabled: signupProviders.length > 0,
+      isFirstUser,
+      signupProviders,
+      isOAuthConfigured: oauthConfigured,
+      oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",
+      oauthProviderId: signupProviders.includes("oauth")
+        ? (env.OAUTH_PROVIDER_ID ?? "")
+        : "",
+    };
   });
-
-  return {
-    enabled: signupProviders.length > 0,
-    isFirstUser,
-    signupProviders,
-    isOAuthConfigured: oauthConfigured,
-    oauthProviderName: env.OAUTH_PROVIDER_NAME ?? "OAuth",
-    oauthProviderId: signupProviders.includes("oauth")
-      ? (env.OAUTH_PROVIDER_ID ?? "")
-      : "",
-  };
-});
 
 // Time range schema for stats
 const timeRangeSchema = z.enum(["30d", "1y", "all"]);

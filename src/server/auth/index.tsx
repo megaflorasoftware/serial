@@ -7,10 +7,10 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, gte } from "drizzle-orm";
 import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
 import { db } from "../db";
-import { account, appConfig, session, user } from "../db/schema";
+import { account, appConfig, invitation, session, user } from "../db/schema";
 import { getPolarProductIds, polarClient } from "../subscriptions/polar";
 import { PLANS } from "../subscriptions/plans";
 import {
@@ -269,6 +269,26 @@ export const auth = betterAuth({
 
       // Sign-up gating
       if (isEmailSignUp && !availableSignupProviders.includes("email")) {
+        // Check for a valid invitation token before blocking
+        const invitationToken = ctx.body?.invitationToken;
+        if (typeof invitationToken === "string") {
+          const inv = await db
+            .select({ id: invitation.id })
+            .from(invitation)
+            .where(
+              and(
+                eq(invitation.token, invitationToken),
+                eq(invitation.status, "pending"),
+                gte(invitation.expiresAt, new Date()),
+              ),
+            )
+            .get();
+
+          if (inv) {
+            return;
+          }
+        }
+
         throw new APIError("BAD_REQUEST", {
           message: "Sign ups are currently disabled",
         });
@@ -286,6 +306,22 @@ export const auth = betterAuth({
       if (!ctx.context?.newSession?.user?.id) return;
 
       const userId = ctx.context.newSession.user.id;
+
+      // Mark invitation as accepted if a token was provided
+      if (isEmailSignUp) {
+        const invitationToken = ctx.body?.invitationToken;
+        if (typeof invitationToken === "string") {
+          await db
+            .update(invitation)
+            .set({ status: "accepted" })
+            .where(
+              and(
+                eq(invitation.token, invitationToken),
+                eq(invitation.status, "pending"),
+              ),
+            );
+        }
+      }
 
       // Check if this user is the first user by creation time
       const firstUser = await db

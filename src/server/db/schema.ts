@@ -1,6 +1,7 @@
 // Example model schema from the Drizzle docs
 // https://orm.drizzle.team/docs/sql-schema-declaration
 
+import { randomBytes } from "node:crypto";
 import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
 import {
@@ -123,6 +124,25 @@ export const accountRelations = relations(account, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+export const invitation = sqliteTable("invitation", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  token: text("token")
+    .notNull()
+    .unique()
+    .$defaultFn(() => randomBytes(32).toString("base64url")),
+  email: text("email"),
+  inviterId: text("inviter_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // "pending" | "accepted" | "canceled"
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$default(() => new Date())
+    .notNull(),
+});
 
 // === End: Better Auth ===
 
