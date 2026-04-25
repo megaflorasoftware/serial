@@ -18,6 +18,7 @@ export type PublishedChunk =
 
 const RESUME_RETENTION_SECONDS = 60 * 2;
 const REDIS_KEY_PREFIX = "serial:pub:";
+const REDIS_CONNECT_TIMEOUT_MS = 5_000;
 
 type PublisherChannelMap = Record<string, PublishedChunk>;
 
@@ -46,8 +47,22 @@ async function createPublisher() {
     const { IORedisPublisher } =
       await import("@orpc/experimental-publisher/ioredis");
 
-    const commander = new Redis(env.REDIS_URL!);
-    const listener = new Redis(env.REDIS_URL!, { lazyConnect: true });
+    const commander = new Redis(env.REDIS_URL!, {
+      connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+      maxRetriesPerRequest: 3,
+    });
+    const listener = new Redis(env.REDIS_URL!, {
+      connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+
+    commander.on("error", (err) => {
+      console.error("[publisher] Redis commander error:", err.message);
+    });
+    listener.on("error", (err) => {
+      console.error("[publisher] Redis listener error:", err.message);
+    });
 
     console.log("[publisher] Using IORedisPublisher");
     return new IORedisPublisher<PublisherChannelMap>({

@@ -47,6 +47,6 @@ services:
         required: false
       redis:
         condition: service_healthy
-        required: false
+        required: true
     ports:
       - 3000:3000
