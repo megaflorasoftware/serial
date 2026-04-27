@@ -1214,7 +1214,7 @@ export const streamingImport = protectedProcedure
     }));
 
     // Publish import start with total feeds count (must come before
-    // import-limit-warning so the client's progressState is initialized first)
+    // import-limit-warning so the client's loading machine is initialized first)
     await publisher.publish(channel, {
       source: "initial",
       chunk: { type: "import-start", totalFeeds: input.feeds.length },
