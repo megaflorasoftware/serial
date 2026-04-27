@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { orpcRouterClient } from "../orpc";
+import { buildViewManifests } from "./buildViewManifests";
+import { loadingActor } from "./loading-machine";
 import { feedItemsStore } from "./store";
 import type { PublishedChunk } from "~/server/api/publisher";
 import type { VisibilityFilter } from "./atoms";
@@ -40,19 +42,67 @@ export function useDataSubscription() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Per-connection controller — aborted on visibility change to force
+    // a reconnect without tearing down the entire subscription lifecycle.
+    let connectionController: AbortController | null = null;
+    let visibilityReconnect = false;
+    let paused = false;
+
     async function subscribe() {
       while (!controller.signal.aborted) {
+        // Wait while the page is hidden — no point holding an SSE
+        // connection open when the tab isn't visible.
+        if (paused) {
+          await new Promise<void>((resolve) => {
+            const check = () => {
+              if (!paused || controller.signal.aborted) {
+                document.removeEventListener("visibilitychange", check);
+                resolve();
+              }
+            };
+            document.addEventListener("visibilitychange", check);
+            // In case the flag was already flipped before we started listening
+            check();
+          });
+          if (controller.signal.aborted) break;
+        }
+
+        const conn = new AbortController();
+        connectionController = conn;
+
+        // Cascade main abort → connection abort so unmount kills the
+        // active connection immediately.
+        const forwardAbort = () => conn.abort();
+        controller.signal.addEventListener("abort", forwardAbort, {
+          once: true,
+        });
+
         try {
-          // Reset retry delay on successful connection
           isConnectedRef.current = true;
           retryDelayRef.current = INITIAL_RETRY_DELAY;
 
           const iterator = await orpcRouterClient.initial.subscribe(undefined, {
-            signal: controller.signal,
+            signal: conn.signal,
           });
 
+          // After reconnecting due to page refocus, re-request data so
+          // the server sends fresh metadata, diffs, and triggers a
+          // refresh if the cooldown elapsed while the tab was hidden.
+          if (visibilityReconnect) {
+            visibilityReconnect = false;
+            const state = feedItemsStore.getState();
+            const hasCachedData = Object.keys(state.feedItemsDict).length > 0;
+            if (hasCachedData) {
+              void orpcRouterClient.initial.requestInitialData({
+                viewManifests: buildViewManifests(state),
+              });
+            } else {
+              void orpcRouterClient.initial.requestInitialData();
+            }
+          }
+
           for await (const payload of iterator as AsyncIterable<PublishedChunk>) {
-            if (controller.signal.aborted) break;
+            if (conn.signal.aborted) break;
 
             // Buffer the chunk and schedule a flush via RAF
             chunkBufferRef.current.push(payload);
@@ -63,11 +113,10 @@ export function useDataSubscription() {
         } catch (error) {
           isConnectedRef.current = false;
 
-          // Don't retry if aborted
+          if (controller.signal.aborted) break;
 
-          if (controller.signal.aborted) {
-            break;
-          }
+          // Skip backoff for visibility-triggered reconnects
+          if (conn.signal.aborted) continue;
 
           console.error("Subscription error, retrying...", error);
 
@@ -81,13 +130,39 @@ export function useDataSubscription() {
             retryDelayRef.current * BACKOFF_MULTIPLIER,
             MAX_RETRY_DELAY,
           );
+        } finally {
+          controller.signal.removeEventListener("abort", forwardAbort);
         }
       }
     }
 
+    // Disconnect on page hide, reconnect on refocus. Keeping the SSE
+    // pipe open while the tab is hidden wastes server resources and the
+    // connection often goes stale anyway.
+    const handleVisibilityChange = () => {
+      if (controller.signal.aborted) return;
+
+      if (document.visibilityState === "hidden") {
+        paused = true;
+        connectionController?.abort();
+      } else if (document.visibilityState === "visible") {
+        // Reset the machine so stale in-flight state doesn't confuse
+        // the freshly requested data stream.
+        loadingActor.send({ type: "RESET" });
+        paused = false;
+        visibilityReconnect = true;
+        // If the loop is waiting on the paused promise, the
+        // visibilitychange listener inside it will resolve it.
+        // If it's in a backoff sleep, the next iteration will
+        // see paused=false and proceed normally.
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     subscribe();
 
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       controller.abort();
       isConnectedRef.current = false;
       // Cancel any pending RAF flush
