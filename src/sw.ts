@@ -1,6 +1,10 @@
 /// <reference lib="webworker" />
 import { ExpirationPlugin } from "workbox-expiration";
-import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
+import {
+  cleanupOutdatedCaches,
+  matchPrecache,
+  precacheAndRoute,
+} from "workbox-precaching";
 import {
   NavigationRoute,
   registerRoute,
@@ -62,6 +66,7 @@ registerRoute(new NavigationRoute(navigationHandler));
 // a browser error. The client-side router can then resolve the correct route.
 setCatchHandler(async ({ request }) => {
   if (request.destination === "document") {
+    // Layer 1: try the runtime navigation cache (SSR HTML with hydration data)
     const cache = await caches.open("navigation-cache");
     // ignoreVary prevents mismatches between the warm-up request's headers
     // (Accept: */*) and the real navigation request's headers (Accept:
@@ -69,6 +74,15 @@ setCatchHandler(async ({ request }) => {
     const cachedRoot = await cache.match("/", { ignoreVary: true });
     if (cachedRoot) {
       return cachedRoot;
+    }
+
+    // Layer 2: static offline page from the precache. The precache is
+    // populated during SW install and is more durable than runtime caches —
+    // iOS Safari can evict runtime caches after ~7 days of inactivity, but
+    // the precache survives as long as the SW registration exists.
+    const offlinePage = await matchPrecache("/offline.html");
+    if (offlinePage) {
+      return offlinePage;
     }
   }
 

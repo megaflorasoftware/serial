@@ -1,4 +1,4 @@
-import { del, get, set } from "idb-keyval";
+import { clear, del, get, set } from "idb-keyval";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
 
 /**
@@ -35,22 +35,53 @@ export function createIDBStorage<T>(): PersistStorage<T> {
   const flush = () => {
     writeTimeout = null;
     if (pendingName !== null && pendingValue !== null) {
-      void set(pendingName, pendingValue);
+      const name = pendingName;
+      void set(pendingName, pendingValue).catch((err: unknown) => {
+        const isDOMException = err instanceof DOMException;
+        const isQuotaExceeded =
+          isDOMException && err.name === "QuotaExceededError";
+        // InvalidStateError means the DB connection was closed or deleted
+        // from under us — cached data is unreliable either way.
+        const isInvalidState =
+          isDOMException && err.name === "InvalidStateError";
+
+        if (isQuotaExceeded || isInvalidState) {
+          console.warn(
+            `[idb-storage] ${isDOMException ? err.name : "Unknown error"} writing "${name}" — clearing cache so next load does a full refresh`,
+          );
+          // Wipe all keys so the next page load starts with empty stores
+          // and triggers a full SSE fetch instead of rehydrating stale data.
+          void clear();
+        } else {
+          console.warn("[idb-storage] write failed:", name, err);
+        }
+      });
       pendingName = null;
       pendingValue = null;
     }
   };
 
-  // Flush on page hide so the latest state is persisted before the tab
-  // is discarded or backgrounded.
+  const flushPending = () => {
+    if (writeTimeout !== null) {
+      clearTimeout(writeTimeout);
+    }
+    flush();
+  };
+
+  // Flush on visibility change so the latest state is persisted before the
+  // tab is backgrounded or discarded.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
-      if (writeTimeout !== null) {
-        clearTimeout(writeTimeout);
-      }
-      flush();
+      flushPending();
     }
   });
+
+  // Flush on pagehide — fires reliably on page refresh, navigation, and
+  // close, including on mobile. visibilitychange alone misses hard refreshes
+  // on desktop and some mobile browsers, which can leave stale data in IDB.
+  // IDB transactions started here will complete even after the JS context
+  // is torn down, so the write is durable.
+  window.addEventListener("pagehide", flushPending);
 
   return {
     getItem: async (name: string) => {
