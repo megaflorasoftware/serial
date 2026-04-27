@@ -1732,6 +1732,43 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         hasInitialData: state.hasInitialData,
         fetchFeedItemsLastFetchedAt: state.fetchFeedItemsLastFetchedAt,
       }),
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<ApplicationStore>;
+        const merged = { ...current, ...persistedState };
+
+        // Cross-reference hydrated feed items against the feeds store's
+        // cached feed list. If a feed was deleted on another client and that
+        // client's cleanup was persisted to IDB (via pagehide flush), the
+        // feeds store will no longer contain the deleted feed — but the
+        // application store may still have its items. Filtering here
+        // prevents a flash of deleted items on first load.
+        const cachedFeeds = feedsStore.getState().feeds;
+        if (cachedFeeds.length > 0 && merged.feedItemsDict) {
+          const validFeedIds = new Set(cachedFeeds.map((f) => f.id));
+          const dict = merged.feedItemsDict;
+          const order = merged.feedItemsOrder ?? [];
+
+          const orphanedIds: string[] = [];
+          for (const id of order) {
+            const item = dict[id];
+            if (item && !validFeedIds.has(item.feedId)) {
+              orphanedIds.push(id);
+            }
+          }
+
+          if (orphanedIds.length > 0) {
+            const orphanedSet = new Set(orphanedIds);
+            const newDict = { ...dict };
+            for (const id of orphanedIds) {
+              delete newDict[id];
+            }
+            merged.feedItemsDict = newDict;
+            merged.feedItemsOrder = order.filter((id) => !orphanedSet.has(id));
+          }
+        }
+
+        return merged;
+      },
     },
   ),
 );
