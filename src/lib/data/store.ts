@@ -903,7 +903,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 }
                 break;
 
-              case "feeds":
+              case "feeds": {
                 feedsStore.getState().set(initialChunk.feeds);
                 feedsStore.setState({ fetchStatus: "success" });
                 // Track total feeds for progress calculation
@@ -918,7 +918,39 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     },
                   });
                 }
+
+                // Feed-level deletion: remove cached items whose feed no longer exists.
+                // This is the primary deletion path — items are deleted via feed cascade,
+                // not individually. Comparing feed IDs catches all such deletions without
+                // needing an unbounded global manifest.
+                const serverFeedIds = new Set(
+                  initialChunk.feeds.map((f) => f.id),
+                );
+                const currentDict = get().feedItemsDict;
+                const currentOrder = get().feedItemsOrder;
+                const orphanedIds: string[] = [];
+
+                for (const id of currentOrder) {
+                  const item = currentDict[id];
+                  if (item && !serverFeedIds.has(item.feedId)) {
+                    orphanedIds.push(id);
+                  }
+                }
+
+                if (orphanedIds.length > 0) {
+                  const orphanedSet = new Set(orphanedIds);
+                  const newDict: Record<string, ApplicationFeedItem> = {};
+                  const newOrder: string[] = [];
+                  for (const id of currentOrder) {
+                    if (!orphanedSet.has(id) && currentDict[id]) {
+                      newOrder.push(id);
+                      newDict[id] = currentDict[id];
+                    }
+                  }
+                  set({ feedItemsDict: newDict, feedItemsOrder: newOrder });
+                }
                 break;
+              }
 
               case "content-categories":
                 contentCategoriesStore
@@ -1129,7 +1161,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 break;
 
               case "item-manifest": {
-                // Delta sync: diff cached items against the server manifest
+                // Delta sync: detect new and changed items within the manifest scope.
+                // The manifest is scoped to the initial items per view per visibility,
+                // so it does NOT cover paginated items. Deletion is handled separately
+                // in the "feeds" chunk handler via feed-level comparison.
                 const manifestMap = new Map<
                   string,
                   { contentHash: string | null; updatedAt: Date }
@@ -1141,38 +1176,27 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   });
                 }
 
-                const currentDict = get().feedItemsDict;
-                const currentOrder = get().feedItemsOrder;
-
-                // Find deleted items: in client but not in manifest
-                const deletedIds = new Set<string>();
-                for (const id of currentOrder) {
-                  if (!manifestMap.has(id)) {
-                    deletedIds.add(id);
-                  }
-                }
+                const manifestCurrentDict = get().feedItemsDict;
 
                 // Collect stale item IDs: new items in initial scope + changed items
                 const staleItemIds: string[] = [];
                 const staleIdSet = new Set<string>();
 
-                // New items: in initial scope but not in client
+                // New items: in initial scope but not in client cache
                 for (const id of initialChunk.initialScopeIds) {
-                  if (!currentDict[id] && !staleIdSet.has(id)) {
+                  if (!manifestCurrentDict[id] && !staleIdSet.has(id)) {
                     staleItemIds.push(id);
                     staleIdSet.add(id);
                   }
                 }
 
                 // Changed items: in both client and manifest, but different hash or updatedAt
-                for (const id of currentOrder) {
-                  if (deletedIds.has(id) || staleIdSet.has(id)) continue;
-                  const manifestItem = manifestMap.get(id);
-                  if (!manifestItem) continue;
-                  const cachedItem = currentDict[id];
+                for (const [id, manifestItem] of manifestMap) {
+                  if (staleIdSet.has(id)) continue;
+                  const cachedItem = manifestCurrentDict[id];
                   if (!cachedItem) continue;
 
-                  // Compare contentHash (null-safe: null === null means unchanged)
+                  // Compare contentHash (null === null means unchanged)
                   if (manifestItem.contentHash !== cachedItem.contentHash) {
                     staleItemIds.push(id);
                     staleIdSet.add(id);
@@ -1200,27 +1224,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   }
                 }
 
-                // Remove deleted items from store
-                if (deletedIds.size > 0) {
-                  const newDict: Record<string, ApplicationFeedItem> = {};
-                  const newOrder: string[] = [];
-                  for (const id of currentOrder) {
-                    if (!deletedIds.has(id) && currentDict[id]) {
-                      newOrder.push(id);
-                      newDict[id] = currentDict[id];
-                    }
-                  }
-
-                  set({
-                    feedItemsDict: newDict,
-                    feedItemsOrder: newOrder,
-                    _pendingViewCursors: initialChunk.viewCursors,
-                  });
-                } else {
-                  set({
-                    _pendingViewCursors: initialChunk.viewCursors,
-                  });
-                }
+                set({ _pendingViewCursors: initialChunk.viewCursors });
 
                 // Request stale items from server (fire-and-forget)
                 if (staleItemIds.length > 0) {
