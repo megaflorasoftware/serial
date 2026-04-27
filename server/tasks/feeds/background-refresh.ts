@@ -1,9 +1,8 @@
 import { defineTask } from "nitro/task";
 import { and, eq, inArray, isNull, lte, or } from "drizzle-orm";
-import { captureException } from "../../../src/server/logger";
 import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
-import { fetchAndInsertFeedData } from "../../../src/server/rss/fetchFeeds";
+import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
 import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
 import { env } from "../../../src/env";
@@ -97,43 +96,25 @@ export default defineTask({
     let emptyCount = 0;
     let errorCount = 0;
 
-    // Map feed ID → name for error logging
-    const feedNameMap = new Map<number, string>();
-    for (const userFeeds of feedsByUser.values()) {
-      for (const feed of userFeeds) {
-        feedNameMap.set(feed.id, feed.name);
-      }
-    }
-
     for (const [userId, userFeeds] of feedsByUser) {
       try {
-        // Fetch and insert feed data
-        for await (const result of fetchAndInsertFeedData({ db }, userFeeds)) {
-          if (result.status === "success") {
-            refreshedCount++;
-            totalRowsWritten += result.feedItems.length;
-          } else if (result.status === "skipped") {
-            skippedCount++;
-          } else if (result.status === "empty") {
-            emptyCount++;
-          } else if (result.status === "error") {
-            errorCount++;
-            const feedName = feedNameMap.get(result.id) ?? "unknown";
-            const errMsg =
-              result.error instanceof Error
-                ? result.error.message
-                : String(result.error);
-            captureException(
-              result.error instanceof Error ? result.error : new Error(errMsg),
-              { feedId: result.id, feedName },
-            );
-            console.error(
-              `[background-refresh] Error refreshing feed "${feedName}" (id=${result.id}, user=${userId}): ${errMsg}`,
-            );
-          }
-        }
+        // Use the shared refreshUserFeeds function.
+        // Pass the user's SSE channel so any active subscriber receives
+        // live progress updates (if no one is subscribed, publishes are no-ops).
+        const channel = `user:${userId}`;
+        const stats = await refreshUserFeeds({
+          db,
+          feedsList: userFeeds,
+          channel,
+          source: "new-data",
+        });
+
+        refreshedCount += stats.refreshedCount;
+        skippedCount += stats.skippedCount;
+        emptyCount += stats.emptyCount;
+        errorCount += stats.errorCount;
+        totalRowsWritten += stats.totalRowsWritten;
       } catch (e) {
-        captureException(e);
         console.error(
           `[background-refresh] Failed to refresh feeds for user ${userId}:`,
           e,

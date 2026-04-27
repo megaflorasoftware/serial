@@ -5,7 +5,10 @@ import { orpcRouterClient } from "../orpc";
 import { feedItemsStore } from "./store";
 import type { PublishedChunk } from "~/server/api/publisher";
 import type { VisibilityFilter } from "./atoms";
-import type { PaginationCursor } from "~/server/api/routers/initialRouter";
+import type {
+  ClientManifestEntry,
+  PaginationCursor,
+} from "~/server/api/routers/initialRouter";
 
 // Exponential backoff configuration
 const INITIAL_RETRY_DELAY = 1000; // 1 second
@@ -103,15 +106,9 @@ export function useDataSubscription() {
   // Request methods that trigger data fetching via the publisher
   const requestInitialData = useCallback(
     (options?: {
-      visibilityFilter?: VisibilityFilter;
-      hasCachedData?: boolean;
+      viewManifests?: Record<number, Record<string, ClientManifestEntry[]>>;
     }) => {
-      const hasOptions =
-        options?.visibilityFilter !== undefined ||
-        options?.hasCachedData !== undefined;
-      return orpcRouterClient.initial.requestInitialData(
-        hasOptions ? options : undefined,
-      );
+      return orpcRouterClient.initial.requestInitialData(options ?? undefined);
     },
     [],
   );
@@ -122,12 +119,14 @@ export function useDataSubscription() {
       visibilityFilter: VisibilityFilter,
       cursor?: PaginationCursor,
       limit?: number,
+      clientItems?: ClientManifestEntry[],
     ) => {
       return orpcRouterClient.initial.requestItemsByVisibility({
         viewId,
         visibilityFilter,
         cursor,
         limit,
+        clientItems,
       });
     },
     [],
@@ -182,15 +181,9 @@ export function useDataSubscription() {
  */
 export const dataSubscriptionActions = {
   requestInitialData: (options?: {
-    visibilityFilter?: VisibilityFilter;
-    hasCachedData?: boolean;
+    viewManifests?: Record<number, Record<string, ClientManifestEntry[]>>;
   }) => {
-    const hasOptions =
-      options?.visibilityFilter !== undefined ||
-      options?.hasCachedData !== undefined;
-    return orpcRouterClient.initial.requestInitialData(
-      hasOptions ? options : undefined,
-    );
+    return orpcRouterClient.initial.requestInitialData(options ?? undefined);
   },
   requestImportedData: (newFeedIds: number[]) =>
     orpcRouterClient.initial.requestImportedData({ newFeedIds }),
@@ -203,12 +196,14 @@ export const dataSubscriptionActions = {
     visibilityFilter: VisibilityFilter,
     cursor?: PaginationCursor,
     limit?: number,
+    clientItems?: ClientManifestEntry[],
   ) =>
     orpcRouterClient.initial.requestItemsByVisibility({
       viewId,
       visibilityFilter,
       cursor,
       limit,
+      clientItems,
     }),
   requestItemsByFeed: (
     feedId: number,
