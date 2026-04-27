@@ -30,7 +30,7 @@ export type PlanConfig = {
  * Small buffer subtracted from refresh intervals so users don't hit the
  * rate-limit boundary when refreshing right on the dot (e.g. every 15 min).
  */
-const REFRESH_PERIOD_BUFFER = 30_000;
+const REFRESH_PERIOD_BUFFER = 59_000;
 
 const STANDARD_REFRESH_MS = 15 * 60 * 1000 - REFRESH_PERIOD_BUFFER; // ~15 minutes
 const STANDARD_BACKGROUND_REFRESH_MS = 4 * 60 * 60 * 1000; // 4 hours
