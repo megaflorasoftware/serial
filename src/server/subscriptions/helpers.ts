@@ -43,24 +43,43 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
   }
 }
 
+/** Check if a user is an admin. */
+export async function isAdminUser(db: DB, userId: string): Promise<boolean> {
+  const row = await db
+    .select({ role: user.role })
+    .from(user)
+    .where(eq(user.id, userId))
+    .get();
+  return row?.role === "admin";
+}
+
 export async function canActivateFeed(db: DB, userId: string) {
-  const planId = await getUserPlanId(userId);
-  const config = getEffectivePlanConfig(planId);
+  const [planId, isAdmin] = await Promise.all([
+    getUserPlanId(userId),
+    isAdminUser(db, userId),
+  ]);
+  const config = getEffectivePlanConfig(planId, { isAdmin });
   const activeCount = await getActiveFeedCount(db, userId);
   return activeCount < config.maxActiveFeeds;
 }
 
 export async function getFeedsActivationBudget(db: DB, userId: string) {
-  const planId = await getUserPlanId(userId);
-  const config = getEffectivePlanConfig(planId);
+  const [planId, isAdmin] = await Promise.all([
+    getUserPlanId(userId),
+    isAdminUser(db, userId),
+  ]);
+  const config = getEffectivePlanConfig(planId, { isAdmin });
   const activeCount = await getActiveFeedCount(db, userId);
   const remainingSlots = Math.max(0, config.maxActiveFeeds - activeCount);
   return { remainingSlots, maxActiveFeeds: config.maxActiveFeeds };
 }
 
 export async function getUserPlanLimits(db: DB, userId: string) {
-  const planId = await getUserPlanId(userId);
-  const config = getEffectivePlanConfig(planId);
+  const [planId, isAdmin] = await Promise.all([
+    getUserPlanId(userId),
+    isAdminUser(db, userId),
+  ]);
+  const config = getEffectivePlanConfig(planId, { isAdmin });
   const activeFeeds = await getActiveFeedCount(db, userId);
 
   return {
@@ -86,8 +105,11 @@ export async function checkUserRefreshEligibility(
   | { eligible: true; nextRefreshAt: Date }
   | { eligible: false; nextRefreshAt: Date }
 > {
-  const planId = await getUserPlanId(userId);
-  const config = getEffectivePlanConfig(planId);
+  const [planId, isAdmin] = await Promise.all([
+    getUserPlanId(userId),
+    isAdminUser(db, userId),
+  ]);
+  const config = getEffectivePlanConfig(planId, { isAdmin });
 
   const now = new Date();
   const nowEpoch = Math.floor(now.getTime() / 1000);

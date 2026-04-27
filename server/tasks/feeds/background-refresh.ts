@@ -5,7 +5,6 @@ import { feeds, user } from "../../../src/server/db/schema";
 import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
 import { hasSubscribers, publisher } from "../../../src/server/api/publisher";
 import { checkUserRefreshEligibility } from "../../../src/server/subscriptions/helpers";
-import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
 import { env } from "../../../src/env";
 
@@ -34,23 +33,17 @@ export default defineTask({
     let eligibleUserIds: string[] | null = null;
 
     if (IS_BILLING_ENABLED) {
-      // With billing: only refresh feeds for users whose plan-based
-      // nextRefreshAt has elapsed (or was never set).
+      // With billing: users whose plan-based nextRefreshAt has elapsed
+      // (or was never set). Admin users naturally qualify because they
+      // get UNLIMITED_CONFIG with the shortest refresh interval.
       const eligibleUsers = await db
         .select({ id: user.id })
         .from(user)
         .where(or(lte(user.nextRefreshAt, now), isNull(user.nextRefreshAt)))
         .all();
       eligibleUserIds = eligibleUsers.map((u) => u.id);
-    } else if (IS_MAIN_INSTANCE) {
-      // Main instance without billing: only admin users.
-      const admins = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.role, "admin"))
-        .all();
-      eligibleUserIds = admins.map((a) => a.id);
     }
+    // Without billing: eligibleUserIds stays null → all active feeds
 
     // Early exit if user filtering yielded no eligible users.
     if (eligibleUserIds !== null && eligibleUserIds.length === 0) {
@@ -59,11 +52,12 @@ export default defineTask({
     }
 
     // Fetch feeds belonging to eligible users that are due for refresh.
-    // On self-hosted (eligibleUserIds is null), fetch all active feeds due,
-    // including those with null nextFetchAt (never-scheduled feeds).
-    const fetchAtCondition = IS_MAIN_INSTANCE
-      ? lte(feeds.nextFetchAt, now)
-      : or(lte(feeds.nextFetchAt, now), isNull(feeds.nextFetchAt));
+    // Include feeds with null nextFetchAt (never-scheduled feeds) so they
+    // get picked up on first pass.
+    const fetchAtCondition = or(
+      lte(feeds.nextFetchAt, now),
+      isNull(feeds.nextFetchAt),
+    );
 
     const userCondition =
       eligibleUserIds !== null

@@ -85,7 +85,10 @@ const UNLIMITED_CONFIG: PlanConfig = {
   backgroundRefreshIntervalMs: PRO_BACKGROUND_REFRESH_MS,
 };
 
-export function getEffectivePlanConfig(planId: PlanId): PlanConfig {
-  if (!IS_MAIN_INSTANCE) return UNLIMITED_CONFIG;
+export function getEffectivePlanConfig(
+  planId: PlanId,
+  options?: { isAdmin?: boolean },
+): PlanConfig {
+  if (!IS_MAIN_INSTANCE || options?.isAdmin) return UNLIMITED_CONFIG;
   return PLANS[planId];
 }

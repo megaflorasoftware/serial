@@ -6,7 +6,7 @@ import {
   polarClient,
 } from "./polar";
 import { getEffectivePlanConfig, PLANS } from "./plans";
-import { deactivateExcessFeeds } from "./helpers";
+import { deactivateExcessFeeds, isAdminUser } from "./helpers";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
 import { feeds, user } from "~/server/db/schema";
@@ -196,7 +196,8 @@ export async function applySubscriptionSideEffects(
   userId: string,
   data: PolarSubscriptionCache,
 ): Promise<void> {
-  const config = getEffectivePlanConfig(data.planId);
+  const isAdmin = await isAdminUser(db, userId);
+  const config = getEffectivePlanConfig(data.planId, { isAdmin });
 
   // Clear the user's manual-refresh cooldown so they can immediately
   // refresh with their new plan's interval after upgrading.
