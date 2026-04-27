@@ -572,11 +572,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         set({ feedStatusDict: {} });
         loadingActor.send({ type: "MANUAL_REFRESH_REQUEST" });
 
-        // Re-run the same flow as initial mount: metadata, diffs, RSS refresh.
-        // Rate limiting is handled server-side via checkUserRefreshEligibility —
-        // if the user is in cooldown, metadata+diffs still run but RSS is skipped.
-        const viewManifests = buildViewManifests(get());
-        await orpcRouterClient.initial.requestInitialData({ viewManifests });
+        try {
+          // Re-run the same flow as initial mount: metadata, diffs, RSS refresh.
+          // Rate limiting is handled server-side via checkUserRefreshEligibility —
+          // if the user is in cooldown, metadata+diffs still run but RSS is skipped.
+          const viewManifests = buildViewManifests(get());
+          await orpcRouterClient.initial.requestInitialData({ viewManifests });
+        } catch (e) {
+          // Exit loading state so the button re-enables on error
+          loadingActor.send({ type: "RESET" });
+          throw e;
+        }
       },
 
       revalidateView: async (viewId: number) => {
@@ -742,17 +748,16 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   nextRefreshAt: cooldownMs,
                 });
 
-                // Only enter backgroundRefresh when there are feeds to
-                // process. When totalFeeds is 0, the cooldown update above
-                // is the only thing that matters for the UI.
-                if (initialChunk.totalFeeds > 0) {
-                  loadingActor.send({
-                    type: "BACKGROUND_REFRESH_START",
-                    totalFeeds: initialChunk.totalFeeds,
-                  });
-                }
+                loadingActor.send({
+                  type: "BACKGROUND_REFRESH_START",
+                  totalFeeds: initialChunk.totalFeeds,
+                });
                 break;
               }
+
+              case "refresh-complete":
+                loadingActor.send({ type: "BACKGROUND_REFRESH_COMPLETE" });
+                break;
 
               case "feed-status": {
                 const feedStatusDict = { ...get().feedStatusDict };
@@ -1462,13 +1467,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             flushBatched();
             get().processChunk(payload);
 
-            // After a refresh-start with feeds, defer remaining chunks to
-            // the next animation frame so React can render the loading
-            // state before feed-status events complete the refresh.
+            // After a refresh-start, defer remaining chunks to the next
+            // animation frame so React can render the loading state
+            // before feed-status / refresh-complete events resolve it.
             const isRefreshStart =
               payload.source === "initial" &&
-              payload.chunk.type === "refresh-start" &&
-              payload.chunk.totalFeeds > 0;
+              payload.chunk.type === "refresh-start";
 
             if (isRefreshStart && i < payloads.length - 1) {
               const remaining = payloads.slice(i + 1);

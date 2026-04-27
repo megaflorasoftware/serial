@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
-import { publisher } from "../../../src/server/api/publisher";
+import { hasSubscribers, publisher } from "../../../src/server/api/publisher";
 import { checkUserRefreshEligibility } from "../../../src/server/subscriptions/helpers";
 import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
@@ -58,7 +58,7 @@ export default defineTask({
       return { result: "no-eligible-users" };
     }
 
-    // Fetch only feeds belonging to eligible users that are due for refresh.
+    // Fetch feeds belonging to eligible users that are due for refresh.
     // On self-hosted (eligibleUserIds is null), fetch all active feeds due,
     // including those with null nextFetchAt (never-scheduled feeds).
     const fetchAtCondition = IS_MAIN_INSTANCE
@@ -76,31 +76,6 @@ export default defineTask({
       .where(and(eq(feeds.isActive, true), fetchAtCondition, userCondition))
       .all();
 
-    if (feedsToRefresh.length === 0) {
-      // No feeds are due, but eligible users still need a fresh cooldown
-      // published so the client's refresh button shows the correct state.
-      if (eligibleUserIds !== null) {
-        for (const userId of eligibleUserIds) {
-          const eligibility = await checkUserRefreshEligibility(db, userId);
-          const channel = `user:${userId}`;
-          console.log(
-            `[background-refresh] Publishing refresh-start to channel "${channel}" (no feeds) — nextRefreshAt: ${eligibility.nextRefreshAt.toISOString()}`,
-          );
-          await publisher.publish(channel, {
-            source: "initial",
-            chunk: {
-              type: "refresh-start",
-              totalFeeds: 0,
-              nextRefreshAt: eligibility.nextRefreshAt,
-            },
-          });
-        }
-      }
-
-      console.log("[background-refresh] No feeds to refresh");
-      return { result: "no-feeds-to-refresh" };
-    }
-
     // Group feeds by userId for per-user processing
     const feedsByUser = new Map<string, typeof feedsToRefresh>();
     for (const feed of feedsToRefresh) {
@@ -112,40 +87,71 @@ export default defineTask({
       }
     }
 
+    // Build the full set of user IDs to process. Every eligible user gets
+    // refresh-start / refresh-complete regardless of whether they have
+    // feeds due, so the client always sees the loading state + cooldown.
+    const userIdsToProcess =
+      eligibleUserIds !== null ? eligibleUserIds : [...feedsByUser.keys()];
+
+    if (userIdsToProcess.length === 0) {
+      console.log("[background-refresh] No users to process");
+      return { result: "no-users" };
+    }
+
     let refreshedCount = 0;
     let totalRowsWritten = 0;
     let skippedCount = 0;
     let emptyCount = 0;
     let errorCount = 0;
 
-    for (const [userId, userFeeds] of feedsByUser) {
+    for (const userId of userIdsToProcess) {
       try {
         const channel = `user:${userId}`;
 
-        // Set the user's next refresh cooldown — streamed to the client
-        // as part of the refresh-start chunk before the slow RSS fetch.
+        // Skip users with no connected client — no one to receive the
+        // chunks, and we avoid unnecessary RSS fetches + Redis publishes.
+        if (!hasSubscribers(channel)) {
+          continue;
+        }
+
+        const userFeeds = feedsByUser.get(userId);
+
+        // Set the user's next refresh cooldown and publish refresh-start
+        // immediately so the client enters loading state.
         const eligibility = await checkUserRefreshEligibility(db, userId);
         console.log(
-          `[background-refresh] Refreshing feeds for user ${userId} on channel "${channel}" — nextRefreshAt: ${eligibility.nextRefreshAt.toISOString()}`,
+          `[background-refresh] refresh-start for user ${userId} on "${channel}" — feeds: ${userFeeds?.length ?? 0}, nextRefreshAt: ${eligibility.nextRefreshAt.toISOString()}`,
         );
 
-        // TODO: remove — temporary delay for testing cooldown UI
-        await new Promise((r) => setTimeout(r, 3000));
-
-        // Run the actual RSS fetch. refresh-start (with cooldown) is
-        // published first inside refreshUserFeeds, then feed-status chunks.
-        const stats = await refreshUserFeeds({
-          db,
-          feedsList: userFeeds,
-          channel,
-          nextRefreshAt: eligibility.nextRefreshAt,
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: {
+            type: "refresh-start",
+            totalFeeds: userFeeds?.length ?? 0,
+            nextRefreshAt: eligibility.nextRefreshAt,
+          },
         });
 
-        refreshedCount += stats.refreshedCount;
-        skippedCount += stats.skippedCount;
-        emptyCount += stats.emptyCount;
-        errorCount += stats.errorCount;
-        totalRowsWritten += stats.totalRowsWritten;
+        // Run the actual RSS fetch (if this user has feeds due).
+        if (userFeeds && userFeeds.length > 0) {
+          const stats = await refreshUserFeeds({
+            db,
+            feedsList: userFeeds,
+            channel,
+          });
+
+          refreshedCount += stats.refreshedCount;
+          skippedCount += stats.skippedCount;
+          emptyCount += stats.emptyCount;
+          errorCount += stats.errorCount;
+          totalRowsWritten += stats.totalRowsWritten;
+        }
+
+        // Always signal completion so the client exits loading state.
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: { type: "refresh-complete" },
+        });
       } catch (e) {
         console.error(
           `[background-refresh] Failed to refresh feeds for user ${userId}:`,

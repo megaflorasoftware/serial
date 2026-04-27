@@ -13,6 +13,7 @@ type LoadingMachineEvent =
 
   // Background RSS refresh (server fetches RSS after initial-data-complete)
   | { type: "BACKGROUND_REFRESH_START"; totalFeeds: number }
+  | { type: "BACKGROUND_REFRESH_COMPLETE" }
 
   // Per-feed status (used by background refresh, manual refresh, and import)
   | { type: "FEED_STATUS" }
@@ -205,6 +206,7 @@ export const loadingMachine = setup({
           },
           { actions: "incrementCompletedBatch" },
         ],
+        BACKGROUND_REFRESH_COMPLETE: { target: "idle" },
         RESET: { target: "idle" },
       },
     },

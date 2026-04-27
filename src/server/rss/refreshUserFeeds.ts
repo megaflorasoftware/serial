@@ -17,22 +17,23 @@ export type RefreshStats = {
 /**
  * Shared feed refresh logic used by both background-refresh tasks and
  * interactive user-triggered refreshes. Fetches RSS content for the
- * given feeds and publishes progress/results via the SSE publisher
- * for any active subscribers.
+ * given feeds and publishes feed-status / feed-items chunks via the
+ * SSE publisher for any active subscribers.
  *
- * @param channel  - If provided, publishes refresh-start, feed-status,
- *                   and feed-items chunks to this SSE channel.
+ * Callers are responsible for publishing `refresh-start` before and
+ * `refresh-complete` after calling this function.
+ *
+ * @param channel  - If provided, publishes feed-status and feed-items
+ *                   chunks to this SSE channel.
  */
 export async function refreshUserFeeds({
   db,
   feedsList,
   channel,
-  nextRefreshAt,
 }: {
   db: typeof Database;
   feedsList: DatabaseFeed[];
   channel?: string;
-  nextRefreshAt?: Date | null;
 }): Promise<RefreshStats> {
   const now = new Date();
 
@@ -50,6 +51,10 @@ export async function refreshUserFeeds({
     totalRowsWritten: 0,
   };
 
+  if (feedsToFetch.length === 0) {
+    return stats;
+  }
+
   // Typed publish helper that no-ops when there is no channel
   const publish = channel
     ? async (chunk: GetByViewChunk) => {
@@ -59,16 +64,6 @@ export async function refreshUserFeeds({
         } as PublishedChunk);
       }
     : async () => {};
-
-  await publish({
-    type: "refresh-start",
-    totalFeeds: feedsToFetch.length,
-    nextRefreshAt: nextRefreshAt ?? null,
-  });
-
-  if (feedsToFetch.length === 0) {
-    return stats;
-  }
 
   // Build feed name map for error logging
   const feedNameMap = new Map<number, string>();

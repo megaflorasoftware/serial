@@ -2,7 +2,7 @@
 
 import { useLocation } from "@tanstack/react-router";
 import clsx from "clsx";
-import { RefreshCwIcon } from "lucide-react";
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import {
@@ -39,13 +39,33 @@ export function RefetchItemsButton() {
   // Only updated via the timeout callback (async) to satisfy the lint rule.
   const [now, setNow] = useState(() => Date.now());
 
-  const isRefreshing = useIsLoadingActive();
+  const isMachineActive = useIsLoadingActive();
   const isRateLimited = nextRefreshAt !== null && nextRefreshAt > now;
+
+  // On mount the button should show as loading until we receive the first
+  // cooldown timestamp (i.e. isRateLimited becomes true), which signals
+  // that initial data + refresh are complete.
+  const [hasReceivedCooldown, setHasReceivedCooldown] = useState(false);
+
+  useEffect(() => {
+    if (isRateLimited && !hasReceivedCooldown) {
+      const id = setTimeout(() => setHasReceivedCooldown(true), 0);
+      return () => clearTimeout(id);
+    }
+  }, [isRateLimited, hasReceivedCooldown]);
+
+  const awaitingFirstCooldown = !hasReceivedCooldown;
+
+  const isRefreshing = isMachineActive || awaitingFirstCooldown;
   const isDisabled =
     isRefreshing ||
     isRateLimited ||
     loading.mode === "initialLoad" ||
     loading.mode === "backgroundRefresh";
+
+  // Show check icon when the user is up to date (cooldown active),
+  // refresh icon when they can refresh again (cooldown expired/absent).
+  const showCheck = isRateLimited && !isMachineActive;
 
   // Tick `now` so the tooltip text updates live and the button re-enables
   // when cooldown expires. Ticks every second when <2min remaining,
@@ -91,12 +111,16 @@ export function RefetchItemsButton() {
       disabled={isDisabled}
       shortcut="r"
     >
-      <RefreshCwIcon
-        size={16}
-        className={clsx({
-          "animate-spin": isRefreshing,
-        })}
-      />
+      {showCheck ? (
+        <CheckIcon size={16} />
+      ) : (
+        <RefreshCwIcon
+          size={16}
+          className={clsx({
+            "animate-spin": isRefreshing,
+          })}
+        />
+      )}
       <span className="hidden pl-1.5 md:block">Refresh</span>
     </ButtonWithShortcut>
   );

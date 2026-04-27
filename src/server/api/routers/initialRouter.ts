@@ -7,7 +7,7 @@ import {
   ITEMS_PER_PAGE,
   REVALIDATE_VIEW_CHUNK_SIZE,
 } from "../constants";
-import { publisher } from "../publisher";
+import { publisher, trackChannelConnection } from "../publisher";
 import { insertFeedWithCategories } from "./feed-router/utils";
 import type { VisibilityFilter } from "~/lib/data/atoms";
 import type {
@@ -102,6 +102,7 @@ export type GetByViewChunk =
   | { type: "view-feeds"; viewId: number; feedIds: number[] }
   | { type: "initial-data-complete" }
   | { type: "refresh-start"; totalFeeds: number; nextRefreshAt: Date | null }
+  | { type: "refresh-complete" }
   | { type: "view-items"; viewId: number; feedItemIds: string[] }
   | {
       type: "import-feed-inserted";
@@ -797,10 +798,16 @@ export const subscribe = protectedProcedure.handler(async function* ({
   lastEventId,
 }) {
   const channel = getUserChannel(context.user.id);
-  const iterator = publisher.subscribe(channel, { signal, lastEventId });
+  const untrack = trackChannelConnection(channel);
 
-  for await (const payload of iterator) {
-    yield payload;
+  try {
+    const iterator = publisher.subscribe(channel, { signal, lastEventId });
+
+    for await (const payload of iterator) {
+      yield payload;
+    }
+  } finally {
+    untrack();
   }
 });
 
@@ -1016,32 +1023,43 @@ export const requestInitialData = protectedProcedure
       await queryAndPublishViewDiff(view, "later");
     }
 
-    // Step 6: Check refresh rate limit. The cooldown is streamed to the
-    // client as part of the refresh-start chunk (before the slow RSS fetch).
+    // Step 6: Check refresh rate limit and publish refresh-start. The
+    // cooldown + total feeds are streamed before the slow RSS fetch so the
+    // client can show loading state immediately.
     const eligibility = await checkUserRefreshEligibility(
       context.db,
       context.user.id,
     );
 
-    // Step 7: Run RSS fetch if eligible, otherwise publish a 0-feed
-    // refresh-start so the client still receives the cooldown timestamp.
+    const feedsDue = eligibility.eligible
+      ? feedsList.filter(
+          (f) => f.isActive && (!f.nextFetchAt || f.nextFetchAt <= new Date()),
+        )
+      : [];
+
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: {
+        type: "refresh-start",
+        totalFeeds: feedsDue.length,
+        nextRefreshAt: eligibility.nextRefreshAt,
+      },
+    });
+
+    // Step 7: Run RSS fetch if eligible.
     if (eligibility.eligible) {
       await refreshUserFeeds({
         db: context.db,
         feedsList,
         channel,
-        nextRefreshAt: eligibility.nextRefreshAt,
-      });
-    } else {
-      await publisher.publish(channel, {
-        source: "initial",
-        chunk: {
-          type: "refresh-start",
-          totalFeeds: 0,
-          nextRefreshAt: eligibility.nextRefreshAt,
-        },
       });
     }
+
+    // Step 8: Always signal completion so the client exits loading state.
+    await publisher.publish(channel, {
+      source: "initial",
+      chunk: { type: "refresh-complete" },
+    });
 
     return { status: "completed" };
   });
