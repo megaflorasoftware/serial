@@ -9,7 +9,9 @@ import {
   viewFilterIdAtom,
   viewsAtom,
 } from "./atoms";
+import { buildViewManifests } from "./buildViewManifests";
 import { useStoresHydrated } from "./hydration";
+import { loadingActor } from "./loading-machine";
 import { feedItemsStore } from "./store";
 import { useDataSubscription } from "./useDataSubscription";
 import { useUpdateViewFilter } from "./views";
@@ -41,42 +43,15 @@ export function InitialClientQueries({ children }: PropsWithChildren) {
     if (!hasRequestedInitialData.current && hydrated) {
       hasRequestedInitialData.current = true;
 
-      const { feedItemsDict, viewFeedIds } = feedItemsStore.getState();
-      const hasCachedData = Object.keys(feedItemsDict).length > 0;
+      // Enter loading state immediately so the UI reflects it before
+      // the first SSE chunk arrives (avoids a brief idle flash).
+      loadingActor.send({ type: "INITIAL_LOAD_START" });
+
+      const state = feedItemsStore.getState();
+      const hasCachedData = Object.keys(state.feedItemsDict).length > 0;
 
       if (hasCachedData) {
-        // Build viewManifests: for each cached view, group items by visibility filter.
-        // This is critical — the server diffs per visibility filter, so if we sent
-        // a flat manifest the server would mark read/later items as "deleted"
-        // during the unread diff (and vice versa).
-        const viewManifests: Record<
-          number,
-          Record<string, Array<{ id: string; contentHash: string | null }>>
-        > = {};
-
-        for (const [viewIdStr, feedIds] of Object.entries(viewFeedIds)) {
-          const viewId = Number(viewIdStr);
-          const feedIdSet = new Set(feedIds);
-          const unread: Array<{ id: string; contentHash: string | null }> = [];
-          const read: Array<{ id: string; contentHash: string | null }> = [];
-          const later: Array<{ id: string; contentHash: string | null }> = [];
-
-          for (const [id, item] of Object.entries(feedItemsDict)) {
-            if (!feedIdSet.has(item.feedId)) continue;
-            const entry = { id, contentHash: item.contentHash ?? null };
-
-            if (item.isWatchLater) {
-              later.push(entry);
-            } else if (item.isWatched) {
-              read.push(entry);
-            } else {
-              unread.push(entry);
-            }
-          }
-
-          viewManifests[viewId] = { unread, read, later };
-        }
-
+        const viewManifests = buildViewManifests(state);
         void requestInitialData({ viewManifests });
       } else {
         void requestInitialData();

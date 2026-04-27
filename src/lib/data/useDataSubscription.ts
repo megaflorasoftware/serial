@@ -185,8 +185,6 @@ export const dataSubscriptionActions = {
   }) => {
     return orpcRouterClient.initial.requestInitialData(options ?? undefined);
   },
-  requestImportedData: (newFeedIds: number[]) =>
-    orpcRouterClient.initial.requestImportedData({ newFeedIds }),
   streamingImport: (
     feeds: Array<{ feedUrl: string; categories: string[] }>,
     importMode?: "tags" | "views" | "ignore",

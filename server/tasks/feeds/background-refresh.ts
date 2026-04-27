@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
+import { publisher } from "../../../src/server/api/publisher";
 import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
 import { env } from "../../../src/env";
@@ -106,7 +107,22 @@ export default defineTask({
           db,
           feedsList: userFeeds,
           channel,
-          source: "new-data",
+        });
+
+        // Publish the user's updated cooldown so any active client subscriber
+        // can disable the refresh button and show a countdown tooltip.
+        const userRow = await db
+          .select({ nextRefreshAt: user.nextRefreshAt })
+          .from(user)
+          .where(eq(user.id, userId))
+          .get();
+
+        await publisher.publish(channel, {
+          source: "initial",
+          chunk: {
+            type: "refresh-cooldown",
+            nextRefreshAt: userRow?.nextRefreshAt ?? null,
+          },
         });
 
         refreshedCount += stats.refreshedCount;

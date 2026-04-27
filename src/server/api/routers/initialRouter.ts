@@ -50,6 +50,7 @@ import {
   feedItems,
   feeds,
   feedsSchema,
+  user,
   viewCategories,
   viewFeeds,
   views,
@@ -101,8 +102,8 @@ export type GetByViewChunk =
   | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
   | { type: "view-feeds"; viewId: number; feedIds: number[] }
   | { type: "initial-data-complete" }
-  | { type: "new-data-complete" }
   | { type: "refresh-start"; totalFeeds: number }
+  | { type: "refresh-cooldown"; nextRefreshAt: Date | null }
   | { type: "view-items"; viewId: number; feedItemIds: string[] }
   | {
       type: "import-feed-inserted";
@@ -680,7 +681,7 @@ function prepareApplicationData(
  */
 async function publishPrerequisiteDataChunks(
   channel: string,
-  source: "initial" | "new-data",
+  source: "initial",
   data: {
     allViews: ApplicationView[];
     applicationFeeds: ApplicationFeed[];
@@ -722,7 +723,7 @@ type PublishViewFeedsResult = {
  */
 async function publishViewFeedsChunks(
   channel: string,
-  source: "initial" | "new-data",
+  source: "initial",
   params: {
     allViews: ApplicationView[];
     applicationFeeds: ApplicationFeed[];
@@ -1017,12 +1018,36 @@ export const requestInitialData = protectedProcedure
       await queryAndPublishViewDiff(view, "later");
     }
 
-    // Step 6: Check if feeds need refreshing and run RSS fetch
-    await refreshUserFeeds({
-      db: context.db,
-      feedsList,
-      channel,
+    // Step 6: Check refresh rate limit and run RSS fetch if eligible.
+    // The eligibility check uses an atomic compare-and-swap on user.nextRefreshAt —
+    // it succeeds on first visit (null) or after the plan-based cooldown elapses.
+    const eligibility = await checkUserRefreshEligibility(
+      context.db,
+      context.user.id,
+    );
+
+    if (eligibility.eligible) {
+      await refreshUserFeeds({
+        db: context.db,
+        feedsList,
+        channel,
+      });
+    }
+
+    // Step 7: Publish the user's current refresh cooldown so the client can
+    // disable the refresh button and show a countdown tooltip.
+    const userRow = await context.db
+      .select({ nextRefreshAt: user.nextRefreshAt })
+      .from(user)
+      .where(eq(user.id, context.user.id))
+      .get();
+
+    await publisher.publish(channel, {
       source: "initial",
+      chunk: {
+        type: "refresh-cooldown",
+        nextRefreshAt: userRow?.nextRefreshAt ?? null,
+      },
     });
 
     return { status: "completed" };
@@ -1455,92 +1480,6 @@ export const streamingImport = protectedProcedure
     await publisher.publish(channel, {
       source: "initial",
       chunk: { type: "initial-data-complete" },
-    });
-
-    return { status: "completed" };
-  });
-
-/**
- * Request new data (refresh). Performs RSS fetching and publishes new items
- * via the shared refreshUserFeeds function.
- */
-export const requestNewData = protectedProcedure
-  .input(z.object({ newerThan: z.coerce.date() }))
-  .handler(async ({ context, input }) => {
-    const channel = getUserChannel(context.user.id);
-    const newerThanTimestamp = input.newerThan;
-
-    // Check user-level refresh rate limit
-    const eligibility = await checkUserRefreshEligibility(
-      context.db,
-      context.user.id,
-    );
-    if (!eligibility.eligible) {
-      await publisher.publish(channel, {
-        source: "new-data",
-        chunk: {
-          type: "error",
-          message: `You can refresh again at ${eligibility.nextRefreshAt.toLocaleTimeString()}`,
-          phase: "initial-fetch",
-          viewId: -1,
-        },
-      });
-      return { status: "rate-limited" };
-    }
-
-    // Fetch prerequisite data
-    let prerequisiteData: PrerequisiteData;
-    try {
-      prerequisiteData = await fetchUserPrerequisiteData(context);
-    } catch (error) {
-      captureException(error);
-      await publisher.publish(channel, {
-        source: "new-data",
-        chunk: {
-          type: "error",
-          message:
-            error instanceof Error ? error.message : "Failed to fetch data",
-          phase: "initial-fetch",
-          viewId: -1,
-        },
-      });
-      return { status: "error" };
-    }
-
-    const { feedsList } = prerequisiteData;
-
-    // Use shared refresh function with a filter for items newer than timestamp
-    const stats = await refreshUserFeeds({
-      db: context.db,
-      feedsList,
-      channel,
-      source: "new-data",
-      onFeedItems: async (feedResult, publish) => {
-        const newItems = feedResult.feedItems.filter(
-          (item) => item.postedAt > newerThanTimestamp,
-        );
-        if (newItems.length > 0) {
-          await publish({
-            type: "feed-items",
-            feedId: feedResult.id,
-            feedItems: newItems,
-          });
-        }
-      },
-    });
-
-    // If nothing was fetched (all cached), still signal completion
-    if (
-      stats.refreshedCount === 0 &&
-      stats.errorCount === 0 &&
-      stats.emptyCount === 0
-    ) {
-      // refreshUserFeeds didn't publish refresh-start since feedsToFetch was 0
-    }
-
-    await publisher.publish(channel, {
-      source: "new-data",
-      chunk: { type: "new-data-complete" },
     });
 
     return { status: "completed" };

@@ -13,8 +13,7 @@ export type PublishedChunk =
   | { source: "revalidate"; chunk: RevalidateViewChunk }
   | { source: "visibility"; chunk: GetItemsByVisibilityChunk }
   | { source: "feed"; chunk: GetItemsByFeedChunk }
-  | { source: "category"; chunk: GetItemsByCategoryIdChunk }
-  | { source: "new-data"; chunk: GetByViewChunk };
+  | { source: "category"; chunk: GetItemsByCategoryIdChunk };
 
 const RESUME_RETENTION_SECONDS = 60 * 2;
 const REDIS_KEY_PREFIX = "serial:pub:";

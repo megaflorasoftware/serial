@@ -20,9 +20,9 @@ type LoadingMachineEvent =
 
   // Manual refresh (user clicks the refresh button)
   | { type: "MANUAL_REFRESH_REQUEST" }
-  | { type: "MANUAL_REFRESH_SERVER_START"; totalFeeds: number }
-  | { type: "MANUAL_REFRESH_COMPLETE" }
-  | { type: "MANUAL_REFRESH_ERROR" }
+
+  // Refresh cooldown (surfaces nextRefreshAt to the client)
+  | { type: "REFRESH_COOLDOWN_UPDATE"; nextRefreshAt: number | null }
 
   // Import (OPML / CSV feed import)
   | { type: "IMPORT_START"; totalFeeds: number }
@@ -47,6 +47,7 @@ type LoadingMachineContext = {
   failedImportUrls: Set<string>;
   importDeactivatedCount: number;
   importMaxActiveFeeds: number;
+  nextRefreshAt: number | null;
 };
 
 const INITIAL_CONTEXT: LoadingMachineContext = {
@@ -56,6 +57,7 @@ const INITIAL_CONTEXT: LoadingMachineContext = {
   failedImportUrls: new Set<string>(),
   importDeactivatedCount: 0,
   importMaxActiveFeeds: 0,
+  nextRefreshAt: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -111,6 +113,14 @@ export const loadingMachine = setup({
   id: "loading",
   initial: "idle",
   context: { ...INITIAL_CONTEXT },
+  // Global handler — works in any state
+  on: {
+    REFRESH_COOLDOWN_UPDATE: {
+      actions: assign({
+        nextRefreshAt: ({ event }) => event.nextRefreshAt,
+      }),
+    },
+  },
   states: {
     // -----------------------------------------------------------------
     // Idle — nothing is loading
@@ -200,20 +210,32 @@ export const loadingMachine = setup({
     },
 
     // -----------------------------------------------------------------
-    // Manual refresh — user clicked the refresh button
+    // Manual refresh — user clicked the refresh button.
+    // Waits for metadata + diffs (INITIAL_DATA_COMPLETE → idle), then
+    // if RSS is eligible the server sends BACKGROUND_REFRESH_START.
     // -----------------------------------------------------------------
     manualRefresh: {
       on: {
-        MANUAL_REFRESH_SERVER_START: {
+        INITIAL_DATA_COMPLETE: { target: "idle" },
+        BACKGROUND_REFRESH_START: {
+          target: "backgroundRefresh",
           actions: assign({
             totalFeeds: ({ event }) => event.totalFeeds,
             completedFeeds: 0,
+            importErrors: 0,
           }),
         },
-        FEED_STATUS: { actions: "incrementCompleted" },
-        FEED_STATUS_BATCH: { actions: "incrementCompletedBatch" },
-        MANUAL_REFRESH_COMPLETE: { target: "idle" },
-        MANUAL_REFRESH_ERROR: { target: "idle" },
+        IMPORT_START: {
+          target: "importing",
+          actions: assign({
+            totalFeeds: ({ event }) => event.totalFeeds,
+            completedFeeds: 0,
+            importErrors: 0,
+            failedImportUrls: () => new Set<string>(),
+            importDeactivatedCount: 0,
+            importMaxActiveFeeds: 0,
+          }),
+        },
         RESET: { target: "idle" },
       },
     },
@@ -345,4 +367,20 @@ export function useImportResults(): ImportResults {
       importMaxActiveFeeds: context.importMaxActiveFeeds,
     };
   });
+}
+
+/**
+ * Returns the user's next eligible refresh timestamp (epoch ms) or null
+ * if no cooldown is active. Used by the RefetchItemsButton to show a
+ * countdown tooltip and disable the button during the cooldown window.
+ */
+export function useNextRefreshAt(): number | null {
+  return useSelector(loadingActor, (s) => s.context.nextRefreshAt);
+}
+
+/**
+ * Returns true when the loading machine is in any non-idle state.
+ */
+export function useIsLoadingActive(): boolean {
+  return useSelector(loadingActor, (s) => !s.matches("idle"));
 }

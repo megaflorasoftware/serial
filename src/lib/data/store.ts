@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
+import { buildViewManifests } from "./buildViewManifests";
 import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
@@ -39,7 +40,6 @@ export type ApplicationStore = {
   setFeedItem: (id: string, item: ApplicationFeedItem) => void;
   fetchFeedItems: () => Promise<void>;
   fetchFeedItemsForFeed: (feedId: number) => Promise<void>;
-  fetchByView: () => Promise<void>;
   fetchNewData: () => Promise<void>;
   revalidateView: (viewId: number) => Promise<void>;
   fetchFeedItemsLastFetchedAt: number | null;
@@ -567,207 +567,16 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         });
       },
 
-      fetchByView: async () => {
-        if (!loadingActor.getSnapshot().matches("idle")) return;
-
-        set({
-          feedStatusDict: {},
-        });
-
-        let lastUpdateTime = 0;
-        const DEBOUNCE_TIME = 1000;
-
-        // Track the oldest item (by postedAt) for each view to initialize pagination cursors
-        const lastItemByView = new Map<number, ApplicationFeedItem>();
-
-        for await (const incomingChunk of await orpcRouterClient.initial.getAllByView()) {
-          const timeSinceLastUpdate = Date.now() - lastUpdateTime;
-          const timeToWait = DEBOUNCE_TIME - timeSinceLastUpdate;
-          const shouldWaitToRender = timeToWait > 0;
-
-          // Handle different chunk types
-          switch (incomingChunk.type) {
-            case "views":
-              // Set views in views store (including Uncategorized)
-              viewsStore.getState().set(incomingChunk.views);
-              viewsStore.setState({ fetchStatus: "success" });
-              // Show UI immediately when views are received
-              set({ hasInitialData: true });
-              break;
-
-            case "feeds":
-              // Set feeds in feeds store
-              feedsStore.getState().set(incomingChunk.feeds);
-              feedsStore.setState({ fetchStatus: "success" });
-              break;
-
-            case "content-categories":
-              // Set content categories in content categories store
-              contentCategoriesStore
-                .getState()
-                .set(incomingChunk.contentCategories);
-              contentCategoriesStore.setState({ fetchStatus: "success" });
-              break;
-
-            case "feed-categories":
-              // Set feed categories in feed categories store
-              feedCategoriesStore.getState().set(incomingChunk.feedCategories);
-              feedCategoriesStore.setState({ fetchStatus: "success" });
-              break;
-
-            case "view-feeds":
-              // Store the feed IDs for this view
-              get().setViewFeedIds(incomingChunk.viewId, incomingChunk.feedIds);
-              break;
-
-            case "feed-status": {
-              const feedStatusDict = shouldWaitToRender
-                ? get().feedStatusDict
-                : { ...get().feedStatusDict };
-
-              feedStatusDict[incomingChunk.feedId] = incomingChunk.status;
-
-              set({ feedStatusDict });
-
-              if (!shouldWaitToRender) {
-                lastUpdateTime = Date.now();
-              }
-              break;
-            }
-
-            case "initial-data-complete": {
-              // Fetch view-feed assignments (not part of SSE chunks)
-              viewFeedsStore.getState().fetch();
-
-              // Mark "unread" visibility filter as fetched for all views
-              const allViews = viewsStore.getState().views;
-              const fetchedFilters: Record<number, Set<VisibilityFilter>> = {};
-              const paginationState: Record<
-                number,
-                Partial<Record<VisibilityFilter, PaginationState>>
-              > = {};
-
-              for (const view of allViews) {
-                fetchedFilters[view.id] = new Set([
-                  "unread",
-                ] as VisibilityFilter[]);
-
-                // Compute cursor from the oldest item we received for this view
-                const lastItem = lastItemByView.get(view.id);
-                const cursor = lastItem
-                  ? { postedAt: lastItem.postedAt, id: lastItem.id }
-                  : null;
-
-                paginationState[view.id] = {
-                  unread: {
-                    cursor,
-                    hasMore: lastItem !== undefined, // Only has more if we received items
-                    isFetching: false,
-                  },
-                };
-              }
-
-              set({
-                fetchedVisibilityFilters: fetchedFilters,
-                viewPaginationState: paginationState,
-              });
-              break;
-            }
-
-            case "feed-items": {
-              // Track the current view ID from the first feed-items chunk
-              const firstView = viewsStore.getState().views[0];
-              if (
-                get().currentViewId === null &&
-                incomingChunk.viewId === firstView?.id
-              ) {
-                set({ currentViewId: incomingChunk.viewId });
-              }
-
-              const feedItemsDict = shouldWaitToRender
-                ? get().feedItemsDict
-                : { ...get().feedItemsDict };
-
-              const feedItemsOrder = shouldWaitToRender
-                ? get().feedItemsOrder
-                : [...get().feedItemsOrder];
-
-              const incomingFeedItems = incomingChunk.feedItems;
-              const existingIds = new Set(feedItemsOrder);
-
-              incomingFeedItems.forEach((item) => {
-                feedItemsDict[item.id] = item;
-
-                if (!existingIds.has(item.id)) {
-                  feedItemsOrder.push(item.id);
-                  existingIds.add(item.id);
-                }
-              });
-
-              // Track the oldest item (by postedAt) for this view to use as cursor
-              const viewId = incomingChunk.viewId;
-              if (viewId !== undefined) {
-                for (const item of incomingFeedItems) {
-                  const currentOldest = lastItemByView.get(viewId);
-                  if (
-                    !currentOldest ||
-                    item.postedAt.getTime() < currentOldest.postedAt.getTime()
-                  ) {
-                    lastItemByView.set(viewId, item);
-                  }
-                }
-              }
-
-              set({
-                feedItemsDict,
-                feedItemsOrder: feedItemsOrder.sort(
-                  sortFeedItemsOrderByDate(get().feedItemsDict),
-                ),
-              });
-
-              if (!shouldWaitToRender) {
-                lastUpdateTime = Date.now();
-              }
-              break;
-            }
-          }
-        }
-
-        // Mark fetch statuses as success for all stores
-        viewsStore.setState({ fetchStatus: "success" });
-        feedsStore.setState({ fetchStatus: "success" });
-        contentCategoriesStore.setState({ fetchStatus: "success" });
-        feedCategoriesStore.setState({ fetchStatus: "success" });
-        // viewFeedsStore manages its own fetchStatus via its fetch() method
-
-        set({
-          fetchFeedItemsLastFetchedAt: Date.now(),
-          feedItemsDict: { ...get().feedItemsDict },
-          feedItemsOrder: [...get().feedItemsOrder].sort(
-            sortFeedItemsOrderByDate(get().feedItemsDict),
-          ),
-          feedStatusDict: { ...get().feedStatusDict },
-        });
-      },
-
       fetchNewData: async () => {
-        const newerThan = get().fetchFeedItemsLastFetchedAt;
-        if (!newerThan) {
-          // No previous fetch timestamp, fall back to fetchByView
-          return get().fetchByView();
-        }
-
         // Show loading state immediately so the refresh button responds
-        // before SSE chunks arrive. The server's "refresh-start" chunk will
-        // update totalFeeds via MANUAL_REFRESH_SERVER_START.
-        set({
-          feedStatusDict: {},
-        });
+        set({ feedStatusDict: {} });
         loadingActor.send({ type: "MANUAL_REFRESH_REQUEST" });
 
-        await orpcRouterClient.initial.requestNewData({
-          newerThan: new Date(newerThan),
-        });
+        // Re-run the same flow as initial mount: metadata, diffs, RSS refresh.
+        // Rate limiting is handled server-side via checkUserRefreshEligibility —
+        // if the user is in cooldown, metadata+diffs still run but RSS is skipped.
+        const viewManifests = buildViewManifests(get());
+        await orpcRouterClient.initial.requestInitialData({ viewManifests });
       },
 
       revalidateView: async (viewId: number) => {
@@ -1155,6 +964,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 break;
               }
 
+              case "refresh-cooldown":
+                loadingActor.send({
+                  type: "REFRESH_COOLDOWN_UPDATE",
+                  nextRefreshAt: initialChunk.nextRefreshAt
+                    ? new Date(initialChunk.nextRefreshAt).getTime()
+                    : null,
+                });
+                break;
+
               case "import-start":
                 // Initialize state for streaming import
                 set({
@@ -1382,71 +1200,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             });
             break;
           }
-
-          case "new-data": {
-            if (chunk.type === "refresh-start") {
-              // Initialize state for manual refresh
-              set({
-                feedStatusDict: {},
-              });
-              loadingActor.send({
-                type: "MANUAL_REFRESH_SERVER_START",
-                totalFeeds: chunk.totalFeeds,
-              });
-              break;
-            }
-
-            if (chunk.type === "feed-status") {
-              // Update feedStatusDict for progress tracking
-              const feedStatusDict = { ...get().feedStatusDict };
-              feedStatusDict[chunk.feedId] = chunk.status;
-              set({ feedStatusDict });
-              loadingActor.send({ type: "FEED_STATUS" });
-              break;
-            }
-
-            if (chunk.type === "feed-items") {
-              // Merge new items into feedItemsDict
-              const newDict = { ...get().feedItemsDict };
-              const feedItemsOrder = [...get().feedItemsOrder];
-              const existingIds = new Set(feedItemsOrder);
-
-              for (const item of chunk.feedItems) {
-                newDict[item.id] = item;
-                if (!existingIds.has(item.id)) {
-                  feedItemsOrder.push(item.id);
-                  existingIds.add(item.id);
-                }
-              }
-              set({
-                feedItemsDict: newDict,
-                feedItemsOrder: feedItemsOrder.sort(
-                  sortFeedItemsOrderByDate(newDict),
-                ),
-              });
-              break;
-            }
-
-            if (chunk.type === "view-items") {
-              // Items are already added to feedItemsDict via feed-items chunk
-              // view-items just tells us which views they belong to (for future use)
-              break;
-            }
-
-            if (chunk.type === "new-data-complete") {
-              set({
-                fetchFeedItemsLastFetchedAt: Date.now(),
-              });
-              loadingActor.send({ type: "MANUAL_REFRESH_COMPLETE" });
-              break;
-            }
-
-            if (chunk.type === "error") {
-              console.error("New data fetch error:", chunk.message);
-              loadingActor.send({ type: "MANUAL_REFRESH_ERROR" });
-            }
-            break;
-          }
         }
       },
 
@@ -1484,10 +1237,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           feedId: number;
           status: FetchFeedsStatus;
         }> = [];
-        let pendingNewDataFeedItems: Array<{
-          feedItems: ApplicationFeedItem[];
-        }> = [];
-
         const flushBatched = () => {
           // Batch initial feed-status updates
           if (pendingInitialFeedStatuses.length > 0) {
@@ -1676,67 +1425,24 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             set(updates);
             pendingInitialFeedItems = [];
           }
-
-          // Batch new-data feed-items
-          if (pendingNewDataFeedItems.length > 0) {
-            const newDict = { ...get().feedItemsDict };
-            const feedItemsOrder = [...get().feedItemsOrder];
-            const existingIds = new Set(feedItemsOrder);
-
-            for (const { feedItems } of pendingNewDataFeedItems) {
-              for (const item of feedItems) {
-                newDict[item.id] = item;
-                if (!existingIds.has(item.id)) {
-                  feedItemsOrder.push(item.id);
-                  existingIds.add(item.id);
-                }
-              }
-            }
-
-            set({
-              feedItemsDict: newDict,
-              feedItemsOrder: feedItemsOrder.sort(
-                sortFeedItemsOrderByDate(newDict),
-              ),
-            });
-            pendingNewDataFeedItems = [];
-          }
         };
 
         for (const payload of payloads) {
           const isBatchable =
-            (payload.source === "initial" &&
-              (payload.chunk.type === "feed-items" ||
-                payload.chunk.type === "view-diff" ||
-                payload.chunk.type === "feed-status")) ||
-            (payload.source === "new-data" &&
-              payload.chunk.type === "feed-items");
+            payload.source === "initial" &&
+            (payload.chunk.type === "feed-items" ||
+              payload.chunk.type === "view-diff" ||
+              payload.chunk.type === "feed-status");
 
           if (isBatchable) {
-            if (
-              payload.source === "initial" &&
-              payload.chunk.type === "view-diff"
-            ) {
+            if (payload.chunk.type === "view-diff") {
               pendingInitialViewDiffs.push(payload as InitialViewDiffPayload);
-            } else if (
-              payload.source === "initial" &&
-              payload.chunk.type === "feed-items"
-            ) {
+            } else if (payload.chunk.type === "feed-items") {
               pendingInitialFeedItems.push(payload as InitialFeedItemPayload);
-            } else if (
-              payload.source === "initial" &&
-              payload.chunk.type === "feed-status"
-            ) {
+            } else if (payload.chunk.type === "feed-status") {
               pendingInitialFeedStatuses.push({
                 feedId: payload.chunk.feedId,
                 status: payload.chunk.status,
-              });
-            } else if (
-              payload.source === "new-data" &&
-              payload.chunk.type === "feed-items"
-            ) {
-              pendingNewDataFeedItems.push({
-                feedItems: payload.chunk.feedItems,
               });
             }
           } else {
@@ -1821,7 +1527,6 @@ export const {
   useHasInitialData,
   useFetchFeedItems,
   useFetchFeedItemsForFeed,
-  useFetchByView,
   useFetchNewData,
   useRevalidateView,
   useCurrentViewId,

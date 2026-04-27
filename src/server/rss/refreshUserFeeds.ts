@@ -3,9 +3,8 @@ import { captureException } from "../logger";
 import { fetchAndInsertFeedData } from "./fetchFeeds";
 import type { PublishedChunk } from "../api/publisher";
 import type { GetByViewChunk } from "../api/routers/initialRouter";
-import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
+import type { DatabaseFeed } from "../db/schema";
 import type { db as Database } from "../db";
-import type { FetchFeedsStatus } from "./fetchFeeds";
 
 export type RefreshStats = {
   refreshedCount: number;
@@ -15,40 +14,23 @@ export type RefreshStats = {
   totalRowsWritten: number;
 };
 
-type RefreshSource = "initial" | "new-data";
-
 /**
  * Shared feed refresh logic used by both background-refresh tasks and
  * interactive user-triggered refreshes. Fetches RSS content for the
- * given feeds and optionally publishes progress/results via the SSE
- * publisher for any active subscribers.
+ * given feeds and publishes progress/results via the SSE publisher
+ * for any active subscribers.
  *
  * @param channel  - If provided, publishes refresh-start, feed-status,
  *                   and feed-items chunks to this SSE channel.
- * @param source   - The PublishedChunk source label ("initial" or "new-data").
- * @param onFeedItems - Optional callback invoked with each successful feed's
- *                      items, allowing callers to apply per-view filtering.
- *                      If omitted, all items are published as-is.
  */
 export async function refreshUserFeeds({
   db,
   feedsList,
   channel,
-  source = "initial",
-  onFeedItems,
 }: {
   db: typeof Database;
   feedsList: DatabaseFeed[];
   channel?: string;
-  source?: RefreshSource;
-  onFeedItems?: (
-    feedResult: {
-      id: number;
-      feedItems: ApplicationFeedItem[];
-      status: FetchFeedsStatus;
-    },
-    publish: (chunk: GetByViewChunk) => Promise<void>,
-  ) => Promise<void>;
 }): Promise<RefreshStats> {
   const now = new Date();
 
@@ -74,7 +56,7 @@ export async function refreshUserFeeds({
   const publish = channel
     ? async (chunk: GetByViewChunk) => {
         await publisher.publish(`${channel}`, {
-          source,
+          source: "initial",
           chunk,
         } as PublishedChunk);
       }
@@ -110,25 +92,12 @@ export async function refreshUserFeeds({
       if ("feedItems" in feedResult) {
         stats.totalRowsWritten += feedResult.feedItems.length;
 
-        // If caller provided custom item handling (e.g., per-view filtering), use it.
-        // Otherwise publish all items directly.
         if (feedResult.feedItems.length > 0) {
-          if (onFeedItems) {
-            await onFeedItems(
-              {
-                id: feedResult.id,
-                feedItems: feedResult.feedItems,
-                status: feedResult.status,
-              },
-              publish,
-            );
-          } else {
-            await publish({
-              type: "feed-items",
-              feedId: feedResult.id,
-              feedItems: feedResult.feedItems,
-            });
-          }
+          await publish({
+            type: "feed-items",
+            feedId: feedResult.id,
+            feedItems: feedResult.feedItems,
+          });
         }
       }
     } else if (feedResult.status === "empty") {
