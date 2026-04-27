@@ -47,16 +47,32 @@ export function RefetchItemsButton() {
     loading.mode === "initialLoad" ||
     loading.mode === "backgroundRefresh";
 
-  // When nextRefreshAt changes, schedule an update to `now` that will
-  // re-enable the button once the cooldown expires. If already expired,
-  // fires on next tick.
+  // Tick `now` so the tooltip text updates live and the button re-enables
+  // when cooldown expires. Ticks every second when <2min remaining,
+  // every minute otherwise.
   useEffect(() => {
     if (nextRefreshAt === null) return;
-    const remaining = nextRefreshAt - Date.now();
-    const delay = remaining > 0 ? remaining + 100 : 0;
-    const timeout = setTimeout(() => setNow(Date.now()), delay);
-    return () => clearTimeout(timeout);
-  }, [nextRefreshAt]);
+
+    const tick = () => setNow(Date.now());
+    tick();
+
+    const getInterval = () => {
+      const remaining = nextRefreshAt - Date.now();
+      if (remaining <= 0) return null; // expired, no more ticks needed
+      return remaining <= 2 * 60 * 1000 ? 1_000 : 60_000;
+    };
+
+    const intervalMs = getInterval();
+    if (intervalMs === null) return;
+
+    const id = setInterval(() => {
+      tick();
+      // When cooldown expires the next render will drop the tooltip,
+      // so we can let the interval keep running until cleanup.
+    }, intervalMs);
+
+    return () => clearInterval(id);
+  }, [nextRefreshAt, isRateLimited]);
 
   const onClick = useCallback(async () => {
     if (isDisabled) return;
@@ -88,9 +104,15 @@ export function RefetchItemsButton() {
   if (isRateLimited) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipTrigger asChild>
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- needed so tooltip opens on a disabled button */}
+          <span tabIndex={0}>{button}</span>
+        </TooltipTrigger>
         <TooltipContent>
-          Refresh available in {formatRelativeTime(nextRefreshAt, now)}
+          Refresh available in{" "}
+          <span className="font-mono">
+            {formatRelativeTime(nextRefreshAt, now)}
+          </span>
         </TooltipContent>
       </Tooltip>
     );

@@ -9,7 +9,7 @@ import { getEffectivePlanConfig, PLANS } from "./plans";
 import { deactivateExcessFeeds } from "./helpers";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
-import { feeds } from "~/server/db/schema";
+import { feeds, user } from "~/server/db/schema";
 import { env } from "~/env";
 
 type DB = typeof Database;
@@ -197,6 +197,10 @@ export async function applySubscriptionSideEffects(
   data: PolarSubscriptionCache,
 ): Promise<void> {
   const config = getEffectivePlanConfig(data.planId);
+
+  // Clear the user's manual-refresh cooldown so they can immediately
+  // refresh with their new plan's interval after upgrading.
+  await db.update(user).set({ nextRefreshAt: null }).where(eq(user.id, userId));
 
   if (ACTIVE_STATUSES.has(data.status)) {
     // Subscription is active — stagger feed nextFetchAt across the refresh

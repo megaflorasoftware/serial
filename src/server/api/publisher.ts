@@ -78,4 +78,19 @@ async function createPublisher() {
   });
 }
 
-export const publisher = await createPublisher();
+// Use a global symbol to ensure a single publisher instance across all
+// module contexts. Nitro tasks can re-instantiate modules in a separate
+// context, which would create a second MemoryPublisher that has no
+// subscribers — causing publishes from background-refresh to silently
+// go nowhere. globalThis guarantees the same instance is shared.
+const PUBLISHER_KEY = Symbol.for("serial:publisher");
+const globalRef = globalThis as unknown as Record<
+  symbol,
+  Awaited<ReturnType<typeof createPublisher>>
+>;
+
+if (!globalRef[PUBLISHER_KEY]) {
+  globalRef[PUBLISHER_KEY] = await createPublisher();
+}
+
+export const publisher = globalRef[PUBLISHER_KEY];

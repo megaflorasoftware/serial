@@ -722,17 +722,37 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 get().setViewFeedIds(initialChunk.viewId, initialChunk.feedIds);
                 break;
 
-              case "refresh-start":
+              case "refresh-start": {
                 // Re-enter fetching state for RSS refresh phase.
                 // The loading machine tracks totalFeeds via BACKGROUND_REFRESH_START.
                 set({
                   feedStatusDict: {},
                 });
+
+                // Round up to the next whole minute so the button re-enables
+                // in sync with the background-refresh cron (runs every minute).
+                let cooldownMs: number | null = null;
+                if (initialChunk.nextRefreshAt) {
+                  const raw = new Date(initialChunk.nextRefreshAt).getTime();
+                  const MS_PER_MINUTE = 60_000;
+                  cooldownMs = Math.ceil(raw / MS_PER_MINUTE) * MS_PER_MINUTE;
+                }
                 loadingActor.send({
-                  type: "BACKGROUND_REFRESH_START",
-                  totalFeeds: initialChunk.totalFeeds,
+                  type: "REFRESH_COOLDOWN_UPDATE",
+                  nextRefreshAt: cooldownMs,
                 });
+
+                // Only enter backgroundRefresh when there are feeds to
+                // process. When totalFeeds is 0, the cooldown update above
+                // is the only thing that matters for the UI.
+                if (initialChunk.totalFeeds > 0) {
+                  loadingActor.send({
+                    type: "BACKGROUND_REFRESH_START",
+                    totalFeeds: initialChunk.totalFeeds,
+                  });
+                }
                 break;
+              }
 
               case "feed-status": {
                 const feedStatusDict = { ...get().feedStatusDict };
@@ -963,15 +983,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 set(updates);
                 break;
               }
-
-              case "refresh-cooldown":
-                loadingActor.send({
-                  type: "REFRESH_COOLDOWN_UPDATE",
-                  nextRefreshAt: initialChunk.nextRefreshAt
-                    ? new Date(initialChunk.nextRefreshAt).getTime()
-                    : null,
-                });
-                break;
 
               case "import-start":
                 // Initialize state for streaming import
@@ -1427,7 +1438,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           }
         };
 
-        for (const payload of payloads) {
+        for (let i = 0; i < payloads.length; i++) {
+          const payload = payloads[i]!;
           const isBatchable =
             payload.source === "initial" &&
             (payload.chunk.type === "feed-items" ||
@@ -1449,6 +1461,20 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             // Flush accumulated batches before processing non-batchable chunk
             flushBatched();
             get().processChunk(payload);
+
+            // After a refresh-start with feeds, defer remaining chunks to
+            // the next animation frame so React can render the loading
+            // state before feed-status events complete the refresh.
+            const isRefreshStart =
+              payload.source === "initial" &&
+              payload.chunk.type === "refresh-start" &&
+              payload.chunk.totalFeeds > 0;
+
+            if (isRefreshStart && i < payloads.length - 1) {
+              const remaining = payloads.slice(i + 1);
+              requestAnimationFrame(() => get().processChunks(remaining));
+              return;
+            }
           }
         }
 

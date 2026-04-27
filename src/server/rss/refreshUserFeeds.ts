@@ -27,10 +27,12 @@ export async function refreshUserFeeds({
   db,
   feedsList,
   channel,
+  nextRefreshAt,
 }: {
   db: typeof Database;
   feedsList: DatabaseFeed[];
   channel?: string;
+  nextRefreshAt?: Date | null;
 }): Promise<RefreshStats> {
   const now = new Date();
 
@@ -48,10 +50,6 @@ export async function refreshUserFeeds({
     totalRowsWritten: 0,
   };
 
-  if (feedsToFetch.length === 0) {
-    return stats;
-  }
-
   // Typed publish helper that no-ops when there is no channel
   const publish = channel
     ? async (chunk: GetByViewChunk) => {
@@ -62,7 +60,15 @@ export async function refreshUserFeeds({
       }
     : async () => {};
 
-  await publish({ type: "refresh-start", totalFeeds: feedsToFetch.length });
+  await publish({
+    type: "refresh-start",
+    totalFeeds: feedsToFetch.length,
+    nextRefreshAt: nextRefreshAt ?? null,
+  });
+
+  if (feedsToFetch.length === 0) {
+    return stats;
+  }
 
   // Build feed name map for error logging
   const feedNameMap = new Map<number, string>();

@@ -4,6 +4,7 @@ import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
 import { publisher } from "../../../src/server/api/publisher";
+import { checkUserRefreshEligibility } from "../../../src/server/subscriptions/helpers";
 import { IS_MAIN_INSTANCE } from "../../../src/lib/constants";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
 import { env } from "../../../src/env";
@@ -76,6 +77,26 @@ export default defineTask({
       .all();
 
     if (feedsToRefresh.length === 0) {
+      // No feeds are due, but eligible users still need a fresh cooldown
+      // published so the client's refresh button shows the correct state.
+      if (eligibleUserIds !== null) {
+        for (const userId of eligibleUserIds) {
+          const eligibility = await checkUserRefreshEligibility(db, userId);
+          const channel = `user:${userId}`;
+          console.log(
+            `[background-refresh] Publishing refresh-start to channel "${channel}" (no feeds) — nextRefreshAt: ${eligibility.nextRefreshAt.toISOString()}`,
+          );
+          await publisher.publish(channel, {
+            source: "initial",
+            chunk: {
+              type: "refresh-start",
+              totalFeeds: 0,
+              nextRefreshAt: eligibility.nextRefreshAt,
+            },
+          });
+        }
+      }
+
       console.log("[background-refresh] No feeds to refresh");
       return { result: "no-feeds-to-refresh" };
     }
@@ -99,30 +120,25 @@ export default defineTask({
 
     for (const [userId, userFeeds] of feedsByUser) {
       try {
-        // Use the shared refreshUserFeeds function.
-        // Pass the user's SSE channel so any active subscriber receives
-        // live progress updates (if no one is subscribed, publishes are no-ops).
         const channel = `user:${userId}`;
+
+        // Set the user's next refresh cooldown — streamed to the client
+        // as part of the refresh-start chunk before the slow RSS fetch.
+        const eligibility = await checkUserRefreshEligibility(db, userId);
+        console.log(
+          `[background-refresh] Refreshing feeds for user ${userId} on channel "${channel}" — nextRefreshAt: ${eligibility.nextRefreshAt.toISOString()}`,
+        );
+
+        // TODO: remove — temporary delay for testing cooldown UI
+        await new Promise((r) => setTimeout(r, 3000));
+
+        // Run the actual RSS fetch. refresh-start (with cooldown) is
+        // published first inside refreshUserFeeds, then feed-status chunks.
         const stats = await refreshUserFeeds({
           db,
           feedsList: userFeeds,
           channel,
-        });
-
-        // Publish the user's updated cooldown so any active client subscriber
-        // can disable the refresh button and show a countdown tooltip.
-        const userRow = await db
-          .select({ nextRefreshAt: user.nextRefreshAt })
-          .from(user)
-          .where(eq(user.id, userId))
-          .get();
-
-        await publisher.publish(channel, {
-          source: "initial",
-          chunk: {
-            type: "refresh-cooldown",
-            nextRefreshAt: userRow?.nextRefreshAt ?? null,
-          },
+          nextRefreshAt: eligibility.nextRefreshAt,
         });
 
         refreshedCount += stats.refreshedCount;

@@ -50,7 +50,6 @@ import {
   feedItems,
   feeds,
   feedsSchema,
-  user,
   viewCategories,
   viewFeeds,
   views,
@@ -102,8 +101,7 @@ export type GetByViewChunk =
   | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
   | { type: "view-feeds"; viewId: number; feedIds: number[] }
   | { type: "initial-data-complete" }
-  | { type: "refresh-start"; totalFeeds: number }
-  | { type: "refresh-cooldown"; nextRefreshAt: Date | null }
+  | { type: "refresh-start"; totalFeeds: number; nextRefreshAt: Date | null }
   | { type: "view-items"; viewId: number; feedItemIds: string[] }
   | {
       type: "import-feed-inserted";
@@ -1018,37 +1016,32 @@ export const requestInitialData = protectedProcedure
       await queryAndPublishViewDiff(view, "later");
     }
 
-    // Step 6: Check refresh rate limit and run RSS fetch if eligible.
-    // The eligibility check uses an atomic compare-and-swap on user.nextRefreshAt —
-    // it succeeds on first visit (null) or after the plan-based cooldown elapses.
+    // Step 6: Check refresh rate limit. The cooldown is streamed to the
+    // client as part of the refresh-start chunk (before the slow RSS fetch).
     const eligibility = await checkUserRefreshEligibility(
       context.db,
       context.user.id,
     );
 
+    // Step 7: Run RSS fetch if eligible, otherwise publish a 0-feed
+    // refresh-start so the client still receives the cooldown timestamp.
     if (eligibility.eligible) {
       await refreshUserFeeds({
         db: context.db,
         feedsList,
         channel,
+        nextRefreshAt: eligibility.nextRefreshAt,
+      });
+    } else {
+      await publisher.publish(channel, {
+        source: "initial",
+        chunk: {
+          type: "refresh-start",
+          totalFeeds: 0,
+          nextRefreshAt: eligibility.nextRefreshAt,
+        },
       });
     }
-
-    // Step 7: Publish the user's current refresh cooldown so the client can
-    // disable the refresh button and show a countdown tooltip.
-    const userRow = await context.db
-      .select({ nextRefreshAt: user.nextRefreshAt })
-      .from(user)
-      .where(eq(user.id, context.user.id))
-      .get();
-
-    await publisher.publish(channel, {
-      source: "initial",
-      chunk: {
-        type: "refresh-cooldown",
-        nextRefreshAt: userRow?.nextRefreshAt ?? null,
-      },
-    });
 
     return { status: "completed" };
   });

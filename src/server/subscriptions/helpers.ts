@@ -82,7 +82,10 @@ export async function getUserPlanLimits(db: DB, userId: string) {
 export async function checkUserRefreshEligibility(
   db: DB,
   userId: string,
-): Promise<{ eligible: true } | { eligible: false; nextRefreshAt: Date }> {
+): Promise<
+  | { eligible: true; nextRefreshAt: Date }
+  | { eligible: false; nextRefreshAt: Date }
+> {
   const planId = await getUserPlanId(userId);
   const config = getEffectivePlanConfig(planId);
 
@@ -104,7 +107,7 @@ export async function checkUserRefreshEligibility(
 
   const rowsAffected = result.rowsAffected ?? 0;
   if (rowsAffected > 0) {
-    return { eligible: true };
+    return { eligible: true, nextRefreshAt };
   }
 
   // Rate-limited — read back the current nextRefreshAt to report to the user
