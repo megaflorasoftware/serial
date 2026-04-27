@@ -4,7 +4,10 @@ import { db } from "../../../src/server/db";
 import { feeds, user } from "../../../src/server/db/schema";
 import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
 import { hasSubscribers, publisher } from "../../../src/server/api/publisher";
-import { checkUserRefreshEligibility } from "../../../src/server/subscriptions/helpers";
+import {
+  checkUserRefreshEligibility,
+  getUserPlanId,
+} from "../../../src/server/subscriptions/helpers";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
 import { captureException } from "../../../src/server/logger";
 import { env } from "../../../src/env";
@@ -42,7 +45,17 @@ export default defineTask({
         .from(user)
         .where(or(lte(user.nextRefreshAt, now), isNull(user.nextRefreshAt)))
         .all();
-      eligibleUserIds = eligibleUsers.map((u) => u.id);
+
+      // Exclude free users — they don't have background refresh.
+      const userPlans = await Promise.all(
+        eligibleUsers.map(async (u) => ({
+          id: u.id,
+          planId: await getUserPlanId(u.id),
+        })),
+      );
+      eligibleUserIds = userPlans
+        .filter((u) => u.planId !== "free")
+        .map((u) => u.id);
     }
     // Without billing: eligibleUserIds stays null → all active feeds
 
