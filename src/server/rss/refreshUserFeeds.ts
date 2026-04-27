@@ -35,13 +35,7 @@ export async function refreshUserFeeds({
   feedsList: DatabaseFeed[];
   channel?: string;
 }): Promise<RefreshStats> {
-  const now = new Date();
-
-  // Only refresh feeds that are actually due
   const activeFeedsList = feedsList.filter((feed) => feed.isActive);
-  const feedsToFetch = activeFeedsList.filter(
-    (feed) => !feed.nextFetchAt || feed.nextFetchAt <= now,
-  );
 
   const stats: RefreshStats = {
     refreshedCount: 0,
@@ -51,7 +45,7 @@ export async function refreshUserFeeds({
     totalRowsWritten: 0,
   };
 
-  if (feedsToFetch.length === 0) {
+  if (activeFeedsList.length === 0) {
     return stats;
   }
 

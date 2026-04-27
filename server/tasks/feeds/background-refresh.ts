@@ -6,6 +6,7 @@ import { refreshUserFeeds } from "../../../src/server/rss/refreshUserFeeds";
 import { hasSubscribers, publisher } from "../../../src/server/api/publisher";
 import { checkUserRefreshEligibility } from "../../../src/server/subscriptions/helpers";
 import { IS_BILLING_ENABLED } from "../../../src/server/subscriptions/polar";
+import { captureException } from "../../../src/server/logger";
 import { env } from "../../../src/env";
 
 export default defineTask({
@@ -147,6 +148,14 @@ export default defineTask({
           chunk: { type: "refresh-complete" },
         });
       } catch (e) {
+        captureException(
+          e instanceof Error
+            ? e
+            : new Error(
+                `[background-refresh] Failed to refresh feeds for user ${userId}`,
+              ),
+          { userId },
+        );
         console.error(
           `[background-refresh] Failed to refresh feeds for user ${userId}:`,
           e,

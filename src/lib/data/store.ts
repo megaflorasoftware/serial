@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { sortFeedItemsOrderByDate } from "../sortFeedItems";
+import { applyDiffEntries } from "./applyDiffEntries";
 import { buildViewManifests } from "./buildViewManifests";
 import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
@@ -916,38 +917,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
               case "view-diff": {
                 // Server-side diff: apply changes to the local store.
-                // Each entry tells us whether an item is unchanged, updated,
-                // new, or deleted relative to the client's cache.
                 const feedItemsDict = { ...get().feedItemsDict };
                 const feedItemsOrder = [...get().feedItemsOrder];
                 const existingIds = new Set(feedItemsOrder);
-
-                for (const entry of initialChunk.diff) {
-                  switch (entry.status) {
-                    case "unchanged":
-                      // Client already has the correct version
-                      break;
-                    case "updated":
-                      feedItemsDict[entry.item.id] = entry.item;
-                      break;
-                    case "new":
-                      feedItemsDict[entry.item.id] = entry.item;
-                      if (!existingIds.has(entry.item.id)) {
-                        feedItemsOrder.push(entry.item.id);
-                        existingIds.add(entry.item.id);
-                      }
-                      break;
-                    case "deleted": {
-                      delete feedItemsDict[entry.id];
-                      const idx = feedItemsOrder.indexOf(entry.id);
-                      if (idx !== -1) {
-                        feedItemsOrder.splice(idx, 1);
-                        existingIds.delete(entry.id);
-                      }
-                      break;
-                    }
-                  }
-                }
+                applyDiffEntries(
+                  feedItemsDict,
+                  feedItemsOrder,
+                  existingIds,
+                  initialChunk.diff,
+                );
 
                 const updates: Partial<ApplicationStore> = {
                   feedItemsDict,
@@ -1060,36 +1038,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             }
 
             if (chunk.type === "view-diff") {
-              // Apply diff entries to the store
               const feedItemsDict = { ...get().feedItemsDict };
               const feedItemsOrder = [...get().feedItemsOrder];
               const existingIds = new Set(feedItemsOrder);
-
-              for (const entry of chunk.diff) {
-                switch (entry.status) {
-                  case "unchanged":
-                    break;
-                  case "updated":
-                    feedItemsDict[entry.item.id] = entry.item;
-                    break;
-                  case "new":
-                    feedItemsDict[entry.item.id] = entry.item;
-                    if (!existingIds.has(entry.item.id)) {
-                      feedItemsOrder.push(entry.item.id);
-                      existingIds.add(entry.item.id);
-                    }
-                    break;
-                  case "deleted": {
-                    delete feedItemsDict[entry.id];
-                    const idx = feedItemsOrder.indexOf(entry.id);
-                    if (idx !== -1) {
-                      feedItemsOrder.splice(idx, 1);
-                      existingIds.delete(entry.id);
-                    }
-                    break;
-                  }
-                }
-              }
+              applyDiffEntries(
+                feedItemsDict,
+                feedItemsOrder,
+                existingIds,
+                chunk.diff,
+              );
 
               const vf = chunk.visibilityFilter as VisibilityFilter;
               set({
@@ -1285,32 +1242,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             for (const payload of pendingInitialViewDiffs) {
               const chunk = payload.chunk;
 
-              // Apply diff entries
-              for (const entry of chunk.diff) {
-                switch (entry.status) {
-                  case "unchanged":
-                    break;
-                  case "updated":
-                    feedItemsDict[entry.item.id] = entry.item;
-                    break;
-                  case "new":
-                    feedItemsDict[entry.item.id] = entry.item;
-                    if (!existingIds.has(entry.item.id)) {
-                      feedItemsOrder.push(entry.item.id);
-                      existingIds.add(entry.item.id);
-                    }
-                    break;
-                  case "deleted": {
-                    delete feedItemsDict[entry.id];
-                    const idx = feedItemsOrder.indexOf(entry.id);
-                    if (idx !== -1) {
-                      feedItemsOrder.splice(idx, 1);
-                      existingIds.delete(entry.id);
-                    }
-                    break;
-                  }
-                }
-              }
+              applyDiffEntries(
+                feedItemsDict,
+                feedItemsOrder,
+                existingIds,
+                chunk.diff,
+              );
 
               // Track cursor
               const vf = chunk.visibilityFilter as VisibilityFilter;

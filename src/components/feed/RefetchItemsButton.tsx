@@ -68,31 +68,33 @@ export function RefetchItemsButton() {
   const showCheck = isRateLimited && !isMachineActive;
 
   // Tick `now` so the tooltip text updates live and the button re-enables
-  // when cooldown expires. Ticks every second when <2min remaining,
-  // every minute otherwise.
+  // when cooldown expires. Uses chained timeouts so the tick interval
+  // adapts as the remaining time shrinks (every second when <2min,
+  // every 20s otherwise). Max delay is 20s so long cooldowns still feel
+  // responsive.
   useEffect(() => {
     if (nextRefreshAt === null) return;
 
-    const tick = () => setNow(Date.now());
-    tick();
+    let timeoutId: ReturnType<typeof setTimeout>;
 
-    const getInterval = () => {
+    const scheduleTick = () => {
       const remaining = nextRefreshAt - Date.now();
-      if (remaining <= 0) return null; // expired, no more ticks needed
-      return remaining <= 2 * 60 * 1000 ? 1_000 : 60_000;
+      if (remaining <= 0) {
+        setNow(Date.now());
+        return; // expired, no more ticks needed
+      }
+      const delayMs = remaining <= 2 * 60 * 1000 ? 1_000 : 20_000;
+      timeoutId = setTimeout(() => {
+        setNow(Date.now());
+        scheduleTick();
+      }, delayMs);
     };
 
-    const intervalMs = getInterval();
-    if (intervalMs === null) return;
+    setNow(Date.now());
+    scheduleTick();
 
-    const id = setInterval(() => {
-      tick();
-      // When cooldown expires the next render will drop the tooltip,
-      // so we can let the interval keep running until cleanup.
-    }, intervalMs);
-
-    return () => clearInterval(id);
-  }, [nextRefreshAt, isRateLimited]);
+    return () => clearTimeout(timeoutId);
+  }, [nextRefreshAt]);
 
   const onClick = useCallback(async () => {
     if (isDisabled) return;
