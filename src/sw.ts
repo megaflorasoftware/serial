@@ -1,7 +1,11 @@
 /// <reference lib="webworker" />
 import { ExpirationPlugin } from "workbox-expiration";
 import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
-import { NavigationRoute, registerRoute } from "workbox-routing";
+import {
+  NavigationRoute,
+  registerRoute,
+  setCatchHandler,
+} from "workbox-routing";
 import {
   CacheFirst,
   NetworkFirst,
@@ -9,6 +13,15 @@ import {
 } from "workbox-strategies";
 
 declare let self: ServiceWorkerGlobalScope;
+
+// Take control of all open clients as soon as the SW activates.
+// Without this, the first page load that triggers installation won't be
+// controlled until the user reloads — meaning offline support doesn't
+// kick in until the second visit. On iOS Safari this is especially
+// important because the browser aggressively kills idle service workers.
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
 
 // Clean up old caches from previous versions
 cleanupOutdatedCaches();
@@ -24,6 +37,24 @@ const navigationHandler = new NetworkFirst({
 });
 
 registerRoute(new NavigationRoute(navigationHandler));
+
+// Offline navigation fallback.
+// TanStack Start is fully SSR — there are no static HTML files in the build
+// output. Navigation responses are only cached as users visit pages. If the
+// user navigates to an uncached URL while offline (or the cache was evicted),
+// fall back to the cached root page so the app shell loads instead of showing
+// a browser error. The client-side router can then resolve the correct route.
+setCatchHandler(async ({ request }) => {
+  if (request.destination === "document") {
+    const cache = await caches.open("navigation-cache");
+    const cachedRoot = await cache.match("/");
+    if (cachedRoot) {
+      return cachedRoot;
+    }
+  }
+
+  return Response.error();
+});
 
 // Static assets (JS/CSS) - CacheFirst (Vite hashes them, so safe to cache long-term)
 registerRoute(
