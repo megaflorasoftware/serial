@@ -11,7 +11,6 @@ config({ path: ".env.local" });
 
 // Dynamic import so env vars are loaded before env.js evaluates process.env
 const { db } = await import("./index.js");
-const { env } = await import("../../env.js");
 
 const MIGRATIONS_FOLDER = "src/server/db/migrations";
 const MIGRATIONS_TABLE = "__drizzle_migrations";
@@ -23,29 +22,30 @@ interface JournalEntry {
   when: number;
 }
 
-function maskUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.password) parsed.password = "***";
-    parsed.searchParams.delete("authToken");
-    return parsed.toString();
-  } catch {
-    return url.slice(0, 30) + "…";
-  }
-}
-
 function readJournal(): JournalEntry[] {
-  const raw = fs.readFileSync(
-    `${MIGRATIONS_FOLDER}/meta/_journal.json`,
-    "utf-8",
-  );
-  return (JSON.parse(raw) as { entries: JournalEntry[] }).entries;
+  const journalPath = `${MIGRATIONS_FOLDER}/meta/_journal.json`;
+  if (!fs.existsSync(journalPath)) {
+    throw new Error(
+      `Can't find meta/_journal.json file in ${MIGRATIONS_FOLDER}`,
+    );
+  }
+  const raw = fs.readFileSync(journalPath, "utf-8");
+  const entries = (JSON.parse(raw) as { entries: JournalEntry[] }).entries;
+
+  for (const entry of entries) {
+    const migrationPath = `${MIGRATIONS_FOLDER}/${entry.tag}.sql`;
+    if (!fs.existsSync(migrationPath)) {
+      throw new Error(
+        `No file ${entry.tag}.sql found in ${MIGRATIONS_FOLDER} folder`,
+      );
+    }
+  }
+
+  return entries;
 }
 
 async function run() {
   const startTime = performance.now();
-
-  console.log(`[migrate] target: ${maskUrl(env.DATABASE_URL)}`);
 
   // ── Connectivity check ──────────────────────────────────────────────
   console.log("[migrate] testing database connectivity…");
@@ -104,35 +104,37 @@ async function run() {
     `[migrate] ${pending.length} pending migration(s) (${applied} already applied)`,
   );
 
-  // ── Run each migration individually for per-migration progress ──────
-  for (let i = 0; i < pending.length; i++) {
-    const entry = pending[i]!;
-    const migrationStart = performance.now();
-    const filePath = `${MIGRATIONS_FOLDER}/${entry.tag}.sql`;
-    const content = fs.readFileSync(filePath, "utf-8");
-    const statements = content
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const hash = crypto.createHash("sha256").update(content).digest("hex");
+  // ── Run all pending migrations in a single transaction ───────────────
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < pending.length; i++) {
+      const entry = pending[i]!;
+      const migrationStart = performance.now();
+      const filePath = `${MIGRATIONS_FOLDER}/${entry.tag}.sql`;
+      const content = fs.readFileSync(filePath, "utf-8");
+      const statements = content
+        .split("--> statement-breakpoint")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const hash = crypto.createHash("sha256").update(content).digest("hex");
 
-    console.log(
-      `[migrate]   [${i + 1}/${pending.length}] ${entry.tag} (${statements.length} statement(s))…`,
-    );
+      console.log(
+        `[migrate]   [${i + 1}/${pending.length}] ${entry.tag} (${statements.length} statement(s))…`,
+      );
 
-    for (const stmt of statements) {
-      await db.run(sql.raw(stmt));
+      for (const stmt of statements) {
+        await tx.run(sql.raw(stmt));
+      }
+
+      await tx.run(
+        sql`INSERT INTO ${sql.identifier(MIGRATIONS_TABLE)} ("hash", "created_at") VALUES (${hash}, ${entry.when})`,
+      );
+
+      const migrationMs = (performance.now() - migrationStart).toFixed(0);
+      console.log(
+        `[migrate]   [${i + 1}/${pending.length}] ${entry.tag} done (${migrationMs}ms)`,
+      );
     }
-
-    await db.run(
-      sql`INSERT INTO ${sql.identifier(MIGRATIONS_TABLE)} ("hash", "created_at") VALUES (${hash}, ${entry.when})`,
-    );
-
-    const migrationMs = (performance.now() - migrationStart).toFixed(0);
-    console.log(
-      `[migrate]   [${i + 1}/${pending.length}] ${entry.tag} done (${migrationMs}ms)`,
-    );
-  }
+  });
 
   const totalMs = (performance.now() - startTime).toFixed(0);
   console.log(
