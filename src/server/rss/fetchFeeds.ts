@@ -98,6 +98,13 @@ export async function* fetchAndInsertFeedData(
         };
       }
 
+      if (!feed.isActive) {
+        return {
+          status: "skipped",
+          id: feed.id,
+        };
+      }
+
       const cached: ConditionalHeaders = {
         etag: feed.etag,
         lastModifiedHeader: feed.lastModifiedHeader,
