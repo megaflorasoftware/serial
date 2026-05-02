@@ -87,18 +87,18 @@ export function DeleteAccountSection() {
   const [isConfirmation, setIsConfirmation] = useState(false);
   const { launchDialog } = useDialogStore();
 
-  const { data: subscriptionSummary, isLoading: isLoadingSummary } = useQuery({
+  const { data: subscriptionSummary, isFetched: hasFetchedSummary } = useQuery({
     ...orpc.subscription.getSubscriptionSummary.queryOptions(),
   });
 
-  const { data: pendingSwitch, isLoading: isLoadingPendingSwitch } = useQuery({
+  const { data: pendingSwitch, isFetched: hasFetchedPendingSwitch } = useQuery({
     ...orpc.subscription.getPendingSwitch.queryOptions(),
   });
 
   const hasActivePlan =
     !!subscriptionSummary?.planId && pendingSwitch?.planId !== "free";
 
-  if (isLoadingSummary || isLoadingPendingSwitch) {
+  if (!hasFetchedSummary || !hasFetchedPendingSwitch) {
     return <Skeleton className="h-24" />;
   }
 
