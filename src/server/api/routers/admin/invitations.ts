@@ -15,7 +15,7 @@ import { db } from "~/server/db";
 import { IS_EMAIL_ENABLED, sendEmail } from "~/server/email";
 
 function getInviteUrl(token: string, origin?: string) {
-  const baseUrl = origin || env.BETTER_AUTH_BASE_URL;
+  const baseUrl = origin || env.VITE_PUBLIC_BASE_URL;
   return `${baseUrl}/auth/sign-up?token=${token}`;
 }
 

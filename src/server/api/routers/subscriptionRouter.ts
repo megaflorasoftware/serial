@@ -23,15 +23,14 @@ import {
 import { user } from "~/server/db/schema";
 import { IS_EMAIL_ENABLED } from "~/server/email";
 import { captureException } from "~/server/logger";
-
-const BASE_URL = process.env.BETTER_AUTH_BASE_URL ?? "http://localhost:3000";
+import { env } from "~/env";
 
 function getValidatedOrigin(headers: Headers): string {
   const origin = headers.get("origin") ?? headers.get("referer");
   if (origin) {
     try {
       const parsed = new URL(origin);
-      const base = new URL(BASE_URL);
+      const base = new URL(env.VITE_PUBLIC_BASE_URL);
       if (parsed.origin === base.origin) {
         return base.origin;
       }
@@ -39,7 +38,7 @@ function getValidatedOrigin(headers: Headers): string {
       // invalid URL, fall through
     }
   }
-  return BASE_URL;
+  return env.VITE_PUBLIC_BASE_URL;
 }
 
 type CachedProducts = {
