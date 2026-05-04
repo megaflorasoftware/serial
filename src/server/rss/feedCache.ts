@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import type { FeedFetchMetadata, RSSFeedWithMetadata } from "./types";
 import { getKV } from "~/server/kv";
 
@@ -6,6 +7,68 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const MAX_INTERVAL_MS = 24 * ONE_HOUR_MS;
 const DEFAULT_INTERVAL_MS = ONE_HOUR_MS;
 const ERROR_BACKOFF_MS = 60 * 60 * 1000;
+
+const feedFetchMetadataSchema = z.object({
+  etag: z.string().optional(),
+  lastModified: z.string().optional(),
+  cacheControlMaxAge: z.number().optional(),
+  expires: z.coerce.date().optional(),
+  ttl: z.number().optional(),
+  updatePeriod: z
+    .enum(["hourly", "daily", "weekly", "monthly", "yearly"])
+    .optional(),
+  updateFrequency: z.number().optional(),
+});
+
+const rssContentSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  subtitle: z.string().optional(),
+  publishedDate: z.string(),
+  author: z.string(),
+  url: z.string(),
+  thumbnail: z.string().optional(),
+  content: z.string().optional(),
+  contentSnippet: z.string().optional(),
+  source: z
+    .object({
+      title: z.string().optional(),
+      description: z.string().optional(),
+      link: z.string().optional(),
+      feedUrl: z.string().optional(),
+      image: z
+        .object({
+          link: z.string().optional(),
+          url: z.string().optional(),
+          title: z.string().optional(),
+          width: z.string().optional(),
+          height: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+const cachedFeedResultSchema = z.union([
+  z.object({
+    status: z.literal("success"),
+    data: z.object({
+      title: z.string(),
+      url: z.string(),
+      items: z.array(rssContentSchema),
+      fetchMetadata: feedFetchMetadataSchema,
+    }),
+  }),
+  z.object({
+    status: z.literal("empty"),
+    fetchMetadata: feedFetchMetadataSchema,
+  }),
+  z.object({
+    status: z.literal("error"),
+    message: z.string(),
+    fetchMetadata: feedFetchMetadataSchema.optional(),
+  }),
+]);
 
 export type CachedFeedResult =
   | {
@@ -82,8 +145,9 @@ export async function getCachedFeedResult(
   if (!raw) return null;
 
   try {
-    const parsed = JSON.parse(raw) as CachedFeedResult;
-    return parsed;
+    const parsed = JSON.parse(raw);
+    const validated = cachedFeedResultSchema.parse(parsed);
+    return validated;
   } catch {
     return null;
   }

@@ -30,13 +30,48 @@ const ERROR_BACKOFF_MS = 60 * 60 * 1000; // 1 hour
 
 export type FetchFeedsStatus = "success" | "empty" | "error" | "skipped";
 
+function assertValidFeedUrl(url: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch (e) {
+    throw new Error("Invalid URL", { cause: e });
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Invalid URL protocol");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+    throw new Error("Localhost URLs are not allowed");
+  }
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    throw new Error("IPv4 address URLs are not allowed");
+  }
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    throw new Error("IPv6 address URLs are not allowed");
+  }
+}
+
 export async function fetchNewFeedDetails(
   url: string,
 ): Promise<NewFeedDetails[]> {
+  assertValidFeedUrl(url);
+
   let urls = [url];
 
   // process url
-  if (url.includes("youtube.com/@") || url.includes("youtube.com/channel/")) {
+  const parsedUrl = new URL(url);
+  const hostname = parsedUrl.hostname.toLowerCase();
+  const isYouTubeHost =
+    hostname === "youtube.com" ||
+    hostname === "www.youtube.com" ||
+    hostname.endsWith(".youtube.com");
+
+  if (
+    isYouTubeHost &&
+    (url.includes("youtube.com/@") || url.includes("youtube.com/channel/"))
+  ) {
     const feed = await fetch(url);
     const text = await feed.text();
 
@@ -52,10 +87,21 @@ export async function fetchNewFeedDetails(
   const feedDetailList = (
     await Promise.all(
       urls.map(async (feedUrl) => {
-        if (feedUrl.includes("youtube.com")) {
+        assertValidFeedUrl(feedUrl);
+        const feedHostname = new URL(feedUrl).hostname.toLowerCase();
+        const isYouTube =
+          feedHostname === "youtube.com" ||
+          feedHostname === "www.youtube.com" ||
+          feedHostname.endsWith(".youtube.com");
+        if (isYouTube) {
           return fetchYouTubeFeedDetails(feedUrl);
         }
-        if (feedUrl.includes("nebula.tv") || feedUrl.includes("nebula.app")) {
+        if (
+          feedHostname === "nebula.tv" ||
+          feedHostname === "nebula.app" ||
+          feedHostname.endsWith(".nebula.tv") ||
+          feedHostname.endsWith(".nebula.app")
+        ) {
           return fetchNebulaFeedDetails(feedUrl);
         }
         return fetchUnknownRssFeed(feedUrl);
