@@ -19,7 +19,7 @@ import type { ImportFeedDataItem } from "../components/feed/import/utils/shared"
 import type { CardRadioOption } from "~/components/ui/card-radio-group";
 import type { FeedPlatform } from "~/server/db/schema";
 import { YoutubeIcon } from "~/components/brand-icons";
-import { getBlogUrl } from "~/lib/constants";
+import { getGuidesUrl } from "~/lib/constants";
 import { ImportLoading } from "~/components/ImportLoading";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -232,7 +232,7 @@ function EditFeedsPage() {
               </code>{" "}
               files from{" "}
               <a
-                href={getBlogUrl("/how-to-export-youtube-subscriptions")}
+                href={getGuidesUrl("/how-to-export-youtube-subscriptions")}
                 className="underline"
                 target="_blank"
                 rel="noopener noreferrer"

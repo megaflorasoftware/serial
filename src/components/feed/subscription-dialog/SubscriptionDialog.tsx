@@ -442,14 +442,8 @@ export function SubscriptionDialog({
                 <EmailVerificationBanner onVerified={handleVerified} />
               </div>
             )}
-
-            {/* Free plan */}
             <FreePlanCard />
-
-            {/* Paid plans */}
             <StandardPlanCards />
-
-            {/* Pro plan */}
             <ProPlanCard />
           </div>
         )}

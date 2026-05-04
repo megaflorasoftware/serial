@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { ExternalLinkIcon } from "lucide-react";
 import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { Button } from "~/components/ui/button";
-import { DemoCarousel } from "~/components/welcome/DemoCarousel";
 import { RecentReleaseBanner } from "~/components/welcome/RecentReleaseBanner";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
@@ -28,10 +28,14 @@ function RouteComponent() {
   return (
     <main className="bg-background text-pretty">
       <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
-      <div className="pt-12 pb-16 md:pt-24 md:pb-32">
-        <DemoCarousel />
+      <div className="relative overflow-clip pt-12 pb-16 md:pt-24 md:pb-32">
         <section className="mx-auto max-w-2xl px-6 pt-16 text-center">
-          <h1 className="text-3xl font-bold text-balance md:text-4xl">
+          <img
+            src="/icon-256.png"
+            className="mx-auto size-16 rounded-xl shadow-lg md:size-20"
+            alt="Serial logo"
+          />
+          <h1 className="mt-6 text-3xl font-bold text-balance md:mt-8 md:text-4xl">
             Serial
           </h1>
           <p className="mt-3 mb-6 text-lg text-pretty md:text-xl">
@@ -39,15 +43,62 @@ function RouteComponent() {
             customization options and great support for video content. Fully
             open source and easily self-hostable.
           </p>
-          <Link to={AUTH_PAGE_URL} className="hover:bg-transparent">
-            <Button size="lg" className="text-base">
-              Get Started
-            </Button>
-          </Link>
+          <div className="flex items-center justify-center gap-3">
+            <Link to={AUTH_PAGE_URL} className="hover:bg-transparent">
+              <Button size="lg" className="text-base">
+                Get Started
+              </Button>
+            </Link>
+            <a
+              href="https://demo.serial.tube"
+              className="hover:bg-transparent"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="outline" size="lg" className="gap-2 text-base">
+                Try Demo <ExternalLinkIcon size={16} />
+              </Button>
+            </a>
+          </div>
+          <div className="dark:hidden">
+            <div className="h-128 md:h-60 lg:h-84 xl:h-104" />
+            <div className="absolute inset-x-0 -bottom-28 h-fit md:-bottom-18 lg:-bottom-24 xl:-bottom-32">
+              <img
+                src="/welcome/screenshot-desktop-light.jpeg"
+                className="mx-auto hidden rounded-xl shadow-[0px_-0px_32px_8px_hsl(var(--foreground)/0.2)] md:block md:w-150 lg:w-200 xl:w-250"
+                alt="A screenshot of the Serial desktop site in light mode"
+              />
+              <img
+                src="/welcome/screenshot-mobile-light.jpeg"
+                className="mx-auto w-72 rounded-xl shadow-[0px_-0px_32px_8px_hsl(var(--foreground)/0.2)] md:hidden"
+                alt="A screenshot of the Serial mobile site in light mode"
+              />
+            </div>
+          </div>
+          <div className="hidden dark:block dark:md:hidden">
+            <div className="h-128" />
+            <div className="absolute inset-x-0 -bottom-28 h-fit">
+              <img
+                src="/welcome/screenshot-mobile-dark.jpeg"
+                className="mx-auto w-72 rounded-xl shadow-[0px_0px_16px_4px_hsl(var(--foreground)/0.2)] md:hidden"
+                alt="A screenshot of the Serial mobile site in dark mode"
+              />
+            </div>
+          </div>
         </section>
+        <div className="mt-16 hidden md:mt-24 dark:md:block">
+          <img
+            src="/welcome/screenshot-desktop-dark.jpeg"
+            className="mx-auto hidden rounded-xl shadow-[0px_8px_16px_0px_hsl(var(--foreground)/0.1)] md:block md:w-150 lg:w-200 xl:w-250"
+            alt="A screenshot of the Serial desktop site in dark mode"
+          />
+        </div>
       </div>
-      <div className="bg-foreground text-background dark:text-foreground border-foreground mx-auto border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:border-x-0 dark:bg-transparent dark:md:border-x-4">
-        <section className="relative mx-auto max-w-xl space-y-12 text-center text-2xl text-pretty md:py-16 md:text-3xl">
+
+      <div className="bg-foreground text-background dark:text-foreground border-foreground relative mx-auto overflow-clip border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:border-x-0 dark:bg-transparent dark:md:border-x-4">
+        {/* {!showVideo && (*/}
+        <section className="mx-auto max-w-xl space-y-12 text-center text-2xl text-pretty md:py-16 md:text-3xl">
+          {/* <WaypointsIcon size={48} className="mx-auto" />*/}
           <p>
             Our digital lives are spread across many platforms, publications,
             and channels.
@@ -56,7 +107,39 @@ function RouteComponent() {
             Serial is a way to bring these disparate parts of the internet into
             one place that you control.
           </p>
+          {/* <Button
+              variant="secondary"
+              size="lg"
+              className="dark gap-2 text-base"
+              onClick={() => setShowVideo(true)}
+            >
+              <PlayIcon size={16} /> Watch Video
+            </Button>*/}
         </section>
+        {/* )}*/}
+
+        {/* {showVideo && (
+          <div className="dark flex flex-col items-center justify-center gap-4">
+            <div
+              className={`mx-auto my-4 aspect-video w-[calc(100%-2rem)] overflow-hidden rounded md:w-[min(calc(100%-8rem),1000px)]`}
+            >
+              <CustomVideoPlayer
+                videoID=""
+                orientation="horizontal"
+                isInactive={false}
+                isEmbed
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="lg"
+              className="mx-auto gap-2 text-base"
+              onClick={() => setShowVideo(false)}
+            >
+              Hide Video <XIcon size={16} />
+            </Button>
+          </div>
+        )}*/}
       </div>
 
       <section className="mx-auto max-w-xl space-y-6 px-6 py-12 text-xl text-pretty md:py-24">
@@ -136,13 +219,14 @@ function RouteComponent() {
         <section className="relative mx-auto max-w-xl space-y-6 text-center text-2xl text-pretty md:py-16 md:text-3xl">
           <p className="text-base font-black uppercase">Pricing Transparency</p>
           <p>
-            Serial is currently free while in beta, and there will be a small
-            subscription after that period ends for users over 100 feeds.
+            You can use Serial for free with up to 40 feeds. After that, most
+            people can get enough feeds for $4 a month (taxes included).
           </p>
-          {/* <p>
-            You can have up to 100 different feeds on Serial for free. After
-            that, it&apos;s <b>$2 a month or $20 a year.</b>
-          </p>*/}
+          <Link to="/pricing" className="dark">
+            <Button size="lg" className="gap-2 text-base" variant="secondary">
+              View Pricing
+            </Button>
+          </Link>
         </section>
       </div>
       <section className="mx-auto max-w-xl space-y-6 px-6 py-12 text-xl text-pretty md:py-24">

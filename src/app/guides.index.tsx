@@ -1,17 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
 import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
-import { getAllBlogPosts } from "~/lib/markdown/loaders";
+import { getAllGuidePosts } from "~/lib/markdown/loaders";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
 
-export const Route = createFileRoute("/blog/")({
+export const Route = createFileRoute("/guides/")({
   component: RouteComponent,
   loader: async () => {
     const isAuthed = await fetchIsAuthed();
 
     return {
       isAuthed,
-      posts: getAllBlogPosts(),
+      posts: getAllGuidePosts(),
     };
   },
 });
@@ -32,7 +32,7 @@ function RouteComponent() {
           <DemoColorThemePopoverButton />
         </div>
       </div>
-      <h1 className="mt-16 text-3xl font-bold md:text-4xl">Blog</h1>
+      <h1 className="mt-16 text-3xl font-bold md:text-4xl">Guides</h1>
       <ul className="mt-8 list-none space-y-8 p-0">
         {!posts.length && (
           <p className="text-xl">Nothing to see here. Check back soon!</p>
@@ -43,7 +43,7 @@ function RouteComponent() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                 <Link
                   // @ts-expect-error this is fine
-                  to={`/blog/${slug}`}
+                  to={`/guides/${slug}`}
                   className="text-xl font-bold underline"
                   preload="intent"
                 >
