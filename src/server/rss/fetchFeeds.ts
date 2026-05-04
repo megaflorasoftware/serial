@@ -383,6 +383,20 @@ export async function* fetchAndInsertFeedData(
         },
       });
 
+      const nextFetchAt = calculateNextFetch(completedFeed.fetchMetadata, now);
+      await dbSemaphore.run(() =>
+        context.db
+          .update(feeds)
+          .set({
+            lastFetchedAt: now,
+            nextFetchAt,
+            etag: completedFeed.fetchMetadata.etag ?? null,
+            lastModifiedHeader:
+              completedFeed.fetchMetadata.lastModified ?? null,
+          })
+          .where(eq(feeds.id, feed.id)),
+      );
+
       const applicationFeedItems = await insertFeedItems(
         context,
         feed.id,
