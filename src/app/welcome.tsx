@@ -244,7 +244,7 @@ function RouteComponent() {
         <p>
           <a
             className="underline"
-            href="https://github.com/hfellerhoff/serial?tab=readme-ov-file#self-hosting"
+            href="https://github.com/megaflorasoftware/serial?tab=readme-ov-file#self-hosting"
           >
             Here is the step-by-step guide
           </a>{" "}
@@ -261,7 +261,7 @@ function RouteComponent() {
               </Button>
             </Link>
             <a
-              href="https://github.com/hfellerhoff/serial"
+              href="https://github.com/megaflorasoftware/serial"
               target="_blank"
               rel="noopener noreferrer"
             >

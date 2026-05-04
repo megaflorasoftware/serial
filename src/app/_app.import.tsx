@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ExternalLinkIcon,
   GlobeIcon,
+  Loader2Icon,
   MinusIcon,
   PauseIcon,
   PlayCircleIcon,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useSetAtom } from "jotai";
 import { ImportDropzone } from "../components/feed/import/ImportDropzone";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
 import type { ImportFeedDataItem } from "../components/feed/import/utils/shared";
@@ -35,6 +37,7 @@ import { feedItemsStore } from "~/lib/data/store";
 import { useImportResults, useLoadingMode } from "~/lib/data/loading-machine";
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 import { useDialogStore } from "~/components/feed/dialogStore";
+import { shouldAlwaysKeepSSEConnectionAlive } from "~/lib/data/atoms";
 
 function ImportedFeedStatus({
   feedUrl,
@@ -105,6 +108,7 @@ function EditFeedsPage() {
   >(null);
   const [hasStartedImport, setHasStartedImport] = useState(false);
   const [isImportComplete, setIsImportComplete] = useState(false);
+  const [isImportPending, setIsImportPending] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>("views");
   // Signal to Playwright tests that React has hydrated and the onChange handler
   // is attached to the file input, so file-chooser interactions are reliable.
@@ -124,6 +128,30 @@ function EditFeedsPage() {
   const { launchDialog } = useDialogStore();
 
   const isPostImportScreen = isImportComplete || hasStartedImport;
+  const setShouldAlwaysKeepSSEConnectionAlive = useSetAtom(
+    shouldAlwaysKeepSSEConnectionAlive,
+  );
+
+  // Keep SSE open during import so visibility changes don't disconnect the
+  // streaming import. Reset when the import loader is hidden.
+  useEffect(() => {
+    if (!isFetchingRss && hasStartedImport) {
+      setShouldAlwaysKeepSSEConnectionAlive(false);
+    }
+  }, [isFetchingRss, hasStartedImport, setShouldAlwaysKeepSSEConnectionAlive]);
+
+  useEffect(() => {
+    return () => {
+      setShouldAlwaysKeepSSEConnectionAlive(false);
+    };
+  }, [setShouldAlwaysKeepSSEConnectionAlive]);
+
+  useEffect(() => {
+    if (isImportPending && loading.mode === "importing" && !hasStartedImport) {
+      const id = requestAnimationFrame(() => setHasStartedImport(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isImportPending, loading.mode, hasStartedImport]);
 
   useEffect(() => {
     if (isImportComplete && importDeactivatedCount > 0) {
@@ -164,9 +192,8 @@ function EditFeedsPage() {
   const onFeedImport = async () => {
     if (!feedsFoundFromFile?.length) return;
 
-    setTimeout(() => {
-      setHasStartedImport(true);
-    }, 500);
+    setShouldAlwaysKeepSSEConnectionAlive(true);
+    setIsImportPending(true);
 
     const channelsToImport = feedsFoundFromFile
       .filter((channel) => channel.shouldImport)
@@ -207,12 +234,15 @@ function EditFeedsPage() {
     ]);
 
     setIsImportComplete(true);
+    setIsImportPending(false);
   };
 
   const onReset = () => {
     setFeedsFoundFromFile(null);
     setHasStartedImport(false);
     setIsImportComplete(false);
+    setIsImportPending(false);
+    setShouldAlwaysKeepSSEConnectionAlive(false);
   };
 
   if (isFetchingRss) {
@@ -462,9 +492,16 @@ function EditFeedsPage() {
                   className="w-full"
                   size="lg"
                   onClick={onFeedImport}
-                  disabled={channelImportCount === 0}
+                  disabled={channelImportCount === 0 || isImportPending}
                 >
-                  Import {channelImportCount} feeds
+                  {isImportPending && !hasStartedImport ? (
+                    <>
+                      <Loader2Icon size={16} className="animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>Import {channelImportCount} feeds</>
+                  )}
                 </Button>
               </div>
             </div>
