@@ -23,6 +23,7 @@ import type {
   RSSContent,
   RSSFeedWithMetadata,
 } from "./types";
+import { env } from "~/env";
 import { dbSemaphore } from "~/lib/semaphore";
 
 /** How long to back off a feed after a fetch error, to avoid cascading retries. */
@@ -41,15 +42,19 @@ function assertValidFeedUrl(url: string) {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("Invalid URL protocol");
   }
+
   const hostname = parsed.hostname.toLowerCase();
-  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+  if (
+    (env.NODE_ENV === "production" && hostname === "localhost") ||
+    hostname.endsWith(".localhost")
+  ) {
     throw new Error("Localhost URLs are not allowed");
   }
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-    throw new Error("IPv4 address URLs are not allowed");
-  }
-  if (hostname.startsWith("[") && hostname.endsWith("]")) {
-    throw new Error("IPv6 address URLs are not allowed");
+  if (
+    env.NODE_ENV === "production" &&
+    /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  ) {
+    throw new Error("Feeds hosted on IPV4 addresses are not allowed");
   }
 }
 
