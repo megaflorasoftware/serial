@@ -17,7 +17,10 @@ import { toast } from "sonner";
 import { useSetAtom } from "jotai";
 import { ImportDropzone } from "../components/feed/import/ImportDropzone";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
-import type { ImportFeedDataItem } from "../components/feed/import/utils/shared";
+import type {
+  ImportFeedDataFromFilesError,
+  ImportFeedDataItem,
+} from "../components/feed/import/utils/shared";
 import type { CardRadioOption } from "~/components/ui/card-radio-group";
 import type { FeedPlatform } from "~/server/db/schema";
 import { YoutubeIcon } from "~/components/brand-icons";
@@ -110,6 +113,10 @@ function EditFeedsPage() {
   const [isImportComplete, setIsImportComplete] = useState(false);
   const [isImportPending, setIsImportPending] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>("views");
+
+  const [fileInputErrorList, setFileInputErrorList] =
+    useState<ImportFeedDataFromFilesError | null>(null);
+
   // Signal to Playwright tests that React has hydrated and the onChange handler
   // is attached to the file input, so file-chooser interactions are reliable.
   useEffect(() => {
@@ -186,6 +193,9 @@ function EditFeedsPage() {
         ),
       }));
       setFeedsFoundFromFile(feedsWithImportStatus);
+      setFileInputErrorList(null);
+    } else {
+      setFileInputErrorList(feedResult);
     }
   };
 
@@ -302,11 +312,18 @@ function EditFeedsPage() {
         id="import-file-input"
         ref={inputElementRef}
         type="file"
-        accept="text/csv,.opml"
+        accept="text"
         className="sr-only"
         multiple
         onChange={onSelectFiles}
       />
+      {!!fileInputErrorList?.errors?.length && (
+        <div className="text-destructive mt-2">
+          {fileInputErrorList.errors.map((error) => (
+            <div key={error}>{error}</div>
+          ))}
+        </div>
+      )}
       {!!feedsFoundFromFile && (
         <>
           {!isPostImportScreen &&
@@ -489,15 +506,15 @@ function EditFeedsPage() {
             <div className="fixed inset-x-0 bottom-0">
               <div className="mx-auto box-border max-w-2xl p-6">
                 <Button
-                  className="w-full"
+                  className="w-full gap-2"
                   size="lg"
                   onClick={onFeedImport}
                   disabled={channelImportCount === 0 || isImportPending}
                 >
                   {isImportPending && !hasStartedImport ? (
                     <>
-                      <Loader2Icon size={16} className="animate-spin" />
                       Importing...
+                      <Loader2Icon size={16} className="animate-spin" />
                     </>
                   ) : (
                     <>Import {channelImportCount} feeds</>

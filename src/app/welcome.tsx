@@ -96,9 +96,7 @@ function RouteComponent() {
       </div>
 
       <div className="bg-foreground text-background dark:text-foreground border-foreground relative mx-auto overflow-clip border-dashed px-6 py-16 dark:max-w-4xl dark:border-4 dark:border-x-0 dark:bg-transparent dark:md:border-x-4">
-        {/* {!showVideo && (*/}
         <section className="mx-auto max-w-xl space-y-12 text-center text-2xl text-pretty md:py-16 md:text-3xl">
-          {/* <WaypointsIcon size={48} className="mx-auto" />*/}
           <p>
             Our digital lives are spread across many platforms, publications,
             and channels.
@@ -107,39 +105,7 @@ function RouteComponent() {
             Serial is a way to bring these disparate parts of the internet into
             one place that you control.
           </p>
-          {/* <Button
-              variant="secondary"
-              size="lg"
-              className="dark gap-2 text-base"
-              onClick={() => setShowVideo(true)}
-            >
-              <PlayIcon size={16} /> Watch Video
-            </Button>*/}
         </section>
-        {/* )}*/}
-
-        {/* {showVideo && (
-          <div className="dark flex flex-col items-center justify-center gap-4">
-            <div
-              className={`mx-auto my-4 aspect-video w-[calc(100%-2rem)] overflow-hidden rounded md:w-[min(calc(100%-8rem),1000px)]`}
-            >
-              <CustomVideoPlayer
-                videoID=""
-                orientation="horizontal"
-                isInactive={false}
-                isEmbed
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="lg"
-              className="mx-auto gap-2 text-base"
-              onClick={() => setShowVideo(false)}
-            >
-              Hide Video <XIcon size={16} />
-            </Button>
-          </div>
-        )}*/}
       </div>
 
       <section className="mx-auto max-w-xl space-y-6 px-6 py-12 text-xl text-pretty md:py-24">
@@ -220,7 +186,7 @@ function RouteComponent() {
           <p className="text-base font-black uppercase">Pricing Transparency</p>
           <p>
             You can use Serial for free with up to 40 feeds. After that, most
-            people can get enough feeds for $4 a month (taxes included).
+            people can get enough feeds for $4 to $6 a month.
           </p>
           <Link to="/pricing" className="dark">
             <Button size="lg" className="gap-2 text-base" variant="secondary">
@@ -234,7 +200,7 @@ function RouteComponent() {
           If the cost of Serial is too much for you, anyone can run an instance
           of Serial for themselves. You won&apos;t need to pay us anything, but
           you will need to have a dedicated computer to run it on, which can be
-          as cheap as $3-4 a month.
+          as cheap as $5-6 a month.
         </p>
         <p>
           This can be a great option for users who are very privacy-conscious,

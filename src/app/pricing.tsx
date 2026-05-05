@@ -10,16 +10,30 @@ import {
   QUOTA_DISPLAY_NAMES,
   STANDARD_PLAN_IDS,
 } from "~/components/feed/subscription-dialog/constants";
-import {
-  formatPrice,
-  getPlanFeatures,
-} from "~/components/feed/subscription-dialog/utils";
+import { getPlanFeatures } from "~/components/feed/subscription-dialog/utils";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 import { AUTH_PAGE_URL } from "~/server/auth/constants";
-import { fetchProductsServerFn } from "~/server/subscriptions/fetchProducts";
 import { PLANS } from "~/server/subscriptions/plans";
+
+const PLAN_PRICES = {
+  "standard-small": { monthly: 4, annual: 40 },
+  "standard-medium": { monthly: 6, annual: 60 },
+  "standard-large": { monthly: 8, annual: 80 },
+  pro: { monthly: 16, annual: 160 },
+} as const;
+
+function getMonthlyFromAnnual(annual: number): string {
+  const monthly = annual / 12;
+  const withCents = monthly.toFixed(2);
+  return withCents.endsWith(".00") ? withCents.slice(0, -3) : withCents;
+}
 
 export const Route = createFileRoute("/pricing")({
   beforeLoad: () => {
@@ -28,19 +42,13 @@ export const Route = createFileRoute("/pricing")({
     }
   },
   component: RouteComponent,
-  loader: async () => {
-    const products = await fetchProductsServerFn();
-    return { products };
-  },
-  staleTime: 1000 * 60 * 60,
 });
 
 function RouteComponent() {
-  const { products } = Route.useLoaderData();
   const supportEmail = import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS;
 
   return (
-    <main className="bg-background p-4 text-pretty md:p-8">
+    <main className="bg-background py-4 text-pretty md:py-8">
       <div className="flex items-center justify-center pt-4 pb-4 md:pt-8 md:pb-8">
         <Link to="/welcome">
           <Button variant="outline" size="lg" className="gap-2">
@@ -59,8 +67,8 @@ function RouteComponent() {
             Pricing
           </h1>
           <p className="mt-3 mb-6 text-lg text-pretty md:text-xl">
-            All prices are fee and taxes included – what you see is what you
-            pay. This pricing is for the main, hosted instance of Serial.
+            This pricing is for the main, hosted instance of Serial. Prices are
+            based on the number of active feeds you have.
           </p>
         </section>
       </div>
@@ -100,7 +108,7 @@ function RouteComponent() {
             <div className="space-y-4">
               {STANDARD_PLAN_IDS.map((id) => {
                 const plan = PLANS[id];
-                const product = products.find((p) => p.planId === id);
+
                 return (
                   <div key={id} className="rounded border p-3">
                     <div className="flex items-center justify-between">
@@ -108,13 +116,17 @@ function RouteComponent() {
                         {QUOTA_DISPLAY_NAMES[id]}
                       </span>
                       <span className="text-md font-bold">
-                        {product?.monthlyPrice != null &&
-                          `${formatPrice(product.monthlyPrice)}/mo`}
-                        {product?.monthlyPrice != null &&
-                          product?.annualPrice != null &&
-                          " · "}
-                        {product?.annualPrice != null &&
-                          `${formatPrice(product.annualPrice)}/yr`}
+                        ${PLAN_PRICES[id].monthly}/mo ·{" "}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-default underline decoration-dotted underline-offset-4">
+                              ${PLAN_PRICES[id].annual}/yr
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            ${getMonthlyFromAnnual(PLAN_PRICES[id].annual)}/mo
+                          </TooltipContent>
+                        </Tooltip>
                       </span>
                     </div>
                     <p className="text-muted-foreground text-sm">
@@ -133,21 +145,17 @@ function RouteComponent() {
                 <h3 className="text-xl font-bold">{PLANS.pro.name}</h3>
               </div>
               <div className="text-md font-bold lg:text-lg">
-                {(() => {
-                  const product = products.find((p) => p.planId === "pro");
-                  if (!product) return null;
-                  return (
-                    <>
-                      {product.monthlyPrice != null &&
-                        `${formatPrice(product.monthlyPrice)}/mo`}
-                      {product.monthlyPrice != null &&
-                        product.annualPrice != null &&
-                        " · "}
-                      {product.annualPrice != null &&
-                        `${formatPrice(product.annualPrice)}/yr`}
-                    </>
-                  );
-                })()}
+                ${PLAN_PRICES.pro.monthly}/mo ·{" "}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-default underline decoration-dotted underline-offset-4">
+                      ${PLAN_PRICES.pro.annual}/yr
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    ${getMonthlyFromAnnual(PLAN_PRICES.pro.annual)}/mo
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
             <ul className="space-y-2">
@@ -167,7 +175,7 @@ function RouteComponent() {
           If the cost of Serial is too much for you, anyone can run an instance
           of Serial for themselves. You won&apos;t need to pay us anything, but
           you will need to have a dedicated computer to run it on, which can be
-          as cheap as $3-4 a month.
+          as cheap as $5-6 a month.
         </p>
         <p>
           This can be a great option for users who are very privacy-conscious,
@@ -182,6 +190,14 @@ function RouteComponent() {
             Here is the step-by-step guide
           </a>{" "}
           on how to host your own Serial instance.
+        </p>
+        <p className="italic">
+          If Serial is cost-prohibitive and self-hosting is not feasible for
+          you, don&apos;t hesitate to{" "}
+          <a href={`mailto:${supportEmail}`} className="underline">
+            get in touch
+          </a>{" "}
+          – we&apos;d be happy to work something out.
         </p>
       </section>
       <div className="border-foreground mx-auto max-w-4xl border-4 border-x-0 border-dashed px-6 py-16 md:border-x-4">
