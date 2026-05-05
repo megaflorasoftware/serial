@@ -43,23 +43,6 @@ function RouteComponent() {
   return (
     <div>
       <article className="mx-auto max-w-3xl px-6 text-xl text-pretty">
-        <div className="relative flex items-center justify-between text-lg font-semibold">
-          <Link
-            to={isAuthed ? "/" : "/welcome"}
-            className="hover:bg-primary hover:text-background -m-1 rounded p-1"
-          >
-            ← Back to {isAuthed ? "App" : "Home"}
-          </Link>
-          <div className="absolute left-1/2 -translate-x-1/2">
-            <DemoColorThemePopoverButton />
-          </div>
-          <Link
-            to="/guides"
-            className="hover:bg-primary hover:text-background -m-1 rounded p-1"
-          >
-            ↑ All Posts
-          </Link>
-        </div>
         <div className="mx-auto mt-20 mb-12 max-w-2xl text-center text-balance">
           {post.icon && <GuideIcon name={post.icon} />}
           <h1 className="text-3xl leading-tight font-bold md:text-4xl">

@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
+import { CoinsIcon, ContainerIcon } from "lucide-react";
+import { WebsiteHeader } from "~/components/welcome/WebsiteHeader";
+import { WebsiteNavigation } from "~/components/welcome/WebsiteNavigation";
 import { getAllReleases } from "~/lib/markdown/loaders";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
 
@@ -20,12 +23,7 @@ function RouteComponent() {
 
   return (
     <div>
-      <p>
-        <Link to={isAuthed ? "/" : "/welcome"}>
-          ⭠ Back to {isAuthed ? "App" : "Home"}
-        </Link>
-      </p>
-      <h1>Releases</h1>
+      <WebsiteHeader Icon={ContainerIcon} title="Releases" />
       <ul className="list-none space-y-8 p-0 pt-4">
         {!releases.length && <p>Nothing to see here. Check back soon!</p>}
         {releases.map(({ slug, title, description, publish_date }) => {

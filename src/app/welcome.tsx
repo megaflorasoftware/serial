@@ -3,6 +3,7 @@ import { ExternalLinkIcon } from "lucide-react";
 import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { Button } from "~/components/ui/button";
 import { RecentReleaseBanner } from "~/components/welcome/RecentReleaseBanner";
+import { WebsiteNavigation } from "~/components/welcome/WebsiteNavigation";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
 import { AUTH_PAGE_URL } from "~/server/auth/constants";
@@ -25,9 +26,10 @@ function RouteComponent() {
   const { mostRecentRelease } = Route.useLoaderData();
   const supportEmail = import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS;
 
+  // <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
   return (
     <main className="bg-background text-pretty">
-      <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
+      <WebsiteNavigation />
       <div className="relative overflow-clip pt-12 pb-16 md:pt-24 md:pb-32">
         <section className="mx-auto max-w-2xl px-6 pt-16 text-center">
           <img
@@ -50,13 +52,13 @@ function RouteComponent() {
               </Button>
             </Link>
             <a
-              href="https://demo.serial.tube"
+              href="https://github.com/megaflorasoftware/serial?tab=readme-ov-file#self-hosting"
               className="hover:bg-transparent"
               target="_blank"
               rel="noopener noreferrer"
             >
               <Button variant="outline" size="lg" className="gap-2 text-base">
-                Try Demo <ExternalLinkIcon size={16} />
+                Self Host <ExternalLinkIcon size={16} />
               </Button>
             </a>
           </div>
@@ -227,12 +229,13 @@ function RouteComponent() {
               </Button>
             </Link>
             <a
-              href="https://github.com/megaflorasoftware/serial"
+              href="https://github.com/megaflorasoftware/serial?tab=readme-ov-file#self-hosting"
+              className="hover:bg-transparent"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button size="lg" className="text-base" variant="outline">
-                GitHub
+              <Button variant="outline" size="lg" className="gap-2 text-base">
+                Self Host <ExternalLinkIcon size={16} />
               </Button>
             </a>
           </div>

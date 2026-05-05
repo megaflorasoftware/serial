@@ -18,20 +18,6 @@ function RouteComponent() {
 
   return (
     <article>
-      <div className="flex items-center justify-between pb-6">
-        {isAuthed && (
-          <>
-            <Link to="/">⭠ Back to App</Link>
-            <Link to="/releases">↑ All Releases</Link>
-          </>
-        )}
-        {!isAuthed && (
-          <>
-            <Link to="/welcome">⭠ Back to Home</Link>
-            <Link to="/releases">↑ All Releases</Link>
-          </>
-        )}
-      </div>
       <p className="pb-0 font-sans">{release.publish_date}</p>
       <h2>{release.title}</h2>
       <p>{release.description}</p>
