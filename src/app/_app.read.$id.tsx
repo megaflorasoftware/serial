@@ -100,24 +100,38 @@ function ReadPage() {
     },
   });
 
-  // Restore progress on open — wait a frame so layout is complete
-  const hasRestoredRef = useRef(false);
+  // Disable browser scroll restoration so it doesn't fight with our
+  // programmatic restoration (especially on full page reloads).
   useEffect(() => {
-    if (hasRestoredRef.current) return;
+    const original = history.scrollRestoration;
+    history.scrollRestoration = "manual";
+    return () => {
+      history.scrollRestoration = original;
+    };
+  }, []);
+
+  // Restore progress on open — wait a frame so layout is complete.
+  // We track the last restored progress value so we can re-run when the
+  // stored progress changes (e.g. IDB hydrates with stale data first, then
+  // SSE updates to the real saved progress).
+  const restoredProgressRef = useRef<number | null>(null);
+  useEffect(() => {
     if (feedItem == null) return;
 
     const progress = feedItem.progress ?? 0;
 
     if (progress <= 0) {
-      hasRestoredRef.current = true;
+      restoredProgressRef.current = progress;
       return;
     }
+
+    if (restoredProgressRef.current === progress) return;
 
     const elements = getElements(articleRef.current);
     if (elements.length === 0) return;
 
     const targetIndex = Math.min(progress, elements.length - 1);
-    hasRestoredRef.current = true;
+    restoredProgressRef.current = progress;
     requestAnimationFrame(() => {
       selectElement(elements, targetIndex, true);
     });
