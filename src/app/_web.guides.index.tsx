@@ -1,12 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
 import { BookIcon } from "lucide-react";
-import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { WebsiteHeader } from "~/components/welcome/WebsiteHeader";
 import { getAllGuidePosts } from "~/lib/markdown/loaders";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
 
-export const Route = createFileRoute("/guides/")({
+export const Route = createFileRoute("/_web/guides/")({
   component: RouteComponent,
   loader: async () => {
     const isAuthed = await fetchIsAuthed();
@@ -19,7 +18,7 @@ export const Route = createFileRoute("/guides/")({
 });
 
 function RouteComponent() {
-  const { isAuthed, posts } = Route.useLoaderData();
+  const { posts } = Route.useLoaderData();
 
   return (
     <div>

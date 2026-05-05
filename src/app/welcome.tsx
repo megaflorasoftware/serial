@@ -7,6 +7,7 @@ import { WebsiteNavigation } from "~/components/welcome/WebsiteNavigation";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
 import { AUTH_PAGE_URL } from "~/server/auth/constants";
+import { fetchIsAuthed } from "~/server/auth/endpoints";
 
 export const Route = createFileRoute("/welcome")({
   beforeLoad: () => {
@@ -15,22 +16,23 @@ export const Route = createFileRoute("/welcome")({
     }
   },
   component: RouteComponent,
-  loader: () => {
+  loader: async () => {
+    const isAuthed = await fetchIsAuthed();
     const mostRecentRelease = getMostRecentRelease();
-    return { mostRecentRelease };
+    return { isAuthed, mostRecentRelease };
   },
   staleTime: 1000 * 60 * 60,
 });
 
 function RouteComponent() {
-  const { mostRecentRelease } = Route.useLoaderData();
+  const { isAuthed, mostRecentRelease } = Route.useLoaderData();
   const supportEmail = import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS;
 
-  // <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
   return (
     <main className="bg-background text-pretty">
-      <WebsiteNavigation />
-      <div className="relative overflow-clip pt-12 pb-16 md:pt-24 md:pb-32">
+      <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
+      <WebsiteNavigation isAuthed={isAuthed} />
+      <div className="relative overflow-clip pb-16 md:pt-24 md:pb-32">
         <section className="mx-auto max-w-2xl px-6 pt-16 text-center">
           <img
             src="/icon-256.png"

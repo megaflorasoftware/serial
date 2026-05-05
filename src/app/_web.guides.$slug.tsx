@@ -3,14 +3,12 @@ import dayjs from "dayjs";
 import { BookOpenIcon, PenLineIcon, RssIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { YoutubeIcon } from "~/components/brand-icons";
-import { DemoColorThemePopoverButton } from "~/components/color-theme/ColorThemePopoverButton";
 import { Markdown } from "~/components/Markdown";
-
 import { Button } from "~/components/ui/button";
 import { getGuidePostWithSlug } from "~/lib/markdown/loaders";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
 
-export const Route = createFileRoute("/guides/$slug")({
+export const Route = createFileRoute("/_web/guides/$slug")({
   component: RouteComponent,
   loader: async ({ params }) => {
     const isAuthed = await fetchIsAuthed();
@@ -38,7 +36,7 @@ function GuideIcon({ name }: { name: string }) {
 }
 
 function RouteComponent() {
-  const { post, isAuthed } = Route.useLoaderData();
+  const { post } = Route.useLoaderData();
 
   return (
     <div>

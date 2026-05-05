@@ -1,6 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import {
-  ArrowLeftIcon,
   CheckIcon,
   CoinsIcon,
   ExternalLinkIcon,
@@ -20,10 +19,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { RecentReleaseBanner } from "~/components/welcome/RecentReleaseBanner";
 import { WebsiteHeader } from "~/components/welcome/WebsiteHeader";
 import { WebsiteNavigation } from "~/components/welcome/WebsiteNavigation";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
+import { getMostRecentRelease } from "~/lib/markdown/loaders";
 import { AUTH_PAGE_URL } from "~/server/auth/constants";
+import { fetchIsAuthed } from "~/server/auth/endpoints";
 import { PLANS } from "~/server/subscriptions/plans";
 
 const PLAN_PRICES = {
@@ -46,14 +48,21 @@ export const Route = createFileRoute("/pricing")({
     }
   },
   component: RouteComponent,
+  loader: async () => {
+    const isAuthed = await fetchIsAuthed();
+    const mostRecentRelease = getMostRecentRelease();
+    return { isAuthed, mostRecentRelease };
+  },
 });
 
 function RouteComponent() {
+  const { isAuthed, mostRecentRelease } = Route.useLoaderData();
   const supportEmail = import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS;
 
   return (
     <div className="bg-background">
-      <WebsiteNavigation />
+      <RecentReleaseBanner mostRecentRelease={mostRecentRelease} />
+      <WebsiteNavigation isAuthed={isAuthed} />
       <main className="py-4 text-pretty md:py-8">
         <WebsiteHeader
           Icon={CoinsIcon}

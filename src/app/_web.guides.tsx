@@ -1,8 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { WebsiteNavigation } from "~/components/welcome/WebsiteNavigation";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
 
-export const Route = createFileRoute("/guides")({
+export const Route = createFileRoute("/_web/guides")({
   beforeLoad: () => {
     if (!IS_MAIN_INSTANCE) {
       throw redirect({ to: BASE_SIGNED_OUT_URL });
@@ -12,12 +11,5 @@ export const Route = createFileRoute("/guides")({
 });
 
 function GuidesLayout() {
-  return (
-    <main className="bg-background text-pretty">
-      <WebsiteNavigation />
-      <div className="pt-8 pb-12 md:pt-12 md:pb-24">
-        <Outlet />
-      </div>
-    </main>
-  );
+  return <Outlet />;
 }
