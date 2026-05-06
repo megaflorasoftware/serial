@@ -68,7 +68,7 @@ export function UserProfileEditDialog() {
       description="Manage your account and your data"
     >
       <div className="grid gap-6">
-        {!env.VITE_PUBLIC_IS_DEMO_INSTANCE && (
+        {env.VITE_PUBLIC_IS_DEMO_INSTANCE !== "true" && (
           <>
             <EditableSavableTextField
               label="Name"

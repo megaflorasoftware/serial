@@ -58,7 +58,7 @@ export function UserManagementNavItem() {
                     {" "}
                     {data?.user.name || "Account"}
                   </span>
-                  {!env.VITE_PUBLIC_IS_DEMO_INSTANCE && (
+                  {env.VITE_PUBLIC_IS_DEMO_INSTANCE !== "true" && (
                     <span className="text-muted-foreground truncate text-xs">
                       {data?.user.email}
                     </span>
@@ -74,7 +74,7 @@ export function UserManagementNavItem() {
               <h2 className="text-sm font-semibold">
                 {data?.user.name || "Serial User"}
               </h2>
-              {!env.VITE_PUBLIC_IS_DEMO_INSTANCE && (
+              {env.VITE_PUBLIC_IS_DEMO_INSTANCE !== "true" && (
                 <p className="text-muted-foreground text-xs">
                   {data?.user.email}
                 </p>
@@ -90,7 +90,7 @@ export function UserManagementNavItem() {
               </Link>
             </div>
           </ResponsiveDropdownLabel>
-          {!env.VITE_PUBLIC_IS_DEMO_INSTANCE && (
+          {env.VITE_PUBLIC_IS_DEMO_INSTANCE !== "true" && (
             <ResponsiveDropdownMenuItem asChild>
               <Button
                 variant="outline"
@@ -116,7 +116,7 @@ export function UserManagementNavItem() {
               </Button>
             </ResponsiveDropdownMenuItem>
           )}
-          {!env.VITE_PUBLIC_IS_DEMO_INSTANCE && (
+          {env.VITE_PUBLIC_IS_DEMO_INSTANCE !== "true" && (
             <div className="my-4">
               <DropdownMenuSeparator />
             </div>
