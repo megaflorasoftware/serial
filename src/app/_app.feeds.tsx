@@ -5,20 +5,20 @@ import { GlobeIcon, PlayCircleIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { FeedPlatform } from "~/server/db/schema";
-import { YoutubeIcon } from "~/components/brand-icons";
 import { ViewCategoriesInput } from "~/components/AddViewDialog";
+import { YoutubeIcon } from "~/components/brand-icons";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import { FeedManagementTabs } from "~/components/feed/FeedManagementTabs";
 import { useFeedManagementShortcuts } from "~/components/feed/useManagementShortcuts";
 import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { Progress } from "~/components/ui/progress";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { ChipCombobox } from "~/components/ui/chip-combobox";
 import { Input } from "~/components/ui/input";
+import { Progress } from "~/components/ui/progress";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Switch } from "~/components/ui/switch";
 import {
@@ -26,8 +26,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { FEED_LIMIT_COPY } from "~/lib/constants/feed-limits";
-import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import {
@@ -41,14 +39,15 @@ import {
   useSetFeedActiveMutation,
 } from "~/lib/data/feeds/mutations";
 import { useSubscription } from "~/lib/data/subscription";
-import { useViews } from "~/lib/data/views";
-import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
-import { useQuickCreateViewMutation } from "~/lib/data/views/mutations";
 import { useViewFeeds } from "~/lib/data/view-feeds";
 import {
   useBulkAssignViewFeedMutation,
   useBulkRemoveViewFeedMutation,
 } from "~/lib/data/view-feeds/mutations";
+import { useViews } from "~/lib/data/views";
+import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
+import { useQuickCreateViewMutation } from "~/lib/data/views/mutations";
+import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { useShiftSelect } from "~/lib/hooks/useShiftSelect";
 
 export const Route = createFileRoute("/_app/feeds")({
@@ -371,13 +370,24 @@ function ManageFeedsPage() {
 
       if (wouldBeActive > maxActiveFeeds) {
         const overLimit = wouldBeActive - maxActiveFeeds;
-        toast.warning(FEED_LIMIT_COPY.bulkActivateOverLimit(overLimit), {
-          action: {
-            label: FEED_LIMIT_COPY.bulkActivateActionLabel,
-            onClick: () =>
-              launchDialog("subscription", { subscriptionView: "picker" }),
-          },
-        });
+
+        if (IS_DEMO_INSTANCE) {
+          toast.warning(
+            `${overLimit} feed${overLimit > 1 ? "s would" : " would"} exceed the limit of active feeds you can have on the demo instance.`,
+          );
+        } else {
+          toast.warning(
+            `${overLimit} feed${overLimit > 1 ? "s would" : " would"} exceed your plan limit. To unlock more active feeds, you can switch to a higher plan.`,
+            {
+              action: {
+                label: "Upgrade",
+                onClick: () =>
+                  launchDialog("subscription", { subscriptionView: "picker" }),
+              },
+            },
+          );
+        }
+
         return;
       }
     }
@@ -484,14 +494,11 @@ function ManageFeedsPage() {
           maxActiveFeeds > 0 &&
           activeFeeds >= maxActiveFeeds && (
             <Alert className="mt-4">
-              <AlertTitle>
-                {FEED_LIMIT_COPY.maxActiveFeedsAlertTitle}
-              </AlertTitle>
+              <AlertTitle>Max active feeds reached</AlertTitle>
               <AlertDescription>
-                {FEED_LIMIT_COPY.maxActiveFeedsAlertDescription(
-                  planName,
-                  maxActiveFeeds,
-                )}
+                The {planName} plan supports a maximum of {maxActiveFeeds}{" "}
+                feeds. You can add more than this, but only your active feeds
+                will receive new content.
                 <Button
                   type="button"
                   onClick={() =>
@@ -499,7 +506,7 @@ function ManageFeedsPage() {
                   }
                   className="mt-4"
                 >
-                  {FEED_LIMIT_COPY.maxActiveFeedsAlertButton}
+                  Upgrade your plan
                 </Button>
               </AlertDescription>
             </Alert>
@@ -618,7 +625,15 @@ function ManageFeedsPage() {
                     ) {
                       setFeedActive({ feedId: feed.id, isActive: checked });
                     } else {
-                      toast.error(FEED_LIMIT_COPY.singleFeedLimitReached);
+                      if (IS_DEMO_INSTANCE) {
+                        toast.error(
+                          "Feed limit reached. This is the limit for the demo instance.",
+                        );
+                      } else {
+                        toast.error(
+                          "Feed limit reached. Upgrade your plan to activate more feeds.",
+                        );
+                      }
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
