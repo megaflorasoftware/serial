@@ -1,4 +1,3 @@
-import { Redis } from "@upstash/redis";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   determinePlanFromProductId,
@@ -15,20 +14,88 @@ import { env } from "~/env";
 type DB = typeof Database;
 
 // ---------------------------------------------------------------------------
-// Upstash client — null when billing is disabled or creds are missing.
+// Unified KV client — supports Upstash REST, ioredis, or null.
 // Consumers must handle null gracefully (fall through to Polar API).
 // ---------------------------------------------------------------------------
 
-const hasUpstashCredentials =
-  !!env.UPSTASH_REDIS_REST_URL && !!env.UPSTASH_REDIS_REST_TOKEN;
+type KVClient = {
+  get: (key: string) => Promise<string | null>;
+  set: (key: string, value: string, ttlSeconds?: number) => Promise<void>;
+  /** Set only if key does not exist. Returns true if set, false if key already existed. */
+  setNX: (key: string, value: string, ttlSeconds?: number) => Promise<boolean>;
+};
 
-export const redis =
-  IS_BILLING_ENABLED && hasUpstashCredentials
-    ? new Redis({
-        url: env.UPSTASH_REDIS_REST_URL!,
-        token: env.UPSTASH_REDIS_REST_TOKEN!,
-      })
-    : null;
+async function createKVClient(): Promise<KVClient | null> {
+  if (!IS_BILLING_ENABLED) return null;
+
+  if (env.KV_STORE === "upstash") {
+    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+      return null;
+    }
+    const { Redis } = await import("@upstash/redis");
+    const client = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
+    return {
+      async get(key) {
+        const raw = await client.get<string>(key);
+        if (raw == null) return null;
+        return typeof raw === "string" ? raw : JSON.stringify(raw);
+      },
+      async set(key, value, ttlSeconds) {
+        if (ttlSeconds && ttlSeconds > 0) {
+          await client.set(key, value, { ex: ttlSeconds });
+        } else {
+          await client.set(key, value);
+        }
+      },
+      async setNX(key, value, ttlSeconds) {
+        const result =
+          ttlSeconds && ttlSeconds > 0
+            ? await client.set(key, value, { nx: true, ex: ttlSeconds })
+            : await client.set(key, value, { nx: true });
+        return result !== null;
+      },
+    };
+  }
+
+  if (env.KV_STORE === "ioredis") {
+    if (!env.REDIS_URL) return null;
+    const { default: Redis } = await import("ioredis");
+    const client = new Redis(env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+    });
+    client.on("error", (err) => {
+      console.error("[kv] Redis error:", err.message);
+    });
+    return {
+      async get(key) {
+        const raw = await client.get(key);
+        return raw ?? null;
+      },
+      async set(key, value, ttlSeconds) {
+        if (ttlSeconds && ttlSeconds > 0) {
+          await client.set(key, value, "EX", ttlSeconds);
+        } else {
+          await client.set(key, value);
+        }
+      },
+      async setNX(key, value, ttlSeconds) {
+        if (ttlSeconds && ttlSeconds > 0) {
+          const result = await client.set(key, value, "EX", ttlSeconds, "NX");
+          return result === "OK";
+        }
+        const result = await client.set(key, value, "NX");
+        return result === "OK";
+      },
+    };
+  }
+
+  return null;
+}
+
+export const redis = await createKVClient();
 
 // ---------------------------------------------------------------------------
 // Cached subscription type — stored as JSON at `polar:sub:{userId}`
@@ -52,11 +119,10 @@ function kvKey(userId: string) {
   return `polar:sub:${userId}`;
 }
 
-const KV_TTL_SECONDS = 86_400; // 24 hours — safety net; active syncs keep data fresh
-
 // ---------------------------------------------------------------------------
 // syncPolarDataToKV — the single source-of-truth sync function.
 // Fetches the latest subscription state from Polar and writes it to KV.
+// No TTL: we keep the data indefinitely so we never need to hit Polar on reads.
 // ---------------------------------------------------------------------------
 
 export async function syncPolarDataToKV(
@@ -117,9 +183,7 @@ export async function syncPolarDataToKV(
     // Write to KV (best-effort — failure here is non-fatal)
     if (redis) {
       try {
-        await redis.set(kvKey(userId), JSON.stringify(data), {
-          ex: KV_TTL_SECONDS,
-        });
+        await redis.set(kvKey(userId), JSON.stringify(data));
       } catch (e) {
         console.warn(
           `[kv] Failed to write subscription cache for user ${userId}:`,
@@ -165,16 +229,10 @@ export async function getSubscriptionFromKV(
   if (!redis) return null;
 
   try {
-    const raw = await redis.get<string>(kvKey(userId));
+    const raw = await redis.get(kvKey(userId));
     if (!raw) return null;
 
-    // @upstash/redis may auto-parse JSON, handle both string and object
-    const data =
-      typeof raw === "string"
-        ? (JSON.parse(raw) as PolarSubscriptionCache)
-        : (raw as unknown as PolarSubscriptionCache);
-
-    return data;
+    return JSON.parse(raw) as PolarSubscriptionCache;
   } catch (e) {
     console.warn(
       `[kv] Failed to read subscription cache for user ${userId}:`,
