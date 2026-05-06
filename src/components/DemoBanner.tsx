@@ -46,9 +46,9 @@ export function DemoBanner() {
 
   return (
     <div className="@container shrink-0 bg-amber-500 text-amber-950">
-      <div className="mx-auto flex w-full max-w-full flex-col items-center gap-2 px-2 py-4 @md:flex-row @md:gap-0 @md:py-2">
-        <div className="hidden flex-1 @lg:flex" />
-        <div className="flex flex-none items-center gap-2 text-xs font-medium @md:pl-2 @md:text-sm @lg:pl-0">
+      <div className="mx-auto flex w-full max-w-full flex-col items-center gap-2 px-2 py-4 @xl:flex-row @xl:py-2">
+        <div className="hidden flex-1 @xl:flex" />
+        <div className="flex flex-none items-center gap-2 text-xs font-medium @lg:text-sm">
           <ClockIcon size={16} />
           <span>
             This is a demo instance. All data will be deleted in{" "}
