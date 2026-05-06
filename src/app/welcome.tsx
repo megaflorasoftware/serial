@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { RecentReleaseBanner } from "~/components/welcome/RecentReleaseBanner";
 import { WebsiteNavigation } from "~/components/welcome/WebsiteNavigation";
 import { BASE_SIGNED_OUT_URL, IS_MAIN_INSTANCE } from "~/lib/constants";
+import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { getMostRecentRelease } from "~/lib/markdown/loaders";
 import { AUTH_PAGE_URL } from "~/server/auth/constants";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
@@ -18,6 +19,9 @@ export const Route = createFileRoute("/welcome")({
   component: RouteComponent,
   loader: async () => {
     const isAuthed = await fetchIsAuthed();
+    if (IS_DEMO_INSTANCE && !isAuthed) {
+      throw redirect({ to: "/api/demo/provision" });
+    }
     const mostRecentRelease = getMostRecentRelease();
     return { isAuthed, mostRecentRelease };
   },

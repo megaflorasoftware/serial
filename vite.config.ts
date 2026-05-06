@@ -22,7 +22,10 @@ const plugins = [
     preset: "node",
     serverDir: "server",
     experimental: { vite: {}, tasks: true } as any,
-    scheduledTasks: { "* * * * *": ["feeds:background-refresh"] },
+    scheduledTasks: {
+      "* * * * *": ["feeds:background-refresh"],
+      "0 0 * * *": ["demo:midnight-wipe"],
+    },
   } as any),
   viteReact(),
 ];
