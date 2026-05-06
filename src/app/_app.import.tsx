@@ -25,6 +25,7 @@ import type { CardRadioOption } from "~/components/ui/card-radio-group";
 import type { FeedPlatform } from "~/server/db/schema";
 import { YoutubeIcon } from "~/components/brand-icons";
 import { getGuidesUrl } from "~/lib/constants";
+import { FEED_LIMIT_COPY } from "~/lib/constants/feed-limits";
 import { ImportLoading } from "~/components/ImportLoading";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -163,16 +164,13 @@ function EditFeedsPage() {
   useEffect(() => {
     if (isImportComplete && importDeactivatedCount > 0) {
       const count = importDeactivatedCount;
-      toast.warning(
-        `${count} feed${count > 1 ? "s were" : " was"} added as inactive. To unlock more active feeds, you can switch to a higher plan.`,
-        {
-          action: {
-            label: "Upgrade",
-            onClick: () =>
-              launchDialog("subscription", { subscriptionView: "picker" }),
-          },
+      toast.warning(FEED_LIMIT_COPY.importDeactivated(count), {
+        action: {
+          label: FEED_LIMIT_COPY.importDeactivatedActionLabel,
+          onClick: () =>
+            launchDialog("subscription", { subscriptionView: "picker" }),
         },
-      );
+      });
     }
   }, [isImportComplete, importDeactivatedCount, launchDialog]);
 

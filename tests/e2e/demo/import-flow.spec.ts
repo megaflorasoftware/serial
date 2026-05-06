@@ -33,9 +33,9 @@ test.describe("demo instance full import flow", () => {
     await expect(page).toHaveURL("/", { timeout: 30000 });
 
     // Demo banner should be visible
-    await expect(
-      page.getByText(/This is a demo instance/i),
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/This is a demo instance/i)).toBeVisible({
+      timeout: 10000,
+    });
 
     // ── 2. Import Feeds ─────────────────────────────────────────────
     await page.goto("/import");

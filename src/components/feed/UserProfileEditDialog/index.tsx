@@ -2,7 +2,7 @@
 
 import { Link } from "@tanstack/react-router";
 import { ChevronRightIcon, DownloadIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+
 import { toast } from "sonner";
 import { useDialogStore } from "../dialogStore";
 import { DeleteAccountSection } from "./DeleteAccountSection";
@@ -16,29 +16,22 @@ import { useUpdateNameMutation } from "~/lib/data/user/useUpdateNameMutation";
 import { userEmailSchema, userNameSchema } from "~/server/api/schemas";
 import { AUTH_RESET_PASSWORD_URL } from "~/server/auth/constants";
 
-type SettingsPane = "main" | "export" | "delete";
-
 export function UserProfileEditDialog() {
   const { data, refetch: refetchUser } = authClient.useSession();
 
-  const { dialog, onOpenChange } = useDialogStore();
+  const { dialog, onOpenChange, settingsPane, launchDialog } = useDialogStore();
 
   const { mutateAsync: updateName } = useUpdateNameMutation();
 
-  const [pane, setPane] = useState<SettingsPane>("main");
-
   const isOpen = dialog === "edit-user-profile";
 
-  // Reset to main pane whenever the dialog closes
-  useEffect(() => {
-    if (!isOpen) {
-      setPane("main");
-    }
-  }, [isOpen]);
+  const setPane = (pane: "main" | "export" | "delete") => {
+    launchDialog("edit-user-profile", { settingsPane: pane });
+  };
 
   const userEmail = data?.user.email ?? "";
 
-  if (pane === "export") {
+  if (settingsPane === "export") {
     return (
       <ControlledResponsiveDialog
         open={isOpen}
@@ -52,7 +45,7 @@ export function UserProfileEditDialog() {
     );
   }
 
-  if (pane === "delete") {
+  if (settingsPane === "delete") {
     return (
       <ControlledResponsiveDialog
         open={isOpen}

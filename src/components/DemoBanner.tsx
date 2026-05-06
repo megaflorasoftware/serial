@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClockIcon } from "lucide-react";
+import { ClockIcon, DownloadIcon } from "lucide-react";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
+import { useDialogStore } from "~/components/feed/dialogStore";
+import { Button } from "~/components/ui/button";
 
 function getNextMidnightUTC() {
   const now = new Date();
@@ -21,6 +23,7 @@ function formatCountdown(ms: number) {
 
 export function DemoBanner() {
   const [countdown, setCountdown] = useState("");
+  const { launchDialog } = useDialogStore();
 
   useEffect(() => {
     if (!IS_DEMO_INSTANCE) return;
@@ -42,14 +45,27 @@ export function DemoBanner() {
   }
 
   return (
-    <div className="bg-amber-500 text-amber-950 shrink-0">
-      <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-2">
-        <div className="flex items-center gap-2 text-sm font-medium">
+    <div className="shrink-0 bg-amber-500 text-amber-950">
+      <div className="mx-auto flex w-full max-w-full flex-col items-center gap-2 px-2 py-4 md:flex-row md:gap-0 md:py-2">
+        <div className="hidden flex-1 lg:flex" />
+        <div className="flex flex-none items-center gap-2 text-xs font-medium md:pl-2 md:text-sm lg:pl-0">
           <ClockIcon size={16} />
           <span>
             This is a demo instance. All data will be deleted in{" "}
-            <strong>{countdown}</strong>.
+            <strong className="font-mono">{countdown}</strong>.
           </span>
+        </div>
+        <div className="flex flex-1 justify-end">
+          <Button
+            size="sm"
+            className="flex items-center gap-1.5"
+            onClick={() =>
+              launchDialog("edit-user-profile", { settingsPane: "export" })
+            }
+          >
+            <DownloadIcon size={14} />
+            Export Data
+          </Button>
         </div>
       </div>
     </div>

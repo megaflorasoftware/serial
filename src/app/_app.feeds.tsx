@@ -26,6 +26,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { FEED_LIMIT_COPY } from "~/lib/constants/feed-limits";
+import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import {
@@ -369,16 +371,13 @@ function ManageFeedsPage() {
 
       if (wouldBeActive > maxActiveFeeds) {
         const overLimit = wouldBeActive - maxActiveFeeds;
-        toast.warning(
-          `${overLimit} feed${overLimit > 1 ? "s would" : " would"} exceed your plan limit. To unlock more active feeds, you can switch to a higher plan.`,
-          {
-            action: {
-              label: "Upgrade",
-              onClick: () =>
-                launchDialog("subscription", { subscriptionView: "picker" }),
-            },
+        toast.warning(FEED_LIMIT_COPY.bulkActivateOverLimit(overLimit), {
+          action: {
+            label: FEED_LIMIT_COPY.bulkActivateActionLabel,
+            onClick: () =>
+              launchDialog("subscription", { subscriptionView: "picker" }),
           },
-        );
+        });
         return;
       }
     }
@@ -465,9 +464,11 @@ function ManageFeedsPage() {
             <PlusIcon size={16} />
           </ButtonWithShortcut>
         </div>
-        {billingEnabled &&
+        {(billingEnabled || IS_DEMO_INSTANCE) &&
           maxActiveFeeds > 0 &&
-          activeFeeds < maxActiveFeeds && (
+          (IS_DEMO_INSTANCE
+            ? activeFeeds <= maxActiveFeeds
+            : activeFeeds < maxActiveFeeds) && (
             <div className="mt-3 space-y-1.5">
               <div className="flex items-center justify-between">
                 <p className="text-muted-foreground text-sm">
@@ -483,11 +484,14 @@ function ManageFeedsPage() {
           maxActiveFeeds > 0 &&
           activeFeeds >= maxActiveFeeds && (
             <Alert className="mt-4">
-              <AlertTitle>Max active feeds reached</AlertTitle>
+              <AlertTitle>
+                {FEED_LIMIT_COPY.maxActiveFeedsAlertTitle}
+              </AlertTitle>
               <AlertDescription>
-                The {planName} plan supports a maximum of {maxActiveFeeds}{" "}
-                feeds. You can add more than this, but only your active feeds
-                will receive new content.
+                {FEED_LIMIT_COPY.maxActiveFeedsAlertDescription(
+                  planName,
+                  maxActiveFeeds,
+                )}
                 <Button
                   type="button"
                   onClick={() =>
@@ -495,7 +499,7 @@ function ManageFeedsPage() {
                   }
                   className="mt-4"
                 >
-                  Upgrade your plan
+                  {FEED_LIMIT_COPY.maxActiveFeedsAlertButton}
                 </Button>
               </AlertDescription>
             </Alert>
@@ -614,9 +618,7 @@ function ManageFeedsPage() {
                     ) {
                       setFeedActive({ feedId: feed.id, isActive: checked });
                     } else {
-                      toast.error(
-                        "Feed limit reached. Upgrade your plan to activate more feeds.",
-                      );
+                      toast.error(FEED_LIMIT_COPY.singleFeedLimitReached);
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
