@@ -15,6 +15,7 @@ import { authClient } from "~/lib/auth-client";
 import { useUpdateNameMutation } from "~/lib/data/user/useUpdateNameMutation";
 import { userEmailSchema, userNameSchema } from "~/server/api/schemas";
 import { AUTH_RESET_PASSWORD_URL } from "~/server/auth/constants";
+import { env } from "~/env";
 
 export function UserProfileEditDialog() {
   const { data, refetch: refetchUser } = authClient.useSession();
@@ -67,50 +68,54 @@ export function UserProfileEditDialog() {
       description="Manage your account and your data"
     >
       <div className="grid gap-6">
-        <EditableSavableTextField
-          label="Name"
-          placeholder="Serial User"
-          initialValue={data?.user.name ?? ""}
-          onSave={async (updatedName) => {
-            await updateName({ name: updatedName });
-            void refetchUser();
-          }}
-          schema={userNameSchema}
-        />
-        <EditableSavableTextField
-          label="Email"
-          helperText="A verification email will be sent to confirm the change."
-          showHelperTextOnlyWhenEditing
-          placeholder="user@example.com"
-          initialValue={userEmail}
-          onSave={async (updatedEmail) => {
-            const { error } = await authClient.changeEmail({
-              newEmail: updatedEmail,
-              callbackURL: "/",
-            });
-            if (error) {
-              toast.error(error.message ?? "Failed to change email");
-              return;
-            }
-            toast.success(
-              "Verification email sent! Check your new inbox to confirm.",
-            );
-          }}
-          schema={userEmailSchema}
-        />
-        <div className="grid gap-2">
-          <Label>Password</Label>
-          <Button variant="outline" asChild>
-            <Link
-              to={AUTH_RESET_PASSWORD_URL}
-              search={{
-                email: userEmail,
+        {!env.VITE_PUBLIC_IS_DEMO_INSTANCE && (
+          <>
+            <EditableSavableTextField
+              label="Name"
+              placeholder="Serial User"
+              initialValue={data?.user.name ?? ""}
+              onSave={async (updatedName) => {
+                await updateName({ name: updatedName });
+                void refetchUser();
               }}
-            >
-              Update password
-            </Link>
-          </Button>
-        </div>
+              schema={userNameSchema}
+            />
+            <EditableSavableTextField
+              label="Email"
+              helperText="A verification email will be sent to confirm the change."
+              showHelperTextOnlyWhenEditing
+              placeholder="user@example.com"
+              initialValue={userEmail}
+              onSave={async (updatedEmail) => {
+                const { error } = await authClient.changeEmail({
+                  newEmail: updatedEmail,
+                  callbackURL: "/",
+                });
+                if (error) {
+                  toast.error(error.message ?? "Failed to change email");
+                  return;
+                }
+                toast.success(
+                  "Verification email sent! Check your new inbox to confirm.",
+                );
+              }}
+              schema={userEmailSchema}
+            />
+            <div className="grid gap-2">
+              <Label>Password</Label>
+              <Button variant="outline" asChild>
+                <Link
+                  to={AUTH_RESET_PASSWORD_URL}
+                  search={{
+                    email: userEmail,
+                  }}
+                >
+                  Update password
+                </Link>
+              </Button>
+            </div>
+          </>
+        )}
         <div className="grid gap-2">
           <Label>Data</Label>
           <Button
