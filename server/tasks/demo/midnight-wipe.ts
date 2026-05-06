@@ -2,6 +2,7 @@ import { defineTask } from "nitro/task";
 import { db } from "../../../src/server/db";
 import { user, verification } from "../../../src/server/db/schema";
 import { env } from "../../../src/env";
+import { IS_BILLING_ENABLED } from "~/server/subscriptions/polar";
 
 export default defineTask({
   meta: {
@@ -9,7 +10,12 @@ export default defineTask({
     description: "Wipe all demo data at midnight UTC",
   },
   async run() {
-    if (env.IS_DEMO_INSTANCE !== "true") {
+    if (env.VITE_PUBLIC_IS_DEMO_INSTANCE !== "true") {
+      return { result: "skipped-not-demo" };
+    }
+
+    // Add additional checks due to how terrifying this is to get wrong
+    if (env.VITE_PUBLIC_IS_MAIN_INSTANCE === "true" || IS_BILLING_ENABLED) {
       return { result: "skipped-not-demo" };
     }
 

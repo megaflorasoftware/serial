@@ -12,6 +12,7 @@ export const env = createEnv({
     VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: z.string().email().optional(),
     VITE_PUBLIC_SENTRY_DSN_WEB: z.string().url().optional(),
     VITE_PUBLIC_IS_MAINTENANCE_MODE: z.string().optional().default("false"),
+    VITE_PUBLIC_IS_MAIN_INSTANCE: z.string().optional().default("false"),
     VITE_PUBLIC_IS_DEMO_INSTANCE: z.string().optional().default("false"),
   },
   /**
@@ -102,6 +103,9 @@ export const env = createEnv({
     VITE_PUBLIC_IS_DEMO_INSTANCE:
       import.meta.env?.VITE_PUBLIC_IS_DEMO_INSTANCE ??
       process.env.VITE_PUBLIC_IS_DEMO_INSTANCE,
+    VITE_PUBLIC_IS_MAIN_INSTANCE:
+      import.meta.env?.VITE_PUBLIC_IS_MAIN_INSTANCE ??
+      process.env.VITE_PUBLIC_IS_MAIN_INSTANCE,
     DATABASE_URL: process.env.DATABASE_URL,
     DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN,
     NODE_ENV: process.env.NODE_ENV,

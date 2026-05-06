@@ -5,6 +5,14 @@ import viteReact from "@vitejs/plugin-react";
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
+import { env } from "~/env";
+
+function scheduleTask(task: object, condition: boolean) {
+  if (condition) {
+    return task;
+  }
+  return {};
+}
 
 const plugins = [
   contentCollections(),
@@ -23,8 +31,14 @@ const plugins = [
     serverDir: "server",
     experimental: { vite: {}, tasks: true } as any,
     scheduledTasks: {
-      "* * * * *": ["feeds:background-refresh"],
-      "0 0 * * *": ["demo:midnight-wipe"],
+      ...scheduleTask(
+        { "* * * * *": ["feeds:background-refresh"] },
+        env.BACKGROUND_REFRESH_ENABLED === "true",
+      ),
+      ...scheduleTask(
+        { "0 0 * * *": ["demo:midnight-wipe"] },
+        env.VITE_PUBLIC_IS_DEMO_INSTANCE === "true",
+      ),
     },
   } as any),
   viteReact(),
