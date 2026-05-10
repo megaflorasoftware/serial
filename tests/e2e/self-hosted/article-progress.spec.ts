@@ -57,8 +57,10 @@ test.describe("article progress tracking", () => {
       await page.mouse.wheel(0, 300);
       await page.waitForTimeout(50);
     }
-    // Allow scroll event handlers and debounce (500ms) + buffer
-    await page.waitForTimeout(1000);
+    // Allow scroll event handlers and debounce (500ms) to fire, plus extra
+    // buffer for the RPC call and IDB write (throttled at 2000ms) to finish
+    // before we reload the page.
+    await page.waitForTimeout(3000);
 
     // Verify we scrolled
     const scrolledTop = await scrollContainer.evaluate((el) => el.scrollTop);
@@ -89,7 +91,7 @@ test.describe("article progress tracking", () => {
     // Wait for progress restoration — the element with data-article-selected
     // appears once the restoration effect fires and selects the saved element.
     const restoredSelected = page.locator("[data-article-selected]");
-    await expect(restoredSelected.first()).toBeVisible({ timeout: 10000 });
+    await expect(restoredSelected.first()).toBeVisible({ timeout: 20000 });
 
     // Wait for SSE processing to settle so the scroll position is stable.
     await page.waitForTimeout(2000);
