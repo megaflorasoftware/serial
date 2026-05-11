@@ -32,7 +32,10 @@ import {
   getEnabledAuthProviders,
   isPublicSignupEnabled,
 } from "~/lib/constants";
-import { isOAuthConfigured } from "~/server/auth/constants";
+import {
+  isOAuthConfigured,
+  TRUSTED_ORIGINS_SET,
+} from "~/server/auth/constants";
 import { IS_EMAIL_ENABLED, sendEmail } from "~/server/email";
 import {
   redeemInvitationToken,
@@ -199,10 +202,7 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "sqlite",
   }),
-  trustedOrigins: [
-    new URL(env.VITE_PUBLIC_BASE_URL).origin,
-    ...env.TRUSTED_ORIGINS.map((o) => new URL(o).origin),
-  ],
+  trustedOrigins: Array.from(TRUSTED_ORIGINS_SET),
   emailAndPassword: {
     enabled: true,
     maxPasswordLength: 64,

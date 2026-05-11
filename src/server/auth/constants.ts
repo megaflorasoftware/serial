@@ -6,7 +6,7 @@ export const AUTH_PAGE_URL = "/auth/sign-in";
 export const AUTH_RESET_PASSWORD_URL = "/auth/reset";
 
 const BASE_ORIGIN = new URL(env.VITE_PUBLIC_BASE_URL).origin;
-const TRUSTED_ORIGINS_SET = new Set([
+export const TRUSTED_ORIGINS_SET = new Set([
   BASE_ORIGIN,
   ...env.TRUSTED_ORIGINS.map((o) => new URL(o).origin),
 ]);
