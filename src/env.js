@@ -3,10 +3,6 @@ import { z } from "zod";
 
 export const env = createEnv({
   clientPrefix: "VITE_PUBLIC_",
-  /**
-   * Specify your client-side environment variables schema here.
-   * These are exposed to the browser via Vite's VITE_PUBLIC_ prefix.
-   */
   client: {
     VITE_PUBLIC_BASE_URL: z.url(),
     VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS: z.string().email().optional(),
@@ -15,10 +11,6 @@ export const env = createEnv({
     VITE_PUBLIC_IS_MAIN_INSTANCE: z.string().optional().default("false"),
     VITE_PUBLIC_IS_DEMO_INSTANCE: z.string().optional().default("false"),
   },
-  /**
-   * Specify your server-side environment variables schema here. This way you can ensure the app
-   * isn't built with invalid env vars.
-   */
   server: {
     DATABASE_URL: z.url().optional().default("http://127.0.0.1:8080"),
     DATABASE_AUTH_TOKEN: z
@@ -89,6 +81,7 @@ export const env = createEnv({
               .map((s) => s.trim())
               .filter(Boolean)
           : [];
+
         for (const origin of origins) {
           try {
             new URL(origin);
@@ -105,11 +98,6 @@ export const env = createEnv({
       .default("development"),
     IS_DEMO_INSTANCE: z.string().optional().default("false"),
   },
-
-  /**
-   * You can't destruct `process.env` as a regular object in the Next.js edge runtimes (e.g.
-   * middlewares) or client-side so we need to destruct manually.
-   */
   runtimeEnv: {
     VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS:
       import.meta.env?.VITE_PUBLIC_SUPPORT_EMAIL_ADDRESS ??
