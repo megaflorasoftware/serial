@@ -188,6 +188,7 @@ function buildGenericOAuthPlugin() {
           userInfoUrl: env.OAUTH_USER_INFO_URL,
           scopes: env.OAUTH_SCOPES?.split(" ") ?? undefined,
           pkce: env.OAUTH_PKCE === "true",
+          redirectURI: env.OAUTH_REDIRECT_URI,
         },
       ],
     }),
@@ -198,6 +199,10 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "sqlite",
   }),
+  trustedOrigins: [
+    new URL(env.VITE_PUBLIC_BASE_URL).origin,
+    ...env.TRUSTED_ORIGINS.map((o) => new URL(o).origin),
+  ],
   emailAndPassword: {
     enabled: true,
     maxPasswordLength: 64,

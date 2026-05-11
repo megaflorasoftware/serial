@@ -78,6 +78,26 @@ export const env = createEnv({
     OAUTH_USER_INFO_URL: z.string().optional(),
     OAUTH_SCOPES: z.string().optional(),
     OAUTH_PKCE: z.string().optional(),
+    OAUTH_REDIRECT_URI: z.string().optional(),
+    TRUSTED_ORIGINS: z
+      .string()
+      .optional()
+      .transform((val) => {
+        const origins = val
+          ? val
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+        for (const origin of origins) {
+          try {
+            new URL(origin);
+          } catch {
+            throw new Error(`Invalid trusted origin URL: ${origin}`);
+          }
+        }
+        return origins;
+      }),
     SENTRY_DSN_BACKEND: z.string().url().optional(),
     SENTRY_AUTH_TOKEN: z.string().optional(),
     NODE_ENV: z
@@ -149,6 +169,8 @@ export const env = createEnv({
     OAUTH_USER_INFO_URL: process.env.OAUTH_USER_INFO_URL,
     OAUTH_SCOPES: process.env.OAUTH_SCOPES,
     OAUTH_PKCE: process.env.OAUTH_PKCE,
+    OAUTH_REDIRECT_URI: process.env.OAUTH_REDIRECT_URI,
+    TRUSTED_ORIGINS: process.env.TRUSTED_ORIGINS,
     SENTRY_DSN_BACKEND: process.env.SENTRY_DSN_BACKEND,
     SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
     IS_DEMO_INSTANCE: process.env.IS_DEMO_INSTANCE,
