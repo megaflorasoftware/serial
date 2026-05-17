@@ -16,6 +16,7 @@ export const SHORTCUT_KEYS = {
   TOGGLE_READ_ALT: " ",
   TOGGLE_LATER: "w",
   MARK_VISIBLE_READ: "f",
+  MARK_SECTION_READ: "Shift+Space",
   OPEN_ORIGINAL: "o",
   SEND_TO_INSTAPAPER: "s",
   UNDO: "z",

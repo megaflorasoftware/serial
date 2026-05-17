@@ -26,11 +26,7 @@ const VISIBILITY_FILTER_LABELS: Record<VisibilityFilter, string> = {
   read: "Read",
 };
 
-const VISIBILITY_FILTER_ORDER: VisibilityFilter[] = [
-  "unread",
-  "later",
-  "read",
-];
+const VISIBILITY_FILTER_ORDER: VisibilityFilter[] = ["unread", "later", "read"];
 
 export function ItemVisibilityChips() {
   const [visibilityFilter, setVisibilityFilter] = useAtom(visibilityFilterAtom);
@@ -46,11 +42,7 @@ export function ItemVisibilityChips() {
       <TabsList>
         {VISIBILITY_FILTER_ORDER.map((filter) => {
           return (
-            <TabsTrigger
-              className="relative"
-              key={filter}
-              value={filter}
-            >
+            <TabsTrigger className="relative" key={filter} value={filter}>
               {VISIBILITY_FILTER_LABELS[filter]}
               <KeyboardShortcutDisplay
                 shortcut={VISIBILITY_FILTER_SHORTCUTS[filter]}

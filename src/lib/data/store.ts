@@ -2,7 +2,10 @@ import { createStore, useStore } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
-import { sortFeedItemsOrderByDate } from "../sortFeedItems";
+import {
+  sortFeedItemsOrderByDate,
+  sortFeedItemsOrderBySectionThenDate,
+} from "../sortFeedItems";
 import { applyDiffEntries } from "./applyDiffEntries";
 import { buildViewManifests } from "./buildViewManifests";
 import { contentCategoriesStore } from "./content-categories/store";
@@ -30,6 +33,27 @@ export type PaginationState = {
   hasMore: boolean;
   isFetching: boolean;
 };
+
+function getSortFunction(
+  feedItemsDict: Record<string, ApplicationFeedItem>,
+  viewId?: number,
+) {
+  if (!viewId) return sortFeedItemsOrderByDate(feedItemsDict);
+
+  const view = viewsStore.getState().views.find((v) => v.id === viewId);
+  if (!view?.viewSections?.length)
+    return sortFeedItemsOrderByDate(feedItemsDict);
+
+  const feedCategories = feedCategoriesStore.getState().feedCategories;
+  if (feedCategories.length === 0)
+    return sortFeedItemsOrderByDate(feedItemsDict);
+
+  return sortFeedItemsOrderBySectionThenDate(
+    feedItemsDict,
+    view.viewSections,
+    feedCategories,
+  );
+}
 
 export type ApplicationStore = {
   reset: () => void;
@@ -226,7 +250,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             set({
               feedItemsDict,
               feedItemsOrder: feedItemsOrder.sort(
-                sortFeedItemsOrderByDate(get().feedItemsDict),
+                getSortFunction(get().feedItemsDict, viewId),
               ),
               viewPaginationState: {
                 ...get().viewPaginationState,
@@ -623,7 +647,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               set({
                 feedItemsDict,
                 feedItemsOrder: feedItemsOrder.sort(
-                  sortFeedItemsOrderByDate(get().feedItemsDict),
+                  getSortFunction(get().feedItemsDict, chunk.viewId),
                 ),
               });
               break;
@@ -636,7 +660,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         const { source, chunk } = payload;
 
         // Helper function to merge feed items into the store
-        const mergeFeedItems = (items: ApplicationFeedItem[]) => {
+        const mergeFeedItems = (
+          items: ApplicationFeedItem[],
+          viewId?: number,
+        ) => {
           const feedItemsDict = { ...get().feedItemsDict };
           const feedItemsOrder = [...get().feedItemsOrder];
           const existingIds = new Set(feedItemsOrder);
@@ -652,7 +679,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           set({
             feedItemsDict,
             feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(feedItemsDict),
+              getSortFunction(feedItemsDict, viewId),
             ),
           });
         };
@@ -865,7 +892,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
                 updates.feedItemsDict = feedItemsDict;
                 updates.feedItemsOrder = feedItemsOrder.sort(
-                  sortFeedItemsOrderByDate(feedItemsDict),
+                  getSortFunction(feedItemsDict, viewId),
                 );
 
                 // Only track view-specific data if viewId is present
@@ -1021,7 +1048,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 break;
 
               case "feed-items":
-                mergeFeedItems(chunk.feedItems);
+                mergeFeedItems(chunk.feedItems, chunk.viewId);
                 break;
 
               case "error":
@@ -1052,7 +1079,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               set({
                 feedItemsDict,
                 feedItemsOrder: feedItemsOrder.sort(
-                  sortFeedItemsOrderByDate(feedItemsDict),
+                  getSortFunction(get().feedItemsDict, chunk.viewId),
                 ),
                 viewPaginationState: {
                   ...get().viewPaginationState,
@@ -1078,7 +1105,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
             // Legacy: chunk.type is "feed-items"
             if (chunk.type === "feed-items") {
-              mergeFeedItems(chunk.feedItems);
+              mergeFeedItems(chunk.feedItems, chunk.viewId);
 
               const visibilityFilter =
                 chunk.visibilityFilter as VisibilityFilter;

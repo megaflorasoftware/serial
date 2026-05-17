@@ -108,8 +108,8 @@ function Home() {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center lg:pb-18">
-      <div className="flex w-full flex-col px-6 pb-6 md:items-center md:text-center">
+    <div className="mx-auto flex h-full w-full flex-col lg:pb-18">
+      <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pb-6 md:items-center md:text-center">
         <div className="w-max pt-3">
           <ViewFilterChips />
         </div>

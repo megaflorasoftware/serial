@@ -2,45 +2,38 @@ import { createStore } from "zustand";
 import { createSelectorHooks } from "./createSelectorHooks";
 
 export type VisibleItemsStore = {
-  visibleIndices: Set<number>;
-  addVisibleIndex: (index: number) => void;
-  removeVisibleIndex: (index: number) => void;
+  visibleItemIds: Set<string>;
+  addVisibleItemId: (itemId: string) => void;
+  removeVisibleItemId: (itemId: string) => void;
   reset: () => void;
 };
 
 const vanillaVisibleItemsStore = createStore<VisibleItemsStore>()((set) => ({
-  visibleIndices: new Set<number>(),
-  addVisibleIndex: (index: number) => {
+  visibleItemIds: new Set<string>(),
+  addVisibleItemId: (itemId: string) => {
     set((state) => {
-      if (state.visibleIndices.has(index)) return state;
-      const newSet = new Set(state.visibleIndices);
-      newSet.add(index);
-      return { visibleIndices: newSet };
+      if (state.visibleItemIds.has(itemId)) return state;
+      const newSet = new Set(state.visibleItemIds);
+      newSet.add(itemId);
+      return { visibleItemIds: newSet };
     });
   },
-  removeVisibleIndex: (index: number) => {
+  removeVisibleItemId: (itemId: string) => {
     set((state) => {
-      if (!state.visibleIndices.has(index)) return state;
-      const newSet = new Set(state.visibleIndices);
-      newSet.delete(index);
-      return { visibleIndices: newSet };
+      if (!state.visibleItemIds.has(itemId)) return state;
+      const newSet = new Set(state.visibleItemIds);
+      newSet.delete(itemId);
+      return { visibleItemIds: newSet };
     });
   },
-  reset: () => set({ visibleIndices: new Set<number>() }),
+  reset: () => set({ visibleItemIds: new Set<string>() }),
 }));
 
 export const visibleItemsStore = createSelectorHooks(vanillaVisibleItemsStore);
 
 export const {
-  useVisibleIndices,
-  useAddVisibleIndex,
-  useRemoveVisibleIndex,
+  useVisibleItemIds,
+  useAddVisibleItemId,
+  useRemoveVisibleItemId,
   useReset: useResetVisibleItems,
 } = visibleItemsStore;
-
-// Computed hook: returns the max index of currently visible items, or -1 if none
-export const useLastFullyVisibleIndex = () => {
-  const visibleIndices = useVisibleIndices();
-  if (visibleIndices.size === 0) return -1;
-  return Math.max(...visibleIndices);
-};
