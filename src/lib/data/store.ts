@@ -5,6 +5,7 @@ import { orpcRouterClient } from "../orpc";
 import {
   sortFeedItemsOrderByDate,
   sortFeedItemsOrderBySectionThenDate,
+  sortFeedItemsOrderByWatchedAt,
 } from "../sortFeedItems";
 import { applyDiffEntries } from "./applyDiffEntries";
 import { buildViewManifests } from "./buildViewManifests";
@@ -37,7 +38,12 @@ export type PaginationState = {
 function getSortFunction(
   feedItemsDict: Record<string, ApplicationFeedItem>,
   viewId?: number,
+  visibilityFilter?: VisibilityFilter,
 ) {
+  if (visibilityFilter === "read") {
+    return sortFeedItemsOrderByWatchedAt(feedItemsDict);
+  }
+
   if (!viewId) return sortFeedItemsOrderByDate(feedItemsDict);
 
   const view = viewsStore.getState().views.find((v) => v.id === viewId);
@@ -250,7 +256,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             set({
               feedItemsDict,
               feedItemsOrder: feedItemsOrder.sort(
-                getSortFunction(get().feedItemsDict, viewId),
+                getSortFunction(get().feedItemsDict, viewId, visibilityFilter),
               ),
               viewPaginationState: {
                 ...get().viewPaginationState,
@@ -292,6 +298,23 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               },
             },
           });
+        } finally {
+          const finalState =
+            get().viewPaginationState[viewId]?.[visibilityFilter];
+          if (finalState?.isFetching) {
+            set({
+              viewPaginationState: {
+                ...get().viewPaginationState,
+                [viewId]: {
+                  ...get().viewPaginationState[viewId],
+                  [visibilityFilter]: {
+                    ...finalState,
+                    isFetching: false,
+                  },
+                },
+              },
+            });
+          }
         }
       },
 
@@ -349,7 +372,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             set({
               feedItemsDict,
               feedItemsOrder: feedItemsOrder.sort(
-                sortFeedItemsOrderByDate(get().feedItemsDict),
+                getSortFunction(get().feedItemsDict, viewId, visibilityFilter),
               ),
               viewPaginationState: {
                 ...get().viewPaginationState,
@@ -379,6 +402,24 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               },
             },
           });
+        } finally {
+          // Defensive: ensure isFetching is reset even if stream ends with only error chunks
+          const finalState =
+            get().viewPaginationState[viewId]?.[visibilityFilter];
+          if (finalState?.isFetching) {
+            set({
+              viewPaginationState: {
+                ...get().viewPaginationState,
+                [viewId]: {
+                  ...get().viewPaginationState[viewId],
+                  [visibilityFilter]: {
+                    ...finalState,
+                    isFetching: false,
+                  },
+                },
+              },
+            });
+          }
         }
       },
 
@@ -1079,7 +1120,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               set({
                 feedItemsDict,
                 feedItemsOrder: feedItemsOrder.sort(
-                  getSortFunction(get().feedItemsDict, chunk.viewId),
+                  getSortFunction(get().feedItemsDict, chunk.viewId, vf),
                 ),
                 viewPaginationState: {
                   ...get().viewPaginationState,

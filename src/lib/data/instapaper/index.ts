@@ -32,7 +32,11 @@ export function useSaveToInstapaperMutation(contentId: string) {
     orpc.instapaper.saveBookmark.mutationOptions({
       onSuccess: () => {
         if (feedItem) {
-          setFeedItem({ ...feedItem, isWatched: true });
+          setFeedItem({
+            ...feedItem,
+            isWatched: true,
+            isWatchedUpdatedAt: new Date(),
+          });
         }
         toast.success("Saved to Instapaper");
       },

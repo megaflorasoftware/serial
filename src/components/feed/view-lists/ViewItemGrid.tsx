@@ -39,13 +39,13 @@ export function ViewItemGrid({
 
   const actualSentinelRef = sentinelRef ?? defaultSentinelRef;
   const actualSentinelIndex =
-    sentinelIndex ?? defaultSentinelIndex + startIndex;
+    (sentinelIndex ?? defaultSentinelIndex) + startIndex;
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl px-4">
       <div
         ref={parent}
-        className="grid w-full grid-cols-2 items-stretch gap-y-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
+        className="grid w-full grid-cols-2 items-stretch gap-y-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
       >
         {items.map((contentId, index) => {
           const globalIndex = startIndex + index;

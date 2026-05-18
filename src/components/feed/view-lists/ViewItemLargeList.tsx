@@ -39,11 +39,11 @@ export function ViewItemLargeList({
 
   const actualSentinelRef = sentinelRef ?? defaultSentinelRef;
   const actualSentinelIndex =
-    sentinelIndex ?? defaultSentinelIndex + startIndex;
+    (sentinelIndex ?? defaultSentinelIndex) + startIndex;
 
   return (
     <div
-      className="mx-auto w-full max-w-3xl transition-all md:pt-4 md:pr-6 md:pl-4"
+      className="mx-auto w-full max-w-3xl transition-all md:pt-2"
       ref={parent}
     >
       {items.map((contentId, index) => {

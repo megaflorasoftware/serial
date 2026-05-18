@@ -59,6 +59,51 @@ export function sortFeedItemsOrderByDate(
   };
 }
 
+export function sortFeedItemsOrderByWatchedAt(
+  feedItems: ApplicationStore["feedItemsDict"],
+) {
+  return function (a: string, b: string) {
+    const itemA = feedItems[a];
+    const itemB = feedItems[b];
+
+    if (!itemA || !itemB) return 0;
+
+    const watchedTimeA = itemA.isWatchedUpdatedAt
+      ? itemA.isWatchedUpdatedAt instanceof Date
+        ? itemA.isWatchedUpdatedAt.getTime()
+        : new Date(itemA.isWatchedUpdatedAt).getTime()
+      : 0;
+    const watchedTimeB = itemB.isWatchedUpdatedAt
+      ? itemB.isWatchedUpdatedAt instanceof Date
+        ? itemB.isWatchedUpdatedAt.getTime()
+        : new Date(itemB.isWatchedUpdatedAt).getTime()
+      : 0;
+
+    if (watchedTimeB !== watchedTimeA) {
+      return watchedTimeB - watchedTimeA;
+    }
+
+    const timeA =
+      itemA.postedAt instanceof Date
+        ? itemA.postedAt.getTime()
+        : new Date(itemA.postedAt).getTime();
+    const timeB =
+      itemB.postedAt instanceof Date
+        ? itemB.postedAt.getTime()
+        : new Date(itemB.postedAt).getTime();
+
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+
+    if (itemA.title !== itemB.title) {
+      return itemA.title.localeCompare(itemB.title);
+    }
+
+    return itemA.id.localeCompare(itemB.id);
+  };
+}
+
 export function sortFeedItemsOrderBySectionThenDate(
   feedItems: ApplicationStore["feedItemsDict"],
   viewSections: ApplicationViewSection[],

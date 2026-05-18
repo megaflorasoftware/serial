@@ -278,6 +278,10 @@ export const feedItems = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
+    isWatchedUpdatedAt: integer("is_watched_updated_at", { mode: "timestamp" }),
+    isWatchLaterUpdatedAt: integer("is_watch_later_updated_at", {
+      mode: "timestamp",
+    }),
     contentHash: text("content_hash"),
   },
   (example) => [
@@ -303,6 +307,12 @@ export const feedItems = sqliteTable(
       example.feedId,
       example.isWatchLater,
       example.postedAt,
+    ),
+    // Covers the "read" visibility filter ordered by isWatchedUpdatedAt.
+    index("feed_item_feed_id_is_watched_updated_at_idx").on(
+      example.feedId,
+      example.isWatched,
+      example.isWatchedUpdatedAt,
     ),
   ],
 );

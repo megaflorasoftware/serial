@@ -116,7 +116,7 @@ function SectionHeading({
           isStuck ? "border-border" : "border-transparent"
         }`}
       >
-        <div className="mx-auto flex max-w-3xl items-center gap-2 px-4">
+        <div className="mx-auto flex max-w-3xl items-center gap-2 px-6">
           {itemType === "feed" &&
             itemId !== undefined &&
             (() => {

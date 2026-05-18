@@ -302,11 +302,11 @@ function ItemActions({
         "md:bg-background/90 flex flex-row items-center md:absolute md:right-2 md:bottom-2 md:rounded-lg md:shadow-sm",
         {
           "md:hidden md:group-hover:flex": !(showShortcuts && isSelected),
-          "-ml-2 justify-start pb-2 pl-6 md:right-4 md:bottom-5 md:ml-0 md:pb-0 md:pl-0":
+          "-ml-2 justify-start px-6 pb-2 md:right-2 md:bottom-5 md:ml-0 md:px-0 md:pb-0":
             isStandardList,
           "-ml-2 justify-start gap-1 px-2 pb-2 md:ml-0 md:px-0 md:pb-0": isGrid,
-          "-ml-2 justify-start pb-2 pl-6 md:ml-0 md:pb-0 md:pl-0":
-            isStandardList || isLargeList,
+          "-ml-2 justify-start px-6 pb-2 md:right-2 md:bottom-2 md:ml-0 md:px-0 md:pb-0":
+            isLargeList,
         },
       )}
     >
@@ -441,7 +441,7 @@ export function ItemDisplay({
       data-item-id={contentId}
       onMouseEnter={onSelect}
       className={clsx(
-        "group relative flex w-full flex-1 justify-stretch gap-2",
+        "group relative flex w-full flex-1 justify-stretch gap-2 md:mx-4 md:my-2",
         isLarge
           ? "flex-col md:flex-row md:items-center"
           : "items-center md:h-20",
@@ -456,8 +456,8 @@ export function ItemDisplay({
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
         className={clsx(
-          "flex w-full flex-1 flex-col gap-4 pt-4 pr-4 pl-6 text-left md:flex-row md:items-center md:rounded md:py-4 md:pr-0",
-          isLarge ? "pb-1 md:pb-4" : "pb-4 md:h-20 md:py-0",
+          "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2 md:py-2",
+          isLarge ? "pb-1 md:pb-2" : "pb-4 md:h-20 md:py-0",
           isSelected && "md:bg-muted",
         )}
       >

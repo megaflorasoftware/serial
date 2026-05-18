@@ -76,6 +76,7 @@ export type PaginationCursor = {
   placement?: number;
   postedAt: Date;
   id: string;
+  isWatchedUpdatedAt?: Date | null;
 } | null;
 
 export type ClientManifestEntry = {
@@ -632,7 +633,12 @@ type PaginationResult<T> = {
  * Pass itemsData from a query that fetched limit + 1 items.
  */
 function processPaginationResults<
-  T extends { postedAt: Date; id: string; placement?: number },
+  T extends {
+    postedAt: Date;
+    id: string;
+    placement?: number;
+    isWatchedUpdatedAt?: Date | null;
+  },
 >(itemsData: T[], limit: number): PaginationResult<T> {
   const hasMore = itemsData.length > limit;
   const itemsToReturn = hasMore ? itemsData.slice(0, limit) : itemsData;
@@ -644,6 +650,7 @@ function processPaginationResults<
           placement: lastItem.placement,
           postedAt: lastItem.postedAt,
           id: lastItem.id,
+          isWatchedUpdatedAt: lastItem.isWatchedUpdatedAt ?? undefined,
         }
       : null;
 
@@ -1557,10 +1564,31 @@ const cursorSchema = z
  * and {placement, postedAt, id} for section-ordered views.
  */
 function buildCursorCondition(
-  cursor: { placement?: number; postedAt: Date; id: string } | null,
+  cursor: {
+    placement?: number;
+    postedAt: Date;
+    id: string;
+    isWatchedUpdatedAt?: Date | null;
+  } | null,
   placementColumn?: SQL<number>,
 ) {
   if (!cursor) return undefined;
+
+  // isWatchedUpdatedAt-based cursor for read visibility filter
+  if (cursor.isWatchedUpdatedAt) {
+    return or(
+      lt(feedItems.isWatchedUpdatedAt, cursor.isWatchedUpdatedAt),
+      and(
+        eq(feedItems.isWatchedUpdatedAt, cursor.isWatchedUpdatedAt),
+        lt(feedItems.postedAt, cursor.postedAt),
+      ),
+      and(
+        eq(feedItems.isWatchedUpdatedAt, cursor.isWatchedUpdatedAt),
+        eq(feedItems.postedAt, cursor.postedAt),
+        lt(feedItems.id, cursor.id),
+      ),
+    );
+  }
 
   // Date-only cursor (legacy or non-sectioned views)
   if (!placementColumn || cursor.placement === undefined) {
@@ -1701,14 +1729,38 @@ export const requestItemsByVisibility = protectedProcedure
     }
 
     try {
+      const isReadVisibility = input.visibilityFilter === "read";
       const hasSections =
-        targetView.viewSections && targetView.viewSections.length > 0;
+        !isReadVisibility &&
+        targetView.viewSections &&
+        targetView.viewSections.length > 0;
 
       let itemsData: Array<
         typeof feedItems.$inferSelect & { placement?: number }
       >;
 
-      if (!hasSections) {
+      if (isReadVisibility) {
+        // Read visibility: sort by when items were marked as read,
+        // don't apply subviews (sections, categories, content type, time window)
+        const filterConditions = [
+          inArray(feedItems.feedId, feedIds),
+          buildVisibilityFilter(input.visibilityFilter),
+          buildCursorCondition(input.cursor ?? null),
+        ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+        const filter =
+          filterConditions.length > 0 ? and(...filterConditions) : undefined;
+
+        itemsData = await context.db.query.feedItems.findMany({
+          where: filter,
+          orderBy: [
+            desc(feedItems.isWatchedUpdatedAt),
+            desc(feedItems.postedAt),
+            desc(feedItems.id),
+          ],
+          limit: limit + 1,
+        });
+      } else if (!hasSections) {
         // Non-sectioned views: order by date only
         const filterConditions = [
           inArray(feedItems.feedId, feedIds),
@@ -2521,14 +2573,38 @@ export const getItemsByVisibility = protectedProcedure
     }
 
     try {
+      const isReadVisibility = input.visibilityFilter === "read";
       const hasSections =
-        targetView.viewSections && targetView.viewSections.length > 0;
+        !isReadVisibility &&
+        targetView.viewSections &&
+        targetView.viewSections.length > 0;
 
       let itemsData: Array<
         typeof feedItems.$inferSelect & { placement?: number }
       >;
 
-      if (!hasSections) {
+      if (isReadVisibility) {
+        // Read visibility: sort by when items were marked as read,
+        // don't apply subviews (sections, categories, content type, time window)
+        const filterConditions = [
+          inArray(feedItems.feedId, feedIds),
+          buildVisibilityFilter(input.visibilityFilter),
+          buildCursorCondition(input.cursor ?? null),
+        ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+        const filter =
+          filterConditions.length > 0 ? and(...filterConditions) : undefined;
+
+        itemsData = await context.db.query.feedItems.findMany({
+          where: filter,
+          orderBy: [
+            desc(feedItems.isWatchedUpdatedAt),
+            desc(feedItems.postedAt),
+            desc(feedItems.id),
+          ],
+          limit: limit + 1,
+        });
+      } else if (!hasSections) {
         // Non-sectioned views: order by date only
         const filterConditions = [
           inArray(feedItems.feedId, feedIds),

@@ -4,7 +4,6 @@ import { MinusIcon, PlusIcon, SettingsIcon } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { FeedLoader } from "./FeedLoader";
-import { ItemVisibilityChips } from "./ItemVisibilityChips";
 import { MAX_ZOOM, MIN_ZOOM, useZoom } from "./watch/[id]/useZoom";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
@@ -51,10 +50,6 @@ export function HeaderCenterContent() {
 
   useShortcut("=", zoomIn);
   useShortcut("-", zoomOut);
-
-  if (pathname === "/") {
-    return <ItemVisibilityChips />;
-  }
 
   if (
     !isMobile &&

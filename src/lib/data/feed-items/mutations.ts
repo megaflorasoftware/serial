@@ -14,6 +14,7 @@ export function useFeedItemsSetWatchedValueMutation(contentId: string) {
         setFeedItem({
           ...feedItem,
           isWatched,
+          isWatchedUpdatedAt: isWatched ? new Date() : null,
         });
       },
     }),
@@ -32,6 +33,7 @@ export function useFeedItemsSetWatchLaterValueMutation(contentId: string) {
         setFeedItem({
           ...feedItem,
           isWatchLater,
+          isWatchLaterUpdatedAt: new Date(),
         });
       },
     }),
@@ -59,7 +61,11 @@ export function useBulkSetWatchedValueMutation() {
         const newDict = { ...store.feedItemsDict };
         items.forEach(({ id }) => {
           if (newDict[id]) {
-            newDict[id] = { ...newDict[id], isWatched };
+            newDict[id] = {
+              ...newDict[id],
+              isWatched,
+              isWatchedUpdatedAt: isWatched ? new Date() : null,
+            };
           }
         });
         store.setFeedItemsDict(newDict);
