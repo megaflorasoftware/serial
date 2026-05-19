@@ -118,8 +118,8 @@ export function ExportDataSection() {
       }
     }
 
-    // Sort groups by name
-    groups.sort((a, b) => a.name.localeCompare(b.name));
+    // Groups already follow view placement order because `customViews`
+    // (and therefore `views`) is sorted by placement from the store.
 
     // Ungrouped feeds: not in any custom view
     const ungroupedFeeds: OPMLFeedItem[] = feeds

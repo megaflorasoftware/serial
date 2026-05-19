@@ -879,7 +879,6 @@ async function queryFeedItemsForView(
     customViews: ApplicationView[];
     applicationFeeds: ApplicationFeed[];
     customViewFeedIds?: Set<number>;
-    applyViewFilters?: boolean;
   },
 ): Promise<{
   items: ApplicationFeedItem[];
@@ -897,7 +896,6 @@ async function queryFeedItemsForView(
     customViews,
     applicationFeeds,
     customViewFeedIds,
-    applyViewFilters = true,
   } = params;
 
   const isReadVisibility = visibilityFilter === "read";
@@ -908,25 +906,22 @@ async function queryFeedItemsForView(
 
   if (isReadVisibility) {
     // Read visibility: sort by when items were marked as read.
-    // View filters are optional (pagination skips them; initial load applies them).
+    // Subsections (section placement) are not applied, but all other
+    // view filters (category, content type, time window) are.
     const filterConditions = [
       inArray(feedItems.feedId, feedIds),
       buildVisibilityFilter(visibilityFilter),
-      applyViewFilters
-        ? buildViewCategoryFilter(
-            view,
-            feedCategoriesList,
-            feedIds,
-            customViewCategoryIds,
-            customViews,
-            applicationFeeds,
-            customViewFeedIds,
-          )
-        : undefined,
-      applyViewFilters
-        ? buildContentTypeFilter(view.contentType, applicationFeeds)
-        : undefined,
-      applyViewFilters ? buildTimeWindowFilter(view.daysWindow) : undefined,
+      buildViewCategoryFilter(
+        view,
+        feedCategoriesList,
+        feedIds,
+        customViewCategoryIds,
+        customViews,
+        applicationFeeds,
+        customViewFeedIds,
+      ),
+      buildContentTypeFilter(view.contentType, applicationFeeds),
+      buildTimeWindowFilter(view.daysWindow),
       buildCursorCondition(cursor),
     ].filter((f): f is NonNullable<typeof f> => f !== undefined);
 
@@ -1724,14 +1719,18 @@ export const streamingImport = protectedProcedure
     // For "views" mode: create (or reuse) a view per unique section name and
     // link successfully-imported feeds to those views via the viewFeeds table.
     if (importMode === "views" && successfulFeeds.length > 0) {
-      const sectionNames = new Set<string>();
-      for (const sf of successfulFeeds) {
-        for (const name of sf.sectionNames) {
-          if (name) sectionNames.add(name);
+      // Derive section order from the original input so OPML ordering is
+      // preserved (successfulFeeds is populated in completion order).
+      const sectionOrder: string[] = [];
+      for (const feed of input.feeds) {
+        for (const category of feed.categories) {
+          if (category && !sectionOrder.includes(category)) {
+            sectionOrder.push(category);
+          }
         }
       }
 
-      if (sectionNames.size > 0) {
+      if (sectionOrder.length > 0) {
         await context.db.transaction(async (tx) => {
           // Look up existing views by name for this user
           const existingViews = await tx
@@ -1741,7 +1740,7 @@ export const streamingImport = protectedProcedure
           const existingByName = new Map(existingViews.map((v) => [v.name, v]));
 
           // Insert any missing views with default settings
-          const namesToCreate = [...sectionNames].filter(
+          const namesToCreate = sectionOrder.filter(
             (name) => !existingByName.has(name),
           );
           if (namesToCreate.length > 0) {
@@ -1751,6 +1750,8 @@ export const streamingImport = protectedProcedure
                 namesToCreate.map((name) => ({
                   userId: context.user.id,
                   name,
+                  placement:
+                    sectionOrder.length - 1 - sectionOrder.indexOf(name),
                 })),
               )
               .returning();
@@ -1849,6 +1850,7 @@ const cursorSchema = z
     placement: z.number().optional(),
     postedAt: z.coerce.date(),
     id: z.string(),
+    isWatchedUpdatedAt: z.coerce.date().nullable().optional(),
   })
   .nullable();
 
@@ -2034,8 +2036,6 @@ export const requestItemsByVisibility = protectedProcedure
     }
 
     try {
-      const isReadVisibility = input.visibilityFilter === "read";
-
       const { items, hasMore, nextCursor } = await queryFeedItemsForView(
         context,
         targetView,
@@ -2050,8 +2050,6 @@ export const requestItemsByVisibility = protectedProcedure
           customViews,
           applicationFeeds,
           customViewFeedIds,
-          // Read visibility pagination skips view filters (legacy behavior)
-          applyViewFilters: !isReadVisibility,
         },
       );
 
@@ -2737,11 +2735,23 @@ export const getItemsByVisibility = protectedProcedure
       >;
 
       if (isReadVisibility) {
-        // Read visibility: sort by when items were marked as read,
-        // don't apply subviews (sections, categories, content type, time window)
+        // Read visibility: sort by when items were marked as read.
+        // Subsections (section placement) are not applied, but all other
+        // view filters (category, content type, time window) are.
         const filterConditions = [
           inArray(feedItems.feedId, feedIds),
           buildVisibilityFilter(input.visibilityFilter),
+          buildViewCategoryFilter(
+            targetView,
+            feedCategoriesList,
+            feedIds,
+            customViewCategoryIds,
+            customViews,
+            applicationFeeds,
+            customViewFeedIds,
+          ),
+          buildContentTypeFilter(targetView.contentType, applicationFeeds),
+          buildTimeWindowFilter(targetView.daysWindow),
           buildCursorCondition(input.cursor ?? null),
         ].filter((f): f is NonNullable<typeof f> => f !== undefined);
 
@@ -2901,7 +2911,13 @@ export const requestFullTextForItems = protectedProcedure
           contentSnippet: feedItems.contentSnippet,
         })
         .from(feedItems)
-        .where(inArray(feedItems.id, input.itemIds));
+        .innerJoin(feeds, eq(feedItems.feedId, feeds.id))
+        .where(
+          and(
+            inArray(feedItems.id, input.itemIds),
+            eq(feeds.userId, context.user.id),
+          ),
+        );
 
       await publisher.publish(channel, {
         source: "initial",

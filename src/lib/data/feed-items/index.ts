@@ -41,6 +41,28 @@ function isItemOlderThanCursor(
     return false;
   }
 
+  // For read visibility, the server sorts by isWatchedUpdatedAt first.
+  if (cursor.isWatchedUpdatedAt) {
+    const itemWatchedTime = item.isWatchedUpdatedAt?.getTime() ?? 0;
+    const cursorWatchedTime = cursor.isWatchedUpdatedAt.getTime();
+
+    if (itemWatchedTime < cursorWatchedTime) {
+      return true;
+    }
+    if (itemWatchedTime === cursorWatchedTime) {
+      const itemTime = item.postedAt.getTime();
+      const cursorTime = cursor.postedAt.getTime();
+
+      if (itemTime < cursorTime) {
+        return true;
+      }
+      if (itemTime === cursorTime && item.id > cursor.id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   const itemTime = item.postedAt.getTime();
   const cursorTime = cursor.postedAt.getTime();
 

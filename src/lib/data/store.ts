@@ -224,7 +224,14 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
           set({ isFetchingFulltext: true });
 
-          const itemIds = [...state.pendingFulltextItems];
+          const FULLTEXT_BATCH_SIZE = 500;
+          const itemIds = state.pendingFulltextItems.slice(
+            0,
+            FULLTEXT_BATCH_SIZE,
+          );
+          const remaining =
+            state.pendingFulltextItems.slice(FULLTEXT_BATCH_SIZE);
+          set({ pendingFulltextItems: remaining });
 
           void orpcRouterClient.initial
             .requestFullTextForItems({ itemIds })
