@@ -3,7 +3,7 @@
 import clsx from "clsx";
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";
@@ -25,6 +25,16 @@ import {
 import { getScrollContainer } from "~/lib/scroll";
 import { useDebouncedSaveProgress } from "~/lib/hooks/useDebouncedSaveProgress";
 import { useScrollDirection } from "~/lib/hooks/useScrollDirection";
+import { detectTruncatedContent } from "~/lib/utils/detectTruncatedContent";
+import {
+  hasRespondedToTruncationAlert,
+  setTruncationAlertResponded,
+} from "~/lib/utils/truncationAlert";
+import { useEditFeedMutation } from "~/lib/data/feeds/mutations";
+import { useFeedCategories } from "~/lib/data/feed-categories/store";
+import { useViewFeeds } from "~/lib/data/view-feeds/store";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
@@ -52,6 +62,8 @@ function ReadPage() {
 
   const feedItem = useFeedItemValue(params.id);
   const { feeds } = useFeeds();
+  const feedCategories = useFeedCategories();
+  const viewFeeds = useViewFeeds();
 
   const feed = feeds.find((f) => f.id === feedItem?.feedId);
 
@@ -130,6 +142,44 @@ function ReadPage() {
     });
   }, [params.id, feedItem, selectElement]);
 
+  // Truncation alert
+  const { mutate: editFeed } = useEditFeedMutation();
+
+  const [alertDismissed, setAlertDismissed] = useState(false);
+
+  const feedId = feed?.id;
+  const platform = feed?.platform;
+
+  const shouldShowTruncationAlert = (() => {
+    if (alertDismissed) return false;
+    if (platform !== "website") return false;
+    if (!feedId) return false;
+    if (hasRespondedToTruncationAlert(feedId)) return false;
+    if (!feedItem) return false;
+    return detectTruncatedContent(feedItem.content, feedItem.contentSnippet);
+  })();
+
+  const handleAlertResponse = (openLocation: "serial" | "origin") => {
+    if (!feedId) return;
+
+    const categoryIds = feedCategories
+      .filter((fc) => fc.feedId === feedId)
+      .map((fc) => fc.categoryId);
+    const viewIds = viewFeeds
+      .filter((vf) => vf.feedId === feedId)
+      .map((vf) => vf.viewId);
+
+    editFeed({
+      feedId,
+      categoryIds,
+      viewIds,
+      openLocation,
+    });
+
+    setTruncationAlertResponded(feedId);
+    setAlertDismissed(true);
+  };
+
   return (
     <div
       className={clsx("mx-auto grid h-full w-full place-items-center", {
@@ -174,6 +224,29 @@ function ReadPage() {
           <ArticleContent content={content} />
         )}
       </div>
+      {shouldShowTruncationAlert && (
+        <div className="w-full px-6">
+          <Alert>
+            <AlertTitle>Possible partial content detected</AlertTitle>
+            <AlertDescription className="mt-2 text-base">
+              It looks like this feed might not be providing all of its content
+              in its feed. Would you like to open future items in the original
+              website?
+            </AlertDescription>
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => handleAlertResponse("serial")}
+              >
+                No, view in reader
+              </Button>
+              <Button onClick={() => handleAlertResponse("origin")}>
+                Yes, open in website
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
       <div
         className={clsx(
           "sticky inset-x-0 bottom-0 left-0 grid place-items-center transition-transform duration-300",

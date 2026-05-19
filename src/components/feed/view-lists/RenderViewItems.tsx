@@ -142,7 +142,7 @@ function SectionHeading({
               shortcut={SHORTCUT_KEYS.MARK_SECTION_READ}
             >
               <CheckIcon size={14} />
-              Mark section as read
+              Mark as read
             </ButtonWithShortcut>
           )}
         </div>
