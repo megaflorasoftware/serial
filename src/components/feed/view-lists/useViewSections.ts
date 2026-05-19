@@ -59,21 +59,42 @@ export function useViewSections(
       }
     }
 
-    const allSectionItems = new Set<string>();
+    const assignedItemIds = new Set<string>();
+    const feedIdsInFeedSections = new Set<number>();
+
+    for (const li of currentView.viewSections) {
+      if (li.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED) {
+        feedIdsInFeedSections.add(li.itemId);
+      }
+    }
+
     const sections: ViewSection[] = [];
     let startIndex = 0;
 
     for (const li of currentView.viewSections) {
       const sectionItems = filteredFeedItemsOrder.filter((itemId) => {
+        if (assignedItemIds.has(itemId)) return false;
+
         const item = feedItemsDict[itemId];
         if (!item) return false;
 
         if (li.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED) {
-          return item.feedId === li.itemId;
+          if (item.feedId === li.itemId) {
+            assignedItemIds.add(itemId);
+            return true;
+          }
+          return false;
         }
         if (li.itemType === VIEW_LAYOUT_ITEM_TYPE.TAG) {
           const cats = feedIdToCategories.get(item.feedId) ?? [];
-          return cats.includes(li.itemId);
+          if (
+            cats.includes(li.itemId) &&
+            !feedIdsInFeedSections.has(item.feedId)
+          ) {
+            assignedItemIds.add(itemId);
+            return true;
+          }
+          return false;
         }
         return false;
       });
@@ -87,8 +108,6 @@ export function useViewSections(
             })();
 
       const layout = (li.layout ?? baseLayout) as ViewLayout;
-
-      sectionItems.forEach((id) => allSectionItems.add(id));
 
       sections.push({
         name: resolvedName,
@@ -105,7 +124,7 @@ export function useViewSections(
 
     // Uncategorized: items not in any section
     const uncategorizedItems = filteredFeedItemsOrder.filter(
-      (id) => !allSectionItems.has(id),
+      (id) => !assignedItemIds.has(id),
     );
 
     sections.push({

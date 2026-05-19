@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtomValue } from "jotai";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import { EmptyState, FeedEmptyState } from "./EmptyStates";
 import {
@@ -40,11 +40,15 @@ function SectionHeading({
   itemType,
   itemId,
   sectionItems,
+  sectionIndex,
+  onMarkAsRead,
 }: {
   name: string;
   itemType?: "feed" | "tag";
   itemId?: number;
   sectionItems: string[];
+  sectionIndex: number;
+  onMarkAsRead?: (sectionIndex: number) => void;
 }) {
   const { feeds } = useFeeds();
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
@@ -80,6 +84,8 @@ function SectionHeading({
 
       await bulkMutation.mutateAsync({ items, isWatched: true });
 
+      onMarkAsRead?.(sectionIndex);
+
       showUndoToast({
         message: `Marked ${items.length} item${items.length === 1 ? "" : "s"} as read`,
         onUndo: async () => {
@@ -111,18 +117,20 @@ function SectionHeading({
                   <img
                     src={feed.imageUrl}
                     alt={feed.name}
-                    className="h-6 w-6 rounded object-contain"
+                    className="h-6 w-6 shrink-0 rounded object-contain"
                   />
                 );
               }
-              return <div className="bg-muted-foreground/20 h-6 w-6 rounded" />;
+              return (
+                <div className="bg-muted-foreground/20 h-6 w-6 shrink-0 rounded" />
+              );
             })()}
           {itemType === "tag" && (
-            <div className="bg-muted text-muted-foreground flex h-6 w-6 items-center justify-center rounded text-xs font-medium">
+            <div className="bg-muted text-muted-foreground flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-medium">
               #
             </div>
           )}
-          <h2 className="text-lg font-semibold">{name}</h2>
+          <h2 className="line-clamp-1 text-lg font-semibold">{name}</h2>
           <div className="flex-1" />
           {visibilityFilter === "unread" && sectionItems.length > 0 && (
             <ButtonWithShortcut
@@ -146,9 +154,13 @@ function SectionHeading({
 function LayoutSection({
   section,
   handleMouseSelect,
+  sectionIndex,
+  onMarkAsRead,
 }: {
   section: ViewSection;
   handleMouseSelect: (itemId: string) => void;
+  sectionIndex: number;
+  onMarkAsRead?: (sectionIndex: number) => void;
 }) {
   const { items, layout, startIndex, name, isUncategorized, itemType, itemId } =
     section;
@@ -162,13 +174,15 @@ function LayoutSection({
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full" id={`section-${sectionIndex}`}>
       {items.length > 0 && (
         <SectionHeading
           name={isUncategorized ? "Uncategorized" : name}
           itemType={itemType}
           itemId={itemId}
           sectionItems={items}
+          sectionIndex={sectionIndex}
+          onMarkAsRead={onMarkAsRead}
         />
       )}
       {items.length > 0 && (
@@ -217,6 +231,22 @@ export function RenderViewItems() {
   );
 
   const { paginationState } = useLoadMoreItems();
+
+  const handleSectionMarkAsRead = useCallback(
+    (sectionIndex: number) => {
+      for (let i = sectionIndex + 1; i < computedSections.length; i++) {
+        const section = computedSections[i];
+        if (section && section.items.length > 0) {
+          const el = document.getElementById(`section-${i}`);
+          if (el) {
+            el.scrollIntoView({ behavior: "instant", block: "start" });
+          }
+          break;
+        }
+      }
+    },
+    [computedSections],
+  );
 
   if (!hasInitialData) {
     return <FeedLoading />;
@@ -294,7 +324,9 @@ export function RenderViewItems() {
               : `${section.name}-${index}`
           }
           section={section}
+          sectionIndex={index}
           handleMouseSelect={handleMouseSelect}
+          onMarkAsRead={handleSectionMarkAsRead}
         />
       ))}
       {paginationState?.isFetching && (
