@@ -1,6 +1,13 @@
 "use client";
 
-import { ViewCategoriesInput, ViewFeedsInput, ViewNameInput } from "./inputs";
+import {
+  ViewCategoriesInput,
+  ViewContentTypeInput,
+  ViewFeedsInput,
+  ViewNameInput,
+  ViewTimeInput,
+} from "./inputs";
+import type { ViewContentType } from "~/server/db/constants";
 
 interface ContentTabProps {
   name: string;
@@ -10,6 +17,10 @@ interface ContentTabProps {
   setSelectedCategories: (categories: number[]) => void;
   selectedFeedIds: number[];
   setSelectedFeedIds: (feedIds: number[]) => void;
+  daysTimeWindow: number;
+  setDaysTimeWindow: (daysTimeWindow: number) => void;
+  contentType: ViewContentType;
+  setContentType: (contentType: ViewContentType) => void;
 }
 
 export function ContentTab({
@@ -20,6 +31,10 @@ export function ContentTab({
   setSelectedCategories,
   selectedFeedIds,
   setSelectedFeedIds,
+  daysTimeWindow,
+  setDaysTimeWindow,
+  contentType,
+  setContentType,
 }: ContentTabProps) {
   return (
     <div className="grid gap-6">
@@ -31,6 +46,14 @@ export function ContentTab({
       <ViewCategoriesInput
         selectedCategories={selectedCategories}
         setSelectedCategories={setSelectedCategories}
+      />
+      <ViewTimeInput
+        daysWindow={daysTimeWindow}
+        setDaysWindow={setDaysTimeWindow}
+      />
+      <ViewContentTypeInput
+        contentType={contentType}
+        setContentType={setContentType}
       />
     </div>
   );

@@ -367,13 +367,19 @@ export async function seedViewLayoutData(
     { feedId: feed2Id, categoryId: newsTagId },
   ]);
 
-  // Create 2 articles per feed so each section has visible items
+  // Create 15 articles per feed so sections have enough items to trigger
+  // pagination (initial load is 30 items per view)
   const feedItemIds: string[] = [];
   for (let f = 0; f < 3; f++) {
     const feedId = feedIds[f]!;
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 15; i++) {
       const feedItemId = `article-${testId}-f${f}-i${i}`;
-      const postedAt = new Date(now.getTime() + (6 - (f * 2 + i)) * 1000);
+      // Spread dates across a range so earlier sections have items both
+      // newer and older than later sections' items, exercising the cursor
+      // filter correctly for sectioned views.
+      const postedAt = new Date(
+        now.getTime() + (45 - (f * 15 + i)) * 86400000 + (2 - f) * 43200000,
+      );
       await db.insert(schema.feedItems).values({
         id: feedItemId,
         feedId,

@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { useContentCategories } from "~/lib/data/content-categories";
+import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 
@@ -39,18 +40,30 @@ export function ViewSectionAddDropdown({
   const [search, setSearch] = useState("");
   const { feeds } = useFeeds();
   const { contentCategories } = useContentCategories();
+  const { feedCategories } = useFeedCategories();
 
   const existingIds = useMemo(
     () => new Set(existingItems.map((i) => `${i.itemType}:${i.itemId}`)),
     [existingItems],
   );
 
+  // All feeds in the view: explicitly selected + feeds that have selected categories
+  const feedIdsInView = useMemo(() => {
+    const ids = new Set(selectedFeedIds);
+    for (const fc of feedCategories) {
+      if (selectedCategories.includes(fc.categoryId)) {
+        ids.add(fc.feedId);
+      }
+    }
+    return ids;
+  }, [selectedFeedIds, selectedCategories, feedCategories]);
+
   const feedOptions = useMemo(
     () =>
       feeds
         .filter(
           (f) =>
-            selectedFeedIds.includes(f.id) &&
+            feedIdsInView.has(f.id) &&
             !existingIds.has(`${VIEW_LAYOUT_ITEM_TYPE.FEED}:${f.id}`),
         )
         .map((f) => ({
@@ -58,15 +71,26 @@ export function ViewSectionAddDropdown({
           label: f.name,
           itemType: VIEW_LAYOUT_ITEM_TYPE.FEED,
         })),
-    [feeds, selectedFeedIds, existingIds],
+    [feeds, feedIdsInView, existingIds],
   );
+
+  // All tags in the view: explicitly selected + tags that feeds in the view have
+  const tagIdsInView = useMemo(() => {
+    const ids = new Set(selectedCategories);
+    for (const fc of feedCategories) {
+      if (feedIdsInView.has(fc.feedId)) {
+        ids.add(fc.categoryId);
+      }
+    }
+    return ids;
+  }, [selectedCategories, feedIdsInView, feedCategories]);
 
   const tagOptions = useMemo(
     () =>
       contentCategories
         .filter(
           (c) =>
-            selectedCategories.includes(c.id) &&
+            tagIdsInView.has(c.id) &&
             !existingIds.has(`${VIEW_LAYOUT_ITEM_TYPE.TAG}:${c.id}`),
         )
         .map((c) => ({
@@ -75,7 +99,7 @@ export function ViewSectionAddDropdown({
           rawLabel: c.name,
           itemType: VIEW_LAYOUT_ITEM_TYPE.TAG,
         })),
-    [contentCategories, selectedCategories, existingIds],
+    [contentCategories, tagIdsInView, existingIds],
   );
 
   const allOptions = useMemo(

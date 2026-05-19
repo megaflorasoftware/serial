@@ -4,10 +4,10 @@ import { useAtomValue } from "jotai";
 import { GridItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
+import { ViewListContainer } from "./ViewListContainer";
 import { VisibleItemTracker } from "./VisibleItemTracker";
 import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
-import { useDeferredAutoAnimate } from "~/lib/hooks/useDeferredAutoAnimate";
 
 interface ViewItemLargeGridProps {
   items: string[];
@@ -18,6 +18,7 @@ interface ViewItemLargeGridProps {
     | ((node: HTMLDivElement | null) => void);
   sentinelIndex?: number;
   showPaginationEnd?: boolean;
+  sectionItemType?: "feed" | "tag";
 }
 
 export function ViewItemLargeGrid({
@@ -27,8 +28,8 @@ export function ViewItemLargeGrid({
   sentinelRef,
   sentinelIndex,
   showPaginationEnd = true,
+  sectionItemType,
 }: ViewItemLargeGridProps) {
-  const [parent] = useDeferredAutoAnimate();
   const selectedItemId = useAtomValue(selectedItemIdAtom);
 
   const {
@@ -42,11 +43,8 @@ export function ViewItemLargeGrid({
     (sentinelIndex ?? defaultSentinelIndex) + startIndex;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4">
-      <div
-        ref={parent}
-        className="grid w-full items-stretch gap-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]"
-      >
+    <ViewListContainer className="px-4">
+      <div className="grid w-full items-stretch gap-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]">
         {items.map((contentId, index) => {
           const globalIndex = startIndex + index;
           return (
@@ -60,6 +58,7 @@ export function ViewItemLargeGrid({
                     ? () => handleMouseSelect(contentId)
                     : undefined
                 }
+                sectionItemType={sectionItemType}
               />
               {globalIndex === actualSentinelIndex && (
                 <div ref={actualSentinelRef} key={globalIndex} />
@@ -70,6 +69,6 @@ export function ViewItemLargeGrid({
       </div>
       {paginationState?.isFetching && <PaginationLoader />}
       {showPaginationEnd && !paginationState?.hasMore && <PaginationEnd />}
-    </div>
+    </ViewListContainer>
   );
 }

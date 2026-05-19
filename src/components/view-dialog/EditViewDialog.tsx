@@ -11,6 +11,7 @@ import { Button } from "~/components/ui/button";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useContentCategories } from "~/lib/data/content-categories";
+import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import {
   useDeleteViewMutation,
@@ -75,6 +76,28 @@ export function EditViewDialog({
   );
   const initialViewSections = useBuildViewSectionsFromView(selectedView);
 
+  const { feedCategories } = useFeedCategories();
+
+  const feedIdsInView = useMemo(() => {
+    const ids = new Set(selectedFeedIds);
+    for (const fc of feedCategories) {
+      if (selectedCategories.includes(fc.categoryId)) {
+        ids.add(fc.feedId);
+      }
+    }
+    return ids;
+  }, [selectedFeedIds, selectedCategories, feedCategories]);
+
+  const tagIdsInView = useMemo(() => {
+    const ids = new Set(selectedCategories);
+    for (const fc of feedCategories) {
+      if (feedIdsInView.has(fc.feedId)) {
+        ids.add(fc.categoryId);
+      }
+    }
+    return ids;
+  }, [selectedCategories, feedIdsInView, feedCategories]);
+
   useEffect(() => {
     if (!selectedViewId) return;
 
@@ -106,15 +129,15 @@ export function EditViewDialog({
     setViewSections((prev) =>
       prev.filter((item) => {
         if (item.itemType === "feed") {
-          return selectedFeedIds.includes(item.itemId);
+          return feedIdsInView.has(item.itemId);
         }
         if (item.itemType === "tag") {
-          return selectedCategories.includes(item.itemId);
+          return tagIdsInView.has(item.itemId);
         }
         return false;
       }),
     );
-  }, [selectedFeedIds, selectedCategories]);
+  }, [feedIdsInView, tagIdsInView]);
 
   const handleSave = async () => {
     if (selectedViewId === null) return;
@@ -215,6 +238,10 @@ export function EditViewDialog({
             setSelectedCategories={setSelectedCategories}
             selectedFeedIds={selectedFeedIds}
             setSelectedFeedIds={setSelectedFeedIds}
+            daysTimeWindow={daysTimeWindow}
+            setDaysTimeWindow={setDaysTimeWindow}
+            contentType={contentType}
+            setContentType={setContentType}
           />
         </TabsContent>
         <TabsContent value="display" className="mt-4">

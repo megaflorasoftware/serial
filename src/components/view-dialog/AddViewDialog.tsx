@@ -112,6 +112,10 @@ export function AddViewDialog() {
             setSelectedCategories={setSelectedCategories}
             selectedFeedIds={selectedFeedIds}
             setSelectedFeedIds={setSelectedFeedIds}
+            daysTimeWindow={daysTimeWindow}
+            setDaysTimeWindow={setDaysTimeWindow}
+            contentType={contentType}
+            setContentType={setContentType}
           />
         </TabsContent>
         <TabsContent value="display" className="mt-4">

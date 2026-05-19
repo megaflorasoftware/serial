@@ -22,7 +22,15 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, LayoutTemplate, XIcon } from "lucide-react";
+import {
+  ChevronDown,
+  Grid2x2,
+  Grid3x3,
+  LayoutTemplate,
+  Rows2,
+  Rows4,
+  XIcon,
+} from "lucide-react";
 import type { DragEndEvent } from "@dnd-kit/core";
 import type { ViewLayout, ViewLayoutItemType } from "~/server/db/constants";
 import { VIEW_LAYOUT, VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
@@ -41,12 +49,36 @@ export interface ViewSection {
   layout: ViewLayout | null;
 }
 
-const LAYOUT_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "__default__", label: "Default" },
-  { value: VIEW_LAYOUT.LIST, label: "List" },
-  { value: VIEW_LAYOUT.GRID, label: "Grid" },
-  { value: VIEW_LAYOUT.LARGE_LIST, label: "Large List" },
-  { value: VIEW_LAYOUT.LARGE_GRID, label: "Large Grid" },
+const LAYOUT_OPTIONS: Array<{
+  value: string;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    value: "__default__",
+    label: "Default",
+    icon: <LayoutTemplate className="size-3" />,
+  },
+  {
+    value: VIEW_LAYOUT.LIST,
+    label: "List",
+    icon: <Rows4 className="size-3" />,
+  },
+  {
+    value: VIEW_LAYOUT.LARGE_LIST,
+    label: "Large List",
+    icon: <Rows2 className="size-3" />,
+  },
+  {
+    value: VIEW_LAYOUT.GRID,
+    label: "Grid",
+    icon: <Grid3x3 className="size-3" />,
+  },
+  {
+    value: VIEW_LAYOUT.LARGE_GRID,
+    label: "Large Grid",
+    icon: <Grid2x2 className="size-3" />,
+  },
 ];
 
 function SectionSettingChip({
@@ -55,13 +87,14 @@ function SectionSettingChip({
   onChange,
 }: {
   value: string | null;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; icon: React.ReactNode }>;
   onChange: (value: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const displayValue = value ?? "__default__";
-  const selectedLabel =
-    options.find((o) => o.value === displayValue)?.label ?? "Default";
+  const selectedOption = options.find((o) => o.value === displayValue);
+  const selectedLabel = selectedOption?.label ?? "Default";
+  const selectedIcon = selectedOption?.icon;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -70,7 +103,7 @@ function SectionSettingChip({
           type="button"
           className="border-border bg-background hover:bg-muted flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-colors"
         >
-          <LayoutTemplate className="size-3" />
+          {selectedIcon}
           <span>{selectedLabel}</span>
           <ChevronDown className="size-3 opacity-50" />
         </button>
@@ -81,7 +114,7 @@ function SectionSettingChip({
             <button
               key={opt.value}
               type="button"
-              className={`hover:bg-accent hover:text-accent-foreground flex items-center rounded-sm px-2 py-1.5 text-sm transition-colors ${
+              className={`hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors ${
                 displayValue === opt.value
                   ? "bg-accent text-accent-foreground"
                   : ""
@@ -91,6 +124,7 @@ function SectionSettingChip({
                 setOpen(false);
               }}
             >
+              {opt.icon}
               {opt.label}
             </button>
           ))}
@@ -112,13 +146,12 @@ function SortableViewSectionItem({
   const { feeds } = useFeeds();
   const { contentCategories } = useContentCategories();
 
+  const feed = feeds.find((f) => f.id === item.itemId);
+  const tag = contentCategories.find((c) => c.id === item.itemId);
   const displayName =
     item.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED
-      ? (feeds.find((f) => f.id === item.itemId)?.name ?? "")
-      : (() => {
-          const tag = contentCategories.find((c) => c.id === item.itemId);
-          return tag ? `#${tag.name}` : "";
-        })();
+      ? (feed?.name ?? "")
+      : (tag?.name ?? "");
 
   const {
     attributes,
@@ -149,7 +182,24 @@ function SortableViewSectionItem({
       >
         <DragHandleDots2Icon className="size-4" />
       </div>
-      <span className="flex-1 text-sm">{displayName}</span>
+      <div className="flex flex-1 items-center gap-2">
+        {item.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED &&
+          (feed?.imageUrl ? (
+            <img
+              src={feed.imageUrl}
+              alt={feed.name}
+              className="h-5 w-5 rounded object-contain"
+            />
+          ) : (
+            <div className="bg-muted-foreground/20 h-5 w-5 rounded" />
+          ))}
+        {item.itemType === VIEW_LAYOUT_ITEM_TYPE.TAG && (
+          <div className="bg-muted text-muted-foreground flex h-5 w-5 items-center justify-center rounded text-xs font-medium">
+            #
+          </div>
+        )}
+        <span className="text-sm">{displayName}</span>
+      </div>
       <div className="flex items-center gap-1">
         <SectionSettingChip
           value={item.layout ?? null}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtomValue } from "jotai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import { EmptyState, FeedEmptyState } from "./EmptyStates";
 import {
@@ -15,7 +15,8 @@ import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import { useViewListScroll } from "./useViewListScroll";
-import type { ViewLayout } from "~/server/db/constants";
+import { useViewSections } from "./useViewSections";
+import type { ViewSection } from "./useViewSections";
 import FeedLoading from "~/components/loading";
 import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
@@ -27,28 +28,12 @@ import {
   useFetchFeedItemsLastFetchedAt,
   useHasInitialData,
 } from "~/lib/data/store";
-import { useContentCategories } from "~/lib/data/content-categories";
-import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
-import {
-  VIEW_LAYOUT,
-  VIEW_LAYOUT_ITEM_TYPE,
-  viewLayoutSchema,
-} from "~/server/db/constants";
+import { VIEW_LAYOUT } from "~/server/db/constants";
 import { useFeedItemNavigation } from "~/lib/hooks/useFeedItemNavigation";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { showUndoToast } from "~/lib/undo";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
-
-interface ViewSection {
-  name: string;
-  items: string[];
-  layout: ViewLayout;
-  startIndex: number;
-  isUncategorized: boolean;
-  itemType?: "feed" | "tag";
-  itemId?: number;
-}
 
 function SectionHeading({
   name,
@@ -181,6 +166,7 @@ function LayoutSection({
     sentinelRef,
     sentinelIndex,
     showPaginationEnd: isUncategorized,
+    sectionItemType: itemType,
   };
 
   return (
@@ -214,141 +200,22 @@ function LayoutSection({
 export function RenderViewItems() {
   const { feeds, hasFetchedFeeds } = useFeeds();
   const { hasFetchedFeedCategories } = useFeedCategories();
-  const { contentCategories } = useContentCategories();
 
   const feedItemsLastFetchedAt = useFetchFeedItemsLastFetchedAt();
   const hasInitialData = useHasInitialData();
-  const feedItemsDict = feedItemsStore.useFeedItemsDict();
-  const feedCategories = useFeedCategories();
 
   const filteredFeedItemsOrder = useFilteredFeedItemsOrder();
 
   const currentView = useAtomValue(viewFilterAtom);
-  const isUncategorized = currentView?.id === INBOX_VIEW_ID;
 
-  const parsedLayout = viewLayoutSchema.safeParse(currentView?.layout);
-  const baseLayout =
-    isUncategorized || !parsedLayout.success
-      ? VIEW_LAYOUT.LIST
-      : parsedLayout.data;
-
-  // Build sections if the view has layout items
-  const hasSubviews =
-    currentView &&
-    !isUncategorized &&
-    currentView.viewSections &&
-    currentView.viewSections.length > 0;
-
-  const computedSections = useMemo(() => {
-    if (!hasSubviews || !currentView) return [] as ViewSection[];
-
-    const feedIdToCategories = new Map<number, number[]>();
-    for (const fc of feedCategories.feedCategories) {
-      const existing = feedIdToCategories.get(fc.feedId);
-      if (existing) {
-        existing.push(fc.categoryId);
-      } else {
-        feedIdToCategories.set(fc.feedId, [fc.categoryId]);
-      }
-    }
-
-    const allSectionItems = new Set<string>();
-    const sections: ViewSection[] = [];
-    let startIndex = 0;
-
-    for (const li of currentView.viewSections) {
-      const sectionItems = filteredFeedItemsOrder.filter((itemId) => {
-        const item = feedItemsDict[itemId];
-        if (!item) return false;
-
-        if (li.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED) {
-          return item.feedId === li.itemId;
-        }
-        if (li.itemType === VIEW_LAYOUT_ITEM_TYPE.TAG) {
-          const cats = feedIdToCategories.get(item.feedId) ?? [];
-          return cats.includes(li.itemId);
-        }
-        return false;
-      });
-
-      const resolvedName =
-        li.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED
-          ? (feeds.find((f) => f.id === li.itemId)?.name ?? "")
-          : (() => {
-              const tag = contentCategories.find((c) => c.id === li.itemId);
-              return tag ? `#${tag.name}` : "";
-            })();
-
-      const layout = (li.layout ?? baseLayout) as ViewLayout;
-
-      sectionItems.forEach((id) => allSectionItems.add(id));
-
-      sections.push({
-        name: resolvedName,
-        items: sectionItems,
-        layout,
-        startIndex,
-        isUncategorized: false,
-        itemType: li.itemType,
-        itemId: li.itemId,
-      });
-
-      startIndex += sectionItems.length;
-    }
-
-    // Uncategorized: items not in any section
-    const uncategorizedItems = filteredFeedItemsOrder.filter(
-      (id) => !allSectionItems.has(id),
-    );
-
-    sections.push({
-      name: "Uncategorized",
-      items: uncategorizedItems,
-      layout: baseLayout,
-      startIndex,
-      isUncategorized: true,
-    });
-
-    return sections;
-  }, [
+  const {
     hasSubviews,
-    currentView,
-    filteredFeedItemsOrder,
-    feeds,
-    contentCategories,
+    computedSections,
+    flatItems,
+    hasGridSections,
+    sectionInfo,
     baseLayout,
-    feedItemsDict,
-    feedCategories,
-  ]);
-
-  // Create flat list for keyboard navigation
-  const flatItems = useMemo(() => {
-    if (!hasSubviews) return filteredFeedItemsOrder;
-    return computedSections.flatMap((s) => s.items);
-  }, [hasSubviews, filteredFeedItemsOrder, computedSections]);
-
-  // Track which sections use grid layouts
-  const hasGridSections = useMemo(() => {
-    if (!hasSubviews) {
-      return (
-        baseLayout === VIEW_LAYOUT.GRID || baseLayout === VIEW_LAYOUT.LARGE_GRID
-      );
-    }
-    return computedSections.some(
-      (s) =>
-        s.layout === VIEW_LAYOUT.GRID || s.layout === VIEW_LAYOUT.LARGE_GRID,
-    );
-  }, [hasSubviews, baseLayout, computedSections]);
-
-  // Build section info for keyboard navigation
-  const sectionInfo = useMemo(() => {
-    if (!hasSubviews) return undefined;
-    return computedSections.map((s) => ({
-      size: s.items.length,
-      isGrid:
-        s.layout === VIEW_LAYOUT.GRID || s.layout === VIEW_LAYOUT.LARGE_GRID,
-    }));
-  }, [hasSubviews, computedSections]);
+  } = useViewSections(currentView, filteredFeedItemsOrder);
 
   // Keyboard navigation
   const { handleMouseSelect } = useFeedItemNavigation(

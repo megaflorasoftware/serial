@@ -106,39 +106,42 @@ test.describe("view subview sections", () => {
     await page.waitForTimeout(300);
 
     // ── 4. Add 2 feeds and 1 tag to the display ───────────────────────
-    const addSubviewBtn = dialog.getByRole("button", {
-      name: /add subview/i,
-    });
+    // The add-section button is an icon button next to the "View sections" label
+    const addSubviewBtn = dialog
+      .locator("div")
+      .filter({ hasText: "View sections" })
+      .locator("button")
+      .first();
     await expect(addSubviewBtn).toBeVisible({ timeout: 3000 });
 
     // Add first feed (Tech Feed)
     await addSubviewBtn.click();
-    await page.waitForTimeout(500);
-    const subviewFeedOption0 = page.getByRole("option").filter({
-      hasText: /Tech Feed/i,
+    await page.waitForTimeout(800);
+    const subviewFeedOption0 = page.locator("[cmdk-item]").filter({
+      hasText: "Tech Feed",
     });
     await expect(subviewFeedOption0).toBeVisible({ timeout: 3000 });
-    await subviewFeedOption0.click({ force: true });
+    await subviewFeedOption0.click();
     await page.waitForTimeout(300);
 
     // Add second feed (News Feed)
     await addSubviewBtn.click();
-    await page.waitForTimeout(500);
-    const subviewFeedOption1 = page.getByRole("option").filter({
-      hasText: /News Feed/i,
+    await page.waitForTimeout(800);
+    const subviewFeedOption1 = page.locator("[cmdk-item]").filter({
+      hasText: "News Feed",
     });
     await expect(subviewFeedOption1).toBeVisible({ timeout: 3000 });
-    await subviewFeedOption1.click({ force: true });
+    await subviewFeedOption1.click();
     await page.waitForTimeout(300);
 
     // Add first tag (#Tech)
     await addSubviewBtn.click();
-    await page.waitForTimeout(500);
-    const subviewTagOption0 = page.getByRole("option").filter({
-      hasText: /#Tech/i,
+    await page.waitForTimeout(800);
+    const subviewTagOption0 = page.locator("[cmdk-item]").filter({
+      hasText: "#Tech",
     });
     await expect(subviewTagOption0).toBeVisible({ timeout: 3000 });
-    await subviewTagOption0.click({ force: true });
+    await subviewTagOption0.click();
     await page.waitForTimeout(300);
 
     // ── 5. Assign layouts ────────────────────────────────────────────
@@ -222,25 +225,40 @@ test.describe("view subview sections", () => {
     await page.keyboard.press("ArrowDown");
     await page.waitForTimeout(300);
 
-    // All items in the Tech Feed section should be in large-list layout.
     // The first large-list item should now have the data-selected attribute.
     const firstItem = page.locator("[data-item-id]").first();
     await expect(firstItem).toHaveAttribute("data-selected", "true", {
       timeout: 5000,
     });
 
-    // Navigate through Tech Feed items (2 items), then jump to News Feed
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(300);
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(300);
+    // ── 10. Verify pagination in sectioned views ─────────────────────
+    // Count total visible items after initial load (should be 30)
+    const initialItemCount = await page.locator("[data-item-id]").count();
+    expect(initialItemCount).toBe(30);
 
-    // After 3 downs, we should be at the first item of News Feed section
-    // (the selection moved from last Tech Feed item to first News Feed item)
-    const selectedAfterJump = page.locator('[data-selected="true"]');
-    await expect(selectedAfterJump).toBeVisible({ timeout: 5000 });
+    // Scroll to the bottom of the page to trigger infinite-scroll pagination
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    await page.waitForTimeout(800);
 
-    // ── 10. Edit view and delete a feed from Content tab ─────────────
+    // Wait for pagination to load — the total item count should increase
+    await expect(async () => {
+      const count = await page.locator("[data-item-id]").count();
+      expect(count).toBeGreaterThan(30);
+    }).toPass({ timeout: 15000 });
+
+    const paginatedItemCount = await page.locator("[data-item-id]").count();
+    expect(paginatedItemCount).toBe(45);
+
+    // Critical: verify items from the first section were NOT hidden after
+    // pagination. The Tech Feed section should still have all 15 items.
+    const techFeedHeading = page.locator("h2").filter({ hasText: "Tech Feed" });
+    const techFeedSection = techFeedHeading.locator("xpath=../..");
+    const techFeedItems = techFeedSection.locator("[data-item-id]");
+    expect(await techFeedItems.count()).toBe(15);
+
+    // ── 11. Edit view and delete a feed from Content tab ─────────────
     // Navigate to /views page to edit
     await page.goto("/views");
     await expect(

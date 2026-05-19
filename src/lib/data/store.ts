@@ -8,7 +8,6 @@ import {
   sortFeedItemsOrderByWatchedAt,
 } from "../sortFeedItems";
 import { applyDiffEntries } from "./applyDiffEntries";
-import { buildViewManifests } from "./buildViewManifests";
 import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
@@ -28,6 +27,9 @@ import type {
 import type { PublishedChunk } from "~/server/api/publisher";
 import { getQueryClient } from "~/lib/query-provider";
 import { orpc } from "~/lib/orpc";
+
+// Module-level debounce timer for fulltext fetches
+let fulltextTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export type PaginationState = {
   cursor: PaginationCursor;
@@ -135,6 +137,12 @@ export type ApplicationStore = {
     number,
     Partial<Record<VisibilityFilter, PaginationCursor>>
   >;
+  // Item IDs that need fulltext content fetched after receiving lightweight items
+  pendingFulltextItems: string[];
+  // Whether a fulltext request is currently in flight
+  isFetchingFulltext: boolean;
+  // Schedule a debounced fulltext fetch for pending items
+  scheduleFulltextFetch: () => void;
 };
 
 const vanillaApplicationStore = createStore<ApplicationStore>()(
@@ -157,6 +165,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           fetchedCategoryFilters: {},
           _lastItemByView: {},
           _pendingViewCursors: {},
+          pendingFulltextItems: [],
+          isFetchingFulltext: false,
         });
         loadingActor.send({ type: "RESET" });
       },
@@ -191,6 +201,50 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       fetchedCategoryFilters: {},
       _lastItemByView: {},
       _pendingViewCursors: {},
+      pendingFulltextItems: [],
+      isFetchingFulltext: false,
+
+      scheduleFulltextFetch: () => {
+        // Debounce fulltext requests so multiple lightweight chunks
+        // arriving in quick succession are batched into one request.
+        const DEBOUNCE_MS = 300;
+        if (fulltextTimeout) {
+          clearTimeout(fulltextTimeout);
+        }
+
+        fulltextTimeout = setTimeout(() => {
+          fulltextTimeout = null;
+          const state = get();
+          if (
+            state.isFetchingFulltext ||
+            state.pendingFulltextItems.length === 0
+          ) {
+            return;
+          }
+
+          set({ isFetchingFulltext: true });
+
+          const itemIds = [...state.pendingFulltextItems];
+
+          void orpcRouterClient.initial
+            .requestFullTextForItems({ itemIds })
+            .then(() => {
+              // Fulltext chunks will arrive via the SSE subscription and be
+              // processed by processChunk. Nothing to do here.
+            })
+            .catch((error) => {
+              console.error("Error fetching fulltext:", error);
+            })
+            .finally(() => {
+              set({ isFetchingFulltext: false });
+              // If new pending items accumulated while this request was in flight,
+              // schedule another fetch.
+              if (get().pendingFulltextItems.length > 0) {
+                get().scheduleFulltextFetch();
+              }
+            });
+        }, DEBOUNCE_MS);
+      },
 
       getPaginationState: (viewId, visibilityFilter) => {
         return get().viewPaginationState[viewId]?.[visibilityFilter];
@@ -253,11 +307,13 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               }
             });
 
+            feedItemsOrder.sort(
+              getSortFunction(feedItemsDict, viewId, visibilityFilter),
+            );
+
             set({
               feedItemsDict,
-              feedItemsOrder: feedItemsOrder.sort(
-                getSortFunction(get().feedItemsDict, viewId, visibilityFilter),
-              ),
+              feedItemsOrder,
               viewPaginationState: {
                 ...get().viewPaginationState,
                 [viewId]: {
@@ -369,11 +425,13 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               }
             });
 
+            feedItemsOrder.sort(
+              getSortFunction(feedItemsDict, viewId, visibilityFilter),
+            );
+
             set({
               feedItemsDict,
-              feedItemsOrder: feedItemsOrder.sort(
-                getSortFunction(get().feedItemsDict, viewId, visibilityFilter),
-              ),
+              feedItemsOrder,
               viewPaginationState: {
                 ...get().viewPaginationState,
                 [viewId]: {
@@ -570,11 +628,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             });
           }
 
+          feedItemsOrder.sort(sortFeedItemsOrderByDate(feedItemsDict));
+
           set({
             feedItemsDict: feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(get().feedItemsDict),
-            ),
+            feedItemsOrder,
             feedStatusDict: feedStatusDict,
           });
 
@@ -583,11 +641,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           }
         }
 
+        const finalFeedItemsDict = get().feedItemsDict;
         set({
           fetchFeedItemsLastFetchedAt: Date.now(),
-          feedItemsDict: { ...get().feedItemsDict },
+          feedItemsDict: { ...finalFeedItemsDict },
           feedItemsOrder: [...get().feedItemsOrder].sort(
-            sortFeedItemsOrderByDate(get().feedItemsDict),
+            sortFeedItemsOrderByDate(finalFeedItemsDict),
           ),
           feedStatusDict: { ...get().feedStatusDict },
         });
@@ -617,18 +676,19 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             });
           }
 
+          feedItemsOrder.sort(sortFeedItemsOrderByDate(feedItemsDict));
+
           set({
             feedItemsDict: feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(get().feedItemsDict),
-            ),
+            feedItemsOrder,
             feedStatusDict: feedStatusDict,
           });
         }
 
+        const finalFeedItemsDict = get().feedItemsDict;
         set({
           feedItemsOrder: [...get().feedItemsOrder].sort(
-            sortFeedItemsOrderByDate(get().feedItemsDict),
+            sortFeedItemsOrderByDate(finalFeedItemsDict),
           ),
         });
       },
@@ -642,8 +702,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           // Re-run the same flow as initial mount: metadata, diffs, RSS refresh.
           // Rate limiting is handled server-side via checkUserRefreshEligibility —
           // if the user is in cooldown, metadata+diffs still run but RSS is skipped.
-          const viewManifests = buildViewManifests(get());
-          await orpcRouterClient.initial.requestInitialData({ viewManifests });
+          await orpcRouterClient.initial.requestInitialData();
         } catch (e) {
           // Exit loading state so the button re-enables on error
           loadingActor.send({ type: "RESET" });
@@ -685,11 +744,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 }
               });
 
+              feedItemsOrder.sort(getSortFunction(feedItemsDict, chunk.viewId));
+
               set({
                 feedItemsDict,
-                feedItemsOrder: feedItemsOrder.sort(
-                  getSortFunction(get().feedItemsDict, chunk.viewId),
-                ),
+                feedItemsOrder,
               });
               break;
             }
@@ -995,17 +1054,18 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   initialChunk.diff,
                 );
 
+                const viewId = initialChunk.viewId;
+                const vf = initialChunk.visibilityFilter as VisibilityFilter;
+
                 const updates: Partial<ApplicationStore> = {
                   feedItemsDict,
                   feedItemsOrder: feedItemsOrder.sort(
-                    sortFeedItemsOrderByDate(feedItemsDict),
+                    getSortFunction(feedItemsDict, viewId, vf),
                   ),
                 };
 
                 // Track cursor from this diff chunk
-                const viewId = initialChunk.viewId;
                 if (viewId !== undefined) {
-                  const vf = initialChunk.visibilityFilter as VisibilityFilter;
                   const pendingCursors = { ...get()._pendingViewCursors };
                   pendingCursors[viewId] = {
                     ...pendingCursors[viewId],
@@ -1032,6 +1092,123 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 }
 
                 set(updates);
+                break;
+              }
+
+              case "view-lightweight-items": {
+                const feedItemsDict = { ...get().feedItemsDict };
+                const feedItemsOrder = [...get().feedItemsOrder];
+                const existingIds = new Set(feedItemsOrder);
+                const pendingFulltext = new Set(get().pendingFulltextItems);
+                let hasNewPending = false;
+
+                for (const item of initialChunk.items) {
+                  const existing = feedItemsDict[item.id];
+                  if (
+                    existing &&
+                    existing.contentHash === item.contentHash &&
+                    existing.content
+                  ) {
+                    // Client already has this item with matching fulltext — keep it.
+                    continue;
+                  }
+
+                  // Store the lightweight item (no content yet, but snippet is present)
+                  feedItemsDict[item.id] = {
+                    ...item,
+                    content: existing?.content ?? "",
+                    contentSnippet:
+                      (item as ApplicationFeedItem).contentSnippet ??
+                      existing?.contentSnippet ??
+                      "",
+                  } as ApplicationFeedItem;
+
+                  if (!existingIds.has(item.id)) {
+                    feedItemsOrder.push(item.id);
+                    existingIds.add(item.id);
+                  }
+
+                  // Only add to pending if we don't already have matching fulltext
+                  if (!existing || existing.contentHash !== item.contentHash) {
+                    pendingFulltext.add(item.id);
+                    hasNewPending = true;
+                  }
+                }
+
+                const viewId = initialChunk.viewId;
+                const vf = initialChunk.visibilityFilter as VisibilityFilter;
+
+                feedItemsOrder.sort(getSortFunction(feedItemsDict, viewId, vf));
+
+                const updates: Partial<ApplicationStore> = {
+                  feedItemsDict,
+                  feedItemsOrder,
+                };
+
+                if (hasNewPending) {
+                  updates.pendingFulltextItems = Array.from(pendingFulltext);
+                }
+
+                // Track cursor for pagination
+                if (viewId !== undefined) {
+                  const pendingCursors = { ...get()._pendingViewCursors };
+                  pendingCursors[viewId] = {
+                    ...pendingCursors[viewId],
+                    [vf]: initialChunk.cursor,
+                  };
+                  updates._pendingViewCursors = pendingCursors;
+
+                  // Track fetched visibility filter
+                  if (vf) {
+                    updates.fetchedVisibilityFilters = {
+                      ...get().fetchedVisibilityFilters,
+                      [viewId]: new Set([
+                        ...(get().fetchedVisibilityFilters[viewId] ?? []),
+                        vf,
+                      ]),
+                    };
+                  }
+
+                  // Set current view from first lightweight chunk
+                  const firstView = viewsStore.getState().views[0];
+                  if (
+                    get().currentViewId === null &&
+                    viewId === firstView?.id
+                  ) {
+                    updates.currentViewId = viewId;
+                  }
+                }
+
+                set(updates);
+
+                // Schedule a debounced fulltext fetch
+                if (hasNewPending) {
+                  get().scheduleFulltextFetch();
+                }
+
+                break;
+              }
+
+              case "fulltext-items": {
+                const feedItemsDict = { ...get().feedItemsDict };
+                const pendingFulltext = new Set(get().pendingFulltextItems);
+
+                for (const item of initialChunk.items) {
+                  const existing = feedItemsDict[item.id];
+                  if (existing) {
+                    feedItemsDict[item.id] = {
+                      ...existing,
+                      content: item.content,
+                      contentSnippet: item.contentSnippet,
+                    };
+                  }
+                  pendingFulltext.delete(item.id);
+                }
+
+                set({
+                  feedItemsDict,
+                  pendingFulltextItems: Array.from(pendingFulltext),
+                });
                 break;
               }
 

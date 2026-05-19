@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { getDefaultStore } from "jotai";
 import { orpcRouterClient } from "../orpc";
-import { buildViewManifests } from "./buildViewManifests";
 import { loadingActor } from "./loading-machine";
 import { feedItemsStore } from "./store";
 import { shouldAlwaysKeepSSEConnectionAlive } from "./atoms";
@@ -92,15 +91,7 @@ export function useDataSubscription() {
           // refresh if the cooldown elapsed while the tab was hidden.
           if (visibilityReconnect) {
             visibilityReconnect = false;
-            const state = feedItemsStore.getState();
-            const hasCachedData = Object.keys(state.feedItemsDict).length > 0;
-            if (hasCachedData) {
-              void orpcRouterClient.initial.requestInitialData({
-                viewManifests: buildViewManifests(state),
-              });
-            } else {
-              void orpcRouterClient.initial.requestInitialData();
-            }
+            void orpcRouterClient.initial.requestInitialData();
           }
 
           for await (const payload of iterator as AsyncIterable<PublishedChunk>) {
@@ -206,14 +197,13 @@ export function useDataSubscription() {
   }, [flushBuffer]);
 
   // Request methods that trigger data fetching via the publisher
-  const requestInitialData = useCallback(
-    (options?: {
-      viewManifests?: Record<number, Record<string, ClientManifestEntry[]>>;
-    }) => {
-      return orpcRouterClient.initial.requestInitialData(options ?? undefined);
-    },
-    [],
-  );
+  const requestInitialData = useCallback(() => {
+    return orpcRouterClient.initial.requestInitialData();
+  }, []);
+
+  const requestFullTextForItems = useCallback((itemIds: string[]) => {
+    return orpcRouterClient.initial.requestFullTextForItems({ itemIds });
+  }, []);
 
   const requestItemsByVisibility = useCallback(
     (
@@ -270,6 +260,7 @@ export function useDataSubscription() {
 
   return {
     requestInitialData,
+    requestFullTextForItems,
     requestItemsByVisibility,
     requestItemsByFeed,
     requestItemsByCategoryId,
@@ -282,10 +273,11 @@ export function useDataSubscription() {
  * This allows accessing request methods from anywhere in the app.
  */
 export const dataSubscriptionActions = {
-  requestInitialData: (options?: {
-    viewManifests?: Record<number, Record<string, ClientManifestEntry[]>>;
-  }) => {
-    return orpcRouterClient.initial.requestInitialData(options ?? undefined);
+  requestInitialData: () => {
+    return orpcRouterClient.initial.requestInitialData();
+  },
+  requestFullTextForItems: (itemIds: string[]) => {
+    return orpcRouterClient.initial.requestFullTextForItems({ itemIds });
   },
   streamingImport: (
     feeds: Array<{ feedUrl: string; categories: string[] }>,

@@ -85,16 +85,21 @@ function getThumbnailType(
   },
   feed?: { imageUrl?: string },
   layout?: ThumbnailLayout,
+  hideFeedIcon?: boolean,
 ): ThumbnailType {
   if (item.thumbnail) {
     // Standard list uses icon style for non-video content
     if (item.platform === "website") {
-      return layout === "list" ? (feed?.imageUrl ? "icon" : "none") : "article";
+      return layout === "list"
+        ? feed?.imageUrl && !hideFeedIcon
+          ? "icon"
+          : "none"
+        : "article";
     }
     if (item.orientation === "vertical") return "vertical-video";
     return "horizontal-video";
   }
-  if (feed?.imageUrl) return "icon";
+  if (feed?.imageUrl && !hideFeedIcon) return "icon";
   return "none";
 }
 
@@ -193,6 +198,7 @@ interface ArticleThumbnailProps {
   title: string;
   feedImageUrl?: string;
   feedName?: string;
+  hideFeedIcon?: boolean;
 }
 
 function ArticleThumbnail({
@@ -200,6 +206,7 @@ function ArticleThumbnail({
   title,
   feedImageUrl,
   feedName,
+  hideFeedIcon,
 }: ArticleThumbnailProps) {
   return (
     <>
@@ -209,7 +216,7 @@ function ArticleThumbnail({
         className="absolute inset-0 h-full w-full object-cover"
       />
       <div className="bg-foreground/30 dark:bg-background/30 absolute inset-0" />
-      {feedImageUrl && (
+      {feedImageUrl && !hideFeedIcon && (
         <img
           src={feedImageUrl}
           alt={feedName}
@@ -370,10 +377,16 @@ interface ItemThumbnailProps {
     imageUrl?: string;
     name?: string;
   };
+  hideFeedIcon?: boolean;
 }
 
-function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
-  const thumbnailType = getThumbnailType(item, feed, layout);
+function ItemThumbnail({
+  layout,
+  item,
+  feed,
+  hideFeedIcon,
+}: ItemThumbnailProps) {
+  const thumbnailType = getThumbnailType(item, feed, layout, hideFeedIcon);
 
   return (
     <ThumbnailContainer
@@ -394,6 +407,7 @@ function ItemThumbnail({ layout, item, feed }: ItemThumbnailProps) {
           title={item.title}
           feedImageUrl={feed?.imageUrl}
           feedName={feed?.name}
+          hideFeedIcon={hideFeedIcon}
         />
       )}
       {thumbnailType === "icon" && feed?.imageUrl && (
@@ -409,6 +423,7 @@ interface ItemDisplayProps {
   size?: ItemSize;
   isSelected?: boolean;
   onSelect?: () => void;
+  sectionItemType?: "feed" | "tag";
 }
 
 export function ItemDisplay({
@@ -416,6 +431,7 @@ export function ItemDisplay({
   size = "standard",
   isSelected,
   onSelect,
+  sectionItemType,
 }: ItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
@@ -441,7 +457,7 @@ export function ItemDisplay({
       data-item-id={contentId}
       onMouseEnter={onSelect}
       className={clsx(
-        "group relative flex w-full flex-1 justify-stretch gap-2 md:mx-4 md:my-2",
+        "group relative flex flex-1 justify-stretch gap-2 md:mx-4 md:my-2",
         isLarge
           ? "flex-col md:flex-row md:items-center"
           : "items-center md:h-20",
@@ -464,7 +480,12 @@ export function ItemDisplay({
         {isLarge ? (
           <>
             <div className="grid w-44 place-items-center">
-              <ItemThumbnail layout="large-list" item={item} feed={feed} />
+              <ItemThumbnail
+                layout="large-list"
+                item={item}
+                feed={feed}
+                hideFeedIcon={sectionItemType === "feed"}
+              />
             </div>
             <div className="flex h-full flex-1 flex-col justify-center pr-2">
               <ItemTitle title={item.title} lineClamp={2} />
@@ -479,9 +500,11 @@ export function ItemDisplay({
           </>
         ) : (
           <>
-            <div className="grid w-16 place-items-center">
-              <ItemThumbnail layout="list" item={item} feed={feed} />
-            </div>
+            {sectionItemType !== "feed" && (
+              <div className="grid w-16 place-items-center">
+                <ItemThumbnail layout="list" item={item} feed={feed} />
+              </div>
+            )}
             <div className="flex h-full flex-1 flex-col justify-center">
               <ItemTitle title={item.title} lineClamp={1} />
               <ItemMeta
@@ -508,6 +531,7 @@ interface GridItemDisplayProps {
   size?: ItemSize;
   isSelected?: boolean;
   onSelect?: () => void;
+  sectionItemType?: "feed" | "tag";
 }
 
 export function GridItemDisplay({
@@ -515,6 +539,7 @@ export function GridItemDisplay({
   size = "standard",
   isSelected,
   onSelect,
+  sectionItemType,
 }: GridItemDisplayProps) {
   const feeds = useFeedsArray();
   const item = useFeedItemValue(contentId);
@@ -557,6 +582,7 @@ export function GridItemDisplay({
           layout={isLarge ? "large-grid" : "grid"}
           item={item}
           feed={feed}
+          hideFeedIcon={sectionItemType === "feed"}
         />
         <div className="flex flex-1 flex-col justify-center pt-2">
           <ItemTitle title={item.title} lineClamp={isLarge ? 1 : 2} />
