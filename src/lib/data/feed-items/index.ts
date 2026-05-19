@@ -31,6 +31,38 @@ function isItemOlderThanCursor(
 ): boolean {
   if (!cursor) return false;
 
+  // For sectioned views, the cursor includes placement. We cannot correctly
+  // determine if an item is "after" the cursor without computing its section
+  // placement, which is expensive and already handled by server-side ordering.
+  // The server only returns items in the correct order; unfetched items are
+  // simply not in feedItemsOrder yet. So we skip the cursor filter for
+  // sectioned views.
+  if (cursor.placement !== undefined) {
+    return false;
+  }
+
+  // For read visibility, the server sorts by isWatchedUpdatedAt first.
+  if (cursor.isWatchedUpdatedAt) {
+    const itemWatchedTime = item.isWatchedUpdatedAt?.getTime() ?? 0;
+    const cursorWatchedTime = cursor.isWatchedUpdatedAt.getTime();
+
+    if (itemWatchedTime < cursorWatchedTime) {
+      return true;
+    }
+    if (itemWatchedTime === cursorWatchedTime) {
+      const itemTime = item.postedAt.getTime();
+      const cursorTime = cursor.postedAt.getTime();
+
+      if (itemTime < cursorTime) {
+        return true;
+      }
+      if (itemTime === cursorTime && item.id > cursor.id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   const itemTime = item.postedAt.getTime();
   const cursorTime = cursor.postedAt.getTime();
 

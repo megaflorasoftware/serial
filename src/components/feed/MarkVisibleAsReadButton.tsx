@@ -23,8 +23,8 @@ import {
   useViewPaginationState,
 } from "~/lib/data/store";
 import {
-  useLastFullyVisibleIndex,
   useResetVisibleItems,
+  useVisibleItemIds,
 } from "~/lib/data/visible-items-store";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useShortcut } from "~/lib/hooks/useShortcut";
@@ -41,7 +41,7 @@ export function MarkVisibleAsReadButton() {
 
   const filteredItemIds = useFilteredFeedItemsOrder();
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
-  const lastFullyVisibleIndex = useLastFullyVisibleIndex();
+  const visibleItemIds = useVisibleItemIds();
   const resetVisibleItems = useResetVisibleItems();
 
   const viewPaginationState = useViewPaginationState();
@@ -58,19 +58,15 @@ export function MarkVisibleAsReadButton() {
     // Only handle for unread filter with visible items
     if (visibilityFilter !== "unread" || filteredItemIds.length === 0) return;
     // Don't proceed if no items are fully visible yet
-    if (lastFullyVisibleIndex < 0) return;
+    if (visibleItemIds.size === 0) return;
 
     setIsLoading(true);
     try {
-      // Slice from index 0 to lastFullyVisibleIndex (inclusive)
-      // This includes items that are above the viewport (scrolled past) and fully visible items
-      const visibleItemIds = filteredItemIds.slice(
-        0,
-        lastFullyVisibleIndex + 1,
-      );
+      // Gather all visible item IDs (deduplicated via Set)
+      const visibleItemIdList = [...visibleItemIds];
 
       // Prepare items payload
-      const items = visibleItemIds
+      const items = visibleItemIdList
         .map((id) => ({
           id,
           feedId: feedItemsDict[id]?.feedId ?? 0,

@@ -4,45 +4,60 @@ import { useAtomValue } from "jotai";
 import { ItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
+import { ViewListContainer } from "./ViewListContainer";
 import { VisibleItemTracker } from "./VisibleItemTracker";
 import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
-import { useDeferredAutoAnimate } from "~/lib/hooks/useDeferredAutoAnimate";
 
 interface ViewItemLargeListProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
+  startIndex?: number;
+  showPaginationEnd?: boolean;
+  sectionItemType?: "feed" | "tag";
 }
 
 export function ViewItemLargeList({
   items,
   handleMouseSelect,
+  startIndex = 0,
+  showPaginationEnd = true,
+  sectionItemType,
 }: ViewItemLargeListProps) {
-  const [parent] = useDeferredAutoAnimate();
   const selectedItemId = useAtomValue(selectedItemIdAtom);
 
-  const { sentinelRef, sentinelIndex, paginationState } =
+  const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
     useViewListScroll(items);
 
+  const actualSentinelIndex = sentinelIndex + startIndex;
+
   return (
-    <div className="w-full transition-all md:pt-4 md:pr-6 md:pl-4" ref={parent}>
-      {items.map((contentId, index) => (
-        <VisibleItemTracker key={contentId} index={index}>
-          <ItemDisplay
-            contentId={contentId}
-            size="large"
-            isSelected={contentId === selectedItemId}
-            onSelect={
-              handleMouseSelect ? () => handleMouseSelect(contentId) : undefined
-            }
-          />
-          {index === sentinelIndex && (
-            <div ref={sentinelRef} key={sentinelIndex} />
-          )}
-        </VisibleItemTracker>
-      ))}
-      {paginationState?.isFetching && <PaginationLoader />}
-      {!paginationState?.hasMore && <PaginationEnd />}
-    </div>
+    <ViewListContainer>
+      <div className="transition-all md:pt-2">
+        {visibleItems.map((contentId, index) => {
+          const globalIndex = startIndex + index;
+          return (
+            <VisibleItemTracker key={contentId} itemId={contentId}>
+              <ItemDisplay
+                contentId={contentId}
+                size="large"
+                isSelected={contentId === selectedItemId}
+                onSelect={
+                  handleMouseSelect
+                    ? () => handleMouseSelect(contentId)
+                    : undefined
+                }
+                sectionItemType={sectionItemType}
+              />
+              {globalIndex === actualSentinelIndex && (
+                <div ref={sentinelRef} key={globalIndex} />
+              )}
+            </VisibleItemTracker>
+          );
+        })}
+        {paginationState?.isFetching && <PaginationLoader />}
+        {showPaginationEnd && !paginationState?.hasMore && <PaginationEnd />}
+      </div>
+    </ViewListContainer>
   );
 }

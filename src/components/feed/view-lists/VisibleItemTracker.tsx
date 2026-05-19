@@ -2,22 +2,22 @@
 
 import { useEffect, useRef } from "react";
 import {
-  useAddVisibleIndex,
-  useRemoveVisibleIndex,
+  useAddVisibleItemId,
+  useRemoveVisibleItemId,
 } from "~/lib/data/visible-items-store";
 
 interface VisibleItemTrackerProps {
-  index: number;
+  itemId: string;
   children: React.ReactNode;
 }
 
 export function VisibleItemTracker({
-  index,
+  itemId,
   children,
 }: VisibleItemTrackerProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const addVisibleIndex = useAddVisibleIndex();
-  const removeVisibleIndex = useRemoveVisibleIndex();
+  const addVisibleItemId = useAddVisibleItemId();
+  const removeVisibleItemId = useRemoveVisibleItemId();
 
   useEffect(() => {
     const element = ref.current;
@@ -27,9 +27,9 @@ export function VisibleItemTracker({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            addVisibleIndex(index);
+            addVisibleItemId(itemId);
           } else {
-            removeVisibleIndex(index);
+            removeVisibleItemId(itemId);
           }
         });
       },
@@ -44,9 +44,9 @@ export function VisibleItemTracker({
 
     return () => {
       observer.disconnect();
-      removeVisibleIndex(index);
+      removeVisibleItemId(itemId);
     };
-  }, [index, addVisibleIndex, removeVisibleIndex]);
+  }, [itemId, addVisibleItemId, removeVisibleItemId]);
 
   return <div ref={ref}>{children}</div>;
 }

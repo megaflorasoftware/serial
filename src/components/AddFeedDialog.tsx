@@ -8,7 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "@tanstack/react-router";
-import { ViewCategoriesInput } from "./AddViewDialog";
+import { ViewCategoriesInput } from "./view-dialog";
 import {
   FeedDiscoveryInput,
   FeedDiscoveryResults,

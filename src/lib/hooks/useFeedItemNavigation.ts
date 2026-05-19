@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useLocation } from "@tanstack/react-router";
 import { useShortcut } from "./useShortcut";
@@ -28,6 +28,11 @@ import {
 
 const SCROLL_DURATION_MS = 300;
 const TARGET_VIEWPORT_POSITION = 1 / 3;
+
+interface SectionInfo {
+  size: number;
+  isGrid: boolean;
+}
 
 function isElementInViewport(element: Element): boolean {
   const container = getScrollContainer();
@@ -100,9 +105,37 @@ function getGridPosition(
   return { row, col, columns };
 }
 
+function buildSectionBoundaries(sections: SectionInfo[]) {
+  const boundaries: Array<{ start: number; end: number; isGrid: boolean }> = [];
+  let start = 0;
+  for (const section of sections) {
+    boundaries.push({
+      start,
+      end: start + section.size,
+      isGrid: section.isGrid,
+    });
+    start += section.size;
+  }
+  return boundaries;
+}
+
+function getSectionIndex(
+  itemIndex: number,
+  boundaries: Array<{ start: number; end: number }>,
+): number {
+  for (let i = 0; i < boundaries.length; i++) {
+    const b = boundaries[i]!;
+    if (itemIndex >= b.start && itemIndex < b.end) {
+      return i;
+    }
+  }
+  return boundaries.length - 1;
+}
+
 export function useFeedItemNavigation(
   items: string[],
   isGridLayout: boolean = false,
+  sections?: SectionInfo[],
 ) {
   const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
   const setSoftReadItemIds = useSetAtom(softReadItemIdsAtom);
@@ -126,6 +159,12 @@ export function useFeedItemNavigation(
     selectedItemId ?? "",
   );
   const { handleLoadMore } = useLoadMoreItems();
+
+  const hasSections = sections && sections.length > 0;
+  const sectionBoundaries = useMemo(() => {
+    if (!hasSections) return [];
+    return buildSectionBoundaries(sections);
+  }, [hasSections, sections]);
 
   const scrollToItem = useCallback(
     (itemId: string | null, forceInstant: boolean = false) => {
@@ -212,13 +251,47 @@ export function useFeedItemNavigation(
         return;
       }
 
-      if (isGridLayout && selectedItemId) {
+      const isGrid =
+        isGridLayout ||
+        (hasSections &&
+          sectionBoundaries[getSectionIndex(currentIndex, sectionBoundaries)]
+            ?.isGrid);
+
+      if (isGrid && selectedItemId) {
         const gridPos = getGridPosition(items, selectedItemId);
         if (gridPos) {
           const nextIndex = (gridPos.row + 1) * gridPos.columns + gridPos.col;
           if (nextIndex < items.length) {
+            // Check if we've moved to a different section
+            if (hasSections) {
+              const currentSection = getSectionIndex(
+                currentIndex,
+                sectionBoundaries,
+              );
+              const nextSection = getSectionIndex(nextIndex, sectionBoundaries);
+              if (currentSection !== nextSection) {
+                // Jump to first item of next section
+                const nextSectionStart =
+                  sectionBoundaries[nextSection]?.start ?? nextIndex;
+                selectItem(items[nextSectionStart]!);
+                return;
+              }
+            }
             selectItem(items[nextIndex]!);
           } else {
+            // At the end of the grid, try next section
+            if (hasSections) {
+              const currentSection = getSectionIndex(
+                currentIndex,
+                sectionBoundaries,
+              );
+              const nextSection = currentSection + 1;
+              if (nextSection < sectionBoundaries.length) {
+                const nextSectionStart = sectionBoundaries[nextSection]!.start;
+                selectItem(items[nextSectionStart]!);
+                return;
+              }
+            }
             setSelectedItemId(null);
             getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
           }
@@ -229,6 +302,20 @@ export function useFeedItemNavigation(
           setSelectedItemId(null);
           getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
         } else {
+          // Check if we've crossed a section boundary
+          if (hasSections) {
+            const currentSection = getSectionIndex(
+              currentIndex,
+              sectionBoundaries,
+            );
+            const nextSection = getSectionIndex(nextIndex, sectionBoundaries);
+            if (currentSection !== nextSection) {
+              // Jump to first item of next section
+              const nextSectionStart = sectionBoundaries[nextSection]!.start;
+              selectItem(items[nextSectionStart]!);
+              return;
+            }
+          }
           selectItem(items[nextIndex]!);
         }
       }
@@ -240,6 +327,8 @@ export function useFeedItemNavigation(
       selectItem,
       isGridLayout,
       setSelectedItemId,
+      hasSections,
+      sectionBoundaries,
     ],
   );
 
@@ -276,17 +365,65 @@ export function useFeedItemNavigation(
         return;
       }
 
-      if (isGridLayout && selectedItemId) {
+      const isGrid =
+        isGridLayout ||
+        (hasSections &&
+          sectionBoundaries[getSectionIndex(currentIndex, sectionBoundaries)]
+            ?.isGrid);
+
+      if (isGrid && selectedItemId) {
         const gridPos = getGridPosition(items, selectedItemId);
         if (gridPos && gridPos.row > 0) {
           const prevIndex = (gridPos.row - 1) * gridPos.columns + gridPos.col;
+          // Check if we've moved to a different section
+          if (hasSections) {
+            const currentSection = getSectionIndex(
+              currentIndex,
+              sectionBoundaries,
+            );
+            const prevSection = getSectionIndex(prevIndex, sectionBoundaries);
+            if (currentSection !== prevSection) {
+              // Jump to last item of previous section
+              const prevSectionEnd = sectionBoundaries[prevSection]!.end - 1;
+              selectItem(items[prevSectionEnd]!);
+              return;
+            }
+          }
           selectItem(items[prevIndex]!);
         } else {
+          // At the top of the grid, try previous section
+          if (hasSections) {
+            const currentSection = getSectionIndex(
+              currentIndex,
+              sectionBoundaries,
+            );
+            const prevSection = currentSection - 1;
+            if (prevSection >= 0) {
+              const prevSectionEnd = sectionBoundaries[prevSection]!.end - 1;
+              selectItem(items[prevSectionEnd]!);
+              return;
+            }
+          }
           setSelectedItemId(null);
           getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
         }
       } else if (currentIndex > 0) {
-        selectItem(items[currentIndex - 1]!);
+        const prevIndex = currentIndex - 1;
+        // Check if we've crossed a section boundary
+        if (hasSections) {
+          const currentSection = getSectionIndex(
+            currentIndex,
+            sectionBoundaries,
+          );
+          const prevSection = getSectionIndex(prevIndex, sectionBoundaries);
+          if (currentSection !== prevSection) {
+            // Jump to last item of previous section
+            const prevSectionEnd = sectionBoundaries[prevSection]!.end - 1;
+            selectItem(items[prevSectionEnd]!);
+            return;
+          }
+        }
+        selectItem(items[prevIndex]!);
       } else {
         setSelectedItemId(null);
         getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
@@ -300,13 +437,15 @@ export function useFeedItemNavigation(
       isGridLayout,
       setSelectedItemId,
       handleLoadMore,
+      hasSections,
+      sectionBoundaries,
     ],
   );
 
   const handleArrowRight = useCallback(
     (event: KeyboardEvent) => {
       event.preventDefault();
-      if (pathname !== "/" || !isGridLayout) return;
+      if (pathname !== "/" || (!isGridLayout && !hasSections)) return;
 
       const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
       if (currentIndex === -1) {
@@ -316,16 +455,46 @@ export function useFeedItemNavigation(
 
       const nextIndex = currentIndex + 1;
       if (nextIndex < items.length) {
+        // Check if we've crossed a section boundary into a grid section
+        if (hasSections) {
+          const currentSection = getSectionIndex(
+            currentIndex,
+            sectionBoundaries,
+          );
+          const nextSection = getSectionIndex(nextIndex, sectionBoundaries);
+          if (currentSection !== nextSection) {
+            // Jump to first item of next section
+            const nextSectionStart = sectionBoundaries[nextSection]!.start;
+            selectItem(items[nextSectionStart]!);
+            return;
+          }
+        }
         selectItem(items[nextIndex]!);
+      } else if (hasSections) {
+        // At end, jump to first item of next section
+        const currentSection = getSectionIndex(currentIndex, sectionBoundaries);
+        const nextSection = currentSection + 1;
+        if (nextSection < sectionBoundaries.length) {
+          const nextSectionStart = sectionBoundaries[nextSection]!.start;
+          selectItem(items[nextSectionStart]!);
+        }
       }
     },
-    [pathname, selectedItemId, items, selectItem, isGridLayout],
+    [
+      pathname,
+      selectedItemId,
+      items,
+      selectItem,
+      isGridLayout,
+      hasSections,
+      sectionBoundaries,
+    ],
   );
 
   const handleArrowLeft = useCallback(
     (event: KeyboardEvent) => {
       event.preventDefault();
-      if (pathname !== "/" || !isGridLayout) return;
+      if (pathname !== "/" || (!isGridLayout && !hasSections)) return;
 
       const currentIndex = selectedItemId ? items.indexOf(selectedItemId) : -1;
       if (currentIndex === -1) {
@@ -334,10 +503,41 @@ export function useFeedItemNavigation(
       }
 
       if (currentIndex > 0) {
-        selectItem(items[currentIndex - 1]!);
+        const prevIndex = currentIndex - 1;
+        // Check if we've crossed a section boundary
+        if (hasSections) {
+          const currentSection = getSectionIndex(
+            currentIndex,
+            sectionBoundaries,
+          );
+          const prevSection = getSectionIndex(prevIndex, sectionBoundaries);
+          if (currentSection !== prevSection) {
+            // Jump to last item of previous section
+            const prevSectionEnd = sectionBoundaries[prevSection]!.end - 1;
+            selectItem(items[prevSectionEnd]!);
+            return;
+          }
+        }
+        selectItem(items[prevIndex]!);
+      } else if (hasSections) {
+        // At start, jump to last item of previous section
+        const currentSection = getSectionIndex(currentIndex, sectionBoundaries);
+        const prevSection = currentSection - 1;
+        if (prevSection >= 0) {
+          const prevSectionEnd = sectionBoundaries[prevSection]!.end - 1;
+          selectItem(items[prevSectionEnd]!);
+        }
       }
     },
-    [pathname, selectedItemId, items, selectItem, isGridLayout],
+    [
+      pathname,
+      selectedItemId,
+      items,
+      selectItem,
+      isGridLayout,
+      hasSections,
+      sectionBoundaries,
+    ],
   );
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ARROW_DOWN), handleArrowDown, {

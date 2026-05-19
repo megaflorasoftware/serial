@@ -26,6 +26,7 @@ export function useFeedItemActions(itemId: string) {
     feedItemsStore.getState().setFeedItem(itemId, {
       ...item,
       isWatched: true,
+      isWatchedUpdatedAt: new Date(),
     });
     setSoftReadItemIds((prev) => new Set([...prev, itemId]));
   }, [item, itemId, setSoftReadItemIds]);
@@ -42,6 +43,7 @@ export function useFeedItemActions(itemId: string) {
     feedItemsStore.getState().setFeedItem(itemId, {
       ...item,
       isWatched: newIsWatched,
+      isWatchedUpdatedAt: newIsWatched ? new Date() : null,
     });
 
     if (newIsWatched) {
@@ -62,6 +64,7 @@ export function useFeedItemActions(itemId: string) {
     feedItemsStore.getState().setFeedItem(itemId, {
       ...item,
       isWatchLater: !item.isWatchLater,
+      isWatchLaterUpdatedAt: new Date(),
     });
   }, [item, itemId]);
 

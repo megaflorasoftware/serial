@@ -2,7 +2,7 @@
 
 import { useAtom } from "jotai";
 import type { VisibilityFilter } from "~/lib/data/atoms";
-import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { visibilityFilterAtom } from "~/lib/data/atoms";
 import {
   Select,
@@ -20,37 +20,38 @@ const VISIBILITY_FILTER_SHORTCUTS: Record<VisibilityFilter, string> = {
   later: SHORTCUT_KEYS.LATER,
 };
 
+const VISIBILITY_FILTER_LABELS: Record<VisibilityFilter, string> = {
+  later: "Saved",
+  unread: "Inbox",
+  read: "Read",
+};
+
+const VISIBILITY_FILTER_ORDER: VisibilityFilter[] = ["unread", "later", "read"];
+
 export function ItemVisibilityChips() {
   const [visibilityFilter, setVisibilityFilter] = useAtom(visibilityFilterAtom);
 
   return (
-    <ToggleGroup
-      type="single"
-      value={visibilityFilter.toString()}
+    <Tabs
+      value={visibilityFilter}
       onValueChange={(value) => {
         if (!value) return;
         setVisibilityFilter(value as VisibilityFilter);
       }}
-      size="sm"
-      rovingFocus={false}
     >
-      {(["unread", "read", "later"] as const).map((filter) => {
-        return (
-          <ToggleGroupItem
-            className="relative"
-            key={filter}
-            value={filter}
-            tabIndex={-1}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            {filter.charAt(0).toUpperCase() + filter.slice(1)}
-            <KeyboardShortcutDisplay
-              shortcut={VISIBILITY_FILTER_SHORTCUTS[filter]}
-            />
-          </ToggleGroupItem>
-        );
-      })}
-    </ToggleGroup>
+      <TabsList>
+        {VISIBILITY_FILTER_ORDER.map((filter) => {
+          return (
+            <TabsTrigger className="relative" key={filter} value={filter}>
+              {VISIBILITY_FILTER_LABELS[filter]}
+              <KeyboardShortcutDisplay
+                shortcut={VISIBILITY_FILTER_SHORTCUTS[filter]}
+              />
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
+    </Tabs>
   );
 }
 
@@ -69,9 +70,11 @@ export function ItemVisibilitySelect() {
         <SelectValue placeholder="Visibility" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="unread">Unread</SelectItem>
-        <SelectItem value="read">Read</SelectItem>
-        <SelectItem value="later">Later</SelectItem>
+        {VISIBILITY_FILTER_ORDER.map((filter) => (
+          <SelectItem key={filter} value={filter}>
+            {VISIBILITY_FILTER_LABELS[filter]}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );

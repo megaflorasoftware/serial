@@ -4,49 +4,60 @@ import { useAtomValue } from "jotai";
 import { GridItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
+import { ViewListContainer } from "./ViewListContainer";
 import { VisibleItemTracker } from "./VisibleItemTracker";
 import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
-import { useDeferredAutoAnimate } from "~/lib/hooks/useDeferredAutoAnimate";
 
 interface ViewItemGridProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
+  startIndex?: number;
+  showPaginationEnd?: boolean;
+  sectionItemType?: "feed" | "tag";
 }
 
-export function ViewItemGrid({ items, handleMouseSelect }: ViewItemGridProps) {
-  const [parent] = useDeferredAutoAnimate();
+export function ViewItemGrid({
+  items,
+  handleMouseSelect,
+  startIndex = 0,
+  showPaginationEnd = true,
+  sectionItemType,
+}: ViewItemGridProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
 
-  const { sentinelRef, sentinelIndex, paginationState } =
+  const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
     useViewListScroll(items);
 
+  const actualSentinelIndex = sentinelIndex + startIndex;
+
   return (
-    <div className="w-full">
-      <div
-        ref={parent}
-        className="grid w-full grid-cols-2 items-stretch gap-y-4 px-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
-      >
-        {items.map((contentId, index) => (
-          <VisibleItemTracker key={contentId} index={index}>
-            <GridItemDisplay
-              contentId={contentId}
-              size="standard"
-              isSelected={contentId === selectedItemId}
-              onSelect={
-                handleMouseSelect
-                  ? () => handleMouseSelect(contentId)
-                  : undefined
-              }
-            />
-            {index === sentinelIndex && (
-              <div ref={sentinelRef} key={sentinelIndex} />
-            )}
-          </VisibleItemTracker>
-        ))}
+    <ViewListContainer className="px-4">
+      <div className="grid w-full grid-cols-2 items-stretch gap-y-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2">
+        {visibleItems.map((contentId, index) => {
+          const globalIndex = startIndex + index;
+          return (
+            <VisibleItemTracker key={contentId} itemId={contentId}>
+              <GridItemDisplay
+                contentId={contentId}
+                size="standard"
+                isSelected={contentId === selectedItemId}
+                onSelect={
+                  handleMouseSelect
+                    ? () => handleMouseSelect(contentId)
+                    : undefined
+                }
+                sectionItemType={sectionItemType}
+              />
+              {globalIndex === actualSentinelIndex && (
+                <div ref={sentinelRef} key={globalIndex} />
+              )}
+            </VisibleItemTracker>
+          );
+        })}
       </div>
       {paginationState?.isFetching && <PaginationLoader />}
-      {!paginationState?.hasMore && <PaginationEnd />}
-    </div>
+      {showPaginationEnd && !paginationState?.hasMore && <PaginationEnd />}
+    </ViewListContainer>
   );
 }
