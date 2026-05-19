@@ -36,7 +36,7 @@ import type {
 } from "~/server/db/schema";
 import type { ORPCContext } from "~/server/orpc/base";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
-import { captureException, logError } from "~/server/logger";
+import { captureException, logDebug, logError } from "~/server/logger";
 import {
   checkUserRefreshEligibility,
   getFeedsActivationBudget,
@@ -1250,6 +1250,10 @@ export const requestInitialData = protectedProcedure.handler(
       return { status: "error" };
     }
 
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=prerequisites-fetched`,
+    );
+
     const { feedsList, contentCategoriesList, feedCategoriesList } =
       prerequisiteData;
 
@@ -1264,6 +1268,10 @@ export const requestInitialData = protectedProcedure.handler(
       feedIds,
     } = prepareApplicationData(context.user.id, prerequisiteData);
 
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=application-data-prepared`,
+    );
+
     // Step 2: Publish prerequisite data chunks
     await publishPrerequisiteDataChunks(channel, "initial", {
       allViews,
@@ -1271,6 +1279,10 @@ export const requestInitialData = protectedProcedure.handler(
       contentCategoriesList,
       feedCategoriesList,
     });
+
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=prerequisites-published`,
+    );
 
     // Step 3: Publish view-feeds chunks for each view
     await publishViewFeedsChunks(channel, "initial", {
@@ -1282,6 +1294,10 @@ export const requestInitialData = protectedProcedure.handler(
       customViewFeedIds,
     });
 
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=view-feeds-published`,
+    );
+
     const firstView = allViews[0];
 
     if (feedIds.length === 0 || !firstView) {
@@ -1289,6 +1305,9 @@ export const requestInitialData = protectedProcedure.handler(
         source: "initial",
         chunk: { type: "initial-data-complete" },
       });
+      logDebug(
+        `[requestInitialData] user=${context.user.id} phase=early-complete-no-feeds`,
+      );
       return { status: "completed" };
     }
 
@@ -1349,17 +1368,29 @@ export const requestInitialData = protectedProcedure.handler(
       await queryAndPublishLightweightItems(view, "unread");
     }
 
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=unread-items-published`,
+    );
+
     // Signal that initial (unread) data is complete — client can show UI
     await publisher.publish(channel, {
       source: "initial",
       chunk: { type: "initial-data-complete" },
     });
 
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=initial-data-complete-signaled`,
+    );
+
     // Step 5: Publish read and later lightweight items for all views
     for (const view of allViews) {
       await queryAndPublishLightweightItems(view, "read");
       await queryAndPublishLightweightItems(view, "later");
     }
+
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=read-later-items-published`,
+    );
 
     // Step 6: Check refresh rate limit and publish refresh-start. The
     // cooldown + total feeds are streamed before the slow RSS fetch so the
@@ -1384,6 +1415,10 @@ export const requestInitialData = protectedProcedure.handler(
       },
     });
 
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=refresh-start-published feedsDue=${feedsDue.length}`,
+    );
+
     // Step 7: Run RSS fetch if eligible.
     if (eligibility.eligible) {
       await refreshUserFeeds({
@@ -1391,6 +1426,9 @@ export const requestInitialData = protectedProcedure.handler(
         feedsList,
         channel,
       });
+      logDebug(
+        `[requestInitialData] user=${context.user.id} phase=refresh-completed`,
+      );
     }
 
     // Step 8: Always signal completion so the client exits loading state.
@@ -1398,6 +1436,10 @@ export const requestInitialData = protectedProcedure.handler(
       source: "initial",
       chunk: { type: "refresh-complete" },
     });
+
+    logDebug(
+      `[requestInitialData] user=${context.user.id} phase=refresh-complete-published`,
+    );
 
     return { status: "completed" };
   },
