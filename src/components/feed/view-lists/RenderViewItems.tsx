@@ -14,10 +14,10 @@ import { ViewItemGrid } from "./ViewItemGrid";
 import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
-import { useViewListScroll } from "./useViewListScroll";
 import { useViewSections } from "./useViewSections";
 import type { ViewSection } from "./useViewSections";
 import FeedLoading from "~/components/loading";
+import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
 import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
@@ -146,15 +146,9 @@ function SectionHeading({
 function LayoutSection({
   section,
   handleMouseSelect,
-  sentinelRef,
-  sentinelIndex,
 }: {
   section: ViewSection;
   handleMouseSelect: (itemId: string) => void;
-  sentinelRef?:
-    | React.RefObject<HTMLDivElement | null>
-    | ((node: HTMLDivElement | null) => void);
-  sentinelIndex?: number;
 }) {
   const { items, layout, startIndex, name, isUncategorized, itemType, itemId } =
     section;
@@ -163,8 +157,6 @@ function LayoutSection({
     items,
     handleMouseSelect,
     startIndex,
-    sentinelRef,
-    sentinelIndex,
     showPaginationEnd: isUncategorized,
     sectionItemType: itemType,
   };
@@ -224,9 +216,7 @@ export function RenderViewItems() {
     sectionInfo,
   );
 
-  // Pagination sentinel
-  const { sentinelRef, sentinelIndex, paginationState } =
-    useViewListScroll(flatItems);
+  const { paginationState } = useLoadMoreItems();
 
   if (!hasInitialData) {
     return <FeedLoading />;
@@ -294,39 +284,19 @@ export function RenderViewItems() {
   }
 
   // Sectioned rendering
-  // Find which section should contain the sentinel
-  let sentinelSectionIndex = -1;
-  for (let i = 0; i < computedSections.length; i++) {
-    const section = computedSections[i]!;
-    const sectionEnd = section.startIndex + section.items.length;
-    if (sentinelIndex >= section.startIndex && sentinelIndex < sectionEnd) {
-      sentinelSectionIndex = i;
-      break;
-    }
-  }
-
   return (
     <div className="w-full">
-      {computedSections.map((section, index) => {
-        const isSentinelSection = index === sentinelSectionIndex;
-        const sectionSentinelIndex = isSentinelSection
-          ? sentinelIndex - section.startIndex
-          : undefined;
-
-        return (
-          <LayoutSection
-            key={
-              section.isUncategorized
-                ? "uncategorized"
-                : `${section.name}-${index}`
-            }
-            section={section}
-            handleMouseSelect={handleMouseSelect}
-            sentinelRef={isSentinelSection ? sentinelRef : undefined}
-            sentinelIndex={sectionSentinelIndex}
-          />
-        );
-      })}
+      {computedSections.map((section, index) => (
+        <LayoutSection
+          key={
+            section.isUncategorized
+              ? "uncategorized"
+              : `${section.name}-${index}`
+          }
+          section={section}
+          handleMouseSelect={handleMouseSelect}
+        />
+      ))}
       {paginationState?.isFetching && (
         <div className="px-4 py-4">
           <StandardListSkeleton />

@@ -1283,40 +1283,40 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             }
 
             if (chunk.type === "view-diff") {
+              // Background validation diff — only apply updates and additions.
+              // Skip deletions because an item not being in one view does not
+              // mean it should be removed from the global store (it may still
+              // be valid for other views or visibility filters).
               const feedItemsDict = { ...get().feedItemsDict };
               const feedItemsOrder = [...get().feedItemsOrder];
               const existingIds = new Set(feedItemsOrder);
-              applyDiffEntries(
-                feedItemsDict,
-                feedItemsOrder,
-                existingIds,
-                chunk.diff,
-              );
+
+              for (const entry of chunk.diff) {
+                switch (entry.status) {
+                  case "unchanged":
+                    break;
+                  case "updated":
+                    feedItemsDict[entry.item.id] = entry.item;
+                    break;
+                  case "new":
+                    feedItemsDict[entry.item.id] = entry.item;
+                    if (!existingIds.has(entry.item.id)) {
+                      feedItemsOrder.push(entry.item.id);
+                      existingIds.add(entry.item.id);
+                    }
+                    break;
+                  case "deleted":
+                    // Intentionally skipped — item may still be valid elsewhere
+                    break;
+                }
+              }
 
               const vf = chunk.visibilityFilter as VisibilityFilter;
               set({
                 feedItemsDict,
                 feedItemsOrder: feedItemsOrder.sort(
-                  getSortFunction(get().feedItemsDict, chunk.viewId, vf),
+                  getSortFunction(feedItemsDict, chunk.viewId, vf),
                 ),
-                viewPaginationState: {
-                  ...get().viewPaginationState,
-                  [chunk.viewId]: {
-                    ...get().viewPaginationState[chunk.viewId],
-                    [vf]: {
-                      cursor: chunk.cursor,
-                      hasMore: chunk.hasMore,
-                      isFetching: false,
-                    },
-                  },
-                },
-                fetchedVisibilityFilters: {
-                  ...get().fetchedVisibilityFilters,
-                  [chunk.viewId]: new Set([
-                    ...(get().fetchedVisibilityFilters[chunk.viewId] ?? []),
-                    vf,
-                  ]),
-                },
               });
               break;
             }

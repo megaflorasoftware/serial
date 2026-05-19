@@ -13,10 +13,6 @@ interface ViewItemLargeGridProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
   startIndex?: number;
-  sentinelRef?:
-    | React.RefObject<HTMLDivElement | null>
-    | ((node: HTMLDivElement | null) => void);
-  sentinelIndex?: number;
   showPaginationEnd?: boolean;
   sectionItemType?: "feed" | "tag";
 }
@@ -25,27 +21,20 @@ export function ViewItemLargeGrid({
   items,
   handleMouseSelect,
   startIndex = 0,
-  sentinelRef,
-  sentinelIndex,
   showPaginationEnd = true,
   sectionItemType,
 }: ViewItemLargeGridProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
 
-  const {
-    sentinelRef: defaultSentinelRef,
-    sentinelIndex: defaultSentinelIndex,
-    paginationState,
-  } = useViewListScroll(items);
+  const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
+    useViewListScroll(items);
 
-  const actualSentinelRef = sentinelRef ?? defaultSentinelRef;
-  const actualSentinelIndex =
-    (sentinelIndex ?? defaultSentinelIndex) + startIndex;
+  const actualSentinelIndex = sentinelIndex + startIndex;
 
   return (
     <ViewListContainer className="px-4">
       <div className="grid w-full items-stretch gap-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(250px,_1fr))]">
-        {items.map((contentId, index) => {
+        {visibleItems.map((contentId, index) => {
           const globalIndex = startIndex + index;
           return (
             <VisibleItemTracker key={contentId} itemId={contentId}>
@@ -61,7 +50,7 @@ export function ViewItemLargeGrid({
                 sectionItemType={sectionItemType}
               />
               {globalIndex === actualSentinelIndex && (
-                <div ref={actualSentinelRef} key={globalIndex} />
+                <div ref={sentinelRef} key={globalIndex} />
               )}
             </VisibleItemTracker>
           );

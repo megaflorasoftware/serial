@@ -13,10 +13,6 @@ interface ViewItemStandardListProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
   startIndex?: number;
-  sentinelRef?:
-    | React.RefObject<HTMLDivElement | null>
-    | ((node: HTMLDivElement | null) => void);
-  sentinelIndex?: number;
   showPaginationEnd?: boolean;
   sectionItemType?: "feed" | "tag";
 }
@@ -25,27 +21,20 @@ export function ViewItemStandardList({
   items,
   handleMouseSelect,
   startIndex = 0,
-  sentinelRef,
-  sentinelIndex,
   showPaginationEnd = true,
   sectionItemType,
 }: ViewItemStandardListProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
 
-  const {
-    sentinelRef: defaultSentinelRef,
-    sentinelIndex: defaultSentinelIndex,
-    paginationState,
-  } = useViewListScroll(items);
+  const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
+    useViewListScroll(items);
 
-  const actualSentinelRef = sentinelRef ?? defaultSentinelRef;
-  const actualSentinelIndex =
-    (sentinelIndex ?? defaultSentinelIndex) + startIndex;
+  const actualSentinelIndex = sentinelIndex + startIndex;
 
   return (
     <ViewListContainer>
       <div className="transition-all md:pt-2">
-        {items.map((contentId, index) => {
+        {visibleItems.map((contentId, index) => {
           const globalIndex = startIndex + index;
           return (
             <VisibleItemTracker key={contentId} itemId={contentId}>
@@ -61,7 +50,7 @@ export function ViewItemStandardList({
                 sectionItemType={sectionItemType}
               />
               {globalIndex === actualSentinelIndex && (
-                <div ref={actualSentinelRef} key={globalIndex} />
+                <div ref={sentinelRef} key={globalIndex} />
               )}
             </VisibleItemTracker>
           );
