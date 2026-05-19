@@ -22,6 +22,7 @@ import {
   getElements,
   useArticleNavigation,
 } from "~/lib/hooks/useArticleNavigation";
+import { getScrollContainer } from "~/lib/scroll";
 import { useDebouncedSaveProgress } from "~/lib/hooks/useDebouncedSaveProgress";
 import { useScrollDirection } from "~/lib/hooks/useScrollDirection";
 
@@ -102,6 +103,11 @@ function ReadPage() {
 
   // Restore progress on open — wait a frame so layout is complete
   const hasRestoredRef = useRef(false);
+
+  useEffect(() => {
+    hasRestoredRef.current = false;
+  }, [params.id]);
+
   useEffect(() => {
     if (hasRestoredRef.current) return;
     if (feedItem == null) return;
@@ -110,6 +116,7 @@ function ReadPage() {
 
     if (progress <= 0) {
       hasRestoredRef.current = true;
+      getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
       return;
     }
 
@@ -121,7 +128,7 @@ function ReadPage() {
     requestAnimationFrame(() => {
       selectElement(elements, targetIndex, true);
     });
-  }, [feedItem?.progress, feedItem?.content, selectElement]);
+  }, [params.id, feedItem, selectElement]);
 
   return (
     <div
