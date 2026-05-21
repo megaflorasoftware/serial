@@ -83,8 +83,8 @@ test.describe("undo mark visible as read", () => {
       .first();
     await expect(firstArticle).toBeVisible();
 
-    // Use the "f" keyboard shortcut to mark visible as read
-    await page.keyboard.press("f");
+    // Use the "Shift+F" keyboard shortcut to mark visible as read
+    await page.keyboard.press("Shift+F");
 
     // Wait for undo toast to appear
     const undoToast = page.locator("text=/Marked.*item.*as read/i").first();

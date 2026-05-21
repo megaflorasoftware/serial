@@ -18,7 +18,11 @@ import { useViewSections } from "./useViewSections";
 import type { ViewSection } from "./useViewSections";
 import FeedLoading from "~/components/loading";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
-import { viewFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
+import {
+  selectedItemIdAtom,
+  viewFilterAtom,
+  visibilityFilterAtom,
+} from "~/lib/data/atoms";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
@@ -90,6 +94,7 @@ function SectionHeading({
   onMarkAsRead?: (sectionIndex: number) => void;
 }) {
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
+  const selectedItemId = useAtomValue(selectedItemIdAtom);
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
   const [isLoading, setIsLoading] = useState(false);
   const [isStuck, setIsStuck] = useState(false);
@@ -141,7 +146,14 @@ function SectionHeading({
     }
   };
 
-  useShortcut(SHORTCUT_KEYS.MARK_SECTION_READ, handleMarkSectionAsRead);
+  const isSelectedItemInSection =
+    selectedItemId !== null && sectionItems.includes(selectedItemId);
+
+  useShortcut(SHORTCUT_KEYS.MARK_SECTION_READ, () => {
+    if (!isSelectedItemInSection) return;
+
+    void handleMarkSectionAsRead();
+  });
 
   return (
     <>

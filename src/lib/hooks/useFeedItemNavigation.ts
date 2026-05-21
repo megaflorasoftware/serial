@@ -557,18 +557,18 @@ export function useFeedItemNavigation(
       if (pathname !== "/" || !selectedItemId) return;
 
       const idx = items.indexOf(selectedItemId);
-      const wasMarkedRead = selectedItemActions.toggleRead();
-      if (wasMarkedRead) {
-        if (idx === items.length - 1) {
-          setSelectedItemId(null);
+      const didToggleRead = selectedItemActions.toggleRead();
+      if (!didToggleRead) return;
+
+      if (idx === items.length - 1) {
+        setSelectedItemId(null);
+        requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              getScrollContainer().scrollTo({ top: 0, behavior: "smooth" });
-            });
+            getScrollContainer().scrollTo({ top: 0, behavior: "smooth" });
           });
-        } else {
-          selectNextItem(idx, { deferScroll: true });
-        }
+        });
+      } else {
+        selectNextItem(idx, { deferScroll: true });
       }
     },
     [

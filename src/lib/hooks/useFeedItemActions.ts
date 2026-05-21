@@ -42,7 +42,7 @@ export function useFeedItemActions(itemId: string) {
       isWatchedUpdatedAt: newIsWatched ? new Date() : null,
     });
 
-    return newIsWatched;
+    return true;
   }, [item, itemId]);
 
   const toggleWatchLater = useCallback(() => {
