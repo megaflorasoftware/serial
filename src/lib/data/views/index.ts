@@ -75,7 +75,6 @@ export function useCheckFilteredFeedItemsForView() {
             viewFilter,
             customViewCategoryIds,
             customViews: undefined,
-            softReadItemIds: undefined,
             customViewFeedIds,
           }),
       );

@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { useSetAtom } from "jotai";
 import { useRouter } from "@tanstack/react-router";
-import { softReadItemIdsAtom } from "../data/atoms";
 import { orpcRouterClient } from "../orpc";
 import { feedItemsStore, useFeedItemValue } from "../data/store";
 import { useFeeds as useFeedsArray } from "../data/feeds/store";
@@ -12,7 +10,6 @@ export function useFeedItemActions(itemId: string) {
   const router = useRouter();
   const feeds = useFeedsArray();
   const item = useFeedItemValue(itemId);
-  const setSoftReadItemIds = useSetAtom(softReadItemIdsAtom);
 
   const markAsRead = useCallback(() => {
     if (!item) return;
@@ -28,8 +25,7 @@ export function useFeedItemActions(itemId: string) {
       isWatched: true,
       isWatchedUpdatedAt: new Date(),
     });
-    setSoftReadItemIds((prev) => new Set([...prev, itemId]));
-  }, [item, itemId, setSoftReadItemIds]);
+  }, [item, itemId]);
 
   const toggleRead = useCallback(() => {
     if (!item) return false;
@@ -46,12 +42,8 @@ export function useFeedItemActions(itemId: string) {
       isWatchedUpdatedAt: newIsWatched ? new Date() : null,
     });
 
-    if (newIsWatched) {
-      setSoftReadItemIds((prev) => new Set([...prev, itemId]));
-    }
-
     return newIsWatched;
-  }, [item, itemId, setSoftReadItemIds]);
+  }, [item, itemId]);
 
   const toggleWatchLater = useCallback(() => {
     if (!item) return;
@@ -81,7 +73,7 @@ export function useFeedItemActions(itemId: string) {
     } else {
       window.open(item.url, "_blank", "noopener noreferrer");
     }
-  }, [item, feeds, router, markAsRead]);
+  }, [item, feeds, router]);
 
   const openOriginal = useCallback(() => {
     if (!item?.url) return;

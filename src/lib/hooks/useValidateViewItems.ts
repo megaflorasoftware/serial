@@ -11,6 +11,8 @@ import {
 } from "~/lib/data/atoms";
 import { feedItemsStore } from "~/lib/data/store";
 import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
+import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
+import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
 const validatingCombos = new Set<string>();
 
@@ -28,6 +30,10 @@ export function useValidateViewItems() {
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const feedFilter = useAtomValue(feedFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
+  const filteredItemIds = useFilteredFeedItemsOrder();
+  const manifestItemIdsKey = filteredItemIds
+    .slice(0, ITEMS_PER_PAGE)
+    .join("\0");
 
   useEffect(() => {
     // Feed / category selections use separate endpoints — skip here
@@ -40,22 +46,16 @@ export function useValidateViewItems() {
     if (validatingCombos.has(key)) return;
     validatingCombos.add(key);
 
+    // The server validates against the first paginated page for this
+    // visibility. Keep the manifest scoped to that same client-side page;
+    // otherwise cached read/later items outside the first page look deleted.
     const state = feedItemsStore.getState();
-
-    // Only include items that belong to the current view's feeds so the
-    // server diff doesn't return spurious deletions for items from other views.
-    const viewFeedIds = state.viewFeedIds[viewId];
-    if (!viewFeedIds || viewFeedIds.length === 0) {
-      validatingCombos.delete(key);
-      return;
-    }
-    const viewFeedIdSet = new Set(viewFeedIds);
-
+    const manifestItemIds =
+      manifestItemIdsKey.length > 0 ? manifestItemIdsKey.split("\0") : [];
     const manifest: ClientManifestEntry[] = [];
-    for (const id of state.feedItemsOrder) {
+    for (const id of manifestItemIds) {
       const item = state.feedItemsDict[id];
       if (!item) continue;
-      if (!viewFeedIdSet.has(item.feedId)) continue;
 
       manifest.push({ id, contentHash: item.contentHash });
     }
@@ -71,5 +71,11 @@ export function useValidateViewItems() {
       .finally(() => {
         validatingCombos.delete(key);
       });
-  }, [viewFilter, visibilityFilter, feedFilter, categoryFilter]);
+  }, [
+    viewFilter,
+    visibilityFilter,
+    feedFilter,
+    categoryFilter,
+    manifestItemIdsKey,
+  ]);
 }

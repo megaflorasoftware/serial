@@ -62,7 +62,12 @@ interface ItemMetaProps {
 
 function ItemMeta({ author, feedName, postedAt, className }: ItemMetaProps) {
   return (
-    <p className={clsx("w-full text-xs opacity-80 md:text-sm", className)}>
+    <p
+      className={clsx(
+        "line-clamp-1 w-full text-xs opacity-80 md:text-sm",
+        className,
+      )}
+    >
       {author || feedName} • {timeAgo(postedAt)}
     </p>
   );
@@ -461,9 +466,6 @@ export function ItemDisplay({
         isLarge
           ? "flex-col md:flex-row md:items-center"
           : "items-center md:h-20",
-        {
-          "opacity-50": item.isWatched,
-        },
       )}
     >
       <Link
@@ -506,7 +508,7 @@ export function ItemDisplay({
               </div>
             )}
             <div className="flex h-full flex-1 flex-col justify-center">
-              <ItemTitle title={item.title} lineClamp={1} />
+              <ItemTitle title={item.title} lineClamp={2} />
               <ItemMeta
                 author={item.author}
                 feedName={feed?.name}
@@ -564,9 +566,7 @@ export function GridItemDisplay({
     <article
       data-item-id={contentId}
       onMouseEnter={onSelect}
-      className={clsx("group relative flex h-full w-full flex-col", {
-        "opacity-50": item.isWatched,
-      })}
+      className="group relative flex h-full w-full flex-col"
     >
       <Link
         to={href}

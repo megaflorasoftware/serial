@@ -32,8 +32,47 @@ import { VIEW_LAYOUT } from "~/server/db/constants";
 import { useFeedItemNavigation } from "~/lib/hooks/useFeedItemNavigation";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
-import { showUndoToast } from "~/lib/undo";
+import { clearUndoToast, showUndoToast } from "~/lib/undo";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
+
+function getNextAvailableItemAfterSection(
+  sectionIndex: number,
+  sections: ViewSection[],
+) {
+  for (let i = sectionIndex + 1; i < sections.length; i++) {
+    const nextSectionFirstItem = sections[i]?.items[0];
+    if (nextSectionFirstItem) return nextSectionFirstItem;
+  }
+
+  for (let i = sectionIndex - 1; i >= 0; i--) {
+    const previousSectionItems = sections[i]?.items;
+    const previousSectionLastItem =
+      previousSectionItems?.[previousSectionItems.length - 1];
+    if (previousSectionLastItem) return previousSectionLastItem;
+  }
+
+  return null;
+}
+
+function SectionFeedIcon({ itemId }: { itemId?: number }) {
+  const { feeds } = useFeeds();
+
+  if (itemId === undefined) return null;
+
+  const feed = feeds.find((candidateFeed) => candidateFeed.id === itemId);
+
+  if (feed?.imageUrl) {
+    return (
+      <img
+        src={feed.imageUrl}
+        alt={feed.name}
+        className="h-6 w-6 shrink-0 rounded object-contain"
+      />
+    );
+  }
+
+  return <div className="bg-muted-foreground/20 h-6 w-6 shrink-0 rounded" />;
+}
 
 function SectionHeading({
   name,
@@ -50,7 +89,6 @@ function SectionHeading({
   sectionIndex: number;
   onMarkAsRead?: (sectionIndex: number) => void;
 }) {
-  const { feeds } = useFeeds();
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const feedItemsDict = feedItemsStore.useFeedItemsDict();
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +104,12 @@ function SectionHeading({
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearUndoToast();
+    };
   }, []);
 
   const handleMarkSectionAsRead = async () => {
@@ -103,28 +147,12 @@ function SectionHeading({
     <>
       <div ref={sentinelRef} />
       <div
-        className={`bg-background sticky top-0 z-30 border-b pt-4 pb-2 transition-[border-color] ${
+        className={`bg-background sticky top-0 z-30 border-b pb-2 transition-[border-color] ${
           isStuck ? "border-border" : "border-transparent"
-        }`}
+        } ${sectionIndex === 0 ? "pt-4" : "pt-8"}`}
       >
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-6">
-          {itemType === "feed" &&
-            itemId !== undefined &&
-            (() => {
-              const feed = feeds.find((f) => f.id === itemId);
-              if (feed?.imageUrl) {
-                return (
-                  <img
-                    src={feed.imageUrl}
-                    alt={feed.name}
-                    className="h-6 w-6 shrink-0 rounded object-contain"
-                  />
-                );
-              }
-              return (
-                <div className="bg-muted-foreground/20 h-6 w-6 shrink-0 rounded" />
-              );
-            })()}
+          {itemType === "feed" && <SectionFeedIcon itemId={itemId} />}
           {itemType === "tag" && (
             <div className="bg-muted text-muted-foreground flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-medium">
               #
@@ -156,14 +184,17 @@ function LayoutSection({
   handleMouseSelect,
   sectionIndex,
   onMarkAsRead,
+  viewName,
 }: {
   section: ViewSection;
   handleMouseSelect: (itemId: string) => void;
   sectionIndex: number;
   onMarkAsRead?: (sectionIndex: number) => void;
+  viewName?: string;
 }) {
   const { items, layout, startIndex, name, isUncategorized, itemType, itemId } =
     section;
+  const sectionName = isUncategorized ? (viewName ?? name) : name;
 
   const layoutProps = {
     items,
@@ -177,7 +208,7 @@ function LayoutSection({
     <div className="w-full" id={`section-${sectionIndex}`}>
       {items.length > 0 && (
         <SectionHeading
-          name={isUncategorized ? "Uncategorized" : name}
+          name={sectionName}
           itemType={itemType}
           itemId={itemId}
           sectionItems={items}
@@ -215,7 +246,6 @@ export function RenderViewItems() {
   const currentView = useAtomValue(viewFilterAtom);
 
   const {
-    hasSubviews,
     computedSections,
     flatItems,
     hasGridSections,
@@ -224,7 +254,7 @@ export function RenderViewItems() {
   } = useViewSections(currentView, filteredFeedItemsOrder);
 
   // Keyboard navigation
-  const { handleMouseSelect } = useFeedItemNavigation(
+  const { handleMouseSelect, selectItem } = useFeedItemNavigation(
     flatItems,
     hasGridSections,
     sectionInfo,
@@ -234,18 +264,16 @@ export function RenderViewItems() {
 
   const handleSectionMarkAsRead = useCallback(
     (sectionIndex: number) => {
-      for (let i = sectionIndex + 1; i < computedSections.length; i++) {
-        const section = computedSections[i];
-        if (section && section.items.length > 0) {
-          const el = document.getElementById(`section-${i}`);
-          if (el) {
-            el.scrollIntoView({ behavior: "instant", block: "start" });
-          }
-          break;
-        }
-      }
+      const nextItemId = getNextAvailableItemAfterSection(
+        sectionIndex,
+        computedSections,
+      );
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => selectItem(nextItemId));
+      });
     },
-    [computedSections],
+    [computedSections, selectItem],
   );
 
   if (!hasInitialData) {
@@ -279,41 +307,6 @@ export function RenderViewItems() {
     return <EmptyState />;
   }
 
-  // Non-sectioned rendering (existing behavior)
-  if (!hasSubviews) {
-    switch (baseLayout) {
-      case VIEW_LAYOUT.LARGE_LIST:
-        return (
-          <ViewItemLargeList
-            items={filteredFeedItemsOrder}
-            handleMouseSelect={handleMouseSelect}
-          />
-        );
-      case VIEW_LAYOUT.GRID:
-        return (
-          <ViewItemGrid
-            items={filteredFeedItemsOrder}
-            handleMouseSelect={handleMouseSelect}
-          />
-        );
-      case VIEW_LAYOUT.LARGE_GRID:
-        return (
-          <ViewItemLargeGrid
-            items={filteredFeedItemsOrder}
-            handleMouseSelect={handleMouseSelect}
-          />
-        );
-      default:
-        return (
-          <ViewItemStandardList
-            items={filteredFeedItemsOrder}
-            handleMouseSelect={handleMouseSelect}
-          />
-        );
-    }
-  }
-
-  // Sectioned rendering
   return (
     <div className="w-full">
       {computedSections.map((section, index) => (
@@ -327,6 +320,7 @@ export function RenderViewItems() {
           sectionIndex={index}
           handleMouseSelect={handleMouseSelect}
           onMarkAsRead={handleSectionMarkAsRead}
+          viewName={currentView?.name}
         />
       ))}
       {paginationState?.isFetching && (

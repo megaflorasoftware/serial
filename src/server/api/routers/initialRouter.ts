@@ -53,6 +53,7 @@ import { INBOX_VIEW_ID } from "~/lib/data/views/constants";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
 import { prepareArrayChunks } from "~/lib/iterators";
 import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
+import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import { dbSemaphore } from "~/lib/semaphore";
@@ -1582,6 +1583,94 @@ export const requestImportedData = protectedProcedure
     return { status: "completed" };
   });
 
+type ImportCategoryPathInput =
+  | string
+  | {
+      name: string;
+      type?: "view" | "tag" | "feed";
+      feedUrl?: string;
+    };
+
+type NormalizedImportCategoryPathItem = {
+  name: string;
+  type?: "view" | "tag" | "feed";
+  feedUrl?: string;
+};
+
+type NormalizedImportSubsectionItem = NormalizedImportCategoryPathItem & {
+  type: "tag" | "feed";
+};
+
+function isNormalizedImportCategoryPathItem(
+  item: NormalizedImportCategoryPathItem | null,
+): item is NormalizedImportCategoryPathItem {
+  return item !== null;
+}
+
+function normalizeImportCategoryPathItem(
+  item: ImportCategoryPathInput,
+): NormalizedImportCategoryPathItem | null {
+  if (typeof item === "string") {
+    const name = item.trim();
+    return name ? { name } : null;
+  }
+
+  const name = item.name.trim();
+  if (!name) return null;
+
+  return {
+    name,
+    type: item.type,
+    feedUrl: item.feedUrl,
+  };
+}
+
+function normalizeImportCategoryPaths(feed: {
+  categories: string[];
+  categoryPaths?: ImportCategoryPathInput[][];
+}) {
+  const rawCategoryPaths =
+    feed.categoryPaths && feed.categoryPaths.length > 0
+      ? feed.categoryPaths
+      : feed.categories.map((category) => [category]);
+
+  return rawCategoryPaths
+    .map((path) =>
+      path
+        .map(normalizeImportCategoryPathItem)
+        .filter(isNormalizedImportCategoryPathItem),
+    )
+    .filter((path) => path.length > 0);
+}
+
+function getImportedSubsectionName(
+  categoryPath: NormalizedImportCategoryPathItem[],
+) {
+  return categoryPath
+    .slice(1)
+    .map((category) => category.name)
+    .join(" / ");
+}
+
+function getImportedSubsectionItem(
+  categoryPath: NormalizedImportCategoryPathItem[],
+): NormalizedImportSubsectionItem | null {
+  const lastItem = categoryPath[categoryPath.length - 1];
+  if (!lastItem) return null;
+  const type: NormalizedImportSubsectionItem["type"] =
+    lastItem.type === VIEW_LAYOUT_ITEM_TYPE.FEED ? "feed" : "tag";
+
+  return {
+    ...lastItem,
+    name: getImportedSubsectionName(categoryPath),
+    type,
+  };
+}
+
+function getUniqueNames(names: string[]) {
+  return [...new Set(names.filter((name) => !!name))];
+}
+
 /**
  * Combined streaming import endpoint that inserts feeds and fetches RSS content
  * in a single operation using a worker pool for maximum parallelism.
@@ -1594,6 +1683,21 @@ export const streamingImport = protectedProcedure
         .object({
           feedUrl: z.string(),
           categories: z.string().array(),
+          categoryPaths: z
+            .array(
+              z.array(
+                z.union([
+                  z.string(),
+                  z.object({
+                    name: z.string(),
+                    type: z.enum(["view", "tag", "feed"]).optional(),
+                    feedUrl: z.string().optional(),
+                  }),
+                ]),
+              ),
+            )
+            .optional(),
+          tagNames: z.string().array().optional(),
         })
         .array(),
       importMode: z.enum(["tags", "views", "ignore"]).optional(),
@@ -1620,14 +1724,17 @@ export const streamingImport = protectedProcedure
     const deactivatedCount = Math.max(0, input.feeds.length - remainingSlots);
 
     // Pre-calculate which feeds should be active. Strip categories for any
-    // mode other than "tags" — we only want to create category links when
-    // the user explicitly chose to import sections as tags. The original
-    // categories list is preserved on the side for "views" mode below.
+    // mode other than "tags", but keep explicit Serial tag metadata in every
+    // mode because those are feed tags rather than OPML section folders.
     const feedsWithActivation = input.feeds.map((feed, index) => ({
       feedUrl: feed.feedUrl,
-      categories: importMode === "tags" ? feed.categories : [],
-      originalCategories: feed.categories,
+      categories: getUniqueNames([
+        ...(importMode === "tags" ? feed.categories : []),
+        ...(feed.tagNames ?? []),
+      ]),
+      categoryPaths: normalizeImportCategoryPaths(feed),
       shouldBeActive: index < remainingSlots,
+      tagNames: feed.tagNames ?? [],
     }));
 
     // Publish import start with total feeds count (must come before
@@ -1651,9 +1758,11 @@ export const streamingImport = protectedProcedure
 
     // Track successful feed IDs for building view mappings later
     const successfulFeeds: Array<{
+      inputFeedUrl: string;
       feedId: number;
       feed: typeof feeds.$inferSelect;
-      sectionNames: string[];
+      categoryPaths: NormalizedImportCategoryPathItem[][];
+      tagNames: string[];
     }> = [];
 
     // Worker function: insert feed + fetch RSS content
@@ -1705,9 +1814,11 @@ export const streamingImport = protectedProcedure
 
         // Track successful feed for later
         successfulFeeds.push({
+          inputFeedUrl: feedInput.feedUrl,
           feedId: insertResult.feedId,
           feed: insertResult.feed as typeof feeds.$inferSelect,
-          sectionNames: feedInput.originalCategories,
+          categoryPaths: feedInput.categoryPaths,
+          tagNames: feedInput.tagNames,
         });
 
         // 3. Immediately fetch RSS content for this feed
@@ -1758,21 +1869,54 @@ export const streamingImport = protectedProcedure
       // Results stream as each feed completes
     }
 
-    // For "views" mode: create (or reuse) a view per unique section name and
-    // link successfully-imported feeds to those views via the viewFeeds table.
+    // For "views" mode: create (or reuse) views from the top-level OPML
+    // folders, then preserve nested folders as ordered view sections.
     if (importMode === "views" && successfulFeeds.length > 0) {
-      // Derive section order from the original input so OPML ordering is
-      // preserved (successfulFeeds is populated in completion order).
-      const sectionOrder: string[] = [];
-      for (const feed of input.feeds) {
-        for (const category of feed.categories) {
-          if (category && !sectionOrder.includes(category)) {
-            sectionOrder.push(category);
+      const successfulFeedsByInputUrl = new Map(
+        successfulFeeds.map((feed) => [feed.inputFeedUrl, feed]),
+      );
+      const orderedSuccessfulFeeds = input.feeds
+        .map((feed) => successfulFeedsByInputUrl.get(feed.feedUrl))
+        .filter((feed): feed is (typeof successfulFeeds)[number] => !!feed);
+
+      const viewOrder: string[] = [];
+      const sectionOrderByViewName = new Map<
+        string,
+        NormalizedImportCategoryPathItem[]
+      >();
+
+      for (const successfulFeed of orderedSuccessfulFeeds) {
+        for (const categoryPath of successfulFeed.categoryPaths) {
+          const viewName = categoryPath[0]?.name;
+          if (!viewName) continue;
+
+          if (!viewOrder.includes(viewName)) {
+            viewOrder.push(viewName);
+          }
+
+          if (categoryPath.length <= 1) continue;
+
+          const subsectionItem = getImportedSubsectionItem(categoryPath);
+          if (!subsectionItem) continue;
+
+          const sectionOrder = sectionOrderByViewName.get(viewName);
+          if (sectionOrder) {
+            const hasSection = sectionOrder.some(
+              (item) =>
+                item.name === subsectionItem.name &&
+                item.type === subsectionItem.type &&
+                item.feedUrl === subsectionItem.feedUrl,
+            );
+            if (!hasSection) {
+              sectionOrder.push(subsectionItem);
+            }
+          } else {
+            sectionOrderByViewName.set(viewName, [subsectionItem]);
           }
         }
       }
 
-      if (sectionOrder.length > 0) {
+      if (viewOrder.length > 0) {
         await context.db.transaction(async (tx) => {
           // Look up existing views by name for this user
           const existingViews = await tx
@@ -1782,7 +1926,7 @@ export const streamingImport = protectedProcedure
           const existingByName = new Map(existingViews.map((v) => [v.name, v]));
 
           // Insert any missing views with default settings
-          const namesToCreate = sectionOrder.filter(
+          const namesToCreate = viewOrder.filter(
             (name) => !existingByName.has(name),
           );
           if (namesToCreate.length > 0) {
@@ -1792,8 +1936,7 @@ export const streamingImport = protectedProcedure
                 namesToCreate.map((name) => ({
                   userId: context.user.id,
                   name,
-                  placement:
-                    sectionOrder.length - 1 - sectionOrder.indexOf(name),
+                  placement: viewOrder.length - 1 - viewOrder.indexOf(name),
                 })),
               )
               .returning();
@@ -1802,13 +1945,156 @@ export const streamingImport = protectedProcedure
             }
           }
 
-          // Build viewFeeds rows
+          const nestedTagSectionNames = getUniqueNames(
+            [...sectionOrderByViewName.values()]
+              .flat()
+              .filter((section) => section.type !== VIEW_LAYOUT_ITEM_TYPE.FEED)
+              .map((section) => section.name),
+          );
+          const existingCategories =
+            nestedTagSectionNames.length > 0
+              ? await tx
+                  .select()
+                  .from(contentCategories)
+                  .where(
+                    and(
+                      eq(contentCategories.userId, context.user.id),
+                      inArray(contentCategories.name, nestedTagSectionNames),
+                    ),
+                  )
+              : [];
+          const existingCategoryByName = new Map(
+            existingCategories.map((category) => [category.name, category]),
+          );
+          const categoryNamesToCreate = nestedTagSectionNames.filter(
+            (name) => !existingCategoryByName.has(name),
+          );
+
+          if (categoryNamesToCreate.length > 0) {
+            const insertedCategories = await tx
+              .insert(contentCategories)
+              .values(
+                categoryNamesToCreate.map((name) => ({
+                  userId: context.user.id,
+                  name,
+                })),
+              )
+              .returning();
+
+            for (const category of insertedCategories) {
+              existingCategoryByName.set(category.name, category);
+            }
+          }
+
+          const viewIds = [...existingByName.values()].map((view) => view.id);
+          const existingViewSections =
+            viewIds.length > 0
+              ? await tx
+                  .select()
+                  .from(viewSections)
+                  .where(inArray(viewSections.viewId, viewIds))
+                  .orderBy(asc(viewSections.placement))
+              : [];
+          const existingSectionKeys = new Set(
+            existingViewSections.map(
+              (section) =>
+                `${section.viewId}:${section.itemType}:${section.itemId}`,
+            ),
+          );
+          const nextPlacementByViewId = new Map<number, number>();
+
+          for (const section of existingViewSections) {
+            const nextPlacement = Math.max(
+              nextPlacementByViewId.get(section.viewId) ?? 0,
+              section.placement + 1,
+            );
+            nextPlacementByViewId.set(section.viewId, nextPlacement);
+          }
+
           const viewFeedRows: Array<{ viewId: number; feedId: number }> = [];
-          for (const sf of successfulFeeds) {
-            for (const name of sf.sectionNames) {
-              const view = existingByName.get(name);
+          const feedCategoryRows: Array<{
+            feedId: number;
+            categoryId: number;
+          }> = [];
+          const viewSectionRows: Array<{
+            viewId: number;
+            placement: number;
+            itemType:
+              | typeof VIEW_LAYOUT_ITEM_TYPE.TAG
+              | typeof VIEW_LAYOUT_ITEM_TYPE.FEED;
+            itemId: number;
+          }> = [];
+          const successfulFeedsByCanonicalUrl = new Map(
+            orderedSuccessfulFeeds.map((feed) => [feed.feed.url, feed]),
+          );
+
+          function findImportedFeedSectionItem(
+            section: NormalizedImportCategoryPathItem,
+          ) {
+            if (section.feedUrl) {
+              return (
+                successfulFeedsByInputUrl.get(section.feedUrl) ??
+                successfulFeedsByCanonicalUrl.get(section.feedUrl) ??
+                null
+              );
+            }
+
+            return (
+              orderedSuccessfulFeeds.find(
+                (feed) => (feed.feed.name || feed.feed.url) === section.name,
+              ) ?? null
+            );
+          }
+
+          for (const sf of orderedSuccessfulFeeds) {
+            for (const categoryPath of sf.categoryPaths) {
+              const viewName = categoryPath[0]?.name;
+              if (!viewName) continue;
+
+              const view = existingByName.get(viewName);
               if (!view) continue;
               viewFeedRows.push({ viewId: view.id, feedId: sf.feedId });
+
+              if (categoryPath.length <= 1) continue;
+
+              const subsectionItem = getImportedSubsectionItem(categoryPath);
+              if (!subsectionItem) continue;
+
+              const viewSectionItem =
+                subsectionItem.type === VIEW_LAYOUT_ITEM_TYPE.FEED
+                  ? {
+                      itemType: VIEW_LAYOUT_ITEM_TYPE.FEED,
+                      itemId:
+                        findImportedFeedSectionItem(subsectionItem)?.feedId ??
+                        null,
+                    }
+                  : {
+                      itemType: VIEW_LAYOUT_ITEM_TYPE.TAG,
+                      itemId:
+                        existingCategoryByName.get(subsectionItem.name)?.id ??
+                        null,
+                    };
+              if (!viewSectionItem.itemId) continue;
+
+              if (viewSectionItem.itemType === VIEW_LAYOUT_ITEM_TYPE.TAG) {
+                feedCategoryRows.push({
+                  feedId: sf.feedId,
+                  categoryId: viewSectionItem.itemId,
+                });
+              }
+
+              const sectionKey = `${view.id}:${viewSectionItem.itemType}:${viewSectionItem.itemId}`;
+              if (!existingSectionKeys.has(sectionKey)) {
+                const nextPlacement = nextPlacementByViewId.get(view.id) ?? 0;
+                viewSectionRows.push({
+                  viewId: view.id,
+                  placement: nextPlacement,
+                  itemType: viewSectionItem.itemType,
+                  itemId: viewSectionItem.itemId,
+                });
+                nextPlacementByViewId.set(view.id, nextPlacement + 1);
+                existingSectionKeys.add(sectionKey);
+              }
             }
           }
 
@@ -1817,6 +2103,17 @@ export const streamingImport = protectedProcedure
               .insert(viewFeeds)
               .values(viewFeedRows)
               .onConflictDoNothing();
+          }
+
+          if (feedCategoryRows.length > 0) {
+            await tx
+              .insert(feedCategories)
+              .values(feedCategoryRows)
+              .onConflictDoNothing();
+          }
+
+          if (viewSectionRows.length > 0) {
+            await tx.insert(viewSections).values(viewSectionRows);
           }
         });
       }

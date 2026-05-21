@@ -47,7 +47,17 @@ export function useViewSections(
     currentView.viewSections.length > 0;
 
   const computedSections = useMemo(() => {
-    if (!hasSubviews || !currentView) return [] as ViewSection[];
+    if (!hasSubviews || !currentView) {
+      return [
+        {
+          name: currentView?.name ?? "View",
+          items: filteredFeedItemsOrder,
+          layout: baseLayout,
+          startIndex: 0,
+          isUncategorized: true,
+        },
+      ] as ViewSection[];
+    }
 
     const feedIdToCategories = new Map<number, number[]>();
     for (const fc of feedCategories.feedCategories) {
@@ -148,9 +158,8 @@ export function useViewSections(
   ]);
 
   const flatItems = useMemo(() => {
-    if (!hasSubviews) return filteredFeedItemsOrder;
     return computedSections.flatMap((s) => s.items);
-  }, [hasSubviews, filteredFeedItemsOrder, computedSections]);
+  }, [computedSections]);
 
   const hasGridSections = useMemo(() => {
     if (!hasSubviews) {
@@ -165,13 +174,12 @@ export function useViewSections(
   }, [hasSubviews, baseLayout, computedSections]);
 
   const sectionInfo = useMemo(() => {
-    if (!hasSubviews) return undefined;
     return computedSections.map((s) => ({
       size: s.items.length,
       isGrid:
         s.layout === VIEW_LAYOUT.GRID || s.layout === VIEW_LAYOUT.LARGE_GRID,
     }));
-  }, [hasSubviews, computedSections]);
+  }, [computedSections]);
 
   return {
     hasSubviews,

@@ -1,11 +1,11 @@
 "use client";
 
 import { useAtomValue } from "jotai";
+import { Fragment } from "react";
 import { GridItemDisplay } from "./ItemDisplay";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
 import { ViewListContainer } from "./ViewListContainer";
-import { VisibleItemTracker } from "./VisibleItemTracker";
 import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
 
@@ -37,7 +37,7 @@ export function ViewItemLargeGrid({
         {visibleItems.map((contentId, index) => {
           const globalIndex = startIndex + index;
           return (
-            <VisibleItemTracker key={contentId} itemId={contentId}>
+            <Fragment key={contentId}>
               <GridItemDisplay
                 contentId={contentId}
                 size="large"
@@ -52,7 +52,7 @@ export function ViewItemLargeGrid({
               {globalIndex === actualSentinelIndex && (
                 <div ref={sentinelRef} key={globalIndex} />
               )}
-            </VisibleItemTracker>
+            </Fragment>
           );
         })}
       </div>

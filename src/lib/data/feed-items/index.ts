@@ -2,7 +2,6 @@ import { useAtomValue } from "jotai";
 import {
   categoryFilterAtom,
   feedFilterAtom,
-  softReadItemIdsAtom,
   viewFilterAtom,
   visibilityFilterAtom,
 } from "../atoms";
@@ -84,7 +83,6 @@ export function doesFeedItemPassFilters({
   viewFilter,
   customViewCategoryIds,
   customViews,
-  softReadItemIds,
   customViewFeedIds,
 }: {
   item: ApplicationFeedItem;
@@ -95,15 +93,14 @@ export function doesFeedItemPassFilters({
   viewFilter: ApplicationView | null;
   customViewCategoryIds?: Set<number>;
   customViews?: ApplicationView[];
-  softReadItemIds?: Set<string>;
   customViewFeedIds?: Set<number>;
 }) {
   // Visibility filter
-  if (visibilityFilter === "unread" && (item.isWatched || item.isWatchLater)) {
-    // Allow soft read items to pass through unread filter
-    if (!softReadItemIds?.has(item.id)) {
-      return false;
-    }
+  if (visibilityFilter === "unread" && item.isWatchLater) {
+    return false;
+  }
+  if (visibilityFilter === "unread" && item.isWatched) {
+    return false;
   }
   if (visibilityFilter === "read" && (!item.isWatched || item.isWatchLater)) {
     return false;
@@ -240,7 +237,6 @@ export const useFilteredFeedItemsOrder = () => {
   const viewFilter = useAtomValue(viewFilterAtom);
   const { customViews, customViewCategoryIds, customViewFeedIds } =
     useCustomViewsData();
-  const softReadItemIds = useAtomValue(softReadItemIdsAtom);
 
   // Get pagination states for cursor-based filtering
   const viewPaginationState = feedItemsStore.useViewPaginationState();
@@ -280,7 +276,6 @@ export const useFilteredFeedItemsOrder = () => {
       viewFilter,
       customViewCategoryIds,
       customViews,
-      softReadItemIds,
       customViewFeedIds,
     });
   });
@@ -294,7 +289,6 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
   const viewFilter = useAtomValue(viewFilterAtom);
   const { customViews, customViewCategoryIds, customViewFeedIds } =
     useCustomViewsData();
-  const softReadItemIds = useAtomValue(softReadItemIdsAtom);
 
   return doesFeedItemPassFilters({
     item,
@@ -305,7 +299,6 @@ export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
     viewFilter,
     customViewCategoryIds,
     customViews,
-    softReadItemIds,
     customViewFeedIds,
   });
 }

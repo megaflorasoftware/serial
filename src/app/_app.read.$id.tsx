@@ -149,15 +149,20 @@ function ReadPage() {
 
   const feedId = feed?.id;
   const platform = feed?.platform;
+  const hasTruncationAlertResponse = feedId
+    ? hasRespondedToTruncationAlert(feedId)
+    : false;
 
-  const shouldShowTruncationAlert = (() => {
-    if (alertDismissed) return false;
-    if (platform !== "website") return false;
-    if (!feedId) return false;
-    if (hasRespondedToTruncationAlert(feedId)) return false;
-    if (!feedItem) return false;
-    return detectTruncatedContent(feedItem.content, feedItem.contentSnippet);
-  })();
+  const shouldCheckTruncatedContent =
+    !alertDismissed &&
+    platform === "website" &&
+    !!feedId &&
+    !hasTruncationAlertResponse &&
+    !!feedItem;
+  const shouldShowTruncationAlert =
+    shouldCheckTruncatedContent &&
+    feedItem !== undefined &&
+    detectTruncatedContent(feedItem.content, feedItem.contentSnippet);
 
   const handleAlertResponse = (openLocation: "serial" | "origin") => {
     if (!feedId) return;
@@ -178,6 +183,10 @@ function ReadPage() {
 
     setTruncationAlertResponded(feedId);
     setAlertDismissed(true);
+
+    if (openLocation === "origin" && feedItem?.url) {
+      window.open(feedItem.url, "_blank", "noopener,noreferrer");
+    }
   };
 
   return (

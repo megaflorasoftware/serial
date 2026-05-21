@@ -63,6 +63,39 @@ function getSortFunction(
   );
 }
 
+function hideItemFromVisibilityFilter(
+  feedItemsDict: Record<string, ApplicationFeedItem>,
+  itemId: string,
+  visibilityFilter: VisibilityFilter,
+) {
+  const item = feedItemsDict[itemId];
+  if (!item) return;
+
+  if (visibilityFilter === "unread") {
+    feedItemsDict[itemId] = {
+      ...item,
+      isWatched: true,
+      isWatchedUpdatedAt: item.isWatchedUpdatedAt ?? new Date(),
+    };
+    return;
+  }
+
+  if (visibilityFilter === "read") {
+    feedItemsDict[itemId] = {
+      ...item,
+      isWatched: false,
+      isWatchedUpdatedAt: null,
+    };
+    return;
+  }
+
+  feedItemsDict[itemId] = {
+    ...item,
+    isWatchLater: false,
+    isWatchLaterUpdatedAt: new Date(),
+  };
+}
+
 export type ApplicationStore = {
   reset: () => void;
   feedItemsOrder: string[];
@@ -96,6 +129,7 @@ export type ApplicationStore = {
   fetchMoreItems: (
     viewId: number,
     visibilityFilter: VisibilityFilter,
+    options?: { force?: boolean },
   ) => Promise<void>;
   // Get pagination state for a view and visibility filter
   getPaginationState: (
@@ -120,11 +154,13 @@ export type ApplicationStore = {
   fetchMoreItemsForFeed: (
     feedId: number,
     visibilityFilter: VisibilityFilter,
+    options?: { force?: boolean },
   ) => Promise<void>;
   // Fetch more items for a category (pagination)
   fetchMoreItemsForCategory: (
     categoryId: number,
     visibilityFilter: VisibilityFilter,
+    options?: { force?: boolean },
   ) => Promise<void>;
   // Process chunks received from the publisher subscription
   processChunk: (payload: PublishedChunk) => void;
@@ -381,13 +417,22 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         }
       },
 
-      fetchMoreItems: async (viewId, visibilityFilter) => {
+      fetchMoreItems: async (viewId, visibilityFilter, options) => {
         const state = get();
-        const paginationState =
-          state.viewPaginationState[viewId]?.[visibilityFilter];
+        const paginationState = state.viewPaginationState[viewId]?.[
+          visibilityFilter
+        ] ?? {
+          cursor: null,
+          hasMore: true,
+          isFetching: false,
+        };
+        const shouldForceFetch = options?.force ?? false;
 
         // Don't fetch if no more items or already fetching
-        if (!paginationState?.hasMore || paginationState.isFetching) {
+        if (
+          (!shouldForceFetch && !paginationState.hasMore) ||
+          paginationState.isFetching
+        ) {
           return;
         }
 
@@ -488,13 +533,22 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         }
       },
 
-      fetchMoreItemsForFeed: async (feedId, visibilityFilter) => {
+      fetchMoreItemsForFeed: async (feedId, visibilityFilter, options) => {
         const state = get();
-        const paginationState =
-          state.feedPaginationState[feedId]?.[visibilityFilter];
+        const paginationState = state.feedPaginationState[feedId]?.[
+          visibilityFilter
+        ] ?? {
+          cursor: null,
+          hasMore: true,
+          isFetching: false,
+        };
+        const shouldForceFetch = options?.force ?? false;
 
         // Don't fetch if no more items or already fetching
-        if (!paginationState?.hasMore || paginationState.isFetching) {
+        if (
+          (!shouldForceFetch && !paginationState.hasMore) ||
+          paginationState.isFetching
+        ) {
           return;
         }
 
@@ -536,13 +590,26 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         }
       },
 
-      fetchMoreItemsForCategory: async (categoryId, visibilityFilter) => {
+      fetchMoreItemsForCategory: async (
+        categoryId,
+        visibilityFilter,
+        options,
+      ) => {
         const state = get();
-        const paginationState =
-          state.categoryPaginationState[categoryId]?.[visibilityFilter];
+        const paginationState = state.categoryPaginationState[categoryId]?.[
+          visibilityFilter
+        ] ?? {
+          cursor: null,
+          hasMore: true,
+          isFetching: false,
+        };
+        const shouldForceFetch = options?.force ?? false;
 
         // Don't fetch if no more items or already fetching
-        if (!paginationState?.hasMore || paginationState.isFetching) {
+        if (
+          (!shouldForceFetch && !paginationState.hasMore) ||
+          paginationState.isFetching
+        ) {
           return;
         }
 
@@ -1291,12 +1358,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
             if (chunk.type === "view-diff") {
               // Background validation diff — only apply updates and additions.
-              // Skip deletions because an item not being in one view does not
-              // mean it should be removed from the global store (it may still
-              // be valid for other views or visibility filters).
+              // For deletions, keep the cached item but update enough local
+              // state to make it stop passing the active visibility filter.
               const feedItemsDict = { ...get().feedItemsDict };
               const feedItemsOrder = [...get().feedItemsOrder];
               const existingIds = new Set(feedItemsOrder);
+              const vf = chunk.visibilityFilter as VisibilityFilter;
 
               for (const entry of chunk.diff) {
                 switch (entry.status) {
@@ -1313,12 +1380,11 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     }
                     break;
                   case "deleted":
-                    // Intentionally skipped — item may still be valid elsewhere
+                    hideItemFromVisibilityFilter(feedItemsDict, entry.id, vf);
                     break;
                 }
               }
 
-              const vf = chunk.visibilityFilter as VisibilityFilter;
               set({
                 feedItemsDict,
                 feedItemsOrder: feedItemsOrder.sort(

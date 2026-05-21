@@ -280,7 +280,18 @@ export const dataSubscriptionActions = {
     return orpcRouterClient.initial.requestFullTextForItems({ itemIds });
   },
   streamingImport: (
-    feeds: Array<{ feedUrl: string; categories: string[] }>,
+    feeds: Array<{
+      feedUrl: string;
+      categories: string[];
+      categoryPaths?: Array<
+        Array<{
+          name: string;
+          type?: "view" | "tag" | "feed";
+          feedUrl?: string;
+        }>
+      >;
+      tagNames?: string[];
+    }>,
     importMode?: "tags" | "views" | "ignore",
   ) => orpcRouterClient.initial.streamingImport({ feeds, importMode }),
   requestItemsByVisibility: (
