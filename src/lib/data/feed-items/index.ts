@@ -17,7 +17,10 @@ import type {
 } from "~/server/db/schema";
 import type { PaginationCursor } from "~/server/api/routers/initialRouter";
 
-export { getContentTypeFromItem, isFeedCompatibleWithContentType } from "./filters";
+export {
+  getContentTypeFromItem,
+  isFeedCompatibleWithContentType,
+} from "./filters";
 
 function isVideoContent(item: ApplicationFeedItem): boolean {
   const videoPlatforms = ["youtube", "peertube", "nebula"];

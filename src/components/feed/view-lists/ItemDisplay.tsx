@@ -85,8 +85,11 @@ function ItemMeta({
   const postedDateText = shouldUseWatchedDate
     ? `posted ${timeAgo(postedAt)}`
     : undefined;
-  const metadataParts = [author || feedName, primaryDateText, postedDateText]
-    .filter(Boolean);
+  const metadataParts = [
+    author || feedName,
+    primaryDateText,
+    postedDateText,
+  ].filter(Boolean);
 
   return (
     <p
