@@ -182,6 +182,7 @@ function ReadPage() {
       categoryIds,
       viewIds,
       openLocation,
+      name: feed?.name ?? "",
     });
 
     setTruncationAlertResponded(feedId);

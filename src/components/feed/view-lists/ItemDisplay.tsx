@@ -79,8 +79,7 @@ function ItemMeta({
 }: ItemMetaProps) {
   const shouldUseWatchedDate = showWatchedDate && !!watchedAt;
   const primaryDate = shouldUseWatchedDate ? watchedAt : postedAt;
-  const watchedDateLabel =
-    watchedDatePrefix === "read" ? "Read" : "Watched";
+  const watchedDateLabel = watchedDatePrefix === "read" ? "Read" : "Watched";
   const primaryDateText = shouldUseWatchedDate
     ? `${watchedDateLabel} ${timeAgo(primaryDate)}`
     : timeAgo(primaryDate);

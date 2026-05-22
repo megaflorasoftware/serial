@@ -383,6 +383,7 @@ export function EditFeedDialog({
                   categoryIds: selectedCategories,
                   viewIds: selectedViewIds,
                   openLocation: selectedOpenLocation,
+                  name,
                 });
                 toast.success("Feed updated!");
                 onClose();
@@ -408,7 +409,7 @@ export function EditFeedDialog({
               type="text"
               value={name}
               placeholder="My Feed"
-              disabled
+              onChange={(e) => setName(e.target.value)}
               className="flex-1"
             />
             <Tooltip>
