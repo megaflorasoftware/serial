@@ -594,7 +594,7 @@ export function useFeedItemNavigation(
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ_ALT), handleToggleRead);
 
-  useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_LATER), () => {
+  useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_SAVED), () => {
     if (pathname !== "/" || !selectedItemId) return;
 
     selectedItemActions.toggleWatchLater();

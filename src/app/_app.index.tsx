@@ -76,7 +76,7 @@ function Home() {
   useShortcut(SHORTCUT_KEYS.READ, () =>
     setVisibilityFilter("read" as VisibilityFilter),
   );
-  useShortcut(SHORTCUT_KEYS.LATER, () =>
+  useShortcut(SHORTCUT_KEYS.SAVED, () =>
     setVisibilityFilter("later" as VisibilityFilter),
   );
 

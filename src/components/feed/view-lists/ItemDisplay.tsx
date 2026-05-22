@@ -389,7 +389,7 @@ function ItemActions({
         ) : (
           <ClockIcon size={isGrid ? 14 : 16} />
         )}
-        <KeyboardShortcutDisplay shortcut={SHORTCUT_KEYS.TOGGLE_LATER} />
+        <KeyboardShortcutDisplay shortcut={SHORTCUT_KEYS.TOGGLE_SAVED} />
       </Button>
       <Button
         size="icon"

@@ -17,7 +17,7 @@ import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 const VISIBILITY_FILTER_SHORTCUTS: Record<VisibilityFilter, string> = {
   unread: SHORTCUT_KEYS.UNREAD,
   read: SHORTCUT_KEYS.READ,
-  later: SHORTCUT_KEYS.LATER,
+  later: SHORTCUT_KEYS.SAVED,
 };
 
 const VISIBILITY_FILTER_LABELS: Record<VisibilityFilter, string> = {
