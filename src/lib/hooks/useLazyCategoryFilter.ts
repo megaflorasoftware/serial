@@ -20,14 +20,13 @@ export function useLazyCategoryFilter() {
     // categoryFilter < 0 means no category is selected
     if (categoryFilter < 0) return;
 
-    // Check if already fetched for this category/filter
-    const fetchedFilters =
-      feedItemsStore.getState().fetchedCategoryFilters[categoryFilter];
-    if (fetchedFilters?.has(visibilityFilter)) {
-      return;
-    }
+    const paginationState =
+      feedItemsStore.getState().categoryPaginationState[categoryFilter]?.[
+        visibilityFilter
+      ];
+    if (paginationState?.isFetching) return;
 
-    // Request items via the publisher pattern
+    // Request items on mount/selection so another device's updates are merged.
     void dataSubscriptionActions.requestItemsByCategoryId(
       categoryFilter,
       visibilityFilter,

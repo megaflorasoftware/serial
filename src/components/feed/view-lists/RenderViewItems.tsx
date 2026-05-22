@@ -22,6 +22,9 @@ import FeedLoading from "~/components/loading";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
+import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
+import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
+import { useValidateViewItems } from "~/lib/hooks/useValidateViewItems";
 import {
   selectedItemIdAtom,
   viewFilterAtom,
@@ -280,6 +283,10 @@ function FlatViewItemsList({
 }
 
 export function RenderViewItems() {
+  useLazyFeedFilter();
+  useLazyCategoryFilter();
+  useValidateViewItems();
+
   const { feeds, hasFetchedFeeds } = useFeeds();
   const { hasFetchedFeedCategories } = useFeedCategories();
 

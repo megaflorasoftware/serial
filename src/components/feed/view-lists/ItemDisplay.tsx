@@ -79,11 +79,13 @@ function ItemMeta({
 }: ItemMetaProps) {
   const shouldUseWatchedDate = showWatchedDate && !!watchedAt;
   const primaryDate = shouldUseWatchedDate ? watchedAt : postedAt;
+  const watchedDateLabel =
+    watchedDatePrefix === "read" ? "Read" : "Watched";
   const primaryDateText = shouldUseWatchedDate
-    ? `${watchedDatePrefix} ${timeAgo(primaryDate)}`
+    ? `${watchedDateLabel} ${timeAgo(primaryDate)}`
     : timeAgo(primaryDate);
   const postedDateText = shouldUseWatchedDate
-    ? `posted ${timeAgo(postedAt)}`
+    ? `Posted ${timeAgo(postedAt)}`
     : undefined;
   const metadataParts = [
     author || feedName,

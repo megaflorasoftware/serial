@@ -1,17 +1,10 @@
 import { useCallback } from "react";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useItemWindow } from "~/lib/hooks/useItemWindow";
-import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
-import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
-import { useValidateViewItems } from "~/lib/hooks/useValidateViewItems";
 import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
 export function useViewListScroll(itemIds: string[]) {
-  useLazyFeedFilter();
-  useLazyCategoryFilter();
-  useValidateViewItems();
-
   const { visibleItems, expandWindow, renderCount } = useItemWindow(itemIds);
   const { handleLoadMore, paginationState } = useLoadMoreItems();
 

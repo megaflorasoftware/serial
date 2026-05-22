@@ -57,7 +57,12 @@ export function useValidateViewItems() {
       const item = state.feedItemsDict[id];
       if (!item) continue;
 
-      manifest.push({ id, contentHash: item.contentHash });
+      manifest.push({
+        id,
+        contentHash: item.contentHash,
+        progress: item.progress,
+        duration: item.duration,
+      });
     }
 
     void dataSubscriptionActions

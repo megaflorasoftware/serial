@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { getDefaultStore } from "jotai";
 import { orpcRouterClient } from "../orpc";
+import { getDataSubscriptionClientId } from "./clientChannel";
 import { loadingActor } from "./loading-machine";
 import { feedItemsStore } from "./store";
 import { shouldAlwaysKeepSSEConnectionAlive } from "./atoms";
@@ -23,6 +24,7 @@ const BACKOFF_MULTIPLIER = 2;
  * Handles connection lifecycle, auto-reconnection, and exposes request methods.
  */
 export function useDataSubscription() {
+  const clientIdRef = useRef(getDataSubscriptionClientId());
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryDelayRef = useRef(INITIAL_RETRY_DELAY);
   const isConnectedRef = useRef(false);
@@ -82,16 +84,19 @@ export function useDataSubscription() {
           isConnectedRef.current = true;
           retryDelayRef.current = INITIAL_RETRY_DELAY;
 
-          const iterator = await orpcRouterClient.initial.subscribe(undefined, {
-            signal: conn.signal,
-          });
+          const iterator = await orpcRouterClient.initial.subscribe(
+            { clientId: clientIdRef.current },
+            { signal: conn.signal },
+          );
 
           // After reconnecting due to page refocus, re-request data so
           // the server sends fresh metadata, diffs, and triggers a
           // refresh if the cooldown elapsed while the tab was hidden.
           if (visibilityReconnect) {
             visibilityReconnect = false;
-            void orpcRouterClient.initial.requestInitialData();
+            void orpcRouterClient.initial.requestInitialData({
+              clientId: clientIdRef.current,
+            });
           }
 
           for await (const payload of iterator as AsyncIterable<PublishedChunk>) {
@@ -198,11 +203,16 @@ export function useDataSubscription() {
 
   // Request methods that trigger data fetching via the publisher
   const requestInitialData = useCallback(() => {
-    return orpcRouterClient.initial.requestInitialData();
+    return orpcRouterClient.initial.requestInitialData({
+      clientId: clientIdRef.current,
+    });
   }, []);
 
   const requestFullTextForItems = useCallback((itemIds: string[]) => {
-    return orpcRouterClient.initial.requestFullTextForItems({ itemIds });
+    return orpcRouterClient.initial.requestFullTextForItems({
+      itemIds,
+      clientId: clientIdRef.current,
+    });
   }, []);
 
   const requestItemsByVisibility = useCallback(
@@ -219,6 +229,7 @@ export function useDataSubscription() {
         cursor,
         limit,
         clientItems,
+        clientId: clientIdRef.current,
       });
     },
     [],
@@ -236,6 +247,7 @@ export function useDataSubscription() {
         visibilityFilter,
         cursor,
         limit,
+        clientId: clientIdRef.current,
       });
     },
     [],
@@ -253,6 +265,7 @@ export function useDataSubscription() {
         visibilityFilter,
         cursor,
         limit,
+        clientId: clientIdRef.current,
       });
     },
     [],
@@ -274,10 +287,15 @@ export function useDataSubscription() {
  */
 export const dataSubscriptionActions = {
   requestInitialData: () => {
-    return orpcRouterClient.initial.requestInitialData();
+    return orpcRouterClient.initial.requestInitialData({
+      clientId: getDataSubscriptionClientId(),
+    });
   },
   requestFullTextForItems: (itemIds: string[]) => {
-    return orpcRouterClient.initial.requestFullTextForItems({ itemIds });
+    return orpcRouterClient.initial.requestFullTextForItems({
+      itemIds,
+      clientId: getDataSubscriptionClientId(),
+    });
   },
   streamingImport: (
     feeds: Array<{
@@ -307,6 +325,7 @@ export const dataSubscriptionActions = {
       cursor,
       limit,
       clientItems,
+      clientId: getDataSubscriptionClientId(),
     }),
   requestItemsByFeed: (
     feedId: number,
@@ -319,6 +338,7 @@ export const dataSubscriptionActions = {
       visibilityFilter,
       cursor,
       limit,
+      clientId: getDataSubscriptionClientId(),
     }),
   requestItemsByCategoryId: (
     categoryId: number,
@@ -331,5 +351,6 @@ export const dataSubscriptionActions = {
       visibilityFilter,
       cursor,
       limit,
+      clientId: getDataSubscriptionClientId(),
     }),
 };

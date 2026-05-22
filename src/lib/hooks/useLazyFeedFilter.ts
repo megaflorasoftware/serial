@@ -20,14 +20,13 @@ export function useLazyFeedFilter() {
     // feedFilter < 0 means no feed is selected
     if (feedFilter < 0) return;
 
-    // Check if already fetched for this feed/filter
-    const fetchedFilters =
-      feedItemsStore.getState().fetchedFeedFilters[feedFilter];
-    if (fetchedFilters?.has(visibilityFilter)) {
-      return;
-    }
+    const paginationState =
+      feedItemsStore.getState().feedPaginationState[feedFilter]?.[
+        visibilityFilter
+      ];
+    if (paginationState?.isFetching) return;
 
-    // Request items via the publisher pattern
+    // Request items on mount/selection so another device's updates are merged.
     void dataSubscriptionActions.requestItemsByFeed(
       feedFilter,
       visibilityFilter,

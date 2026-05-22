@@ -83,6 +83,8 @@ export type PaginationCursor = {
 export type ClientManifestEntry = {
   id: string;
   contentHash: string | null;
+  progress?: number | null;
+  duration?: number | null;
 };
 
 export type DiffEntry =
@@ -183,6 +185,18 @@ export type RevalidateViewChunk =
     }
   | { type: "view-feeds"; viewId: number; feedIds: number[] }
   | { type: "error"; message: string; phase: string };
+
+type RouterPublishedChunk =
+  | { source: "initial"; chunk: GetByViewChunk }
+  | { source: "revalidate"; chunk: RevalidateViewChunk }
+  | { source: "visibility"; chunk: GetItemsByVisibilityChunk }
+  | { source: "feed"; chunk: GetItemsByFeedChunk }
+  | { source: "category"; chunk: GetItemsByCategoryIdChunk };
+
+type ChannelSubscription = {
+  channel: string;
+  lastEventId?: string;
+};
 
 function buildFeedCategoriesMap(
   allFeedCategories: DatabaseFeedCategory[],
@@ -410,9 +424,9 @@ function computeViewDiff(
   serverItems: ApplicationFeedItem[],
   clientManifest: ClientManifestEntry[],
 ): DiffEntry[] {
-  const clientMap = new Map<string, string | null>();
+  const clientMap = new Map<string, ClientManifestEntry>();
   for (const entry of clientManifest) {
-    clientMap.set(entry.id, entry.contentHash);
+    clientMap.set(entry.id, entry);
   }
 
   const serverIds = new Set<string>();
@@ -424,14 +438,21 @@ function computeViewDiff(
     if (!clientMap.has(item.id)) {
       diff.push({ status: "new", item });
     } else {
-      const clientHash = clientMap.get(item.id);
+      const clientEntry = clientMap.get(item.id);
+      const clientHash = clientEntry?.contentHash;
       // null hash on either side means we can't confirm match — treat as updated
       const hashesMatch =
         clientHash !== null &&
         item.contentHash !== null &&
         clientHash === item.contentHash;
+      const progressMatches =
+        clientEntry?.progress === undefined ||
+        clientEntry.progress === item.progress;
+      const durationMatches =
+        clientEntry?.duration === undefined ||
+        clientEntry.duration === item.duration;
 
-      if (hashesMatch) {
+      if (hashesMatch && progressMatches && durationMatches) {
         diff.push({ status: "unchanged", id: item.id });
       } else {
         diff.push({ status: "updated", item });
@@ -451,6 +472,69 @@ function computeViewDiff(
 
 function getUserChannel(userId: string): string {
   return `user:${userId}`;
+}
+
+function getClientChannel(userId: string, clientId: string): string {
+  return `${getUserChannel(userId)}:client:${clientId}`;
+}
+
+const clientScopedInputSchema = z.object({
+  clientId: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_-]+$/),
+});
+
+async function* subscribeToChannels(
+  subscriptions: ChannelSubscription[],
+  signal: AbortSignal | undefined,
+): AsyncGenerator<RouterPublishedChunk> {
+  const iterators = subscriptions.map((subscription) => {
+    const channelSubscription = publisher.subscribe(subscription.channel, {
+      signal,
+      lastEventId: subscription.lastEventId,
+    });
+
+    return channelSubscription[Symbol.asyncIterator]();
+  });
+
+  type NextResult = {
+    index: number;
+    result: IteratorResult<RouterPublishedChunk>;
+  };
+
+  const pending = new Map<number, Promise<NextResult>>();
+  const queueNext = (index: number) => {
+    const iterator = iterators[index];
+    if (!iterator) return;
+
+    pending.set(
+      index,
+      iterator.next().then((result) => ({
+        index,
+        result,
+      })),
+    );
+  };
+
+  iterators.forEach((_, index) => queueNext(index));
+
+  try {
+    while (pending.size > 0) {
+      const { index, result } = await Promise.race(pending.values());
+      pending.delete(index);
+
+      if (result.done) {
+        continue;
+      }
+
+      queueNext(index);
+      yield result.value;
+    }
+  } finally {
+    await Promise.allSettled(iterators.map((iterator) => iterator.return?.()));
+  }
 }
 
 // ============================================================================
@@ -1184,34 +1268,36 @@ async function publishViewFeedsChunks(
 // ============================================================================
 
 /**
- * Subscribe to the user's channel to receive real-time data chunks.
+ * Subscribe to the user's broadcast channel and this client's reply channel.
  * This creates a long-lived SSE connection.
  */
-export const subscribe = protectedProcedure.handler(async function* ({
-  context,
-  signal,
-  lastEventId,
-}) {
-  const channel = getUserChannel(context.user.id);
-  const untrack = trackChannelConnection(channel);
+export const subscribe = protectedProcedure
+  .input(clientScopedInputSchema)
+  .handler(async function* ({ context, input, signal, lastEventId }) {
+    const userChannel = getUserChannel(context.user.id);
+    const clientChannel = getClientChannel(context.user.id, input.clientId);
+    const untrack = trackChannelConnection(userChannel);
 
-  try {
-    const iterator = publisher.subscribe(channel, { signal, lastEventId });
-
-    for await (const payload of iterator) {
-      yield payload;
+    try {
+      for await (const payload of subscribeToChannels(
+        [{ channel: userChannel, lastEventId }, { channel: clientChannel }],
+        signal,
+      )) {
+        yield payload;
+      }
+    } finally {
+      untrack();
     }
-  } finally {
-    untrack();
-  }
-});
+  });
 
 // ============================================================================
 // REQUEST PROCEDURES (publish instead of yield)
 // ============================================================================
 
 /**
- * Request initial data load. Data is published to the user's channel.
+ * Request initial data load. Database-backed response chunks are published
+ * only to the requesting client's reply channel; newly fetched RSS data is
+ * broadcast to the user's channel.
  *
  * The client sends a `viewManifests` map of its cached items per view so the
  * server can compute a diff and stream only what changed. If no manifests are
@@ -1226,9 +1312,11 @@ export const subscribe = protectedProcedure.handler(async function* ({
  *   4. Publish read/later diffs
  *   5. If feeds are due for refresh, call refreshUserFeeds
  */
-export const requestInitialData = protectedProcedure.handler(
-  async ({ context }) => {
-    const channel = getUserChannel(context.user.id);
+export const requestInitialData = protectedProcedure
+  .input(clientScopedInputSchema)
+  .handler(async ({ context, input }) => {
+    const userChannel = getUserChannel(context.user.id);
+    const clientChannel = getClientChannel(context.user.id, input.clientId);
 
     // Step 1: Fetch all prerequisite data using helper
     let prerequisiteData: PrerequisiteData;
@@ -1236,7 +1324,7 @@ export const requestInitialData = protectedProcedure.handler(
       prerequisiteData = await fetchUserPrerequisiteData(context);
     } catch (error) {
       captureException(error);
-      await publisher.publish(channel, {
+      await publisher.publish(clientChannel, {
         source: "initial",
         chunk: {
           type: "error",
@@ -1274,7 +1362,7 @@ export const requestInitialData = protectedProcedure.handler(
     );
 
     // Step 2: Publish prerequisite data chunks
-    await publishPrerequisiteDataChunks(channel, "initial", {
+    await publishPrerequisiteDataChunks(clientChannel, "initial", {
       allViews,
       applicationFeeds,
       contentCategoriesList,
@@ -1286,7 +1374,7 @@ export const requestInitialData = protectedProcedure.handler(
     );
 
     // Step 3: Publish view-feeds chunks for each view
-    await publishViewFeedsChunks(channel, "initial", {
+    await publishViewFeedsChunks(clientChannel, "initial", {
       allViews,
       applicationFeeds,
       feedCategoriesList,
@@ -1302,7 +1390,7 @@ export const requestInitialData = protectedProcedure.handler(
     const firstView = allViews[0];
 
     if (feedIds.length === 0 || !firstView) {
-      await publisher.publish(channel, {
+      await publisher.publish(clientChannel, {
         source: "initial",
         chunk: { type: "initial-data-complete" },
       });
@@ -1332,7 +1420,7 @@ export const requestInitialData = protectedProcedure.handler(
             customViewFeedIds,
           });
 
-        await publisher.publish(channel, {
+        await publisher.publish(clientChannel, {
           source: "initial",
           chunk: {
             type: "view-lightweight-items",
@@ -1352,7 +1440,7 @@ export const requestInitialData = protectedProcedure.handler(
           errorMessage,
           error,
         );
-        await publisher.publish(channel, {
+        await publisher.publish(clientChannel, {
           source: "initial",
           chunk: {
             type: "error",
@@ -1374,7 +1462,7 @@ export const requestInitialData = protectedProcedure.handler(
     );
 
     // Signal that initial (unread) data is complete — client can show UI
-    await publisher.publish(channel, {
+    await publisher.publish(clientChannel, {
       source: "initial",
       chunk: { type: "initial-data-complete" },
     });
@@ -1407,7 +1495,7 @@ export const requestInitialData = protectedProcedure.handler(
         )
       : [];
 
-    await publisher.publish(channel, {
+    await publisher.publish(userChannel, {
       source: "initial",
       chunk: {
         type: "refresh-start",
@@ -1425,7 +1513,7 @@ export const requestInitialData = protectedProcedure.handler(
       await refreshUserFeeds({
         db: context.db,
         feedsList,
-        channel,
+        channel: userChannel,
       });
       logDebug(
         `[requestInitialData] user=${context.user.id} phase=refresh-completed`,
@@ -1433,7 +1521,7 @@ export const requestInitialData = protectedProcedure.handler(
     }
 
     // Step 8: Always signal completion so the client exits loading state.
-    await publisher.publish(channel, {
+    await publisher.publish(userChannel, {
       source: "initial",
       chunk: { type: "refresh-complete" },
     });
@@ -1443,8 +1531,7 @@ export const requestInitialData = protectedProcedure.handler(
     );
 
     return { status: "completed" };
-  },
-);
+  });
 
 /**
  * Request data after importing feeds. Similar to requestInitialData but also
@@ -2291,7 +2378,7 @@ function buildSectionPlacementExpression(viewId: number): SQL<number> {
  */
 export const requestItemsByVisibility = protectedProcedure
   .input(
-    z.object({
+    clientScopedInputSchema.extend({
       viewId: z.number(),
       visibilityFilter: visibilityFilterSchema,
       cursor: cursorSchema.optional(),
@@ -2301,13 +2388,15 @@ export const requestItemsByVisibility = protectedProcedure
           z.object({
             id: z.string(),
             contentHash: z.string().nullable(),
+            progress: z.number().nullable().optional(),
+            duration: z.number().nullable().optional(),
           }),
         )
         .optional(),
     }),
   )
   .handler(async ({ context, input }) => {
-    const channel = getUserChannel(context.user.id);
+    const channel = getClientChannel(context.user.id, input.clientId);
     const limit = input.limit ?? ITEMS_PER_PAGE;
     const clientItems = input.clientItems;
 
@@ -2431,7 +2520,7 @@ export const requestItemsByVisibility = protectedProcedure
  */
 export const requestItemsByFeed = protectedProcedure
   .input(
-    z.object({
+    clientScopedInputSchema.extend({
       feedId: z.number(),
       visibilityFilter: visibilityFilterSchema,
       cursor: cursorSchema.optional(),
@@ -2439,7 +2528,7 @@ export const requestItemsByFeed = protectedProcedure
     }),
   )
   .handler(async ({ context, input }) => {
-    const channel = getUserChannel(context.user.id);
+    const channel = getClientChannel(context.user.id, input.clientId);
     const limit = input.limit ?? ITEMS_PER_PAGE;
 
     // Verify feed belongs to user
@@ -2546,7 +2635,7 @@ export const requestItemsByFeed = protectedProcedure
  */
 export const requestItemsByCategoryId = protectedProcedure
   .input(
-    z.object({
+    clientScopedInputSchema.extend({
       categoryId: z.number(),
       visibilityFilter: visibilityFilterSchema,
       cursor: cursorSchema.optional(),
@@ -2554,7 +2643,7 @@ export const requestItemsByCategoryId = protectedProcedure
     }),
   )
   .handler(async ({ context, input }) => {
-    const channel = getUserChannel(context.user.id);
+    const channel = getClientChannel(context.user.id, input.clientId);
     const limit = input.limit ?? ITEMS_PER_PAGE;
 
     // Verify category belongs to user
@@ -3235,12 +3324,12 @@ export const getItemsByVisibility = protectedProcedure
  */
 export const requestFullTextForItems = protectedProcedure
   .input(
-    z.object({
+    clientScopedInputSchema.extend({
       itemIds: z.array(z.string()).max(500),
     }),
   )
   .handler(async ({ context, input }) => {
-    const channel = getUserChannel(context.user.id);
+    const channel = getClientChannel(context.user.id, input.clientId);
 
     try {
       const items = await context.db

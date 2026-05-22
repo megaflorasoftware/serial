@@ -24,6 +24,7 @@ import {
 } from "~/lib/hooks/useArticleNavigation";
 import { getScrollContainer } from "~/lib/scroll";
 import { useDebouncedSaveProgress } from "~/lib/hooks/useDebouncedSaveProgress";
+import { useRefreshFeedItem } from "~/lib/hooks/useRefreshFeedItem";
 import { useScrollDirection } from "~/lib/hooks/useScrollDirection";
 import { detectTruncatedContent } from "~/lib/utils/detectTruncatedContent";
 import {
@@ -61,6 +62,8 @@ function ReadPage() {
   const [articleStyle] = useFlagState("ARTICLE_STYLE");
 
   const feedItem = useFeedItemValue(params.id);
+  useRefreshFeedItem(params.id);
+
   const { feeds } = useFeeds();
   const feedCategories = useFeedCategories();
   const viewFeeds = useViewFeeds();

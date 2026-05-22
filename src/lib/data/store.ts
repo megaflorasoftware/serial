@@ -8,6 +8,7 @@ import {
   sortFeedItemsOrderByWatchedAt,
 } from "../sortFeedItems";
 import { applyDiffEntries } from "./applyDiffEntries";
+import { getDataSubscriptionClientId } from "./clientChannel";
 import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
@@ -270,7 +271,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           set({ pendingFulltextItems: remaining });
 
           void orpcRouterClient.initial
-            .requestFullTextForItems({ itemIds })
+            .requestFullTextForItems({
+              itemIds,
+              clientId: getDataSubscriptionClientId(),
+            })
             .then(() => {
               // Fulltext chunks will arrive via the SSE subscription and be
               // processed by processChunk. Nothing to do here.
@@ -572,6 +576,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             feedId,
             visibilityFilter,
             cursor: paginationState.cursor,
+            clientId: getDataSubscriptionClientId(),
           });
         } catch (error) {
           console.error("Error requesting more items for feed:", error);
@@ -633,6 +638,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             categoryId,
             visibilityFilter,
             cursor: paginationState.cursor,
+            clientId: getDataSubscriptionClientId(),
           });
         } catch (error) {
           console.error("Error requesting more items for category:", error);
@@ -776,7 +782,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           // Re-run the same flow as initial mount: metadata, diffs, RSS refresh.
           // Rate limiting is handled server-side via checkUserRefreshEligibility —
           // if the user is in cooldown, metadata+diffs still run but RSS is skipped.
-          await orpcRouterClient.initial.requestInitialData();
+          await orpcRouterClient.initial.requestInitialData({
+            clientId: getDataSubscriptionClientId(),
+          });
         } catch (e) {
           // Exit loading state so the button re-enables on error
           loadingActor.send({ type: "RESET" });
@@ -1178,9 +1186,16 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
                 for (const item of initialChunk.items) {
                   const existing = feedItemsDict[item.id];
+                  const hasMatchingContentHash =
+                    existing?.contentHash === item.contentHash;
+                  const hasMatchingProgress =
+                    existing?.progress === item.progress &&
+                    existing?.duration === item.duration;
+
                   if (
                     existing &&
-                    existing.contentHash === item.contentHash &&
+                    hasMatchingContentHash &&
+                    hasMatchingProgress &&
                     existing.content
                   ) {
                     // Client already has this item with matching fulltext — keep it.
@@ -1203,7 +1218,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   }
 
                   // Only add to pending if we don't already have matching fulltext
-                  if (!existing || existing.contentHash !== item.contentHash) {
+                  if (!existing || !hasMatchingContentHash) {
                     pendingFulltext.add(item.id);
                     hasNewPending = true;
                   }
@@ -1385,11 +1400,31 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 }
               }
 
+              const paginationState = {
+                cursor: chunk.cursor,
+                hasMore: chunk.hasMore,
+                isFetching: false,
+              };
+
               set({
                 feedItemsDict,
                 feedItemsOrder: feedItemsOrder.sort(
                   getSortFunction(feedItemsDict, chunk.viewId, vf),
                 ),
+                viewPaginationState: {
+                  ...get().viewPaginationState,
+                  [chunk.viewId]: {
+                    ...get().viewPaginationState[chunk.viewId],
+                    [vf]: paginationState,
+                  },
+                },
+                fetchedVisibilityFilters: {
+                  ...get().fetchedVisibilityFilters,
+                  [chunk.viewId]: new Set([
+                    ...(get().fetchedVisibilityFilters[chunk.viewId] ?? []),
+                    vf,
+                  ]),
+                },
               });
               break;
             }

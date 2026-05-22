@@ -7,6 +7,8 @@ export function computeItemHash(item: {
   content?: string | null;
   thumbnail?: string | null;
   postedAt?: Date | null;
+  progress?: number | null;
+  duration?: number | null;
 }): string {
   const data = [
     item.contentId,
@@ -15,6 +17,8 @@ export function computeItemHash(item: {
     item.content ?? "",
     item.thumbnail ?? "",
     item.postedAt?.getTime() ?? "",
+    item.progress ?? 0,
+    item.duration ?? 0,
   ].join("\0");
 
   return createHash("sha256").update(data).digest("hex");
