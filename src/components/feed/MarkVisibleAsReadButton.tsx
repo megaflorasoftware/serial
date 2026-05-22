@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { FlameIcon } from "lucide-react";
 import { PaginationLoader } from "./view-lists/PaginationLoader";
 import {
@@ -12,7 +12,10 @@ import {
   visibilityFilterAtom,
 } from "~/lib/data/atoms";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
-import { useBulkSetWatchedValueMutation } from "~/lib/data/feed-items/mutations";
+import {
+  setBulkWatchedValue,
+  useBulkSetWatchedValueMutation,
+} from "~/lib/data/feed-items/mutations";
 import {
   feedItemsStore,
   useFetchMoreItems,
@@ -22,7 +25,7 @@ import {
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
-import { clearUndoToast, showUndoToast } from "~/lib/undo";
+import { showUndoToast } from "~/lib/undo";
 import {
   getFirstRenderedFeedItemId,
   useScrollToFeedItem,
@@ -46,12 +49,6 @@ export function MarkVisibleAsReadButton() {
   const fetchMoreItemsForCategory = useFetchMoreItemsForCategory();
 
   const bulkMutation = useBulkSetWatchedValueMutation();
-
-  useEffect(() => {
-    return () => {
-      clearUndoToast();
-    };
-  }, []);
 
   const selectFirstRenderedItem = useCallback(() => {
     requestAnimationFrame(() => {
@@ -82,7 +79,7 @@ export function MarkVisibleAsReadButton() {
       showUndoToast({
         message: `Marked ${items.length} item${items.length === 1 ? "" : "s"} as read`,
         onUndo: async () => {
-          await bulkMutation.mutateAsync({ items, isWatched: false });
+          await setBulkWatchedValue({ items, isWatched: false });
         },
       });
 

@@ -210,6 +210,25 @@ export function useFeedItemNavigation(
     [items, selectItem, selectItemAfterRender],
   );
 
+  const selectItemAfterCurrentItemLeavesView = useCallback(
+    (currentIndex: number) => {
+      const isCurrentItemLastVisibleItem = currentIndex === items.length - 1;
+
+      if (isCurrentItemLastVisibleItem) {
+        setSelectedItemId(null);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            getScrollContainer().scrollTo({ top: 0, behavior: "smooth" });
+          });
+        });
+        return;
+      }
+
+      selectNextItem(currentIndex, { deferScroll: true });
+    },
+    [items.length, selectNextItem, setSelectedItemId],
+  );
+
   useEffect(() => {
     const pendingItemScroll = pendingItemScrollRef.current;
     if (!pendingItemScroll) return;
@@ -560,24 +579,14 @@ export function useFeedItemNavigation(
       const didToggleRead = selectedItemActions.toggleRead();
       if (!didToggleRead) return;
 
-      if (idx === items.length - 1) {
-        setSelectedItemId(null);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            getScrollContainer().scrollTo({ top: 0, behavior: "smooth" });
-          });
-        });
-      } else {
-        selectNextItem(idx, { deferScroll: true });
-      }
+      selectItemAfterCurrentItemLeavesView(idx);
     },
     [
       pathname,
       selectedItemId,
       selectedItemActions,
       items,
-      selectNextItem,
-      setSelectedItemId,
+      selectItemAfterCurrentItemLeavesView,
     ],
   );
 
@@ -590,7 +599,7 @@ export function useFeedItemNavigation(
 
     selectedItemActions.toggleWatchLater();
     const idx = items.indexOf(selectedItemId);
-    selectNextItem(idx);
+    selectItemAfterCurrentItemLeavesView(idx);
   });
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.ENTER), () => {

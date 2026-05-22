@@ -2,9 +2,13 @@
 
 import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
+import { useAtomValue } from "jotai";
 import { CheckIcon, ClockIcon, EyeIcon, SendIcon } from "lucide-react";
+import { VIEW_CONTENT_TYPE } from "~/server/db/constants";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
+import { visibilityFilterAtom } from "~/lib/data/atoms";
+import { getContentTypeFromItem } from "~/lib/data/feed-items";
 import { useFeedItemsSetWatchLaterValueMutation } from "~/lib/data/feed-items/mutations";
 import { useFeeds as useFeedsArray } from "~/lib/data/feeds/store";
 import {
@@ -18,6 +22,7 @@ import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 import { useShowShortcuts } from "~/lib/hooks/useShowShortcuts";
 
 export type ItemSize = "standard" | "large";
+type WatchedDatePrefix = "read" | "watched";
 
 // Typography components for consistent styling across layouts
 
@@ -57,10 +62,32 @@ interface ItemMetaProps {
   author: string | undefined;
   feedName: string | undefined;
   postedAt: Date;
+  watchedAt?: Date | null;
+  showWatchedDate?: boolean;
+  watchedDatePrefix?: WatchedDatePrefix;
   className?: string;
 }
 
-function ItemMeta({ author, feedName, postedAt, className }: ItemMetaProps) {
+function ItemMeta({
+  author,
+  feedName,
+  postedAt,
+  watchedAt,
+  showWatchedDate = false,
+  watchedDatePrefix = "watched",
+  className,
+}: ItemMetaProps) {
+  const shouldUseWatchedDate = showWatchedDate && !!watchedAt;
+  const primaryDate = shouldUseWatchedDate ? watchedAt : postedAt;
+  const primaryDateText = shouldUseWatchedDate
+    ? `${watchedDatePrefix} ${timeAgo(primaryDate)}`
+    : timeAgo(primaryDate);
+  const postedDateText = shouldUseWatchedDate
+    ? `posted ${timeAgo(postedAt)}`
+    : undefined;
+  const metadataParts = [author || feedName, primaryDateText, postedDateText]
+    .filter(Boolean);
+
   return (
     <p
       className={clsx(
@@ -68,12 +95,19 @@ function ItemMeta({ author, feedName, postedAt, className }: ItemMetaProps) {
         className,
       )}
     >
-      {author || feedName} • {timeAgo(postedAt)}
+      {metadataParts.join(" • ")}
     </p>
   );
 }
 
 // Thumbnail components for consistent styling across layouts
+
+function getWatchedDatePrefix(
+  item: Parameters<typeof getContentTypeFromItem>[0],
+): WatchedDatePrefix {
+  const contentType = getContentTypeFromItem(item);
+  return contentType === VIEW_CONTENT_TYPE.LONGFORM ? "read" : "watched";
+}
 
 type ThumbnailType =
   | "horizontal-video"
@@ -439,6 +473,7 @@ export function ItemDisplay({
   sectionItemType,
 }: ItemDisplayProps) {
   const feeds = useFeedsArray();
+  const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const item = useFeedItemValue(contentId);
 
   if (!item) return null;
@@ -456,6 +491,9 @@ export function ItemDisplay({
   const rel = shouldOpenInSerial ? undefined : "noopener noreferrer";
 
   const isLarge = size === "large";
+  const shouldDimReadSavedItem = visibilityFilter === "later" && item.isWatched;
+  const shouldShowWatchedDate = visibilityFilter === "read";
+  const watchedDatePrefix = getWatchedDatePrefix(item);
 
   return (
     <article
@@ -476,6 +514,7 @@ export function ItemDisplay({
         className={clsx(
           "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2 md:py-2",
           isLarge ? "pb-1 md:pb-2" : "pb-4 md:h-20 md:py-0",
+          shouldDimReadSavedItem && "opacity-50",
           isSelected && "md:bg-muted",
         )}
       >
@@ -496,6 +535,9 @@ export function ItemDisplay({
                 author={item.author}
                 feedName={feed?.name}
                 postedAt={item.postedAt}
+                watchedAt={item.isWatchedUpdatedAt}
+                showWatchedDate={shouldShowWatchedDate}
+                watchedDatePrefix={watchedDatePrefix}
                 className="pt-1"
               />
             </div>
@@ -513,6 +555,9 @@ export function ItemDisplay({
                 author={item.author}
                 feedName={feed?.name}
                 postedAt={item.postedAt}
+                watchedAt={item.isWatchedUpdatedAt}
+                showWatchedDate={shouldShowWatchedDate}
+                watchedDatePrefix={watchedDatePrefix}
               />
             </div>
           </>
@@ -544,6 +589,7 @@ export function GridItemDisplay({
   sectionItemType,
 }: GridItemDisplayProps) {
   const feeds = useFeedsArray();
+  const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const item = useFeedItemValue(contentId);
 
   if (!item) return null;
@@ -561,6 +607,9 @@ export function GridItemDisplay({
   const rel = shouldOpenInSerial ? undefined : "noopener noreferrer";
 
   const isLarge = size === "large";
+  const shouldDimReadSavedItem = visibilityFilter === "later" && item.isWatched;
+  const shouldShowWatchedDate = visibilityFilter === "read";
+  const watchedDatePrefix = getWatchedDatePrefix(item);
 
   return (
     <article
@@ -575,6 +624,7 @@ export function GridItemDisplay({
         preload={shouldOpenInSerial ? "intent" : undefined}
         className={clsx(
           "flex h-full flex-1 flex-col rounded p-2 text-left",
+          shouldDimReadSavedItem && "opacity-50",
           isSelected && "md:bg-muted",
         )}
       >
@@ -591,6 +641,9 @@ export function GridItemDisplay({
             author={item.author}
             feedName={feed?.name}
             postedAt={item.postedAt}
+            watchedAt={item.isWatchedUpdatedAt}
+            showWatchedDate={shouldShowWatchedDate}
+            watchedDatePrefix={watchedDatePrefix}
             className="pt-0.5"
           />
         </div>

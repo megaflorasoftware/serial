@@ -16,7 +16,11 @@ import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import { useViewSections } from "./useViewSections";
 import type { ViewSection } from "./useViewSections";
+import type { ViewLayout } from "~/server/db/constants";
+import { VIEW_LAYOUT } from "~/server/db/constants";
 import FeedLoading from "~/components/loading";
+import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
+import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
 import {
   selectedItemIdAtom,
@@ -26,18 +30,18 @@ import {
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import { useFilteredFeedItemsOrder } from "~/lib/data/feed-items";
-import { useBulkSetWatchedValueMutation } from "~/lib/data/feed-items/mutations";
+import {
+  setBulkWatchedValue,
+  useBulkSetWatchedValueMutation,
+} from "~/lib/data/feed-items/mutations";
 import {
   feedItemsStore,
   useFetchFeedItemsLastFetchedAt,
   useHasInitialData,
 } from "~/lib/data/store";
-import { VIEW_LAYOUT } from "~/server/db/constants";
 import { useFeedItemNavigation } from "~/lib/hooks/useFeedItemNavigation";
 import { useShortcut } from "~/lib/hooks/useShortcut";
-import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
-import { clearUndoToast, showUndoToast } from "~/lib/undo";
-import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
+import { showUndoToast } from "~/lib/undo";
 
 function getNextAvailableItemAfterSection(
   sectionIndex: number,
@@ -111,12 +115,6 @@ function SectionHeading({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      clearUndoToast();
-    };
-  }, []);
-
   const handleMarkSectionAsRead = async () => {
     if (visibilityFilter !== "unread" || sectionItems.length === 0) return;
 
@@ -138,7 +136,7 @@ function SectionHeading({
       showUndoToast({
         message: `Marked ${items.length} item${items.length === 1 ? "" : "s"} as read`,
         onUndo: async () => {
-          await bulkMutation.mutateAsync({ items, isWatched: false });
+          await setBulkWatchedValue({ items, isWatched: false });
         },
       });
     } finally {
@@ -246,6 +244,41 @@ function LayoutSection({
   );
 }
 
+function isGridLayout(layout: ViewLayout) {
+  return layout === VIEW_LAYOUT.GRID || layout === VIEW_LAYOUT.LARGE_GRID;
+}
+
+function FlatViewItemsList({
+  items,
+  layout,
+  handleMouseSelect,
+}: {
+  items: string[];
+  layout: ViewLayout;
+  handleMouseSelect: (itemId: string) => void;
+}) {
+  const layoutProps = {
+    items,
+    handleMouseSelect,
+    startIndex: 0,
+    showPaginationEnd: true,
+  };
+
+  if (layout === VIEW_LAYOUT.LARGE_LIST) {
+    return <ViewItemLargeList {...layoutProps} />;
+  }
+
+  if (layout === VIEW_LAYOUT.GRID) {
+    return <ViewItemGrid {...layoutProps} />;
+  }
+
+  if (layout === VIEW_LAYOUT.LARGE_GRID) {
+    return <ViewItemLargeGrid {...layoutProps} />;
+  }
+
+  return <ViewItemStandardList {...layoutProps} />;
+}
+
 export function RenderViewItems() {
   const { feeds, hasFetchedFeeds } = useFeeds();
   const { hasFetchedFeedCategories } = useFeedCategories();
@@ -264,12 +297,19 @@ export function RenderViewItems() {
     sectionInfo,
     baseLayout,
   } = useViewSections(currentView, filteredFeedItemsOrder);
+  const visibilityFilter = useAtomValue(visibilityFilterAtom);
+  const isReadVisibility = visibilityFilter === "read";
+  const navigationItems = isReadVisibility ? filteredFeedItemsOrder : flatItems;
+  const navigationHasGridSections = isReadVisibility
+    ? isGridLayout(baseLayout)
+    : hasGridSections;
+  const navigationSectionInfo = isReadVisibility ? undefined : sectionInfo;
 
   // Keyboard navigation
   const { handleMouseSelect, selectItem } = useFeedItemNavigation(
-    flatItems,
-    hasGridSections,
-    sectionInfo,
+    navigationItems,
+    navigationHasGridSections,
+    navigationSectionInfo,
   );
 
   const { paginationState } = useLoadMoreItems();
@@ -321,20 +361,28 @@ export function RenderViewItems() {
 
   return (
     <div className="w-full">
-      {computedSections.map((section, index) => (
-        <LayoutSection
-          key={
-            section.isUncategorized
-              ? "uncategorized"
-              : `${section.name}-${index}`
-          }
-          section={section}
-          sectionIndex={index}
+      {isReadVisibility ? (
+        <FlatViewItemsList
+          items={filteredFeedItemsOrder}
+          layout={baseLayout}
           handleMouseSelect={handleMouseSelect}
-          onMarkAsRead={handleSectionMarkAsRead}
-          viewName={currentView?.name}
         />
-      ))}
+      ) : (
+        computedSections.map((section, index) => (
+          <LayoutSection
+            key={
+              section.isUncategorized
+                ? "uncategorized"
+                : `${section.name}-${index}`
+            }
+            section={section}
+            sectionIndex={index}
+            handleMouseSelect={handleMouseSelect}
+            onMarkAsRead={handleSectionMarkAsRead}
+            viewName={currentView?.name}
+          />
+        ))
+      )}
       {paginationState?.isFetching && (
         <div className="px-4 py-4">
           <StandardListSkeleton />
