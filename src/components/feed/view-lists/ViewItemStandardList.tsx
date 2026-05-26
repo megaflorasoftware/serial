@@ -8,6 +8,7 @@ import { PaginationLoader } from "./PaginationLoader";
 import { ViewListContainer } from "./ViewListContainer";
 import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
+import { useDeferredAutoAnimate } from "~/lib/hooks/useDeferredAutoAnimate";
 
 interface ViewItemStandardListProps {
   items: string[];
@@ -25,6 +26,7 @@ export function ViewItemStandardList({
   sectionItemType,
 }: ViewItemStandardListProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
+  const [parent] = useDeferredAutoAnimate<HTMLDivElement>();
 
   const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
     useViewListScroll(items);
@@ -33,7 +35,7 @@ export function ViewItemStandardList({
 
   return (
     <ViewListContainer>
-      <div className="transition-all md:pt-2">
+      <div ref={parent} className="transition-all md:pt-2">
         {visibleItems.map((contentId, index) => {
           const globalIndex = startIndex + index;
           return (

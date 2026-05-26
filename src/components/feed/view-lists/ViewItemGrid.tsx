@@ -8,6 +8,7 @@ import { PaginationLoader } from "./PaginationLoader";
 import { ViewListContainer } from "./ViewListContainer";
 import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
+import { useDeferredAutoAnimate } from "~/lib/hooks/useDeferredAutoAnimate";
 
 interface ViewItemGridProps {
   items: string[];
@@ -25,6 +26,7 @@ export function ViewItemGrid({
   sectionItemType,
 }: ViewItemGridProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
+  const [parent] = useDeferredAutoAnimate<HTMLDivElement>();
 
   const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
     useViewListScroll(items);
@@ -33,7 +35,10 @@ export function ViewItemGrid({
 
   return (
     <ViewListContainer className="px-4">
-      <div className="grid w-full grid-cols-2 items-stretch gap-y-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2">
+      <div
+        ref={parent}
+        className="grid w-full grid-cols-2 items-stretch gap-y-4 pt-4 md:grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] md:gap-2"
+      >
         {visibleItems.map((contentId, index) => {
           const globalIndex = startIndex + index;
           return (
