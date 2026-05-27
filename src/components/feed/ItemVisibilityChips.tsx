@@ -22,8 +22,8 @@ const VISIBILITY_FILTER_SHORTCUTS: Record<VisibilityFilter, string> = {
 
 const VISIBILITY_FILTER_LABELS: Record<VisibilityFilter, string> = {
   later: "Saved",
-  unread: "Inbox",
-  read: "Read",
+  unread: "Unread",
+  read: "Archived",
 };
 
 const VISIBILITY_FILTER_ORDER: VisibilityFilter[] = ["unread", "later", "read"];

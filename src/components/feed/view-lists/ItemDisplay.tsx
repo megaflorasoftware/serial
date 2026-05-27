@@ -3,7 +3,12 @@
 import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { useAtomValue } from "jotai";
-import { CheckIcon, ClockIcon, EyeIcon, SendIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  BookmarkCheckIcon,
+  BookmarkIcon,
+  SendIcon,
+} from "lucide-react";
 import { VIEW_CONTENT_TYPE } from "~/server/db/constants";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
@@ -385,9 +390,9 @@ function ItemActions({
         })}
       >
         {item.isWatchLater ? (
-          <CheckIcon size={isGrid ? 14 : 16} />
+          <BookmarkCheckIcon size={isGrid ? 14 : 16} />
         ) : (
-          <ClockIcon size={isGrid ? 14 : 16} />
+          <BookmarkIcon size={isGrid ? 14 : 16} />
         )}
         <KeyboardShortcutDisplay shortcut={SHORTCUT_KEYS.TOGGLE_SAVED} />
       </Button>
@@ -399,7 +404,7 @@ function ItemActions({
           "h-8 w-8 p-0": isGrid,
         })}
       >
-        <EyeIcon size={isGrid ? 14 : 16} />
+        <ArchiveIcon size={isGrid ? 14 : 16} />
         <KeyboardShortcutDisplay shortcut={SHORTCUT_KEYS.TOGGLE_READ} />
       </Button>
     </div>

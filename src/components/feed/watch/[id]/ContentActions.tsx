@@ -1,8 +1,9 @@
 import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  BookmarkCheckIcon,
+  BookmarkIcon,
   CheckIcon,
-  ClockIcon,
-  EyeIcon,
-  EyeOffIcon,
   SendIcon,
 } from "lucide-react";
 import { useView } from "./useView";
@@ -48,7 +49,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
     });
   };
 
-  useShortcut("w", () => {
+  useShortcut("s", () => {
     void toggleWatchLater();
   });
 
@@ -98,14 +99,22 @@ export function ContentActions({ contentID }: { contentID: string }) {
           onClick={toggleWatchLater}
           size="icon"
         >
-          {isWatchLater ? <CheckIcon size={16} /> : <ClockIcon size={16} />}
+          {isWatchLater ? (
+            <CheckIcon size={16} />
+          ) : (
+            <BookmarkCheckIcon size={16} />
+          )}
         </Button>
         <Button
           variant={isWatched ? "secondary" : "outline"}
           onClick={toggleWatched}
           size="icon"
         >
-          {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+          {isWatched ? (
+            <ArchiveRestoreIcon size={16} />
+          ) : (
+            <ArchiveIcon size={16} />
+          )}
         </Button>
       </div>
     );
@@ -126,13 +135,19 @@ export function ContentActions({ contentID }: { contentID: string }) {
         </ButtonWithShortcut>
       )}
       <ButtonWithShortcut
-        shortcut="w"
+        shortcut="s"
         variant={isWatchLater ? "secondary" : "outline"}
         onClick={toggleWatchLater}
         size="icon md:default"
       >
-        {isWatchLater ? <CheckIcon size={16} /> : <ClockIcon size={16} />}
-        <span className="hidden pl-1.5 md:block">Watch Later</span>
+        {isWatchLater ? (
+          <BookmarkCheckIcon size={16} />
+        ) : (
+          <BookmarkIcon size={16} />
+        )}
+        <span className="hidden pl-1.5 md:block">
+          {isWatchLater ? "Unsave" : "Save"}
+        </span>
       </ButtonWithShortcut>
       <ButtonWithShortcut
         shortcut="e"
@@ -140,9 +155,13 @@ export function ContentActions({ contentID }: { contentID: string }) {
         onClick={toggleWatched}
         size="icon md:default"
       >
-        {isWatched ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+        {isWatched ? (
+          <ArchiveRestoreIcon size={16} />
+        ) : (
+          <ArchiveIcon size={16} />
+        )}
         <span className="hidden pl-1.5 md:block">
-          {isWatched ? "Watched" : "Unwatched"}
+          {isWatched ? "Unarchive" : "Archive"}
         </span>
       </ButtonWithShortcut>
     </div>
