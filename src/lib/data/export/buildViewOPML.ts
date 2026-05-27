@@ -168,12 +168,19 @@ export function buildViewOPML(input: BuildViewOPMLInput) {
       }
     }
 
+    const hasExplicitFeedSelection =
+      view.feedIds.length > 0 || feedIdsInView.size > 0;
+
     if (view.categoryIds.length > 0) {
       const categorySet = new Set(view.categoryIds);
       for (const feedCategory of feedCategories) {
         if (categorySet.has(feedCategory.categoryId)) {
           feedIdsInView.add(feedCategory.feedId);
         }
+      }
+    } else if (!hasExplicitFeedSelection) {
+      for (const feed of feeds) {
+        feedIdsInView.add(feed.id);
       }
     }
 

@@ -24,7 +24,7 @@ test.describe("feed item actions", () => {
   test("mark as read on read page and verify on home page", async ({
     page,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(30000);
 
     const { email, password, feedItemId } = await seedArticleData(
       SELF_HOSTED_TURSO_PORT,
@@ -68,7 +68,7 @@ test.describe("feed item actions", () => {
   test("read toggle shortcuts advance after marking items unread in read filter", async ({
     page,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(30000);
 
     const { email, password } = await seedMultipleArticleData(
       SELF_HOSTED_TURSO_PORT,

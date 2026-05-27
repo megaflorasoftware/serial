@@ -315,4 +315,46 @@ describe("OPML import/export", () => {
       categoryPaths: undefined,
     });
   });
+
+  it("exports empty-filter custom views as all-feeds views", () => {
+    const feeds = [
+      makeFeed(1, "Tech", "https://example.com/tech.xml"),
+      makeFeed(2, "Fireship", "https://example.com/fireship.xml"),
+    ];
+    const views = [
+      makeView(200, "Everything", {
+        categoryIds: [],
+        feedIds: [],
+        viewSections: [],
+      }),
+    ];
+
+    const opml = buildViewOPML({
+      feeds,
+      views,
+      contentCategories: [],
+      feedCategories: [],
+      viewFeeds: [],
+    });
+    const result = getInitialFeedDataFromOPMLInput(opml);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(
+      result.data.map((feed) => ({
+        feedUrl: feed.feedUrl,
+        categoryPaths: feed.categoryPaths,
+      })),
+    ).toEqual([
+      {
+        feedUrl: "https://example.com/fireship.xml",
+        categoryPaths: [[{ name: "Everything", type: "view" }]],
+      },
+      {
+        feedUrl: "https://example.com/tech.xml",
+        categoryPaths: [[{ name: "Everything", type: "view" }]],
+      },
+    ]);
+  });
 });

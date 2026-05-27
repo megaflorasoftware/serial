@@ -18,7 +18,7 @@ test.describe("undo mark visible as read", () => {
   });
 
   test("clicking undo button restores unread items", async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(30000);
 
     const { email, password } = await seedMultipleArticleData(
       SELF_HOSTED_TURSO_PORT,
@@ -60,7 +60,7 @@ test.describe("undo mark visible as read", () => {
   });
 
   test("pressing z restores unread items", async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(30000);
 
     const { email, password } = await seedMultipleArticleData(
       SELF_HOSTED_TURSO_PORT,
