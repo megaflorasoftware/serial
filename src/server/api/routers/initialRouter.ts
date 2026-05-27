@@ -2353,22 +2353,27 @@ function buildSectionPlacementExpression(viewId: number): SQL<number> {
   const colName = (feedItems.feedId as unknown as { name: string }).name;
   const feedIdRef = sql.raw(`"${tableName}"."${colName}"`);
 
-  return sql<number>`COALESCE((
-    SELECT MIN(placement)
-    FROM serial_view_sections
-    WHERE view_id = ${viewId}
-      AND (
-        (item_type = 'feed' AND item_id = ${feedIdRef})
-        OR (
-          item_type = 'tag'
-          AND EXISTS (
-            SELECT 1 FROM serial_feed_categories
-            WHERE feed_id = ${feedIdRef}
-              AND category_id = serial_view_sections.item_id
-          )
+  return sql<number>`COALESCE(
+    (
+      SELECT MIN(placement)
+      FROM serial_view_sections
+      WHERE view_id = ${viewId}
+        AND item_type = 'feed'
+        AND item_id = ${feedIdRef}
+    ),
+    (
+      SELECT MIN(placement)
+      FROM serial_view_sections AS view_section
+      WHERE view_id = ${viewId}
+        AND item_type = 'tag'
+        AND EXISTS (
+          SELECT 1 FROM serial_feed_categories
+          WHERE feed_id = ${feedIdRef}
+            AND category_id = view_section.item_id
         )
-      )
-  ), 999999)`;
+    ),
+    999999
+  )`;
 }
 
 /**

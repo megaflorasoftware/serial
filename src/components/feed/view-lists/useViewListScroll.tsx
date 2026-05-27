@@ -1,12 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useItemWindow } from "~/lib/hooks/useItemWindow";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
-import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
 export function useViewListScroll(itemIds: string[]) {
   const { visibleItems, expandWindow, renderCount } = useItemWindow(itemIds);
-  const { handleLoadMore, paginationState } = useLoadMoreItems();
+  const { handleLoadMore, paginationKey, paginationState } = useLoadMoreItems();
+  const openValidationKeyRef = useRef<string | null>(null);
 
   const handleLoadMoreWithCache = useCallback(() => {
     if (renderCount < itemIds.length) {
@@ -23,12 +23,35 @@ export function useViewListScroll(itemIds: string[]) {
     hasMore:
       renderCount < itemIds.length || (paginationState?.hasMore ?? false),
     isLoading: paginationState?.isFetching ?? false,
+    rootMargin: "600px 0px",
   });
 
-  const sentinelIndex = Math.max(
-    Math.floor(visibleItems.length - ITEMS_PER_PAGE / 2),
-    10,
-  );
+  const hasRenderedAllItems = renderCount >= itemIds.length;
+  const hasMoreItems = paginationState?.hasMore === true;
+  const isFetchingMoreItems = paginationState?.isFetching === true;
+  const shouldValidatePaginationWhenCacheIsExhausted =
+    hasRenderedAllItems && hasMoreItems && !isFetchingMoreItems;
 
-  return { sentinelRef, sentinelIndex, paginationState, visibleItems };
+  useEffect(() => {
+    if (!shouldValidatePaginationWhenCacheIsExhausted) return;
+
+    const firstItemId = itemIds[0];
+    const openValidationKey = `${paginationKey}:${firstItemId}`;
+    if (openValidationKeyRef.current === openValidationKey) return;
+
+    openValidationKeyRef.current = openValidationKey;
+    handleLoadMore();
+  }, [
+    handleLoadMore,
+    itemIds,
+    paginationKey,
+    shouldValidatePaginationWhenCacheIsExhausted,
+  ]);
+
+  return {
+    sentinelRef,
+    paginationState,
+    visibleItems,
+    hasRenderedAllItems,
+  };
 }

@@ -58,7 +58,7 @@ function isItemOlderThanCursor(
       if (itemTime < cursorTime) {
         return true;
       }
-      if (itemTime === cursorTime && item.id > cursor.id) {
+      if (itemTime === cursorTime && item.id < cursor.id) {
         return true;
       }
     }
@@ -71,7 +71,7 @@ function isItemOlderThanCursor(
   if (itemTime < cursorTime) {
     return true;
   }
-  if (itemTime === cursorTime && item.id > cursor.id) {
+  if (itemTime === cursorTime && item.id < cursor.id) {
     return true;
   }
   return false;

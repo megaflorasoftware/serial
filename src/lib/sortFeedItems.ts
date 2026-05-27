@@ -10,23 +10,28 @@ function getItemPlacement(
   viewSections: ApplicationViewSection[],
   feedCategories: DatabaseFeedCategory[],
 ): number {
-  let minPlacement = Infinity;
+  let minFeedPlacement = Infinity;
+  let minTagPlacement = Infinity;
 
   for (const section of viewSections) {
     if (section.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED) {
       if (section.itemId === feedId) {
-        minPlacement = Math.min(minPlacement, section.placement);
+        minFeedPlacement = Math.min(minFeedPlacement, section.placement);
       }
     } else if (section.itemType === VIEW_LAYOUT_ITEM_TYPE.TAG) {
       for (const fc of feedCategories) {
         if (fc.feedId === feedId && fc.categoryId === section.itemId) {
-          minPlacement = Math.min(minPlacement, section.placement);
+          minTagPlacement = Math.min(minTagPlacement, section.placement);
         }
       }
     }
   }
 
-  return minPlacement === Infinity ? 999999 : minPlacement;
+  if (minFeedPlacement !== Infinity) {
+    return minFeedPlacement;
+  }
+
+  return minTagPlacement === Infinity ? 999999 : minTagPlacement;
 }
 
 export function sortFeedItemsOrderByDate(

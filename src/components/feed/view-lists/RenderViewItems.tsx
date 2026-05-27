@@ -4,6 +4,8 @@ import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import { EmptyState, FeedEmptyState } from "./EmptyStates";
+import { PaginationEnd } from "./PaginationEnd";
+import { PaginationLoader } from "./PaginationLoader";
 import {
   GridSkeleton,
   LargeGridSkeleton,
@@ -15,13 +17,13 @@ import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import { useViewSections } from "./useViewSections";
+import { useViewListScroll } from "./useViewListScroll";
 import type { ViewSection } from "./useViewSections";
 import type { ViewLayout } from "~/server/db/constants";
 import { VIEW_LAYOUT } from "~/server/db/constants";
 import FeedLoading from "~/components/loading";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
-import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
 import { useLazyCategoryFilter } from "~/lib/hooks/useLazyCategoryFilter";
 import { useLazyFeedFilter } from "~/lib/hooks/useLazyFeedFilter";
 import { useValidateViewItems } from "~/lib/hooks/useValidateViewItems";
@@ -198,22 +200,21 @@ function LayoutSection({
   sectionIndex,
   onMarkAsRead,
   viewName,
+  sectionItemsForAction,
 }: {
   section: ViewSection;
   handleMouseSelect: (itemId: string) => void;
   sectionIndex: number;
   onMarkAsRead?: (sectionIndex: number) => void;
   viewName?: string;
+  sectionItemsForAction: string[];
 }) {
-  const { items, layout, startIndex, name, isUncategorized, itemType, itemId } =
-    section;
+  const { items, layout, name, isUncategorized, itemType, itemId } = section;
   const sectionName = isUncategorized ? (viewName ?? name) : name;
 
   const layoutProps = {
     items,
     handleMouseSelect,
-    startIndex,
-    showPaginationEnd: isUncategorized,
     sectionItemType: itemType,
   };
 
@@ -224,7 +225,7 @@ function LayoutSection({
           name={sectionName}
           itemType={itemType}
           itemId={itemId}
-          sectionItems={items}
+          sectionItems={sectionItemsForAction}
           sectionIndex={sectionIndex}
           onMarkAsRead={onMarkAsRead}
         />
@@ -263,8 +264,6 @@ function FlatViewItemsList({
   const layoutProps = {
     items,
     handleMouseSelect,
-    startIndex: 0,
-    showPaginationEnd: true,
   };
 
   if (layout === VIEW_LAYOUT.LARGE_LIST) {
@@ -296,21 +295,38 @@ export function RenderViewItems() {
   const filteredFeedItemsOrder = useFilteredFeedItemsOrder();
 
   const currentView = useAtomValue(viewFilterAtom);
+  const {
+    sentinelRef,
+    paginationState,
+    visibleItems: visibleFilteredFeedItemsOrder,
+    hasRenderedAllItems,
+  } = useViewListScroll(filteredFeedItemsOrder);
 
   const {
-    computedSections,
-    flatItems,
-    hasGridSections,
-    sectionInfo,
+    computedSections: fullComputedSections,
+    flatItems: fullFlatItems,
+    hasGridSections: fullHasGridSections,
+    sectionInfo: fullSectionInfo,
     baseLayout,
   } = useViewSections(currentView, filteredFeedItemsOrder);
+  const { computedSections: visibleComputedSections } = useViewSections(
+    currentView,
+    visibleFilteredFeedItemsOrder,
+  );
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
   const isReadVisibility = visibilityFilter === "read";
-  const navigationItems = isReadVisibility ? filteredFeedItemsOrder : flatItems;
+  const viewListKey = `view-${currentView?.id ?? "none"}-${visibilityFilter}`;
+  const navigationItems = isReadVisibility
+    ? filteredFeedItemsOrder
+    : fullFlatItems;
   const navigationHasGridSections = isReadVisibility
     ? isGridLayout(baseLayout)
-    : hasGridSections;
-  const navigationSectionInfo = isReadVisibility ? undefined : sectionInfo;
+    : fullHasGridSections;
+  const navigationSectionInfo = isReadVisibility ? undefined : fullSectionInfo;
+  const shouldShowPaginationEnd =
+    hasRenderedAllItems &&
+    paginationState?.hasMore === false &&
+    paginationState.isFetching !== true;
 
   // Keyboard navigation
   const { handleMouseSelect, selectItem } = useFeedItemNavigation(
@@ -319,20 +335,18 @@ export function RenderViewItems() {
     navigationSectionInfo,
   );
 
-  const { paginationState } = useLoadMoreItems();
-
   const handleSectionMarkAsRead = useCallback(
     (sectionIndex: number) => {
       const nextItemId = getNextAvailableItemAfterSection(
         sectionIndex,
-        computedSections,
+        fullComputedSections,
       );
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => selectItem(nextItemId));
       });
     },
-    [computedSections, selectItem],
+    [fullComputedSections, selectItem],
   );
 
   if (!hasInitialData) {
@@ -370,31 +384,31 @@ export function RenderViewItems() {
     <div className="w-full">
       {isReadVisibility ? (
         <FlatViewItemsList
-          items={filteredFeedItemsOrder}
+          key={viewListKey}
+          items={visibleFilteredFeedItemsOrder}
           layout={baseLayout}
           handleMouseSelect={handleMouseSelect}
         />
       ) : (
-        computedSections.map((section, index) => (
+        visibleComputedSections.map((section, index) => (
           <LayoutSection
             key={
               section.isUncategorized
-                ? "uncategorized"
-                : `${section.name}-${index}`
+                ? `${viewListKey}-uncategorized`
+                : `${viewListKey}-${section.name}-${index}`
             }
             section={section}
             sectionIndex={index}
             handleMouseSelect={handleMouseSelect}
             onMarkAsRead={handleSectionMarkAsRead}
             viewName={currentView?.name}
+            sectionItemsForAction={fullComputedSections[index]?.items ?? []}
           />
         ))
       )}
-      {paginationState?.isFetching && (
-        <div className="px-4 py-4">
-          <StandardListSkeleton />
-        </div>
-      )}
+      <div ref={sentinelRef} className="h-px w-full" />
+      {paginationState?.isFetching && <PaginationLoader />}
+      {shouldShowPaginationEnd && <PaginationEnd />}
     </div>
   );
 }

@@ -1154,6 +1154,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     [vf]: initialChunk.cursor,
                   };
                   updates._pendingViewCursors = pendingCursors;
+                  updates.viewPaginationState = {
+                    ...get().viewPaginationState,
+                    [viewId]: {
+                      ...get().viewPaginationState[viewId],
+                      [vf]: {
+                        cursor: initialChunk.cursor,
+                        hasMore: initialChunk.hasMore,
+                        isFetching: false,
+                      },
+                    },
+                  };
 
                   // Track fetched visibility filter
                   if (vf) {
@@ -1191,6 +1202,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   const hasMatchingProgress =
                     existing?.progress === item.progress &&
                     existing?.duration === item.duration;
+                  const hasMatchingFulltext =
+                    existing && hasMatchingContentHash && !!existing.content;
 
                   if (
                     existing &&
@@ -1218,7 +1231,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   }
 
                   // Only add to pending if we don't already have matching fulltext
-                  if (!existing || !hasMatchingContentHash) {
+                  if (!hasMatchingFulltext) {
                     pendingFulltext.add(item.id);
                     hasNewPending = true;
                   }
@@ -1246,6 +1259,17 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                     [vf]: initialChunk.cursor,
                   };
                   updates._pendingViewCursors = pendingCursors;
+                  updates.viewPaginationState = {
+                    ...get().viewPaginationState,
+                    [viewId]: {
+                      ...get().viewPaginationState[viewId],
+                      [vf]: {
+                        cursor: initialChunk.cursor,
+                        hasMore: initialChunk.hasMore,
+                        isFetching: false,
+                      },
+                    },
+                  };
 
                   // Track fetched visibility filter
                   if (vf) {

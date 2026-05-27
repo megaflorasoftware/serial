@@ -3,41 +3,28 @@
 import { useAtomValue } from "jotai";
 import { Fragment } from "react";
 import { ItemDisplay } from "./ItemDisplay";
-import { PaginationEnd } from "./PaginationEnd";
-import { PaginationLoader } from "./PaginationLoader";
 import { ViewListContainer } from "./ViewListContainer";
-import { useViewListScroll } from "./useViewListScroll";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
 import { useDeferredAutoAnimate } from "~/lib/hooks/useDeferredAutoAnimate";
 
 interface ViewItemLargeListProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
-  startIndex?: number;
-  showPaginationEnd?: boolean;
   sectionItemType?: "feed" | "tag";
 }
 
 export function ViewItemLargeList({
   items,
   handleMouseSelect,
-  startIndex = 0,
-  showPaginationEnd = true,
   sectionItemType,
 }: ViewItemLargeListProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
   const [parent] = useDeferredAutoAnimate<HTMLDivElement>();
 
-  const { sentinelRef, sentinelIndex, paginationState, visibleItems } =
-    useViewListScroll(items);
-
-  const actualSentinelIndex = sentinelIndex + startIndex;
-
   return (
     <ViewListContainer>
       <div ref={parent} className="transition-all md:pt-2">
-        {visibleItems.map((contentId, index) => {
-          const globalIndex = startIndex + index;
+        {items.map((contentId) => {
           return (
             <Fragment key={contentId}>
               <ItemDisplay
@@ -51,14 +38,9 @@ export function ViewItemLargeList({
                 }
                 sectionItemType={sectionItemType}
               />
-              {globalIndex === actualSentinelIndex && (
-                <div ref={sentinelRef} key={globalIndex} />
-              )}
             </Fragment>
           );
         })}
-        {paginationState?.isFetching && <PaginationLoader />}
-        {showPaginationEnd && !paginationState?.hasMore && <PaginationEnd />}
       </div>
     </ViewListContainer>
   );

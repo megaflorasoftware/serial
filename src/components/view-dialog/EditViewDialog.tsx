@@ -119,9 +119,7 @@ export function EditViewDialog({
   }, [views, selectedViewId]);
 
   useEffect(() => {
-    if (initialViewSections.length > 0) {
-      setViewSections(initialViewSections);
-    }
+    setViewSections(initialViewSections);
   }, [initialViewSections]);
 
   // Auto-remove view sections for feeds/tags that are no longer in the view
