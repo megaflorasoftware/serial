@@ -55,7 +55,7 @@ test.describe("feed item actions", () => {
     await expect(page).toHaveURL("/", { timeout: 10000 });
 
     // Switch to "read" filter with the "i" shortcut
-    await page.keyboard.press("i");
+    await page.keyboard.press("y");
     await page.waitForTimeout(500);
 
     // Article should appear in the read filter.
@@ -92,7 +92,7 @@ test.describe("feed item actions", () => {
       page.locator("text=/Marked.*item.*as read/i").first(),
     ).toBeVisible({ timeout: 5000 });
 
-    await page.keyboard.press("i");
+    await page.keyboard.press("y");
     await expect(page.locator("article").first()).toBeVisible({
       timeout: 10000,
     });

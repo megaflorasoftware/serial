@@ -41,9 +41,9 @@ test.describe("undo mark visible as read", () => {
       .first();
     await expect(firstArticle).toBeVisible();
 
-    // Click "Mark visible as read" button
+    // Click "Mark all as read" button
     const markReadButton = page.getByRole("button", {
-      name: /mark visible as read/i,
+      name: /mark all as read/i,
     });
     await expect(markReadButton).toBeVisible();
     await markReadButton.click();
