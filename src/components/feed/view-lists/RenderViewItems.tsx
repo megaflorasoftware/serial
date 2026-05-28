@@ -201,6 +201,7 @@ function LayoutSection({
   onMarkAsRead,
   viewName,
   sectionItemsForAction,
+  disableAutoAnimate,
 }: {
   section: ViewSection;
   handleMouseSelect: (itemId: string) => void;
@@ -208,6 +209,7 @@ function LayoutSection({
   onMarkAsRead?: (sectionIndex: number) => void;
   viewName?: string;
   sectionItemsForAction: string[];
+  disableAutoAnimate?: boolean;
 }) {
   const { items, layout, name, isUncategorized, itemType, itemId } = section;
   const sectionName = isUncategorized ? (viewName ?? name) : name;
@@ -216,6 +218,7 @@ function LayoutSection({
     items,
     handleMouseSelect,
     sectionItemType: itemType,
+    disableAutoAnimate,
   };
 
   return (
@@ -256,14 +259,17 @@ function FlatViewItemsList({
   items,
   layout,
   handleMouseSelect,
+  disableAutoAnimate,
 }: {
   items: string[];
   layout: ViewLayout;
   handleMouseSelect: (itemId: string) => void;
+  disableAutoAnimate?: boolean;
 }) {
   const layoutProps = {
     items,
     handleMouseSelect,
+    disableAutoAnimate,
   };
 
   if (layout === VIEW_LAYOUT.LARGE_LIST) {
@@ -300,6 +306,7 @@ export function RenderViewItems() {
     paginationState,
     visibleItems: visibleFilteredFeedItemsOrder,
     hasRenderedAllItems,
+    isAutoAnimatePausedForPagination,
   } = useViewListScroll(filteredFeedItemsOrder);
 
   const {
@@ -388,6 +395,7 @@ export function RenderViewItems() {
           items={visibleFilteredFeedItemsOrder}
           layout={baseLayout}
           handleMouseSelect={handleMouseSelect}
+          disableAutoAnimate={isAutoAnimatePausedForPagination}
         />
       ) : (
         visibleComputedSections.map((section, index) => (
@@ -403,6 +411,7 @@ export function RenderViewItems() {
             onMarkAsRead={handleSectionMarkAsRead}
             viewName={currentView?.name}
             sectionItemsForAction={fullComputedSections[index]?.items ?? []}
+            disableAutoAnimate={isAutoAnimatePausedForPagination}
           />
         ))
       )}

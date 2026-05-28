@@ -11,15 +11,19 @@ interface ViewItemLargeListProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
   sectionItemType?: "feed" | "tag";
+  disableAutoAnimate?: boolean;
 }
 
 export function ViewItemLargeList({
   items,
   handleMouseSelect,
   sectionItemType,
+  disableAutoAnimate,
 }: ViewItemLargeListProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
-  const [parent] = useDeferredAutoAnimate<HTMLDivElement>();
+  const [parent] = useDeferredAutoAnimate<HTMLDivElement>({
+    disabled: disableAutoAnimate,
+  });
 
   return (
     <ViewListContainer>

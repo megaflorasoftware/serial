@@ -6,6 +6,7 @@ import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
 type PendingServerExpansion = {
   id: number;
   itemCountBeforeFetch: number;
+  renderCountBeforeFetch: number;
   isComplete: boolean;
 };
 
@@ -17,14 +18,20 @@ export function useViewListScroll(itemIds: string[]) {
   const handledServerExpansionIdRef = useRef<number | null>(null);
   const [pendingServerExpansion, setPendingServerExpansion] =
     useState<PendingServerExpansion | null>(null);
+  const [
+    isAutoAnimatePausedForPagination,
+    setIsAutoAnimatePausedForPagination,
+  ] = useState(false);
 
   const loadMoreFromServer = useCallback(() => {
     const serverLoadId = nextServerLoadIdRef.current + 1;
     nextServerLoadIdRef.current = serverLoadId;
 
+    setIsAutoAnimatePausedForPagination(true);
     setPendingServerExpansion({
       id: serverLoadId,
       itemCountBeforeFetch: itemIds.length,
+      renderCountBeforeFetch: renderCount,
       isComplete: false,
     });
 
@@ -37,7 +44,7 @@ export function useViewListScroll(itemIds: string[]) {
         return { ...pendingExpansion, isComplete: true };
       });
     });
-  }, [handleLoadMore, itemIds.length]);
+  }, [handleLoadMore, itemIds.length, renderCount]);
 
   const handleLoadMoreWithCache = useCallback(() => {
     if (renderCount < itemIds.length) {
@@ -74,6 +81,34 @@ export function useViewListScroll(itemIds: string[]) {
     }
   }, [expandWindow, itemIds.length, paginationState, pendingServerExpansion]);
 
+  useEffect(() => {
+    if (!isAutoAnimatePausedForPagination || !pendingServerExpansion) return;
+
+    const isHandledServerExpansion =
+      handledServerExpansionIdRef.current === pendingServerExpansion.id;
+    const hasRenderedExpandedWindow =
+      isHandledServerExpansion &&
+      renderCount > pendingServerExpansion.renderCountBeforeFetch;
+    const hasSettledWithoutNewItems =
+      pendingServerExpansion.isComplete &&
+      paginationState?.isFetching !== true &&
+      itemIds.length <= pendingServerExpansion.itemCountBeforeFetch;
+
+    if (hasRenderedExpandedWindow || hasSettledWithoutNewItems) {
+      const resumeAutoAnimateFrameId = requestAnimationFrame(() => {
+        setIsAutoAnimatePausedForPagination(false);
+      });
+
+      return () => cancelAnimationFrame(resumeAutoAnimateFrameId);
+    }
+  }, [
+    isAutoAnimatePausedForPagination,
+    itemIds.length,
+    paginationState,
+    pendingServerExpansion,
+    renderCount,
+  ]);
+
   const hasRenderedAllItems = renderCount >= itemIds.length;
   const hasMoreItems = paginationState?.hasMore === true;
   const isFetchingMoreItems = paginationState?.isFetching === true;
@@ -88,7 +123,11 @@ export function useViewListScroll(itemIds: string[]) {
     if (openValidationKeyRef.current === openValidationKey) return;
 
     openValidationKeyRef.current = openValidationKey;
-    loadMoreFromServer();
+    const loadMoreFrameId = requestAnimationFrame(() => {
+      loadMoreFromServer();
+    });
+
+    return () => cancelAnimationFrame(loadMoreFrameId);
   }, [
     itemIds,
     loadMoreFromServer,
@@ -101,5 +140,6 @@ export function useViewListScroll(itemIds: string[]) {
     paginationState,
     visibleItems,
     hasRenderedAllItems,
+    isAutoAnimatePausedForPagination,
   };
 }

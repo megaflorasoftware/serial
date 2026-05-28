@@ -11,15 +11,19 @@ interface ViewItemGridProps {
   items: string[];
   handleMouseSelect?: (itemId: string) => void;
   sectionItemType?: "feed" | "tag";
+  disableAutoAnimate?: boolean;
 }
 
 export function ViewItemGrid({
   items,
   handleMouseSelect,
   sectionItemType,
+  disableAutoAnimate,
 }: ViewItemGridProps) {
   const selectedItemId = useAtomValue(selectedItemIdAtom);
-  const [parent] = useDeferredAutoAnimate<HTMLDivElement>();
+  const [parent] = useDeferredAutoAnimate<HTMLDivElement>({
+    disabled: disableAutoAnimate,
+  });
 
   return (
     <ViewListContainer className="px-4">
