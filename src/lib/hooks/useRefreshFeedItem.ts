@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { mergeFeedItem } from "~/lib/data/feed-items/mergeFeedItem";
 import { feedItemsStore } from "~/lib/data/store";
 import { orpcRouterClient } from "~/lib/orpc";
 
@@ -21,7 +22,9 @@ export function useRefreshFeedItem(id: string | undefined) {
 
         if (currentUpdatedAt > incomingUpdatedAt) return;
 
-        feedItemsStore.getState().setFeedItem(id, item);
+        feedItemsStore
+          .getState()
+          .setFeedItem(id, mergeFeedItem(currentItem, item));
       })
       .catch((error) => {
         console.error("Error refreshing feed item:", error);

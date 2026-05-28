@@ -34,9 +34,9 @@ export function useItemWindow(itemIds: string[]) {
     }
   }, [selectedItemId, itemIds, renderCount]);
 
-  const expandWindow = useCallback(() => {
-    setRenderCount((prev) => Math.min(prev + ITEMS_PER_PAGE, itemIds.length));
-  }, [itemIds.length]);
+  const expandWindow = useCallback((itemCount: number) => {
+    setRenderCount((prev) => Math.min(prev + ITEMS_PER_PAGE, itemCount));
+  }, []);
 
   return { visibleItems, expandWindow, renderCount };
 }

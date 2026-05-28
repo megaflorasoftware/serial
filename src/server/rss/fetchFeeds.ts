@@ -171,8 +171,6 @@ async function insertFeedItems(
       .select({
         url: feedItems.url,
         contentHash: feedItems.contentHash,
-        progress: feedItems.progress,
-        duration: feedItems.duration,
       })
       .from(feedItems)
       .where(
@@ -183,20 +181,10 @@ async function insertFeedItems(
 
   const existingByUrl = new Map(existingItems.map((item) => [item.url, item]));
 
-  // Compute hashes after loading existing user progress so RSS refreshes do
-  // not reset the sync hash back to a zero-progress version.
-  const feedItemListWithHash = feedItemList.map((item) => {
-    const existing = existingByUrl.get(item.url);
-
-    return {
-      ...item,
-      contentHash: computeItemHash({
-        ...item,
-        progress: existing?.progress ?? 0,
-        duration: existing?.duration ?? 0,
-      }),
-    };
-  });
+  const feedItemListWithHash = feedItemList.map((item) => ({
+    ...item,
+    contentHash: computeItemHash(item),
+  }));
 
   const changedItems = feedItemListWithHash.filter((incoming) => {
     const existing = existingByUrl.get(incoming.url);

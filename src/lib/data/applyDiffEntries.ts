@@ -1,3 +1,4 @@
+import { mergeFeedItem } from "./feed-items/mergeFeedItem";
 import type { DiffEntry } from "~/server/api/routers/initialRouter";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 
@@ -21,10 +22,16 @@ export function applyDiffEntries(
         // Client already has the correct version
         break;
       case "updated":
-        feedItemsDict[entry.item.id] = entry.item;
+        feedItemsDict[entry.item.id] = mergeFeedItem(
+          feedItemsDict[entry.item.id],
+          entry.item,
+        );
         break;
       case "new":
-        feedItemsDict[entry.item.id] = entry.item;
+        feedItemsDict[entry.item.id] = mergeFeedItem(
+          feedItemsDict[entry.item.id],
+          entry.item,
+        );
         if (!existingIds.has(entry.item.id)) {
           feedItemsOrder.push(entry.item.id);
           existingIds.add(entry.item.id);

@@ -72,15 +72,14 @@ export function useLoadMoreItems() {
   const handleLoadMore = useCallback(() => {
     switch (activeFilterType) {
       case "feed":
-        fetchMoreItemsForFeed(feedFilter, visibilityFilter);
-        break;
+        return fetchMoreItemsForFeed(feedFilter, visibilityFilter);
       case "category":
-        fetchMoreItemsForCategory(categoryFilter, visibilityFilter);
-        break;
+        return fetchMoreItemsForCategory(categoryFilter, visibilityFilter);
       default:
         if (viewId) {
-          fetchMoreItems(viewId, visibilityFilter);
+          return fetchMoreItems(viewId, visibilityFilter);
         }
+        return Promise.resolve();
     }
   }, [
     activeFilterType,

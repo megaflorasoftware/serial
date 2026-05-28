@@ -8,7 +8,6 @@ import { prepareArrayChunks } from "~/lib/iterators";
 import { feedItems, feeds } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
-import { computeItemHash } from "~/server/rss/hash";
 
 type GetAllItemsChunk =
   | {
@@ -251,29 +250,11 @@ export const setProgress = protectedProcedure
         throw new Error("Unauthorized: Feed does not belong to user");
       }
 
-      const existingItem = await tx.query.feedItems.findFirst({
-        where: and(
-          eq(feedItems.feedId, input.feedId),
-          eq(feedItems.id, input.id),
-        ),
-      });
-
-      if (!existingItem) {
-        throw new Error("Feed item not found");
-      }
-
-      const contentHash = computeItemHash({
-        ...existingItem,
-        progress: input.progress,
-        duration: input.duration,
-      });
-
       await tx
         .update(feedItems)
         .set({
           progress: input.progress,
           duration: input.duration,
-          contentHash,
           updatedAt: new Date(),
         })
         .where(

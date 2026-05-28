@@ -16,11 +16,13 @@ import type {
   DatabaseFeedCategory,
 } from "~/server/db/schema";
 import type { PaginationCursor } from "~/server/api/routers/initialRouter";
+import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 
 export {
   getContentTypeFromItem,
   isFeedCompatibleWithContentType,
 } from "./filters";
+export { mergeFeedItem } from "./mergeFeedItem";
 
 function isVideoContent(item: ApplicationFeedItem): boolean {
   const videoPlatforms = ["youtube", "peertube", "nebula"];
@@ -30,17 +32,18 @@ function isVideoContent(item: ApplicationFeedItem): boolean {
 function isItemOlderThanCursor(
   item: ApplicationFeedItem,
   cursor: PaginationCursor,
+  sectionPlacement?: number,
 ): boolean {
   if (!cursor) return false;
 
-  // For sectioned views, the cursor includes placement. We cannot correctly
-  // determine if an item is "after" the cursor without computing its section
-  // placement, which is expensive and already handled by server-side ordering.
-  // The server only returns items in the correct order; unfetched items are
-  // simply not in feedItemsOrder yet. So we skip the cursor filter for
-  // sectioned views.
-  if (cursor.placement !== undefined) {
-    return false;
+  // Sectioned views are ordered by placement asc, then postedAt/id desc.
+  if (cursor.placement !== undefined && sectionPlacement !== undefined) {
+    if (sectionPlacement > cursor.placement) {
+      return true;
+    }
+    if (sectionPlacement < cursor.placement) {
+      return false;
+    }
   }
 
   // For read visibility, the server sorts by isWatchedUpdatedAt first.
@@ -75,6 +78,43 @@ function isItemOlderThanCursor(
     return true;
   }
   return false;
+}
+
+function getItemSectionPlacement(
+  item: ApplicationFeedItem,
+  viewFilter: ApplicationView | null,
+  feedCategories: DatabaseFeedCategory[],
+) {
+  const viewSections = viewFilter?.viewSections;
+  if (!viewSections?.length) return undefined;
+
+  let feedSectionPlacement = Infinity;
+  let tagSectionPlacement = Infinity;
+
+  for (const section of viewSections) {
+    if (
+      section.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED &&
+      section.itemId === item.feedId
+    ) {
+      feedSectionPlacement = Math.min(feedSectionPlacement, section.placement);
+      continue;
+    }
+
+    if (section.itemType !== VIEW_LAYOUT_ITEM_TYPE.TAG) continue;
+
+    const itemHasSectionTag = feedCategories.some(
+      (feedCategory) =>
+        feedCategory.feedId === item.feedId &&
+        feedCategory.categoryId === section.itemId,
+    );
+    if (itemHasSectionTag) {
+      tagSectionPlacement = Math.min(tagSectionPlacement, section.placement);
+    }
+  }
+
+  if (feedSectionPlacement !== Infinity) return feedSectionPlacement;
+  if (tagSectionPlacement !== Infinity) return tagSectionPlacement;
+  return 999999;
 }
 
 export function doesFeedItemPassFilters({
@@ -266,7 +306,16 @@ export const useFilteredFeedItemsOrder = () => {
     if (!item) return false;
 
     // Apply cursor filter - hide items older than cursor
-    if (activeCursor && isItemOlderThanCursor(item, activeCursor)) {
+    const itemSectionPlacement = getItemSectionPlacement(
+      item,
+      viewFilter,
+      feedCategories,
+    );
+
+    if (
+      activeCursor &&
+      isItemOlderThanCursor(item, activeCursor, itemSectionPlacement)
+    ) {
       return false;
     }
 

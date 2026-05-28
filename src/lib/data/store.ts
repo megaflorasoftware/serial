@@ -12,6 +12,7 @@ import { getDataSubscriptionClientId } from "./clientChannel";
 import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
+import { mergeFeedItem } from "./feed-items/mergeFeedItem";
 import { feedsStore } from "./feeds/store";
 import { createIDBStorage } from "./idb-storage";
 import { loadingActor } from "./loading-machine";
@@ -28,6 +29,7 @@ import type {
 import type { PublishedChunk } from "~/server/api/publisher";
 import { getQueryClient } from "~/lib/query-provider";
 import { orpc } from "~/lib/orpc";
+import type { IncomingFeedItem } from "./feed-items/mergeFeedItem";
 
 // Module-level debounce timer for fulltext fetches
 let fulltextTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -95,6 +97,23 @@ function hideItemFromVisibilityFilter(
     isWatchLater: false,
     isWatchLaterUpdatedAt: new Date(),
   };
+}
+
+function mergeFeedItemIntoOrder(
+  feedItemsDict: Record<string, ApplicationFeedItem>,
+  feedItemsOrder: string[],
+  existingIds: Set<string>,
+  incomingItem: IncomingFeedItem,
+) {
+  feedItemsDict[incomingItem.id] = mergeFeedItem(
+    feedItemsDict[incomingItem.id],
+    incomingItem,
+  );
+
+  if (!existingIds.has(incomingItem.id)) {
+    feedItemsOrder.push(incomingItem.id);
+    existingIds.add(incomingItem.id);
+  }
 }
 
 export type ApplicationStore = {
@@ -347,11 +366,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             const existingIds = new Set(feedItemsOrder);
 
             chunk.feedItems.forEach((item) => {
-              feedItemsDict[item.id] = item;
-              if (!existingIds.has(item.id)) {
-                feedItemsOrder.push(item.id);
-                existingIds.add(item.id);
-              }
+              mergeFeedItemIntoOrder(
+                feedItemsDict,
+                feedItemsOrder,
+                existingIds,
+                item,
+              );
             });
 
             feedItemsOrder.sort(
@@ -474,11 +494,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             const existingIds = new Set(feedItemsOrder);
 
             chunk.feedItems.forEach((item) => {
-              feedItemsDict[item.id] = item;
-              if (!existingIds.has(item.id)) {
-                feedItemsOrder.push(item.id);
-                existingIds.add(item.id);
-              }
+              mergeFeedItemIntoOrder(
+                feedItemsDict,
+                feedItemsOrder,
+                existingIds,
+                item,
+              );
             });
 
             feedItemsOrder.sort(
@@ -699,12 +720,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             const existingIds = new Set(feedItemsOrder);
 
             incomingFeedItems.forEach((item) => {
-              feedItemsDict[item.id] = item;
-
-              if (!existingIds.has(item.id)) {
-                feedItemsOrder.push(item.id);
-                existingIds.add(item.id);
-              }
+              mergeFeedItemIntoOrder(
+                feedItemsDict,
+                feedItemsOrder,
+                existingIds,
+                item,
+              );
             });
           }
 
@@ -747,12 +768,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             const existingIds = new Set(feedItemsOrder);
 
             incomingFeedItems.forEach((item) => {
-              feedItemsDict[item.id] = item;
-
-              if (!existingIds.has(item.id)) {
-                feedItemsOrder.push(item.id);
-                existingIds.add(item.id);
-              }
+              mergeFeedItemIntoOrder(
+                feedItemsDict,
+                feedItemsOrder,
+                existingIds,
+                item,
+              );
             });
           }
 
@@ -818,12 +839,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               const existingIds = new Set(feedItemsOrder);
 
               incomingFeedItems.forEach((item) => {
-                feedItemsDict[item.id] = item;
-
-                if (!existingIds.has(item.id)) {
-                  feedItemsOrder.push(item.id);
-                  existingIds.add(item.id);
-                }
+                mergeFeedItemIntoOrder(
+                  feedItemsDict,
+                  feedItemsOrder,
+                  existingIds,
+                  item,
+                );
               });
 
               feedItemsOrder.sort(getSortFunction(feedItemsDict, chunk.viewId));
@@ -851,11 +872,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           const existingIds = new Set(feedItemsOrder);
 
           items.forEach((item) => {
-            feedItemsDict[item.id] = item;
-            if (!existingIds.has(item.id)) {
-              feedItemsOrder.push(item.id);
-              existingIds.add(item.id);
-            }
+            mergeFeedItemIntoOrder(
+              feedItemsDict,
+              feedItemsOrder,
+              existingIds,
+              item,
+            );
           });
 
           set({
@@ -1065,11 +1087,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 const existingIds = new Set(feedItemsOrder);
 
                 for (const item of initialChunk.feedItems) {
-                  feedItemsDict[item.id] = item;
-                  if (!existingIds.has(item.id)) {
-                    feedItemsOrder.push(item.id);
-                    existingIds.add(item.id);
-                  }
+                  mergeFeedItemIntoOrder(
+                    feedItemsDict,
+                    feedItemsOrder,
+                    existingIds,
+                    item,
+                  );
                 }
 
                 updates.feedItemsDict = feedItemsDict;
@@ -1199,36 +1222,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   const existing = feedItemsDict[item.id];
                   const hasMatchingContentHash =
                     existing?.contentHash === item.contentHash;
-                  const hasMatchingProgress =
-                    existing?.progress === item.progress &&
-                    existing?.duration === item.duration;
                   const hasMatchingFulltext =
-                    existing && hasMatchingContentHash && !!existing.content;
+                    !!existing && hasMatchingContentHash && !!existing.content;
 
-                  if (
-                    existing &&
-                    hasMatchingContentHash &&
-                    hasMatchingProgress &&
-                    existing.content
-                  ) {
-                    // Client already has this item with matching fulltext — keep it.
-                    continue;
-                  }
-
-                  // Store the lightweight item (no content yet, but snippet is present)
-                  feedItemsDict[item.id] = {
-                    ...item,
-                    content: existing?.content ?? "",
-                    contentSnippet:
-                      (item as ApplicationFeedItem).contentSnippet ??
-                      existing?.contentSnippet ??
-                      "",
-                  } as ApplicationFeedItem;
-
-                  if (!existingIds.has(item.id)) {
-                    feedItemsOrder.push(item.id);
-                    existingIds.add(item.id);
-                  }
+                  mergeFeedItemIntoOrder(
+                    feedItemsDict,
+                    feedItemsOrder,
+                    existingIds,
+                    item,
+                  );
 
                   // Only add to pending if we don't already have matching fulltext
                   if (!hasMatchingFulltext) {
@@ -1409,14 +1411,20 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   case "unchanged":
                     break;
                   case "updated":
-                    feedItemsDict[entry.item.id] = entry.item;
+                    mergeFeedItemIntoOrder(
+                      feedItemsDict,
+                      feedItemsOrder,
+                      existingIds,
+                      entry.item,
+                    );
                     break;
                   case "new":
-                    feedItemsDict[entry.item.id] = entry.item;
-                    if (!existingIds.has(entry.item.id)) {
-                      feedItemsOrder.push(entry.item.id);
-                      existingIds.add(entry.item.id);
-                    }
+                    mergeFeedItemIntoOrder(
+                      feedItemsDict,
+                      feedItemsOrder,
+                      existingIds,
+                      entry.item,
+                    );
                     break;
                   case "deleted":
                     hideItemFromVisibilityFilter(feedItemsDict, entry.id, vf);
@@ -1692,11 +1700,12 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               };
 
               for (const item of chunk.feedItems) {
-                feedItemsDict[item.id] = item;
-                if (!existingIds.has(item.id)) {
-                  feedItemsOrder.push(item.id);
-                  existingIds.add(item.id);
-                }
+                mergeFeedItemIntoOrder(
+                  feedItemsDict,
+                  feedItemsOrder,
+                  existingIds,
+                  item,
+                );
               }
 
               const viewId = chunk.viewId;
