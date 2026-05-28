@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mergeFeedItem } from "~/lib/data/feed-items/mergeFeedItem";
 import type { ApplicationFeedItem } from "~/server/db/schema";
+import { mergeFeedItem } from "~/lib/data/feed-items/mergeFeedItem";
 
 function makeItem(
   overrides: Partial<ApplicationFeedItem> = {},

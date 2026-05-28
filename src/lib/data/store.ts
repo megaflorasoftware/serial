@@ -27,9 +27,9 @@ import type {
   PaginationCursor,
 } from "~/server/api/routers/initialRouter";
 import type { PublishedChunk } from "~/server/api/publisher";
+import type { IncomingFeedItem } from "./feed-items/mergeFeedItem";
 import { getQueryClient } from "~/lib/query-provider";
 import { orpc } from "~/lib/orpc";
-import type { IncomingFeedItem } from "./feed-items/mergeFeedItem";
 
 // Module-level debounce timer for fulltext fetches
 let fulltextTimeout: ReturnType<typeof setTimeout> | null = null;

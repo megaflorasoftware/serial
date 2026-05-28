@@ -66,8 +66,7 @@ export function useViewListScroll(itemIds: string[]) {
     const hasReceivedServerItems =
       itemIds.length > pendingServerExpansion.itemCountBeforeFetch;
     const hasSettledWithoutMoreItems =
-      pendingServerExpansion.isComplete &&
-      paginationState?.isFetching !== true;
+      pendingServerExpansion.isComplete && paginationState?.isFetching !== true;
 
     if (hasReceivedServerItems || hasSettledWithoutMoreItems) {
       handledServerExpansionIdRef.current = pendingServerExpansion.id;
