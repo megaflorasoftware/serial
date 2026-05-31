@@ -2,11 +2,6 @@ import { createStore, useStore } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
-import {
-  sortFeedItemsOrderByDate,
-  sortFeedItemsOrderBySectionThenDate,
-  sortFeedItemsOrderByWatchedAt,
-} from "../sortFeedItems";
 import { applyDiffEntries } from "./applyDiffEntries";
 import { getDataSubscriptionClientId } from "./clientChannel";
 import { contentCategoriesStore } from "./content-categories/store";
@@ -39,32 +34,6 @@ export type PaginationState = {
   hasMore: boolean;
   isFetching: boolean;
 };
-
-function getSortFunction(
-  feedItemsDict: Record<string, ApplicationFeedItem>,
-  viewId?: number,
-  visibilityFilter?: VisibilityFilter,
-) {
-  if (visibilityFilter === "read") {
-    return sortFeedItemsOrderByWatchedAt(feedItemsDict);
-  }
-
-  if (!viewId) return sortFeedItemsOrderByDate(feedItemsDict);
-
-  const view = viewsStore.getState().views.find((v) => v.id === viewId);
-  if (!view?.viewSections?.length)
-    return sortFeedItemsOrderByDate(feedItemsDict);
-
-  const feedCategories = feedCategoriesStore.getState().feedCategories;
-  if (feedCategories.length === 0)
-    return sortFeedItemsOrderByDate(feedItemsDict);
-
-  return sortFeedItemsOrderBySectionThenDate(
-    feedItemsDict,
-    view.viewSections,
-    feedCategories,
-  );
-}
 
 function hideItemFromVisibilityFilter(
   feedItemsDict: Record<string, ApplicationFeedItem>,
@@ -374,10 +343,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
               );
             });
 
-            feedItemsOrder.sort(
-              getSortFunction(feedItemsDict, viewId, visibilityFilter),
-            );
-
             set({
               feedItemsDict,
               feedItemsOrder,
@@ -501,10 +466,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 item,
               );
             });
-
-            feedItemsOrder.sort(
-              getSortFunction(feedItemsDict, viewId, visibilityFilter),
-            );
 
             set({
               feedItemsDict,
@@ -729,8 +690,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             });
           }
 
-          feedItemsOrder.sort(sortFeedItemsOrderByDate(feedItemsDict));
-
           set({
             feedItemsDict: feedItemsDict,
             feedItemsOrder,
@@ -746,9 +705,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         set({
           fetchFeedItemsLastFetchedAt: Date.now(),
           feedItemsDict: { ...finalFeedItemsDict },
-          feedItemsOrder: [...get().feedItemsOrder].sort(
-            sortFeedItemsOrderByDate(finalFeedItemsDict),
-          ),
+          feedItemsOrder: [...get().feedItemsOrder],
           feedStatusDict: { ...get().feedStatusDict },
         });
       },
@@ -777,8 +734,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             });
           }
 
-          feedItemsOrder.sort(sortFeedItemsOrderByDate(feedItemsDict));
-
           set({
             feedItemsDict: feedItemsDict,
             feedItemsOrder,
@@ -786,11 +741,8 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           });
         }
 
-        const finalFeedItemsDict = get().feedItemsDict;
         set({
-          feedItemsOrder: [...get().feedItemsOrder].sort(
-            sortFeedItemsOrderByDate(finalFeedItemsDict),
-          ),
+          feedItemsOrder: [...get().feedItemsOrder],
         });
       },
 
@@ -847,8 +799,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 );
               });
 
-              feedItemsOrder.sort(getSortFunction(feedItemsDict, chunk.viewId));
-
               set({
                 feedItemsDict,
                 feedItemsOrder,
@@ -863,10 +813,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         const { source, chunk } = payload;
 
         // Helper function to merge feed items into the store
-        const mergeFeedItems = (
-          items: ApplicationFeedItem[],
-          viewId?: number,
-        ) => {
+        const mergeFeedItems = (items: ApplicationFeedItem[]) => {
           const feedItemsDict = { ...get().feedItemsDict };
           const feedItemsOrder = [...get().feedItemsOrder];
           const existingIds = new Set(feedItemsOrder);
@@ -882,9 +829,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
           set({
             feedItemsDict,
-            feedItemsOrder: feedItemsOrder.sort(
-              getSortFunction(feedItemsDict, viewId),
-            ),
+            feedItemsOrder,
           });
         };
 
@@ -1081,7 +1026,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                   updates.currentViewId = viewId;
                 }
 
-                // Merge feed items inline (single copy + sort)
+                // Merge feed items inline (single copy)
                 const feedItemsDict = { ...get().feedItemsDict };
                 const feedItemsOrder = [...get().feedItemsOrder];
                 const existingIds = new Set(feedItemsOrder);
@@ -1096,9 +1041,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 }
 
                 updates.feedItemsDict = feedItemsDict;
-                updates.feedItemsOrder = feedItemsOrder.sort(
-                  getSortFunction(feedItemsDict, viewId),
-                );
+                updates.feedItemsOrder = feedItemsOrder;
 
                 // Only track view-specific data if viewId is present
                 if (viewId !== undefined) {
@@ -1164,9 +1107,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
                 const updates: Partial<ApplicationStore> = {
                   feedItemsDict,
-                  feedItemsOrder: feedItemsOrder.sort(
-                    getSortFunction(feedItemsDict, viewId, vf),
-                  ),
+                  feedItemsOrder,
                 };
 
                 // Track cursor from this diff chunk
@@ -1241,8 +1182,6 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
                 const viewId = initialChunk.viewId;
                 const vf = initialChunk.visibilityFilter as VisibilityFilter;
-
-                feedItemsOrder.sort(getSortFunction(feedItemsDict, viewId, vf));
 
                 const updates: Partial<ApplicationStore> = {
                   feedItemsDict,
@@ -1381,7 +1320,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 break;
 
               case "feed-items":
-                mergeFeedItems(chunk.feedItems, chunk.viewId);
+                mergeFeedItems(chunk.feedItems);
                 break;
 
               case "error":
@@ -1440,9 +1379,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
               set({
                 feedItemsDict,
-                feedItemsOrder: feedItemsOrder.sort(
-                  getSortFunction(feedItemsDict, chunk.viewId, vf),
-                ),
+                feedItemsOrder,
                 viewPaginationState: {
                   ...get().viewPaginationState,
                   [chunk.viewId]: {
@@ -1463,7 +1400,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
 
             // Legacy: chunk.type is "feed-items"
             if (chunk.type === "feed-items") {
-              mergeFeedItems(chunk.feedItems, chunk.viewId);
+              mergeFeedItems(chunk.feedItems);
 
               const visibilityFilter =
                 chunk.visibilityFilter as VisibilityFilter;
@@ -1664,9 +1601,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             }
 
             updates.feedItemsDict = feedItemsDict;
-            updates.feedItemsOrder = feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(feedItemsDict),
-            );
+            updates.feedItemsOrder = feedItemsOrder;
             updates._pendingViewCursors = pendingCursors;
             if (filtersChanged) {
               updates.fetchedVisibilityFilters = fetchedVisibilityFilters;
@@ -1753,9 +1688,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             }
 
             updates.feedItemsDict = feedItemsDict;
-            updates.feedItemsOrder = feedItemsOrder.sort(
-              sortFeedItemsOrderByDate(feedItemsDict),
-            );
+            updates.feedItemsOrder = feedItemsOrder;
             updates._lastItemByView = lastItemByView;
             if (filtersChanged) {
               updates.fetchedVisibilityFilters = fetchedVisibilityFilters;

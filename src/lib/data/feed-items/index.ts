@@ -1,4 +1,5 @@
 import { useAtomValue } from "jotai";
+import { useMemo } from "react";
 import {
   categoryFilterAtom,
   feedFilterAtom,
@@ -17,6 +18,11 @@ import type {
 } from "~/server/db/schema";
 import type { PaginationCursor } from "~/server/api/routers/initialRouter";
 import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
+import {
+  sortFeedItemsOrderByDate,
+  sortFeedItemsOrderBySectionThenDate,
+  sortFeedItemsOrderByWatchedAt,
+} from "~/lib/sortFeedItems";
 
 export {
   getContentTypeFromItem,
@@ -115,6 +121,37 @@ function getItemSectionPlacement(
   if (feedSectionPlacement !== Infinity) return feedSectionPlacement;
   if (tagSectionPlacement !== Infinity) return tagSectionPlacement;
   return 999999;
+}
+
+function getActiveFeedItemsSort({
+  feedItemsDict,
+  visibilityFilter,
+  feedFilter,
+  categoryFilter,
+  viewFilter,
+  feedCategories,
+}: {
+  feedItemsDict: Record<string, ApplicationFeedItem>;
+  visibilityFilter: VisibilityFilter;
+  feedFilter: number;
+  categoryFilter: number;
+  viewFilter: ApplicationView | null;
+  feedCategories: DatabaseFeedCategory[];
+}) {
+  if (visibilityFilter === "read") {
+    return sortFeedItemsOrderByWatchedAt(feedItemsDict);
+  }
+
+  const isFeedOrCategoryScoped = feedFilter >= 0 || categoryFilter >= 0;
+  if (isFeedOrCategoryScoped || !viewFilter?.viewSections?.length) {
+    return sortFeedItemsOrderByDate(feedItemsDict);
+  }
+
+  return sortFeedItemsOrderBySectionThenDate(
+    feedItemsDict,
+    viewFilter.viewSections,
+    feedCategories,
+  );
 }
 
 export function doesFeedItemPassFilters({
@@ -301,36 +338,61 @@ export const useFilteredFeedItemsOrder = () => {
     return undefined;
   })();
 
-  return feedItemsOrder.filter((id) => {
-    const item = feedItemsDict[id];
-    if (!item) return false;
+  return useMemo(() => {
+    const filteredFeedItemsOrder = feedItemsOrder.filter((id) => {
+      const item = feedItemsDict[id];
+      if (!item) return false;
 
-    // Apply cursor filter - hide items older than cursor
-    const itemSectionPlacement = getItemSectionPlacement(
-      item,
-      viewFilter,
-      feedCategories,
-    );
+      // Apply cursor filter - hide items older than cursor
+      const itemSectionPlacement = getItemSectionPlacement(
+        item,
+        viewFilter,
+        feedCategories,
+      );
 
-    if (
-      activeCursor &&
-      isItemOlderThanCursor(item, activeCursor, itemSectionPlacement)
-    ) {
-      return false;
-    }
+      if (
+        activeCursor &&
+        isItemOlderThanCursor(item, activeCursor, itemSectionPlacement)
+      ) {
+        return false;
+      }
 
-    return doesFeedItemPassFilters({
-      item,
-      visibilityFilter,
-      categoryFilter,
-      feedCategories,
-      feedFilter,
-      viewFilter,
-      customViewCategoryIds,
-      customViews,
-      customViewFeedIds,
+      return doesFeedItemPassFilters({
+        item,
+        visibilityFilter,
+        categoryFilter,
+        feedCategories,
+        feedFilter,
+        viewFilter,
+        customViewCategoryIds,
+        customViews,
+        customViewFeedIds,
+      });
     });
-  });
+
+    return filteredFeedItemsOrder.sort(
+      getActiveFeedItemsSort({
+        feedItemsDict,
+        visibilityFilter,
+        feedFilter,
+        categoryFilter,
+        viewFilter,
+        feedCategories,
+      }),
+    );
+  }, [
+    activeCursor,
+    categoryFilter,
+    customViewCategoryIds,
+    customViewFeedIds,
+    customViews,
+    feedCategories,
+    feedFilter,
+    feedItemsDict,
+    feedItemsOrder,
+    viewFilter,
+    visibilityFilter,
+  ]);
 };
 
 export function useDoesFeedItemMatchAllFilters(item: ApplicationFeedItem) {
