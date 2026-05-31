@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 import { useAtomValue } from "jotai";
 import { categoryFilterAtom, visibilityFilterAtom } from "~/lib/data/atoms";
-import { feedItemsStore } from "~/lib/data/store";
-import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
+import { useFetchMoreItemsForCategory } from "~/lib/data/store";
 
 /**
  * Hook that triggers lazy loading of items when a category is selected.
@@ -15,21 +14,16 @@ import { dataSubscriptionActions } from "~/lib/data/useDataSubscription";
 export function useLazyCategoryFilter() {
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const visibilityFilter = useAtomValue(visibilityFilterAtom);
+  const fetchMoreItemsForCategory = useFetchMoreItemsForCategory();
 
   useEffect(() => {
     // categoryFilter < 0 means no category is selected
     if (categoryFilter < 0) return;
 
-    const paginationState =
-      feedItemsStore.getState().categoryPaginationState[categoryFilter]?.[
-        visibilityFilter
-      ];
-    if (paginationState?.isFetching) return;
-
     // Request items on mount/selection so another device's updates are merged.
-    void dataSubscriptionActions.requestItemsByCategoryId(
-      categoryFilter,
-      visibilityFilter,
-    );
-  }, [categoryFilter, visibilityFilter]);
+    void fetchMoreItemsForCategory(categoryFilter, visibilityFilter, {
+      force: true,
+      resetCursor: true,
+    });
+  }, [categoryFilter, fetchMoreItemsForCategory, visibilityFilter]);
 }

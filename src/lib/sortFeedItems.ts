@@ -56,11 +56,7 @@ export function sortFeedItemsOrderByDate(
       return timeB - timeA;
     }
 
-    if (itemA.title !== itemB.title) {
-      return itemA.title.localeCompare(itemB.title);
-    }
-
-    return itemA.id.localeCompare(itemB.id);
+    return itemB.id.localeCompare(itemA.id);
   };
 }
 
@@ -101,11 +97,7 @@ export function sortFeedItemsOrderByWatchedAt(
       return timeB - timeA;
     }
 
-    if (itemA.title !== itemB.title) {
-      return itemA.title.localeCompare(itemB.title);
-    }
-
-    return itemA.id.localeCompare(itemB.id);
+    return itemB.id.localeCompare(itemA.id);
   };
 }
 
@@ -148,10 +140,6 @@ export function sortFeedItemsOrderBySectionThenDate(
       return timeB - timeA;
     }
 
-    if (itemA.title !== itemB.title) {
-      return itemA.title.localeCompare(itemB.title);
-    }
-
-    return itemA.id.localeCompare(itemB.id);
+    return itemB.id.localeCompare(itemA.id);
   };
 }

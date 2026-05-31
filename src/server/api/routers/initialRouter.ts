@@ -158,6 +158,7 @@ export type GetByViewChunk =
       diff: DiffEntry[];
       cursor: PaginationCursor;
       hasMore: boolean;
+      replacesScope?: boolean;
     }
   | {
       type: "view-lightweight-items";
@@ -764,6 +765,80 @@ const lightweightFeedItemColumns = {
   contentSnippet: feedItems.contentSnippet,
 };
 
+type ViewPaginatedFeedItemScope = {
+  type: "view";
+  view: ApplicationView;
+  feedIds: number[];
+  feedCategoriesList: DatabaseFeedCategory[];
+  customViewCategoryIds: Set<number>;
+  customViews: ApplicationView[];
+  applicationFeeds: ApplicationFeed[];
+  customViewFeedIds?: Set<number>;
+};
+
+type PaginatedFeedItemScope =
+  | ViewPaginatedFeedItemScope
+  | { type: "feed"; feedId: number }
+  | { type: "category"; feedIds: number[] };
+
+function buildPaginatedFeedItemQuery({
+  scope,
+  visibilityFilter,
+  cursor,
+}: {
+  scope: PaginatedFeedItemScope;
+  visibilityFilter: VisibilityFilter;
+  cursor: PaginationCursor | null;
+}) {
+  const isReadVisibility = visibilityFilter === "read";
+  const hasSections =
+    scope.type === "view" &&
+    !isReadVisibility &&
+    scope.view.viewSections &&
+    scope.view.viewSections.length > 0;
+  const placementExpr =
+    hasSections && scope.type === "view"
+      ? buildSectionPlacementExpression(scope.view.id)
+      : undefined;
+
+  const scopeFilterConditions =
+    scope.type === "view"
+      ? [
+          inArray(feedItems.feedId, scope.feedIds),
+          buildViewCategoryFilter(
+            scope.view,
+            scope.feedCategoriesList,
+            scope.feedIds,
+            scope.customViewCategoryIds,
+            scope.customViews,
+            scope.applicationFeeds,
+            scope.customViewFeedIds,
+          ),
+          buildContentTypeFilter(
+            scope.view.contentType,
+            scope.applicationFeeds,
+          ),
+          buildTimeWindowFilter(scope.view.daysWindow),
+        ]
+      : scope.type === "feed"
+        ? [eq(feedItems.feedId, scope.feedId)]
+        : [inArray(feedItems.feedId, scope.feedIds)];
+
+  const filterConditions = [
+    ...scopeFilterConditions,
+    buildVisibilityFilter(visibilityFilter),
+    buildCursorCondition(cursor, placementExpr),
+  ].filter((f): f is NonNullable<typeof f> => f !== undefined);
+
+  return {
+    filter: filterConditions.length > 0 ? and(...filterConditions) : undefined,
+    orderBy: placementExpr
+      ? [asc(placementExpr), desc(feedItems.postedAt), desc(feedItems.id)]
+      : buildFlatItemsOrderBy(visibilityFilter),
+    placementExpr,
+  };
+}
+
 function mapToLightweightFeedItems(
   items: Array<
     { feedId: number; postedAt: Date; id: string } & Record<string, unknown>
@@ -817,112 +892,42 @@ async function queryLightweightItemsForView(
     customViewFeedIds,
   } = params;
 
-  const isReadVisibility = visibilityFilter === "read";
-  const hasSections =
-    !isReadVisibility && view.viewSections && view.viewSections.length > 0;
-
   let itemsData: Array<
     Omit<typeof feedItems.$inferSelect, "content" | "contentSnippet"> & {
       placement?: number;
     }
   >;
+  const queryParts = buildPaginatedFeedItemQuery({
+    scope: {
+      type: "view",
+      view,
+      feedIds,
+      feedCategoriesList,
+      customViewCategoryIds,
+      customViews,
+      applicationFeeds,
+      customViewFeedIds,
+    },
+    visibilityFilter,
+    cursor,
+  });
 
-  if (isReadVisibility) {
-    const readFilterConditions = [
-      inArray(feedItems.feedId, feedIds),
-      buildVisibilityFilter(visibilityFilter),
-      buildViewCategoryFilter(
-        view,
-        feedCategoriesList,
-        feedIds,
-        customViewCategoryIds,
-        customViews,
-        applicationFeeds,
-        customViewFeedIds,
-      ),
-      buildContentTypeFilter(view.contentType, applicationFeeds),
-      buildTimeWindowFilter(view.daysWindow),
-      buildCursorCondition(cursor),
-    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-    const readFilter =
-      readFilterConditions.length > 0
-        ? and(...readFilterConditions)
-        : undefined;
-
+  if (!queryParts.placementExpr) {
     itemsData = await context.db
       .select(lightweightFeedItemColumns)
       .from(feedItems)
-      .where(readFilter)
-      .orderBy(
-        desc(feedItems.isWatchedUpdatedAt),
-        desc(feedItems.postedAt),
-        desc(feedItems.id),
-      )
-      .limit(limit + 1);
-  } else if (!hasSections) {
-    const flatFilterConditions = [
-      inArray(feedItems.feedId, feedIds),
-      buildVisibilityFilter(visibilityFilter),
-      buildViewCategoryFilter(
-        view,
-        feedCategoriesList,
-        feedIds,
-        customViewCategoryIds,
-        customViews,
-        applicationFeeds,
-        customViewFeedIds,
-      ),
-      buildContentTypeFilter(view.contentType, applicationFeeds),
-      buildTimeWindowFilter(view.daysWindow),
-      buildCursorCondition(cursor),
-    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-    const flatFilter =
-      flatFilterConditions.length > 0
-        ? and(...flatFilterConditions)
-        : undefined;
-
-    itemsData = await context.db
-      .select(lightweightFeedItemColumns)
-      .from(feedItems)
-      .where(flatFilter)
-      .orderBy(desc(feedItems.postedAt), desc(feedItems.id))
+      .where(queryParts.filter)
+      .orderBy(...queryParts.orderBy)
       .limit(limit + 1);
   } else {
-    const placementExpr = buildSectionPlacementExpression(view.id);
-    const cursorCondition = buildCursorCondition(cursor, placementExpr);
-
-    const sectionFilterConditions = [
-      inArray(feedItems.feedId, feedIds),
-      buildVisibilityFilter(visibilityFilter),
-      buildViewCategoryFilter(
-        view,
-        feedCategoriesList,
-        feedIds,
-        customViewCategoryIds,
-        customViews,
-        applicationFeeds,
-        customViewFeedIds,
-      ),
-      buildContentTypeFilter(view.contentType, applicationFeeds),
-      buildTimeWindowFilter(view.daysWindow),
-      cursorCondition,
-    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-    const sectionFilter =
-      sectionFilterConditions.length > 0
-        ? and(...sectionFilterConditions)
-        : undefined;
-
     itemsData = await context.db
       .select({
         ...lightweightFeedItemColumns,
-        placement: placementExpr,
+        placement: queryParts.placementExpr,
       })
       .from(feedItems)
-      .where(sectionFilter)
-      .orderBy(asc(placementExpr), desc(feedItems.postedAt), desc(feedItems.id))
+      .where(queryParts.filter)
+      .orderBy(...queryParts.orderBy)
       .limit(limit + 1);
   }
 
@@ -938,6 +943,83 @@ async function queryLightweightItemsForView(
     hasMore,
     nextCursor,
   };
+}
+
+async function queryAndPublishLightweightItemsForViews(
+  channel: string,
+  context: ORPCContext,
+  viewList: ApplicationView[],
+  visibilityFilter: VisibilityFilter,
+  params: {
+    feedIds: number[];
+    feedsById: Map<number, DatabaseFeed>;
+    feedCategoriesList: DatabaseFeedCategory[];
+    customViewCategoryIds: Set<number>;
+    customViews: ApplicationView[];
+    applicationFeeds: ApplicationFeed[];
+    customViewFeedIds: Set<number>;
+  },
+) {
+  const pendingPromises = new Map<
+    number,
+    Promise<{ viewId: number; chunk: GetByViewChunk }>
+  >();
+
+  for (const view of viewList) {
+    const requestViewItems = async (): Promise<{
+      viewId: number;
+      chunk: GetByViewChunk;
+    }> => {
+      try {
+        const { items, hasMore, nextCursor } =
+          await queryLightweightItemsForView(context, view, {
+            ...params,
+            visibilityFilter,
+            cursor: null,
+            limit: INITIAL_ITEMS_PER_VIEW,
+          });
+
+        return {
+          viewId: view.id,
+          chunk: {
+            type: "view-lightweight-items",
+            viewId: view.id,
+            visibilityFilter,
+            items,
+            cursor: nextCursor,
+            hasMore,
+          },
+        };
+      } catch (error) {
+        captureException(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        logError(
+          `[view-lightweight-items] view=${view.id} visibility=${visibilityFilter} error:`,
+          errorMessage,
+          error,
+        );
+
+        return {
+          viewId: view.id,
+          chunk: {
+            type: "error",
+            message: errorMessage,
+            phase: "view-lightweight-items",
+            viewId: view.id,
+          },
+        };
+      }
+    };
+
+    pendingPromises.set(view.id, requestViewItems());
+  }
+
+  while (pendingPromises.size > 0) {
+    const { viewId, chunk } = await Promise.race(pendingPromises.values());
+    pendingPromises.delete(viewId);
+    await publisher.publish(channel, { source: "initial", chunk });
+  }
 }
 
 /**
@@ -983,105 +1065,37 @@ async function queryFeedItemsForView(
     customViewFeedIds,
   } = params;
 
-  const isReadVisibility = visibilityFilter === "read";
-  const hasSections =
-    !isReadVisibility && view.viewSections && view.viewSections.length > 0;
-
   let itemsData: Array<typeof feedItems.$inferSelect & { placement?: number }>;
+  const queryParts = buildPaginatedFeedItemQuery({
+    scope: {
+      type: "view",
+      view,
+      feedIds,
+      feedCategoriesList,
+      customViewCategoryIds,
+      customViews,
+      applicationFeeds,
+      customViewFeedIds,
+    },
+    visibilityFilter,
+    cursor,
+  });
 
-  if (isReadVisibility) {
-    // Read visibility: sort by when items were marked as read.
-    // Subsections (section placement) are not applied, but all other
-    // view filters (category, content type, time window) are.
-    const filterConditions = [
-      inArray(feedItems.feedId, feedIds),
-      buildVisibilityFilter(visibilityFilter),
-      buildViewCategoryFilter(
-        view,
-        feedCategoriesList,
-        feedIds,
-        customViewCategoryIds,
-        customViews,
-        applicationFeeds,
-        customViewFeedIds,
-      ),
-      buildContentTypeFilter(view.contentType, applicationFeeds),
-      buildTimeWindowFilter(view.daysWindow),
-      buildCursorCondition(cursor),
-    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-    const filter =
-      filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
+  if (!queryParts.placementExpr) {
     itemsData = await context.db.query.feedItems.findMany({
-      where: filter,
-      orderBy: [
-        desc(feedItems.isWatchedUpdatedAt),
-        desc(feedItems.postedAt),
-        desc(feedItems.id),
-      ],
-      limit: limit + 1,
-    });
-  } else if (!hasSections) {
-    // Non-sectioned views: order by date only
-    const filterConditions = [
-      inArray(feedItems.feedId, feedIds),
-      buildVisibilityFilter(visibilityFilter),
-      buildViewCategoryFilter(
-        view,
-        feedCategoriesList,
-        feedIds,
-        customViewCategoryIds,
-        customViews,
-        applicationFeeds,
-        customViewFeedIds,
-      ),
-      buildContentTypeFilter(view.contentType, applicationFeeds),
-      buildTimeWindowFilter(view.daysWindow),
-      buildCursorCondition(cursor),
-    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-    const filter =
-      filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
-    itemsData = await context.db.query.feedItems.findMany({
-      where: filter,
-      orderBy: [desc(feedItems.postedAt), desc(feedItems.id)],
+      where: queryParts.filter,
+      orderBy: queryParts.orderBy,
       limit: limit + 1,
     });
   } else {
-    // Sectioned views: order by section placement, then date
-    const placementExpr = buildSectionPlacementExpression(view.id);
-    const cursorCondition = buildCursorCondition(cursor, placementExpr);
-
-    const filterConditions = [
-      inArray(feedItems.feedId, feedIds),
-      buildVisibilityFilter(visibilityFilter),
-      buildViewCategoryFilter(
-        view,
-        feedCategoriesList,
-        feedIds,
-        customViewCategoryIds,
-        customViews,
-        applicationFeeds,
-        customViewFeedIds,
-      ),
-      buildContentTypeFilter(view.contentType, applicationFeeds),
-      buildTimeWindowFilter(view.daysWindow),
-      cursorCondition,
-    ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-    const filter =
-      filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
     itemsData = await context.db
       .select({
         ...getTableColumns(feedItems),
-        placement: placementExpr,
+        placement: queryParts.placementExpr,
       })
       .from(feedItems)
-      .where(filter)
-      .orderBy(asc(placementExpr), desc(feedItems.postedAt), desc(feedItems.id))
+      .where(queryParts.filter)
+      .orderBy(...queryParts.orderBy)
       .limit(limit + 1);
   }
 
@@ -1400,62 +1414,24 @@ export const requestInitialData = protectedProcedure
       return { status: "completed" };
     }
 
-    // Helper: query initial lightweight items for a view + visibility.
-    async function queryAndPublishLightweightItems(
-      view: ApplicationView,
-      visibilityFilter: VisibilityFilter,
-    ) {
-      try {
-        const { items, hasMore, nextCursor } =
-          await queryLightweightItemsForView(context, view, {
-            visibilityFilter,
-            feedIds,
-            cursor: null,
-            limit: INITIAL_ITEMS_PER_VIEW,
-            feedsById,
-            feedCategoriesList,
-            customViewCategoryIds,
-            customViews,
-            applicationFeeds,
-            customViewFeedIds,
-          });
-
-        await publisher.publish(clientChannel, {
-          source: "initial",
-          chunk: {
-            type: "view-lightweight-items",
-            viewId: view.id,
-            visibilityFilter,
-            items,
-            cursor: nextCursor,
-            hasMore,
-          },
-        });
-      } catch (error) {
-        captureException(error);
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        logError(
-          `[view-lightweight-items] view=${view.id} visibility=${visibilityFilter} error:`,
-          errorMessage,
-          error,
-        );
-        await publisher.publish(clientChannel, {
-          source: "initial",
-          chunk: {
-            type: "error",
-            message: errorMessage,
-            phase: "view-lightweight-items",
-            viewId: view.id,
-          },
-        });
-      }
-    }
+    const lightweightQueryParams = {
+      feedIds,
+      feedsById,
+      feedCategoriesList,
+      customViewCategoryIds,
+      customViews,
+      applicationFeeds,
+      customViewFeedIds,
+    };
 
     // Step 4: Publish unread lightweight items for all views (highest priority)
-    for (const view of allViews) {
-      await queryAndPublishLightweightItems(view, "unread");
-    }
+    await queryAndPublishLightweightItemsForViews(
+      clientChannel,
+      context,
+      allViews,
+      "unread",
+      lightweightQueryParams,
+    );
 
     logDebug(
       `[requestInitialData] user=${context.user.id} phase=unread-items-published`,
@@ -1472,10 +1448,22 @@ export const requestInitialData = protectedProcedure
     );
 
     // Step 5: Publish read and later lightweight items for all views
-    for (const view of allViews) {
-      await queryAndPublishLightweightItems(view, "read");
-      await queryAndPublishLightweightItems(view, "later");
-    }
+    await Promise.all([
+      queryAndPublishLightweightItemsForViews(
+        clientChannel,
+        context,
+        allViews,
+        "read",
+        lightweightQueryParams,
+      ),
+      queryAndPublishLightweightItemsForViews(
+        clientChannel,
+        context,
+        allViews,
+        "later",
+        lightweightQueryParams,
+      ),
+    ]);
 
     logDebug(
       `[requestInitialData] user=${context.user.id} phase=read-later-items-published`,
@@ -2337,6 +2325,18 @@ function buildCursorCondition(
   );
 }
 
+function buildFlatItemsOrderBy(visibilityFilter: VisibilityFilter) {
+  if (visibilityFilter === "read") {
+    return [
+      desc(feedItems.isWatchedUpdatedAt),
+      desc(feedItems.postedAt),
+      desc(feedItems.id),
+    ];
+  }
+
+  return [desc(feedItems.postedAt), desc(feedItems.id)];
+}
+
 /**
  * Build a SQL expression that returns the minimum section placement for a feed item.
  * Uncategorized items (not in any section) get placement 999999.
@@ -2498,6 +2498,7 @@ export const requestItemsByVisibility = protectedProcedure
           diff,
           cursor: nextCursor,
           hasMore,
+          replacesScope: clientItems !== undefined,
         },
       });
     } catch (error) {
@@ -2554,20 +2555,16 @@ export const requestItemsByFeed = protectedProcedure
     }
 
     try {
-      // Build filter conditions
-      const filterConditions = [
-        eq(feedItems.feedId, input.feedId),
-        buildVisibilityFilter(input.visibilityFilter),
-        buildCursorCondition(input.cursor ?? null),
-      ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-      const filter =
-        filterConditions.length > 0 ? and(...filterConditions) : undefined;
+      const queryParts = buildPaginatedFeedItemQuery({
+        scope: { type: "feed", feedId: input.feedId },
+        visibilityFilter: input.visibilityFilter,
+        cursor: input.cursor ?? null,
+      });
 
       // Query limit + 1 to determine if there are more items
       const itemsData = await context.db.query.feedItems.findMany({
-        where: filter,
-        orderBy: desc(feedItems.postedAt),
+        where: queryParts.filter,
+        orderBy: queryParts.orderBy,
         limit: limit + 1,
       });
 
@@ -2597,6 +2594,7 @@ export const requestItemsByFeed = protectedProcedure
             visibilityFilter: input.visibilityFilter,
             hasMore,
             nextCursor,
+            replacesScope: input.cursor == null,
           },
         });
       }
@@ -2612,6 +2610,7 @@ export const requestItemsByFeed = protectedProcedure
             visibilityFilter: input.visibilityFilter,
             hasMore: false,
             nextCursor: null,
+            replacesScope: input.cursor == null,
           },
         });
       }
@@ -2689,6 +2688,7 @@ export const requestItemsByCategoryId = protectedProcedure
           visibilityFilter: input.visibilityFilter,
           hasMore: false,
           nextCursor: null,
+          replacesScope: input.cursor == null,
         },
       });
       return { status: "completed" };
@@ -2705,20 +2705,16 @@ export const requestItemsByCategoryId = protectedProcedure
     const feedsById = new Map(feedsList.map((f) => [f.id, f]));
 
     try {
-      // Build filter conditions
-      const filterConditions = [
-        inArray(feedItems.feedId, feedIdsInCategory),
-        buildVisibilityFilter(input.visibilityFilter),
-        buildCursorCondition(input.cursor ?? null),
-      ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-      const filter =
-        filterConditions.length > 0 ? and(...filterConditions) : undefined;
+      const queryParts = buildPaginatedFeedItemQuery({
+        scope: { type: "category", feedIds: feedIdsInCategory },
+        visibilityFilter: input.visibilityFilter,
+        cursor: input.cursor ?? null,
+      });
 
       // Query limit + 1 to determine if there are more items
       const itemsData = await context.db.query.feedItems.findMany({
-        where: filter,
-        orderBy: desc(feedItems.postedAt),
+        where: queryParts.filter,
+        orderBy: queryParts.orderBy,
         limit: limit + 1,
       });
 
@@ -2748,6 +2744,7 @@ export const requestItemsByCategoryId = protectedProcedure
             visibilityFilter: input.visibilityFilter,
             hasMore,
             nextCursor,
+            replacesScope: input.cursor == null,
           },
         });
       }
@@ -2763,6 +2760,7 @@ export const requestItemsByCategoryId = protectedProcedure
             visibilityFilter: input.visibilityFilter,
             hasMore: false,
             nextCursor: null,
+            replacesScope: input.cursor == null,
           },
         });
       }
@@ -3052,6 +3050,7 @@ export type GetItemsByVisibilityChunk =
       visibilityFilter: string;
       hasMore: boolean;
       nextCursor: PaginationCursor;
+      replacesScope?: boolean;
     }
   | {
       type: "view-diff";
@@ -3060,6 +3059,7 @@ export type GetItemsByVisibilityChunk =
       diff: DiffEntry[];
       cursor: PaginationCursor;
       hasMore: boolean;
+      replacesScope?: boolean;
     }
   | { type: "error"; message: string; phase: string };
 
@@ -3071,6 +3071,7 @@ export type GetItemsByFeedChunk =
       visibilityFilter: string;
       hasMore: boolean;
       nextCursor: PaginationCursor;
+      replacesScope?: boolean;
     }
   | { type: "error"; message: string; phase: string };
 
@@ -3082,6 +3083,7 @@ export type GetItemsByCategoryIdChunk =
       visibilityFilter: string;
       hasMore: boolean;
       nextCursor: PaginationCursor;
+      replacesScope?: boolean;
     }
   | { type: "error"; message: string; phase: string };
 
@@ -3140,6 +3142,7 @@ export const getItemsByVisibility = protectedProcedure
         visibilityFilter: input.visibilityFilter,
         hasMore: false,
         nextCursor: null,
+        replacesScope: input.cursor == null,
       } as GetItemsByVisibilityChunk;
       return;
     }
@@ -3157,116 +3160,39 @@ export const getItemsByVisibility = protectedProcedure
     }
 
     try {
-      const isReadVisibility = input.visibilityFilter === "read";
-      const hasSections =
-        !isReadVisibility &&
-        targetView.viewSections &&
-        targetView.viewSections.length > 0;
-
       let itemsData: Array<
         typeof feedItems.$inferSelect & { placement?: number }
       >;
+      const queryParts = buildPaginatedFeedItemQuery({
+        scope: {
+          type: "view",
+          view: targetView,
+          feedIds,
+          feedCategoriesList,
+          customViewCategoryIds,
+          customViews,
+          applicationFeeds,
+          customViewFeedIds,
+        },
+        visibilityFilter: input.visibilityFilter,
+        cursor: input.cursor ?? null,
+      });
 
-      if (isReadVisibility) {
-        // Read visibility: sort by when items were marked as read.
-        // Subsections (section placement) are not applied, but all other
-        // view filters (category, content type, time window) are.
-        const filterConditions = [
-          inArray(feedItems.feedId, feedIds),
-          buildVisibilityFilter(input.visibilityFilter),
-          buildViewCategoryFilter(
-            targetView,
-            feedCategoriesList,
-            feedIds,
-            customViewCategoryIds,
-            customViews,
-            applicationFeeds,
-            customViewFeedIds,
-          ),
-          buildContentTypeFilter(targetView.contentType, applicationFeeds),
-          buildTimeWindowFilter(targetView.daysWindow),
-          buildCursorCondition(input.cursor ?? null),
-        ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-        const filter =
-          filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
+      if (!queryParts.placementExpr) {
         itemsData = await context.db.query.feedItems.findMany({
-          where: filter,
-          orderBy: [
-            desc(feedItems.isWatchedUpdatedAt),
-            desc(feedItems.postedAt),
-            desc(feedItems.id),
-          ],
-          limit: limit + 1,
-        });
-      } else if (!hasSections) {
-        // Non-sectioned views: order by date only
-        const filterConditions = [
-          inArray(feedItems.feedId, feedIds),
-          buildVisibilityFilter(input.visibilityFilter),
-          buildViewCategoryFilter(
-            targetView,
-            feedCategoriesList,
-            feedIds,
-            customViewCategoryIds,
-            customViews,
-            applicationFeeds,
-            customViewFeedIds,
-          ),
-          buildContentTypeFilter(targetView.contentType, applicationFeeds),
-          buildTimeWindowFilter(targetView.daysWindow),
-          buildCursorCondition(input.cursor ?? null),
-        ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-        const filter =
-          filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
-        itemsData = await context.db.query.feedItems.findMany({
-          where: filter,
-          orderBy: desc(feedItems.postedAt),
+          where: queryParts.filter,
+          orderBy: queryParts.orderBy,
           limit: limit + 1,
         });
       } else {
-        // Sectioned views: order by section placement, then date
-        const placementExpr = buildSectionPlacementExpression(targetView.id);
-        const cursorCondition = buildCursorCondition(
-          input.cursor ?? null,
-          placementExpr,
-        );
-
-        const filterConditions = [
-          inArray(feedItems.feedId, feedIds),
-          buildVisibilityFilter(input.visibilityFilter),
-          buildViewCategoryFilter(
-            targetView,
-            feedCategoriesList,
-            feedIds,
-            customViewCategoryIds,
-            customViews,
-            applicationFeeds,
-            customViewFeedIds,
-          ),
-          buildContentTypeFilter(targetView.contentType, applicationFeeds),
-          buildTimeWindowFilter(targetView.daysWindow),
-          cursorCondition,
-        ].filter((f): f is NonNullable<typeof f> => f !== undefined);
-
-        const filter =
-          filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
         itemsData = await context.db
           .select({
             ...getTableColumns(feedItems),
-            placement: placementExpr,
+            placement: queryParts.placementExpr,
           })
           .from(feedItems)
-          .where(filter)
-          .orderBy(
-            asc(placementExpr),
-            desc(feedItems.postedAt),
-            desc(feedItems.id),
-          )
+          .where(queryParts.filter)
+          .orderBy(...queryParts.orderBy)
           .limit(limit + 1);
       }
 
@@ -3294,6 +3220,7 @@ export const getItemsByVisibility = protectedProcedure
           visibilityFilter: input.visibilityFilter,
           hasMore,
           nextCursor,
+          replacesScope: input.cursor == null,
         } as GetItemsByVisibilityChunk;
       }
 
@@ -3306,6 +3233,7 @@ export const getItemsByVisibility = protectedProcedure
           visibilityFilter: input.visibilityFilter,
           hasMore: false,
           nextCursor: null,
+          replacesScope: input.cursor == null,
         } as GetItemsByVisibilityChunk;
       }
     } catch (error) {

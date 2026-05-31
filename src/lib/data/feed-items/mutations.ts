@@ -15,17 +15,16 @@ function applyBulkWatchedValue({
   isWatched: boolean;
 }) {
   const store = feedItemsStore.getState();
-  const newDict = { ...store.feedItemsDict };
   items.forEach(({ id }) => {
-    if (newDict[id]) {
-      newDict[id] = {
-        ...newDict[id],
+    const feedItem = store.feedItemsDict[id];
+    if (feedItem) {
+      store.setFeedItem(id, {
+        ...feedItem,
         isWatched,
         isWatchedUpdatedAt: isWatched ? new Date() : null,
-      };
+      });
     }
   });
-  store.setFeedItemsDict(newDict);
 }
 
 export async function setBulkWatchedValue({
