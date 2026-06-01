@@ -95,11 +95,11 @@ export function useViewListScroll(itemIds: string[]) {
       itemIds.length <= pendingServerExpansion.itemCountBeforeFetch;
 
     if (hasRenderedExpandedWindow || hasSettledWithoutNewItems) {
-      const resumeAutoAnimateFrameId = requestAnimationFrame(() => {
+      const resumeAutoAnimateFrameTimeout = setTimeout(() => {
         setIsAutoAnimatePausedForPagination(false);
-      });
+      }, 100);
 
-      return () => cancelAnimationFrame(resumeAutoAnimateFrameId);
+      return () => clearTimeout(resumeAutoAnimateFrameTimeout);
     }
   }, [
     isAutoAnimatePausedForPagination,
