@@ -13,15 +13,39 @@ type PendingServerExpansion = {
 export function useViewListScroll(itemIds: string[]) {
   const { visibleItems, expandWindow, renderCount } = useItemWindow(itemIds);
   const { handleLoadMore, paginationKey, paginationState } = useLoadMoreItems();
-  const openValidationKeyRef = useRef<string | null>(null);
   const nextServerLoadIdRef = useRef(0);
   const handledServerExpansionIdRef = useRef<number | null>(null);
   const [pendingServerExpansion, setPendingServerExpansion] =
     useState<PendingServerExpansion | null>(null);
+  const [scrolledListKey, setScrolledListKey] = useState<string | null>(null);
   const [
     isAutoAnimatePausedForPagination,
     setIsAutoAnimatePausedForPagination,
   ] = useState(false);
+  const firstItemId = itemIds[0];
+  const currentListKey = `${paginationKey}:${firstItemId ?? "empty"}`;
+  const hasUserScrolledCurrentList = scrolledListKey === currentListKey;
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector(
+      '[data-slot="sidebar-inset"]',
+    );
+    const scrollTarget = scrollContainer ?? window;
+
+    const markCurrentListScrolled = () => {
+      if (hasUserScrolledCurrentList) return;
+
+      setScrolledListKey(currentListKey);
+    };
+
+    scrollTarget.addEventListener("scroll", markCurrentListScrolled, {
+      passive: true,
+    });
+
+    return () => {
+      scrollTarget.removeEventListener("scroll", markCurrentListScrolled);
+    };
+  }, [currentListKey, hasUserScrolledCurrentList]);
 
   const loadMoreFromServer = useCallback(() => {
     const serverLoadId = nextServerLoadIdRef.current + 1;
@@ -59,9 +83,10 @@ export function useViewListScroll(itemIds: string[]) {
   const { sentinelRef } = useInfiniteScroll({
     onLoadMore: handleLoadMoreWithCache,
     hasMore:
-      renderCount < itemIds.length || (paginationState?.hasMore ?? false),
+      hasUserScrolledCurrentList &&
+      (renderCount < itemIds.length || (paginationState?.hasMore ?? false)),
     isLoading: paginationState?.isFetching ?? false,
-    rootMargin: "600px 0px",
+    rootMargin: "0px",
   });
 
   useEffect(() => {
@@ -109,37 +134,11 @@ export function useViewListScroll(itemIds: string[]) {
     renderCount,
   ]);
 
-  const hasRenderedAllItems = renderCount >= itemIds.length;
-  const hasMoreItems = paginationState?.hasMore === true;
-  const isFetchingMoreItems = paginationState?.isFetching === true;
-  const shouldValidatePaginationWhenCacheIsExhausted =
-    hasRenderedAllItems && hasMoreItems && !isFetchingMoreItems;
-
-  useEffect(() => {
-    if (!shouldValidatePaginationWhenCacheIsExhausted) return;
-
-    const firstItemId = itemIds[0];
-    const openValidationKey = `${paginationKey}:${firstItemId}`;
-    if (openValidationKeyRef.current === openValidationKey) return;
-
-    openValidationKeyRef.current = openValidationKey;
-    const loadMoreFrameId = requestAnimationFrame(() => {
-      loadMoreFromServer();
-    });
-
-    return () => cancelAnimationFrame(loadMoreFrameId);
-  }, [
-    itemIds,
-    loadMoreFromServer,
-    paginationKey,
-    shouldValidatePaginationWhenCacheIsExhausted,
-  ]);
-
   return {
     sentinelRef,
     paginationState,
     visibleItems,
-    hasRenderedAllItems,
+    hasRenderedAllItems: renderCount >= itemIds.length,
     isAutoAnimatePausedForPagination,
   };
 }
