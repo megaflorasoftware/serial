@@ -25,6 +25,7 @@ import { timeAgo } from "~/lib/utils";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 import { useShowShortcuts } from "~/lib/hooks/useShowShortcuts";
+import { saveHomeScrollPosition } from "~/lib/scroll";
 
 export type ItemSize = "standard" | "large";
 type WatchedDatePrefix = "read" | "watched";
@@ -520,6 +521,7 @@ export function ItemDisplay({
         target={target}
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
+        onClick={shouldOpenInSerial ? saveHomeScrollPosition : undefined}
         className={clsx(
           "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2 md:py-2",
           isLarge ? "pb-1 md:pb-2" : "pb-4 md:h-20 md:py-0",
@@ -631,6 +633,7 @@ export function GridItemDisplay({
         target={target}
         rel={rel}
         preload={shouldOpenInSerial ? "intent" : undefined}
+        onClick={shouldOpenInSerial ? saveHomeScrollPosition : undefined}
         className={clsx(
           "flex h-full flex-1 flex-col rounded p-2 text-left",
           shouldDimReadSavedItem && "opacity-50",

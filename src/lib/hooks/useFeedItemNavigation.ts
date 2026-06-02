@@ -15,7 +15,6 @@ import type { KeyboardEvent } from "react";
 import {
   categoryFilterAtom,
   feedFilterAtom,
-  isReturningFromRouteAtom,
   selectedItemIdAtom,
   viewFilterIdAtom,
 } from "~/lib/data/atoms";
@@ -144,9 +143,6 @@ export function useFeedItemNavigation(
   sections?: SectionInfo[],
 ) {
   const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
-  const [isReturningFromRoute, setIsReturningFromRoute] = useAtom(
-    isReturningFromRouteAtom,
-  );
   const viewFilterId = useAtomValue(viewFilterIdAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const feedFilter = useAtomValue(feedFilterAtom);
@@ -638,24 +634,6 @@ export function useFeedItemNavigation(
     prevCategoryFilterRef.current = categoryFilter;
     prevFeedFilterRef.current = feedFilter;
   }, [viewFilterId, categoryFilter, feedFilter, setSelectedItemId]);
-
-  useEffect(() => {
-    if (pathname !== "/") {
-      setIsReturningFromRoute(true);
-      return;
-    }
-
-    if (isReturningFromRoute && selectedItemId) {
-      setIsReturningFromRoute(false);
-      scrollToItem(selectedItemId, true);
-    }
-  }, [
-    pathname,
-    selectedItemId,
-    isReturningFromRoute,
-    setIsReturningFromRoute,
-    scrollToItem,
-  ]);
 
   useEffect(() => {
     const handleMouseMove = () => {

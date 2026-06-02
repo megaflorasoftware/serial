@@ -5,6 +5,7 @@ import { useRouter } from "@tanstack/react-router";
 import { orpcRouterClient } from "../orpc";
 import { feedItemsStore, useFeedItemValue } from "../data/store";
 import { useFeeds as useFeedsArray } from "../data/feeds/store";
+import { saveHomeScrollPosition } from "~/lib/scroll";
 
 export function useFeedItemActions(itemId: string) {
   const router = useRouter();
@@ -69,6 +70,7 @@ export function useFeedItemActions(itemId: string) {
       feed?.openLocation === "serial" || !feed?.openLocation;
 
     if (shouldOpenInSerial) {
+      saveHomeScrollPosition();
       router.navigate({ to: `/${itemDestination}/${item.id}` });
     } else {
       window.open(item.url, "_blank", "noopener noreferrer");
