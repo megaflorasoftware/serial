@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useInfiniteScroll } from "~/lib/hooks/useInfiniteScroll";
 import { useItemWindow } from "~/lib/hooks/useItemWindow";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
+import { updateCurrentHomeRenderedItemCount } from "~/lib/scroll";
 
 type PendingServerExpansion = {
   id: number;
@@ -11,7 +12,6 @@ type PendingServerExpansion = {
 };
 
 export function useViewListScroll(itemIds: string[]) {
-  const { visibleItems, expandWindow, renderCount } = useItemWindow(itemIds);
   const { handleLoadMore, paginationKey, paginationState } = useLoadMoreItems();
   const nextServerLoadIdRef = useRef(0);
   const handledServerExpansionIdRef = useRef<number | null>(null);
@@ -24,7 +24,15 @@ export function useViewListScroll(itemIds: string[]) {
   ] = useState(false);
   const firstItemId = itemIds[0];
   const currentListKey = `${paginationKey}:${firstItemId ?? "empty"}`;
+  const { visibleItems, expandWindow, renderCount } = useItemWindow(
+    itemIds,
+    currentListKey,
+  );
   const hasUserScrolledCurrentList = scrolledListKey === currentListKey;
+
+  useEffect(() => {
+    updateCurrentHomeRenderedItemCount(currentListKey, renderCount);
+  }, [currentListKey, renderCount]);
 
   useEffect(() => {
     const scrollContainer = document.querySelector(

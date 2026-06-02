@@ -3,21 +3,31 @@
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
+import { getSavedHomeRenderedItemCount } from "~/lib/scroll";
 import { ITEMS_PER_PAGE } from "~/server/api/constants";
 
-export function useItemWindow(itemIds: string[]) {
-  const [renderCount, setRenderCount] = useState(ITEMS_PER_PAGE);
-  const firstItemRef = useRef<string | undefined>(undefined);
+function getInitialRenderCount(itemIds: string[], listKey: string) {
+  const savedRenderedItemCount = getSavedHomeRenderedItemCount(listKey);
+  const renderCount = savedRenderedItemCount ?? ITEMS_PER_PAGE;
+
+  return Math.min(renderCount, itemIds.length || renderCount);
+}
+
+export function useItemWindow(itemIds: string[], listKey: string) {
+  const [renderCount, setRenderCount] = useState(() =>
+    getInitialRenderCount(itemIds, listKey),
+  );
+  const listKeyRef = useRef(listKey);
 
   // Reset render count when the underlying item list changes (view switch,
-  // filter change). We key off the first item so that appending more cached
+  // filter change). We key off the list identity so that appending more cached
   // items to the same view does not collapse the window.
   useEffect(() => {
-    if (firstItemRef.current !== itemIds[0]) {
-      setRenderCount(ITEMS_PER_PAGE);
-      firstItemRef.current = itemIds[0];
+    if (listKeyRef.current !== listKey) {
+      setRenderCount(getInitialRenderCount(itemIds, listKey));
+      listKeyRef.current = listKey;
     }
-  }, [itemIds]);
+  }, [itemIds, listKey]);
 
   const visibleItems = itemIds.slice(0, renderCount);
 

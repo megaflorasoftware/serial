@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 const DEFAULT_HOME_SCROLL_POSITION = 0;
 let savedHomeScrollPosition: number | null = null;
+let savedHomeRenderedItemCount: number | null = null;
+let savedHomeRenderedItemListKey: string | null = null;
+let currentHomeRenderedItemCount: number | null = null;
+let currentHomeRenderedItemListKey: string | null = null;
 
 const useIsomorphicLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -20,6 +24,28 @@ export function getScrollContainer(): HTMLElement {
 
 export function saveHomeScrollPosition() {
   savedHomeScrollPosition = getScrollContainer().scrollTop;
+
+  if (
+    currentHomeRenderedItemListKey !== null &&
+    currentHomeRenderedItemCount !== null
+  ) {
+    savedHomeRenderedItemListKey = currentHomeRenderedItemListKey;
+    savedHomeRenderedItemCount = currentHomeRenderedItemCount;
+  }
+}
+
+export function updateCurrentHomeRenderedItemCount(
+  listKey: string,
+  renderedItemCount: number,
+) {
+  currentHomeRenderedItemListKey = listKey;
+  currentHomeRenderedItemCount = renderedItemCount;
+}
+
+export function getSavedHomeRenderedItemCount(listKey: string) {
+  if (savedHomeRenderedItemListKey !== listKey) return null;
+
+  return savedHomeRenderedItemCount;
 }
 
 function restoreHomeScrollPosition() {
