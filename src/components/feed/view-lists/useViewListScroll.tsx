@@ -98,20 +98,14 @@ export function useViewListScroll(itemIds: string[]) {
   });
 
   useEffect(() => {
-    if (!pendingServerExpansion) return;
+    if (!pendingServerExpansion?.isComplete) return;
     if (handledServerExpansionIdRef.current === pendingServerExpansion.id) {
       return;
     }
+    if (paginationState?.isFetching === true) return;
 
-    const hasReceivedServerItems =
-      itemIds.length > pendingServerExpansion.itemCountBeforeFetch;
-    const hasSettledWithoutMoreItems =
-      pendingServerExpansion.isComplete && paginationState?.isFetching !== true;
-
-    if (hasReceivedServerItems || hasSettledWithoutMoreItems) {
-      handledServerExpansionIdRef.current = pendingServerExpansion.id;
-      expandWindow(itemIds.length);
-    }
+    handledServerExpansionIdRef.current = pendingServerExpansion.id;
+    expandWindow(itemIds.length);
   }, [expandWindow, itemIds.length, paginationState, pendingServerExpansion]);
 
   useEffect(() => {
