@@ -19,6 +19,7 @@ import { useFeedItemValue } from "~/lib/data/store";
 import { ArticleContent } from "~/components/feed/read/ArticleContent";
 import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import {
+  getClosestVisibleElement,
   getElements,
   isElementInViewport,
   useArticleNavigation,
@@ -103,15 +104,16 @@ function ReadPage() {
   useOpenOriginalShortcut(feedItem?.url);
 
   // Arrow key navigation between paragraphs/headings
-  const { selectedIndex, selectElement } = useArticleNavigation(articleRef);
+  const { scrollToElement } = useArticleNavigation(articleRef);
 
   // Save progress 500ms after last scroll event
   useDebouncedSaveProgress({
     contentId: params.id,
     getProgress: () => {
       const elements = getElements(articleRef.current);
+      const closestVisibleIndex = getClosestVisibleElement(elements);
       return {
-        progress: Math.max(selectedIndex, 0),
+        progress: Math.max(closestVisibleIndex, 0),
         duration: elements.length,
       };
     },
@@ -120,24 +122,48 @@ function ReadPage() {
   // Restore progress on open — wait a frame so layout is complete. Track the
   // restored value so a later server refresh can replace stale hydrated data.
   const restoredProgressRef = useRef<number | null>(null);
+  const restoredElementRef = useRef<HTMLElement | null>(null);
+  const isEntryRestorationCancelledRef = useRef(false);
 
   useEffect(() => {
     restoredProgressRef.current = null;
+    restoredElementRef.current = null;
+    isEntryRestorationCancelledRef.current = false;
+  }, [params.id]);
+
+  useEffect(() => {
+    const cancelEntryRestoration = () => {
+      isEntryRestorationCancelledRef.current = true;
+    };
+
+    window.addEventListener("wheel", cancelEntryRestoration, { passive: true });
+    window.addEventListener("touchstart", cancelEntryRestoration, {
+      passive: true,
+    });
+    window.addEventListener("pointerdown", cancelEntryRestoration, {
+      passive: true,
+    });
+    window.addEventListener("keydown", cancelEntryRestoration);
+
+    return () => {
+      window.removeEventListener("wheel", cancelEntryRestoration);
+      window.removeEventListener("touchstart", cancelEntryRestoration);
+      window.removeEventListener("pointerdown", cancelEntryRestoration);
+      window.removeEventListener("keydown", cancelEntryRestoration);
+    };
   }, [params.id]);
 
   useEffect(() => {
     if (feedItem == null) return;
+    if (isEntryRestorationCancelledRef.current) return;
 
     const progress = feedItem.progress ?? 0;
-    const selectedElement = articleRef.current?.querySelector(
-      "[data-article-selected]",
-    );
-    const hasVisibleRestoredSelection =
+    const hasVisibleRestoredElement =
       restoredProgressRef.current === progress &&
-      selectedElement != null &&
-      isElementInViewport(selectedElement);
+      restoredElementRef.current != null &&
+      isElementInViewport(restoredElementRef.current);
 
-    if (hasVisibleRestoredSelection) return;
+    if (hasVisibleRestoredElement) return;
 
     if (progress <= 0) {
       if (restoredProgressRef.current !== null) return;
@@ -148,16 +174,20 @@ function ReadPage() {
     }
 
     const restoreAnimationFrame = requestAnimationFrame(() => {
+      if (isEntryRestorationCancelledRef.current) return;
+
       const elements = getElements(articleRef.current);
       if (elements.length === 0) return;
 
       const targetIndex = Math.min(progress, elements.length - 1);
+      const targetElement = elements[targetIndex]!;
       restoredProgressRef.current = progress;
-      selectElement(elements, targetIndex, true);
+      restoredElementRef.current = targetElement;
+      scrollToElement(targetElement, true);
     });
 
     return () => cancelAnimationFrame(restoreAnimationFrame);
-  }, [params.id, feedItem, selectElement]);
+  }, [params.id, feedItem, scrollToElement]);
 
   // Truncation alert
   const { mutate: editFeed } = useEditFeedMutation();
