@@ -20,6 +20,7 @@ import {
 import { useFeedItemValue } from "~/lib/data/store";
 import { useMediaQuery } from "~/lib/hooks/use-media-query";
 import { useShortcut } from "~/lib/hooks/useShortcut";
+import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 
 export function ContentActions({ contentID }: { contentID: string }) {
   const { view } = useView();
@@ -49,7 +50,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
     });
   };
 
-  useShortcut("s", () => {
+  useShortcut(SHORTCUT_KEYS.TOGGLE_SAVED, () => {
     void toggleWatchLater();
   });
 
@@ -62,7 +63,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
     });
   };
 
-  useShortcut("e", () => {
+  useShortcut(SHORTCUT_KEYS.TOGGLE_READ, () => {
     void toggleWatched();
   });
 
@@ -71,10 +72,21 @@ export function ContentActions({ contentID }: { contentID: string }) {
     await saveToInstapaper({ feedItemId: video.id });
   };
 
-  useShortcut("s", () => {
-    if (showInstapaperAction) {
-      void handleSaveToInstapaper();
+  const handleSaveAndSendToInstapaper = () => {
+    if (!video || !showInstapaperAction) return;
+
+    if (!video.isWatchLater) {
+      void setWatchLaterValue({
+        id: video.id,
+        feedId: video.feedId,
+        isWatchLater: true,
+      });
     }
+    void handleSaveToInstapaper();
+  };
+
+  useShortcut(SHORTCUT_KEYS.SEND_TO_INSTAPAPER, () => {
+    handleSaveAndSendToInstapaper();
   });
 
   if (!video) return null;
@@ -124,7 +136,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
     <div className="flex w-full items-center justify-center gap-2 p-6">
       {showInstapaperAction && (
         <ButtonWithShortcut
-          shortcut="s"
+          shortcut={SHORTCUT_KEYS.SEND_TO_INSTAPAPER}
           variant="outline"
           onClick={handleSaveToInstapaper}
           disabled={isSavingToInstapaper}
@@ -135,7 +147,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
         </ButtonWithShortcut>
       )}
       <ButtonWithShortcut
-        shortcut="s"
+        shortcut={SHORTCUT_KEYS.TOGGLE_SAVED}
         variant={isWatchLater ? "secondary" : "outline"}
         onClick={toggleWatchLater}
         size="icon md:default"
@@ -150,7 +162,7 @@ export function ContentActions({ contentID }: { contentID: string }) {
         </span>
       </ButtonWithShortcut>
       <ButtonWithShortcut
-        shortcut="e"
+        shortcut={SHORTCUT_KEYS.TOGGLE_READ}
         variant={isWatched ? "secondary" : "outline"}
         onClick={toggleWatched}
         size="icon md:default"
