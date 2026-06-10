@@ -2581,10 +2581,11 @@ export const requestItemsByFeed = protectedProcedure
       })) as ApplicationFeedItem[];
 
       // Publish items in chunks for large result sets
-      for (const chunk of prepareArrayChunks(
+      const chunks = prepareArrayChunks(
         applicationFeedItems,
         GET_BY_VIEW_CHUNK_SIZE,
-      )) {
+      );
+      for (const [chunkIndex, chunk] of chunks.entries()) {
         await publisher.publish(channel, {
           source: "feed",
           chunk: {
@@ -2594,7 +2595,7 @@ export const requestItemsByFeed = protectedProcedure
             visibilityFilter: input.visibilityFilter,
             hasMore,
             nextCursor,
-            replacesScope: input.cursor == null,
+            replacesScope: input.cursor == null && chunkIndex === 0,
           },
         });
       }
@@ -2731,10 +2732,11 @@ export const requestItemsByCategoryId = protectedProcedure
       );
 
       // Publish items in chunks for large result sets
-      for (const chunk of prepareArrayChunks(
+      const chunks = prepareArrayChunks(
         applicationFeedItems,
         GET_BY_VIEW_CHUNK_SIZE,
-      )) {
+      );
+      for (const [chunkIndex, chunk] of chunks.entries()) {
         await publisher.publish(channel, {
           source: "category",
           chunk: {
@@ -2744,7 +2746,7 @@ export const requestItemsByCategoryId = protectedProcedure
             visibilityFilter: input.visibilityFilter,
             hasMore,
             nextCursor,
-            replacesScope: input.cursor == null,
+            replacesScope: input.cursor == null && chunkIndex === 0,
           },
         });
       }
@@ -3208,11 +3210,11 @@ export const getItemsByVisibility = protectedProcedure
         feedsById,
       );
 
-      // Yield items in chunks for large result sets
-      for (const chunk of prepareArrayChunks(
+      const chunks = prepareArrayChunks(
         applicationFeedItems,
         ITEMS_BY_VISIBILITY_CHUNK_SIZE,
-      )) {
+      );
+      for (const [chunkIndex, chunk] of chunks.entries()) {
         yield {
           type: "feed-items",
           viewId: input.viewId,
@@ -3220,11 +3222,10 @@ export const getItemsByVisibility = protectedProcedure
           visibilityFilter: input.visibilityFilter,
           hasMore,
           nextCursor,
-          replacesScope: input.cursor == null,
+          replacesScope: input.cursor == null && chunkIndex === 0,
         } as GetItemsByVisibilityChunk;
       }
 
-      // If no items, still yield an empty response
       if (applicationFeedItems.length === 0) {
         yield {
           type: "feed-items",

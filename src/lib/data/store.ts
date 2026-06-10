@@ -351,7 +351,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 scopeFeedItemIds: get().scopeFeedItemIds,
                 scopeKey: getFeedItemScopeKey("view", viewId, visibilityFilter),
                 itemIds: chunk.feedItems.map((item) => item.id),
-                replace: true,
+                replace: chunk.replacesScope === true,
               }),
               viewPaginationState: {
                 ...get().viewPaginationState,
