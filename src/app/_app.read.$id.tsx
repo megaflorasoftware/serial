@@ -20,6 +20,7 @@ import { ArticleContent } from "~/components/feed/read/ArticleContent";
 import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import {
   getElements,
+  isElementInViewport,
   useArticleNavigation,
 } from "~/lib/hooks/useArticleNavigation";
 import { getScrollContainer } from "~/lib/scroll";
@@ -116,33 +117,46 @@ function ReadPage() {
     },
   });
 
-  // Restore progress on open — wait a frame so layout is complete
-  const hasRestoredRef = useRef(false);
+  // Restore progress on open — wait a frame so layout is complete. Track the
+  // restored value so a later server refresh can replace stale hydrated data.
+  const restoredProgressRef = useRef<number | null>(null);
 
   useEffect(() => {
-    hasRestoredRef.current = false;
+    restoredProgressRef.current = null;
   }, [params.id]);
 
   useEffect(() => {
-    if (hasRestoredRef.current) return;
     if (feedItem == null) return;
 
     const progress = feedItem.progress ?? 0;
+    const selectedElement = articleRef.current?.querySelector(
+      "[data-article-selected]",
+    );
+    const hasVisibleRestoredSelection =
+      restoredProgressRef.current === progress &&
+      selectedElement != null &&
+      isElementInViewport(selectedElement);
+
+    if (hasVisibleRestoredSelection) return;
 
     if (progress <= 0) {
-      hasRestoredRef.current = true;
+      if (restoredProgressRef.current !== null) return;
+
+      restoredProgressRef.current = progress;
       getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
       return;
     }
 
-    const elements = getElements(articleRef.current);
-    if (elements.length === 0) return;
+    const restoreAnimationFrame = requestAnimationFrame(() => {
+      const elements = getElements(articleRef.current);
+      if (elements.length === 0) return;
 
-    const targetIndex = Math.min(progress, elements.length - 1);
-    hasRestoredRef.current = true;
-    requestAnimationFrame(() => {
+      const targetIndex = Math.min(progress, elements.length - 1);
+      restoredProgressRef.current = progress;
       selectElement(elements, targetIndex, true);
     });
+
+    return () => cancelAnimationFrame(restoreAnimationFrame);
   }, [params.id, feedItem, selectElement]);
 
   // Truncation alert

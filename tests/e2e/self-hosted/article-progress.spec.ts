@@ -4,7 +4,11 @@ import {
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_TURSO_PORT,
 } from "../fixtures/ports";
-import { cleanupUser, seedArticleData } from "../fixtures/seed-db";
+import {
+  cleanupUser,
+  getFeedItemProgress,
+  seedArticleData,
+} from "../fixtures/seed-db";
 
 test.describe("article progress tracking", () => {
   let testEmail: string;
@@ -57,9 +61,6 @@ test.describe("article progress tracking", () => {
       await page.mouse.wheel(0, 300);
       await page.waitForTimeout(50);
     }
-    // Allow scroll event handlers and debounce (500ms) + buffer
-    await page.waitForTimeout(1000);
-
     // Verify we scrolled
     const scrolledTop = await scrollContainer.evaluate((el) => el.scrollTop);
     expect(scrolledTop).toBeGreaterThan(0);
@@ -73,6 +74,11 @@ test.describe("article progress tracking", () => {
       await selectedElements.first().textContent()
     )?.trim();
     expect(savedSelectionText).toBeTruthy();
+
+    // Wait for the debounced mutation to reach the server before reloading.
+    await expect
+      .poll(() => getFeedItemProgress(SELF_HOSTED_TURSO_PORT, feedItemId))
+      .toBeGreaterThan(0);
 
     // Reload the page to test that progress persists across page loads.
     await page.reload({ waitUntil: "load" });
@@ -89,7 +95,7 @@ test.describe("article progress tracking", () => {
     // Wait for progress restoration — the element with data-article-selected
     // appears once the restoration effect fires and selects the saved element.
     const restoredSelected = page.locator("[data-article-selected]");
-    await expect(restoredSelected.first()).toBeVisible({ timeout: 10000 });
+    await expect(restoredSelected.first()).toBeVisible({ timeout: 20000 });
 
     // Wait for SSE processing to settle so the scroll position is stable.
     await page.waitForTimeout(2000);

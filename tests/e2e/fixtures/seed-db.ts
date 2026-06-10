@@ -33,6 +33,18 @@ export async function cleanupUser(tursoPort: number, email: string) {
   client.close();
 }
 
+export async function getFeedItemProgress(tursoPort: number, id: string) {
+  const { db, client } = getDb(tursoPort);
+  const feedItem = await db
+    .select({ progress: schema.feedItems.progress })
+    .from(schema.feedItems)
+    .where(eq(schema.feedItems.id, id))
+    .get();
+  client.close();
+
+  return feedItem?.progress ?? null;
+}
+
 function uniqueId() {
   return randomBytes(8).toString("hex");
 }
