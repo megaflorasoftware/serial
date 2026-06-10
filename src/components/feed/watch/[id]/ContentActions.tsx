@@ -72,21 +72,8 @@ export function ContentActions({ contentID }: { contentID: string }) {
     await saveToInstapaper({ feedItemId: video.id });
   };
 
-  const handleSaveAndSendToInstapaper = () => {
-    if (!video || !showInstapaperAction) return;
-
-    if (!video.isWatchLater) {
-      void setWatchLaterValue({
-        id: video.id,
-        feedId: video.feedId,
-        isWatchLater: true,
-      });
-    }
-    void handleSaveToInstapaper();
-  };
-
   useShortcut(SHORTCUT_KEYS.SEND_TO_INSTAPAPER, () => {
-    handleSaveAndSendToInstapaper();
+    void handleSaveToInstapaper();
   });
 
   if (!video) return null;

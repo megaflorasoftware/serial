@@ -607,10 +607,9 @@ export function useFeedItemNavigation(
   useShortcut(getShortcutKey(SHORTCUT_KEYS.SEND_TO_INSTAPAPER), () => {
     if (pathname !== "/" || !selectedItemId || !showInstapaperAction) return;
 
-    selectedItemActions.markAsWatchLater();
     void saveToInstapaper({ feedItemId: selectedItemId });
     const idx = items.indexOf(selectedItemId);
-    selectItemAfterCurrentItemLeavesView(idx);
+    selectNextItem(idx);
   });
 
   useEffect(() => {

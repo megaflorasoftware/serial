@@ -61,21 +61,6 @@ export function useFeedItemActions(itemId: string) {
     });
   }, [item, itemId]);
 
-  const markAsWatchLater = useCallback(() => {
-    if (!item || item.isWatchLater) return;
-
-    void orpcRouterClient.feedItem.setWatchLaterValue({
-      id: itemId,
-      feedId: item.feedId,
-      isWatchLater: true,
-    });
-    feedItemsStore.getState().setFeedItem(itemId, {
-      ...item,
-      isWatchLater: true,
-      isWatchLaterUpdatedAt: new Date(),
-    });
-  }, [item, itemId]);
-
   const openItem = useCallback(() => {
     if (!item) return;
 
@@ -100,7 +85,6 @@ export function useFeedItemActions(itemId: string) {
   return {
     toggleRead,
     toggleWatchLater,
-    markAsWatchLater,
     markAsRead,
     openItem,
     openOriginal,
