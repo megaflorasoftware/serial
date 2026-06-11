@@ -5,7 +5,6 @@ import {
   renderReleaseOgImage,
 } from "~/server/og/release";
 import {
-  findReleaseScreenshot,
   getReleaseOgResponse,
   RELEASE_OG_CACHE_CONTROL,
 } from "~/server/og/releaseResponse";
@@ -121,15 +120,27 @@ describe("getReleaseOgResponse", () => {
     );
   });
 
-  it("finds a release screenshot matching the release slug", () => {
-    expect(findReleaseScreenshot("2026-06-11")).toMatch(
-      /^data:image\/png;base64,/,
+  it("checks for the release's public OG screenshot", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("Not Found", {
+        status: 404,
+      }),
     );
-  });
+    vi.stubGlobal("fetch", fetchMock);
 
-  it("falls back when no matching release screenshot exists", async () => {
-    expect(findReleaseScreenshot("public-release")).toBeUndefined();
-    expect((await getReleaseOgResponse("public-release")).status).toBe(200);
+    try {
+      const response = await getReleaseOgResponse(
+        "public-release",
+        "https://serial.tube",
+      );
+
+      expect(response.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledWith(
+        new URL("https://serial.tube/releases/public-release/og.png"),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("returns 404 for an unknown release", async () => {

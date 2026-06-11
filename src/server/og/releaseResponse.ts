@@ -4,24 +4,34 @@ import { findReleaseWithSlug } from "~/lib/markdown/loaders";
 export const RELEASE_OG_CACHE_CONTROL =
   "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800";
 
-const releaseScreenshots = import.meta.glob("../../content/releases/*.png", {
-  eager: true,
-  import: "default",
-  query: "?inline",
-});
+async function getReleaseScreenshotDataUrl(slug: string, baseUrl: string) {
+  try {
+    const screenshotUrl = new URL(
+      `/releases/${encodeURIComponent(slug)}/og.png`,
+      baseUrl,
+    );
+    const response = await fetch(screenshotUrl);
+    if (!response.ok) return undefined;
 
-export function findReleaseScreenshot(slug: string) {
-  const screenshot = releaseScreenshots[`../../content/releases/${slug}.png`];
-  return typeof screenshot === "string" ? screenshot : undefined;
+    const contentType = response.headers.get("Content-Type");
+    if (!contentType?.startsWith("image/")) return undefined;
+
+    const screenshotBuffer = Buffer.from(await response.arrayBuffer());
+    return `data:${contentType};base64,${screenshotBuffer.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
 }
 
-export async function getReleaseOgResponse(slug: string) {
+export async function getReleaseOgResponse(slug: string, baseUrl?: string) {
   const release = findReleaseWithSlug(slug);
   if (!release) {
     return new Response("Not Found", { status: 404 });
   }
 
-  const screenshotDataUrl = findReleaseScreenshot(release.slug);
+  const screenshotDataUrl = baseUrl
+    ? await getReleaseScreenshotDataUrl(release.slug, baseUrl)
+    : undefined;
   const image = await renderReleaseOgImage(release, screenshotDataUrl);
   return new Response(new Uint8Array(image), {
     status: 200,
