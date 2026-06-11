@@ -1,0 +1,47 @@
+name: Standard.Site Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/content/releases/**"
+      - "src/lib/standard-site/**"
+      - "scripts/sync-standard-site.ts"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only print the planned changes
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync Standard.Site records
+        run: pnpm standard-site:sync ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          STANDARD_SITE_PDS_URL: ${{ vars.STANDARD_SITE_PDS_URL }}
+          STANDARD_SITE_IDENTIFIER: ${{ vars.STANDARD_SITE_IDENTIFIER }}
+          STANDARD_SITE_APP_PASSWORD: ${{ secrets.STANDARD_SITE_APP_PASSWORD }}
+          VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI: ${{ vars.VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI }}
