@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 import satori from "satori";
 import sharp from "sharp";
 import serialLogoDataUrl from "../../../public/icon-256.png?inline";
+import defaultScreenshotDataUrl from "../../../public/welcome/screenshot-desktop-light.jpeg?inline";
 import outfitBoldDataUrl from "./assets/Outfit-Bold.ttf?inline";
 import outfitRegularDataUrl from "./assets/Outfit-Regular.ttf?inline";
 
@@ -9,7 +10,7 @@ import type { Release } from "content-collections";
 
 type ReleaseOgData = Pick<
   Release,
-  "description" | "publish_date" | "slug" | "title"
+  "description" | "publish_date" | "screenshot" | "slug" | "title"
 >;
 
 export const RELEASE_OG_IMAGE_SIZE = {
@@ -20,13 +21,22 @@ export const RELEASE_OG_IMAGE_SIZE = {
 const RELEASE_OG_COLORS = {
   background: "#ffffff",
   foreground: "#1d1b1a",
-  muted: "#efefeb",
+  muted: "#f5f5f3",
   mutedForeground: "#777777",
 } as const;
 
 const RELEASE_OG_TEXT_LIMITS = {
-  title: 100,
-  description: 190,
+  title: 72,
+  description: 150,
+} as const;
+
+const RELEASE_OG_LAYOUT = {
+  edge: 48,
+  releaseIconSize: 64,
+  screenshotHeight: 533,
+  screenshotLeft: 399,
+  screenshotWidth: 946,
+  textWidth: 303,
 } as const;
 
 function decodeFontDataUrl(dataUrl: string) {
@@ -70,58 +80,103 @@ function NotebookTextIcon() {
   );
 }
 
-function ReleaseOgImage({ release }: { release: ReleaseOgData }) {
+function getReleaseTypography(title: string, description?: string) {
+  const combinedLength = title.length + (description?.length ?? 0);
+
+  if (title.length > 48 || combinedLength > 155) {
+    return {
+      descriptionFontSize: 18,
+      titleFontSize: 36,
+    } as const;
+  }
+
+  if (title.length > 30 || combinedLength > 100) {
+    return {
+      descriptionFontSize: 20,
+      titleFontSize: 42,
+    } as const;
+  }
+
+  return {
+    descriptionFontSize: 22,
+    titleFontSize: 48,
+  } as const;
+}
+
+function ReleaseOgImage({
+  release,
+  screenshotDataUrl,
+}: {
+  release: ReleaseOgData;
+  screenshotDataUrl?: string;
+}) {
   const title = truncateText(release.title, RELEASE_OG_TEXT_LIMITS.title);
   const description = release.description
     ? truncateText(release.description, RELEASE_OG_TEXT_LIMITS.description)
     : undefined;
+  const typography = getReleaseTypography(title, description);
 
   return (
     <div
       style={{
-        alignItems: "center",
         backgroundColor: RELEASE_OG_COLORS.background,
         color: RELEASE_OG_COLORS.foreground,
         display: "flex",
-        flexDirection: "column",
         fontFamily: "Outfit",
         height: "100%",
-        justifyContent: "center",
-        padding: "64px 80px",
         position: "relative",
-        textAlign: "center",
         width: "100%",
       }}
     >
       <div
         style={{
           alignItems: "center",
+          backgroundColor: RELEASE_OG_COLORS.muted,
+          borderRadius: "16px",
+          display: "flex",
+          height: RELEASE_OG_LAYOUT.releaseIconSize,
+          justifyContent: "center",
+          left: RELEASE_OG_LAYOUT.edge,
+          position: "absolute",
+          top: RELEASE_OG_LAYOUT.edge,
+          width: RELEASE_OG_LAYOUT.releaseIconSize,
+        }}
+      >
+        <div style={{ display: "flex", transform: "scale(0.75)" }}>
+          <NotebookTextIcon />
+        </div>
+      </div>
+      <div
+        style={{
           display: "flex",
           flexDirection: "column",
-          maxWidth: "1020px",
+          left: RELEASE_OG_LAYOUT.edge,
+          position: "absolute",
+          top: "176px",
+          width: `${RELEASE_OG_LAYOUT.textWidth}px`,
         }}
       >
         <div
           style={{
-            alignItems: "center",
-            backgroundColor: RELEASE_OG_COLORS.muted,
-            borderRadius: "20px",
+            color: RELEASE_OG_COLORS.mutedForeground,
             display: "flex",
-            height: "92px",
-            justifyContent: "center",
-            marginBottom: "28px",
-            width: "92px",
+            fontSize: "18px",
+            fontWeight: 700,
+            letterSpacing: "1.4px",
+            lineHeight: 1.2,
+            textTransform: "uppercase",
           }}
         >
-          <NotebookTextIcon />
+          {dayjs(release.publish_date).format("MMMM D, YYYY")}
         </div>
         <div
           style={{
             display: "flex",
-            fontSize: title.length > 60 ? "56px" : "64px",
+            fontSize: `${typography.titleFontSize}px`,
             fontWeight: 700,
-            letterSpacing: "-1.5px",
-            lineHeight: 1.08,
+            letterSpacing: "-1.2px",
+            lineHeight: 1.02,
+            marginTop: "16px",
           }}
         >
           {title}
@@ -129,37 +184,51 @@ function ReleaseOgImage({ release }: { release: ReleaseOgData }) {
         {description && (
           <div
             style={{
+              color: RELEASE_OG_COLORS.mutedForeground,
               display: "flex",
-              fontSize: "30px",
-              lineHeight: 1.25,
-              marginTop: "18px",
-              maxWidth: "960px",
+              fontSize: `${typography.descriptionFontSize}px`,
+              lineHeight: 1.18,
+              marginTop: "14px",
             }}
           >
             {description}
           </div>
         )}
-        <div
+      </div>
+      <div
+        style={{
+          borderRadius: "16px",
+          boxShadow: "0 -4px 16px rgba(0, 0, 0, 0.2)",
+          display: "flex",
+          height: `${RELEASE_OG_LAYOUT.screenshotHeight}px`,
+          left: `${RELEASE_OG_LAYOUT.screenshotLeft}px`,
+          overflow: "hidden",
+          position: "absolute",
+          top: `${RELEASE_OG_LAYOUT.edge}px`,
+          width: `${RELEASE_OG_LAYOUT.screenshotWidth}px`,
+        }}
+      >
+        <img
+          src={screenshotDataUrl ?? defaultScreenshotDataUrl}
+          alt=""
+          width={RELEASE_OG_LAYOUT.screenshotWidth}
+          height={RELEASE_OG_LAYOUT.screenshotHeight}
           style={{
-            color: RELEASE_OG_COLORS.mutedForeground,
-            display: "flex",
-            fontSize: "28px",
-            lineHeight: 1.2,
-            marginTop: "14px",
+            height: RELEASE_OG_LAYOUT.screenshotHeight,
+            objectFit: "cover",
+            width: RELEASE_OG_LAYOUT.screenshotWidth,
           }}
-        >
-          {dayjs(release.publish_date).format("MMMM DD, YYYY")}
-        </div>
+        />
       </div>
       <div
         style={{
           alignItems: "center",
           bottom: "36px",
-          color: RELEASE_OG_COLORS.foreground,
           display: "flex",
           fontSize: "24px",
           fontWeight: 700,
           gap: "10px",
+          left: `${RELEASE_OG_LAYOUT.edge}px`,
           letterSpacing: "0.5px",
           position: "absolute",
         }}
@@ -177,24 +246,30 @@ function ReleaseOgImage({ release }: { release: ReleaseOgData }) {
   );
 }
 
-export async function renderReleaseOgImage(release: ReleaseOgData) {
-  const svg = await satori(<ReleaseOgImage release={release} />, {
-    ...RELEASE_OG_IMAGE_SIZE,
-    fonts: [
-      {
-        name: "Outfit",
-        data: OUTFIT_FONTS.regular,
-        weight: 400,
-        style: "normal",
-      },
-      {
-        name: "Outfit",
-        data: OUTFIT_FONTS.bold,
-        weight: 700,
-        style: "normal",
-      },
-    ],
-  });
+export async function renderReleaseOgImage(
+  release: ReleaseOgData,
+  screenshotDataUrl?: string,
+) {
+  const svg = await satori(
+    <ReleaseOgImage release={release} screenshotDataUrl={screenshotDataUrl} />,
+    {
+      ...RELEASE_OG_IMAGE_SIZE,
+      fonts: [
+        {
+          name: "Outfit",
+          data: OUTFIT_FONTS.regular,
+          weight: 400,
+          style: "normal",
+        },
+        {
+          name: "Outfit",
+          data: OUTFIT_FONTS.bold,
+          weight: 700,
+          style: "normal",
+        },
+      ],
+    },
+  );
 
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
