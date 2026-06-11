@@ -11,7 +11,6 @@ function extractFrontMatter(content: string) {
 const markdownReleaseSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
-  screenshot: z.string().optional(),
   publish_date: z.string().date(),
   public: z.boolean(),
   content: z.string(),

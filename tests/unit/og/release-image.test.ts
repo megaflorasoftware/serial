@@ -5,6 +5,7 @@ import {
   renderReleaseOgImage,
 } from "~/server/og/release";
 import {
+  findReleaseScreenshot,
   getReleaseOgResponse,
   RELEASE_OG_CACHE_CONTROL,
 } from "~/server/og/releaseResponse";
@@ -26,15 +27,6 @@ vi.mock("content-collections", () => ({
       title: "Private release",
       publish_date: "2026-06-10",
       public: false,
-      content: "",
-      excerpt: "",
-    },
-    {
-      slug: "screenshot-release",
-      title: "Screenshot release",
-      screenshot: "/releases/screenshots/screenshot-release.png",
-      publish_date: "2026-06-10",
-      public: true,
       content: "",
       excerpt: "",
     },
@@ -129,48 +121,15 @@ describe("getReleaseOgResponse", () => {
     );
   });
 
-  it("embeds a configured release screenshot", async () => {
-    const screenshot = await sharp({
-      create: {
-        width: 32,
-        height: 18,
-        channels: 3,
-        background: "#000000",
-      },
-    })
-      .png()
-      .toBuffer();
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(new Uint8Array(screenshot), {
-        headers: { "Content-Type": "image/png" },
-      }),
+  it("finds a release screenshot matching the release slug", () => {
+    expect(findReleaseScreenshot("2026-06-11")).toMatch(
+      /^data:image\/png;base64,/,
     );
-    vi.stubGlobal("fetch", fetchMock);
+  });
 
-    try {
-      const response = await getReleaseOgResponse(
-        "screenshot-release",
-        "https://serial.tube",
-      );
-      const screenshotRegion = await sharp(await response.arrayBuffer())
-        .extract({ left: 450, top: 100, width: 50, height: 50 })
-        .stats();
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        new URL(
-          "https://serial.tube/releases/screenshots/screenshot-release.png",
-        ),
-      );
-      expect(
-        Math.min(
-          ...screenshotRegion.channels
-            .slice(0, 3)
-            .map((channel) => channel.min),
-        ),
-      ).toBe(0);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+  it("falls back when no matching release screenshot exists", async () => {
+    expect(findReleaseScreenshot("public-release")).toBeUndefined();
+    expect((await getReleaseOgResponse("public-release")).status).toBe(200);
   });
 
   it("returns 404 for an unknown release", async () => {

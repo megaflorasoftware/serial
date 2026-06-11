@@ -10,7 +10,7 @@ import type { Release } from "content-collections";
 
 type ReleaseOgData = Pick<
   Release,
-  "description" | "publish_date" | "screenshot" | "slug" | "title"
+  "description" | "publish_date" | "slug" | "title"
 >;
 
 export const RELEASE_OG_IMAGE_SIZE = {
@@ -33,7 +33,7 @@ const RELEASE_OG_TEXT_LIMITS = {
 const RELEASE_OG_LAYOUT = {
   edge: 48,
   releaseIconSize: 64,
-  screenshotHeight: 533,
+  screenshotHeight: 946 / (16 / 9),
   screenshotLeft: 399,
   screenshotWidth: 946,
   textWidth: 303,
@@ -214,6 +214,7 @@ function ReleaseOgImage({
           width={RELEASE_OG_LAYOUT.screenshotWidth}
           height={RELEASE_OG_LAYOUT.screenshotHeight}
           style={{
+            borderRadius: "16px",
             height: RELEASE_OG_LAYOUT.screenshotHeight,
             objectFit: "cover",
             width: RELEASE_OG_LAYOUT.screenshotWidth,
