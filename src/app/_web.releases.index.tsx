@@ -2,24 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
 import { ContainerIcon } from "lucide-react";
 import { WebsiteHeader } from "~/components/welcome/WebsiteHeader";
-import { env } from "~/env";
-import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getAllReleases } from "~/lib/markdown/loaders";
-import { buildPublicationLink } from "~/lib/standard-site";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
 
 export const Route = createFileRoute("/_web/releases/")({
   component: RouteComponent,
-  head: () => {
-    const publicationLink = buildPublicationLink({
-      isMainInstance: IS_MAIN_INSTANCE,
-      publicationUri: env.VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI,
-    });
-
-    return {
-      links: publicationLink ? [publicationLink] : [],
-    };
-  },
   loader: async () => {
     const isAuthed = await fetchIsAuthed();
 

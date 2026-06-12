@@ -205,6 +205,7 @@ describe("Standard.Site reconciliation", () => {
     const plan = planStandardSiteSync({
       documents: [releaseDocument, guideDocument],
       publicationUri: PUBLICATION_URI,
+      existingPublications: [],
       existingDocuments: [],
     });
 
@@ -251,10 +252,12 @@ describe("Standard.Site reconciliation", () => {
     const plan = planStandardSiteSync({
       documents: [unchangedDocument, changedDocument],
       publicationUri: PUBLICATION_URI,
-      existingPublication: {
-        uri: PUBLICATION_URI,
-        value: buildPublicationRecord(),
-      },
+      existingPublications: [
+        {
+          uri: PUBLICATION_URI,
+          value: buildPublicationRecord(),
+        },
+      ],
       existingDocuments: [
         {
           uri: `at://did:plc:serialtest/site.standard.document/${unchangedRkey}`,
@@ -271,7 +274,7 @@ describe("Standard.Site reconciliation", () => {
         {
           uri: "at://did:plc:serialtest/site.standard.document/3bbbbbbbbbbbb",
           value: {
-            site: "at://did:plc:other/site.standard.publication/3cccccccccccc",
+            site: "at://did:plc:serialtest/site.standard.publication/3cccccccccccc",
           },
         },
       ],
@@ -295,5 +298,74 @@ describe("Standard.Site reconciliation", () => {
         rkey: "3aaaaaaaaaaaa",
       },
     ]);
+  });
+
+  it("coexists with other publications and their documents", () => {
+    const plan = planStandardSiteSync({
+      documents: [],
+      publicationUri: PUBLICATION_URI,
+      existingPublications: [
+        {
+          uri: "at://did:plc:serialtest/site.standard.publication/3aaaaaaaaaaaa",
+          value: buildPublicationRecord(),
+        },
+      ],
+      existingDocuments: [
+        {
+          uri: "at://did:plc:serialtest/site.standard.document/3bbbbbbbbbbbb",
+          value: {
+            site: "at://did:plc:serialtest/site.standard.publication/3aaaaaaaaaaaa",
+          },
+        },
+      ],
+    });
+
+    expect(plan).toMatchObject({
+      creates: 1,
+      updates: 0,
+      deletes: 0,
+    });
+    expect(plan.writes).toEqual([
+      {
+        $type: "com.atproto.repo.applyWrites#create",
+        collection: STANDARD_SITE.publicationCollection,
+        rkey: "3mnvfqfsk22zc",
+        value: buildPublicationRecord(),
+      },
+    ]);
+  });
+
+  it("rejects a document record key owned by another publication", () => {
+    const document = buildReleaseDocumentSource(makeRelease());
+    const rkey = getDocumentRkey(document);
+
+    expect(() =>
+      planStandardSiteSync({
+        documents: [document],
+        publicationUri: PUBLICATION_URI,
+        existingPublications: [],
+        existingDocuments: [
+          {
+            uri: `at://did:plc:serialtest/site.standard.document/${rkey}`,
+            value: {
+              site: "at://did:plc:serialtest/site.standard.publication/3bbbbbbbbbbbb",
+            },
+          },
+        ],
+      }),
+    ).toThrow(`record key ${rkey} belongs to another publication`);
+  });
+
+  it("rejects desired documents with colliding record keys", () => {
+    const document = buildReleaseDocumentSource(makeRelease());
+
+    expect(() =>
+      planStandardSiteSync({
+        documents: [document, document],
+        publicationUri: PUBLICATION_URI,
+        existingPublications: [],
+        existingDocuments: [],
+      }),
+    ).toThrow("must have unique record keys");
   });
 });

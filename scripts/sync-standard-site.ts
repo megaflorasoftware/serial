@@ -93,9 +93,7 @@ async function syncStandardSite() {
   const plan = planStandardSiteSync({
     documents,
     publicationUri,
-    existingPublication: existingPublications.find(
-      ({ uri }) => uri === publicationUri,
-    ),
+    existingPublications,
     existingDocuments,
   });
 

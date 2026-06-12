@@ -111,7 +111,7 @@ function getRecordRkey(record: StandardSiteRecord) {
 export function planStandardSiteSync(options: {
   documents: StandardSiteDocumentSource[];
   publicationUri: string;
-  existingPublication?: StandardSiteRecord;
+  existingPublications: StandardSiteRecord[];
   existingDocuments: StandardSiteRecord[];
 }): StandardSiteSyncPlan {
   const desiredDocuments = options.documents.map((document) => ({
@@ -121,12 +121,27 @@ export function planStandardSiteSync(options: {
   const desiredDocumentRkeys = new Set(
     desiredDocuments.map(({ rkey }) => rkey),
   );
+
+  if (desiredDocumentRkeys.size !== desiredDocuments.length) {
+    throw new Error("Standard.Site documents must have unique record keys.");
+  }
+
   const existingDocumentsByRkey = new Map(
-    options.existingDocuments.flatMap((record) => {
-      const rkey = getRecordRkey(record);
-      return rkey ? [[rkey, record] as const] : [];
-    }),
+    options.existingDocuments.map((record) => [getRecordRkey(record), record]),
   );
+  const conflictingDocument = desiredDocuments.find(({ rkey }) => {
+    const existingDocument = existingDocumentsByRkey.get(rkey);
+    return (
+      existingDocument && existingDocument.value.site !== options.publicationUri
+    );
+  });
+
+  if (conflictingDocument) {
+    throw new Error(
+      `Standard.Site document record key ${conflictingDocument.rkey} belongs to another publication.`,
+    );
+  }
+
   const writes: ComAtprotoRepoApplyWrites.InputSchema["writes"] = [];
   let creates = 0;
   let updates = 0;
@@ -161,12 +176,15 @@ export function planStandardSiteSync(options: {
   }
 
   const { rkey: publicationRkey } = parsePublicationUri(options.publicationUri);
+  const existingPublication = options.existingPublications.find(
+    ({ uri }) => uri === options.publicationUri,
+  );
 
   planUpsert(
     STANDARD_SITE.publicationCollection,
     publicationRkey,
     buildPublicationRecord(),
-    options.existingPublication,
+    existingPublication,
   );
 
   for (const { rkey, record } of desiredDocuments) {
@@ -182,7 +200,7 @@ export function planStandardSiteSync(options: {
     if (existingDocument.value.site !== options.publicationUri) continue;
 
     const rkey = getRecordRkey(existingDocument);
-    if (!rkey || desiredDocumentRkeys.has(rkey)) continue;
+    if (desiredDocumentRkeys.has(rkey)) continue;
 
     writes.push({
       $type: "com.atproto.repo.applyWrites#delete",
