@@ -1,5 +1,7 @@
-import { TID } from "@atproto/common-web";
 import type { BlogPost, Release } from "content-collections";
+
+const SORTABLE_BASE32_CHARACTERS = "234567abcdefghijklmnopqrstuvwxyz";
+const TID_LENGTH = 13;
 
 export const STANDARD_SITE = {
   documentCollection: "site.standard.document",
@@ -44,6 +46,34 @@ function hashString(value: string) {
   return hash >>> 0;
 }
 
+function encodeSortableBase32(value: number) {
+  let remainingValue = value;
+  let encodedValue = "";
+
+  while (remainingValue) {
+    const characterIndex = remainingValue % SORTABLE_BASE32_CHARACTERS.length;
+    encodedValue =
+      SORTABLE_BASE32_CHARACTERS.charAt(characterIndex) + encodedValue;
+    remainingValue = Math.floor(
+      remainingValue / SORTABLE_BASE32_CHARACTERS.length,
+    );
+  }
+
+  return encodedValue;
+}
+
+function buildTid(timestampMicroseconds: number, clockId: number) {
+  const timestamp = encodeSortableBase32(timestampMicroseconds);
+  const clock = encodeSortableBase32(clockId).padStart(2, "2");
+  const tid = `${timestamp}${clock}`;
+
+  if (tid.length !== TID_LENGTH) {
+    throw new Error(`Unable to build a valid TID from timestamp ${timestamp}.`);
+  }
+
+  return tid;
+}
+
 function buildDocumentSource(
   content: Pick<
     Release | BlogPost,
@@ -85,7 +115,7 @@ export function getDocumentRkey(
   const timestampMicroseconds =
     publishedAtMilliseconds * 1000 + (keyHash % 1_000_000);
 
-  return TID.fromTime(timestampMicroseconds, keyHash % 1024).toString();
+  return buildTid(timestampMicroseconds, keyHash % 1024);
 }
 
 export function parsePublicationUri(publicationUri: string) {

@@ -15,9 +15,6 @@ importers:
       '@atproto/api':
         specifier: ^0.20.13
         version: 0.20.13
-      '@atproto/common-web':
-        specifier: ^0.5.0
-        version: 0.5.0
       '@content-collections/core':
         specifier: ^0.14.3
         version: 0.14.3(typescript@6.0.2)

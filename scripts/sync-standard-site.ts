@@ -9,7 +9,10 @@ import {
   parsePublicationUri,
   STANDARD_SITE,
 } from "../src/lib/standard-site";
-import { planStandardSiteSync } from "../src/lib/standard-site/records";
+import {
+  assertStandardSiteSyncPlanIsSafe,
+  planStandardSiteSync,
+} from "../src/lib/standard-site/records";
 import type { StandardSiteRecord } from "../src/lib/standard-site/records";
 
 const syncEnv = createEnv({
@@ -30,6 +33,7 @@ const syncEnv = createEnv({
 });
 
 const isDryRun = process.argv.includes("--dry-run");
+const allowLargeDelete = process.argv.includes("--allow-large-delete");
 const publicationUri = syncEnv.VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI;
 const publication = parsePublicationUri(publicationUri);
 
@@ -96,6 +100,10 @@ async function syncStandardSite() {
     existingPublications,
     existingDocuments,
   });
+
+  if (!isDryRun) {
+    assertStandardSiteSyncPlanIsSafe(plan, { allowLargeDelete });
+  }
 
   console.log(
     `${isDryRun ? "Would apply" : "Applying"} ${plan.creates} creates, ${plan.updates} updates, and ${plan.deletes} deletes.`,

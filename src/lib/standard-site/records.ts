@@ -32,6 +32,11 @@ export type StandardSiteSyncPlan = {
   deletes: number;
 };
 
+export const STANDARD_SITE_SYNC_LIMITS = {
+  maximumAtomicWrites: 200,
+  maximumDeletesWithoutOverride: 5,
+} as const;
+
 type MarkdownNode = {
   type?: string;
   children?: MarkdownNode[];
@@ -216,4 +221,23 @@ export function planStandardSiteSync(options: {
     updates,
     deletes,
   };
+}
+
+export function assertStandardSiteSyncPlanIsSafe(
+  plan: StandardSiteSyncPlan,
+  options: { allowLargeDelete: boolean },
+) {
+  if (plan.writes.length > STANDARD_SITE_SYNC_LIMITS.maximumAtomicWrites) {
+    throw new Error(
+      `Standard.Site sync requires ${plan.writes.length} writes, exceeding the PDS atomic limit of ${STANDARD_SITE_SYNC_LIMITS.maximumAtomicWrites}. Split the content change into smaller atomic syncs.`,
+    );
+  }
+
+  const isLargeDelete =
+    plan.deletes > STANDARD_SITE_SYNC_LIMITS.maximumDeletesWithoutOverride;
+  if (isLargeDelete && !options.allowLargeDelete) {
+    throw new Error(
+      `Standard.Site sync would delete ${plan.deletes} documents. Re-run with --allow-large-delete after reviewing the dry-run output.`,
+    );
+  }
 }

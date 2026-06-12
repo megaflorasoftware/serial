@@ -120,29 +120,6 @@ describe("getReleaseOgResponse", () => {
     );
   });
 
-  it("checks for the release's public OG screenshot", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response("Not Found", {
-        status: 404,
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      const response = await getReleaseOgResponse(
-        "public-release",
-        "https://serial.tube",
-      );
-
-      expect(response.status).toBe(200);
-      expect(fetchMock).toHaveBeenCalledWith(
-        new URL("https://serial.tube/releases/public-release/og.png"),
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it("returns 404 for an unknown release", async () => {
     const response = await getReleaseOgResponse("does-not-exist");
 

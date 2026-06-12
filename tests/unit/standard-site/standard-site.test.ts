@@ -12,10 +12,12 @@ import {
   STANDARD_SITE,
 } from "~/lib/standard-site";
 import {
+  assertStandardSiteSyncPlanIsSafe,
   buildDocumentRecord,
   buildPublicationRecord,
   markdownToPlaintext,
   planStandardSiteSync,
+  STANDARD_SITE_SYNC_LIMITS,
 } from "~/lib/standard-site/records";
 
 const PUBLICATION_URI =
@@ -127,6 +129,7 @@ describe("Standard.Site record builders", () => {
     expect(rkey).toMatch(
       /^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/,
     );
+    expect(rkey).toBe("3mnvfqgl3qyiy");
     expect(getDocumentRkey(releaseDocument)).toBe(rkey);
     expect(buildDocumentUri(PUBLICATION_URI, releaseDocument)).toBe(
       `at://did:plc:serialtest/site.standard.document/${rkey}`,
@@ -367,5 +370,51 @@ describe("Standard.Site reconciliation", () => {
         existingDocuments: [],
       }),
     ).toThrow("must have unique record keys");
+  });
+
+  it("rejects plans that exceed the PDS atomic write limit", () => {
+    const writes = Array.from(
+      { length: STANDARD_SITE_SYNC_LIMITS.maximumAtomicWrites + 1 },
+      (_, index) => ({
+        $type: "com.atproto.repo.applyWrites#delete" as const,
+        collection: STANDARD_SITE.documentCollection,
+        rkey: `record-${index}`,
+      }),
+    );
+
+    expect(() =>
+      assertStandardSiteSyncPlanIsSafe(
+        {
+          writes,
+          creates: 0,
+          updates: 0,
+          deletes: writes.length,
+        },
+        { allowLargeDelete: true },
+      ),
+    ).toThrow("exceeding the PDS atomic limit");
+  });
+
+  it("requires an explicit override for large delete plans", () => {
+    const deleteCount =
+      STANDARD_SITE_SYNC_LIMITS.maximumDeletesWithoutOverride + 1;
+    const writes = Array.from({ length: deleteCount }, (_, index) => ({
+      $type: "com.atproto.repo.applyWrites#delete" as const,
+      collection: STANDARD_SITE.documentCollection,
+      rkey: `record-${index}`,
+    }));
+    const plan = {
+      writes,
+      creates: 0,
+      updates: 0,
+      deletes: deleteCount,
+    };
+
+    expect(() =>
+      assertStandardSiteSyncPlanIsSafe(plan, { allowLargeDelete: false }),
+    ).toThrow(`would delete ${deleteCount} documents`);
+    expect(() =>
+      assertStandardSiteSyncPlanIsSafe(plan, { allowLargeDelete: true }),
+    ).not.toThrow();
   });
 });
