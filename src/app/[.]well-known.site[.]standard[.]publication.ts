@@ -3,9 +3,7 @@ import { env } from "~/env";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { createPublicationVerificationResponse } from "~/lib/standard-site";
 
-export const Route = createFileRoute(
-  "/.well-known/site.standard.publication/releases",
-)({
+export const Route = createFileRoute("/.well-known/site.standard.publication")({
   server: {
     handlers: {
       GET: () =>

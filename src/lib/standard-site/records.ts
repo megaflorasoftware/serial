@@ -1,9 +1,12 @@
+import { isDeepStrictEqual } from "node:util";
+import { AtUri } from "@atproto/api";
 import { toString } from "mdast-util-to-string";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { getReleaseDocumentRkey, STANDARD_SITE } from ".";
-import type { Release } from "content-collections";
+import { getDocumentRkey, parsePublicationUri, STANDARD_SITE } from ".";
+import type { ComAtprotoRepoApplyWrites } from "@atproto/api";
+import type { StandardSiteDocumentSource } from ".";
 
 export type StandardSiteDocumentRecord = {
   $type: typeof STANDARD_SITE.documentCollection;
@@ -14,11 +17,19 @@ export type StandardSiteDocumentRecord = {
   tags: string[];
   textContent: string;
   description?: string;
+  updatedAt?: string;
 };
 
 export type StandardSiteRecord = {
   uri: string;
   value: Record<string, unknown>;
+};
+
+export type StandardSiteSyncPlan = {
+  writes: ComAtprotoRepoApplyWrites.InputSchema["writes"];
+  creates: number;
+  updates: number;
+  deletes: number;
 };
 
 type MarkdownNode = {
@@ -77,39 +88,114 @@ export function markdownToPlaintext(markdown: string) {
 }
 
 export function buildDocumentRecord(
-  release: Release,
+  document: StandardSiteDocumentSource,
   publicationUri: string,
 ): StandardSiteDocumentRecord {
   return {
     $type: STANDARD_SITE.documentCollection,
     site: publicationUri,
-    title: release.title,
-    path: `/${release.slug}`,
-    publishedAt: `${release.publish_date}T00:00:00.000Z`,
-    tags: [...STANDARD_SITE.releaseTags],
-    textContent: markdownToPlaintext(release.content),
-    ...(release.description ? { description: release.description } : {}),
+    title: document.title,
+    path: document.path,
+    publishedAt: document.publishedAt,
+    tags: [...document.tags],
+    textContent: markdownToPlaintext(document.markdownContent),
+    ...(document.description ? { description: document.description } : {}),
+    ...(document.updatedAt ? { updatedAt: document.updatedAt } : {}),
   };
 }
 
-export function planDocumentSync(
-  releases: Release[],
-  publicationUri: string,
-  existingRecords: StandardSiteRecord[],
-) {
-  const upserts = releases.map((release) => ({
-    rkey: getReleaseDocumentRkey(release),
-    record: buildDocumentRecord(release, publicationUri),
+function getRecordRkey(record: StandardSiteRecord) {
+  return new AtUri(record.uri).rkey;
+}
+
+export function planStandardSiteSync(options: {
+  documents: StandardSiteDocumentSource[];
+  publicationUri: string;
+  existingPublication?: StandardSiteRecord;
+  existingDocuments: StandardSiteRecord[];
+}): StandardSiteSyncPlan {
+  const desiredDocuments = options.documents.map((document) => ({
+    rkey: getDocumentRkey(document),
+    record: buildDocumentRecord(document, options.publicationUri),
   }));
-  const expectedRkeys = new Set(upserts.map(({ rkey }) => rkey));
+  const desiredDocumentRkeys = new Set(
+    desiredDocuments.map(({ rkey }) => rkey),
+  );
+  const existingDocumentsByRkey = new Map(
+    options.existingDocuments.flatMap((record) => {
+      const rkey = getRecordRkey(record);
+      return rkey ? [[rkey, record] as const] : [];
+    }),
+  );
+  const writes: ComAtprotoRepoApplyWrites.InputSchema["writes"] = [];
+  let creates = 0;
+  let updates = 0;
+  let deletes = 0;
 
-  const deletes = existingRecords.flatMap(({ uri, value }) => {
-    if (value.site !== publicationUri) return [];
+  function planUpsert(
+    collection: string,
+    rkey: string,
+    value: Record<string, unknown>,
+    existingRecord?: StandardSiteRecord,
+  ) {
+    if (!existingRecord) {
+      writes.push({
+        $type: "com.atproto.repo.applyWrites#create",
+        collection,
+        rkey,
+        value,
+      });
+      creates += 1;
+      return;
+    }
 
-    const rkey = uri.split("/").at(-1);
-    if (!rkey || expectedRkeys.has(rkey)) return [];
-    return [rkey];
-  });
+    if (isDeepStrictEqual(existingRecord.value, value)) return;
 
-  return { upserts, deletes };
+    writes.push({
+      $type: "com.atproto.repo.applyWrites#update",
+      collection,
+      rkey,
+      value,
+    });
+    updates += 1;
+  }
+
+  const { rkey: publicationRkey } = parsePublicationUri(options.publicationUri);
+
+  planUpsert(
+    STANDARD_SITE.publicationCollection,
+    publicationRkey,
+    buildPublicationRecord(),
+    options.existingPublication,
+  );
+
+  for (const { rkey, record } of desiredDocuments) {
+    planUpsert(
+      STANDARD_SITE.documentCollection,
+      rkey,
+      record,
+      existingDocumentsByRkey.get(rkey),
+    );
+  }
+
+  for (const existingDocument of options.existingDocuments) {
+    if (existingDocument.value.site !== options.publicationUri) continue;
+
+    const rkey = getRecordRkey(existingDocument);
+    if (!rkey || desiredDocumentRkeys.has(rkey)) continue;
+
+    writes.push({
+      $type: "com.atproto.repo.applyWrites#delete",
+      collection: STANDARD_SITE.documentCollection,
+      rkey,
+    });
+    deletes += 1;
+  }
+
+  return {
+    writes,
+    creates,
+    updates,
+    deletes,
+  };
 }

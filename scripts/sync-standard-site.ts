@@ -1,12 +1,15 @@
+import { fileURLToPath } from "node:url";
 import { AtpAgent } from "@atproto/api";
+import { createBuilder } from "@content-collections/core";
 import { createEnv } from "@t3-oss/env-core";
-import { allReleases } from "content-collections";
 import { z } from "zod";
-import { parsePublicationUri, STANDARD_SITE } from "../src/lib/standard-site";
 import {
-  buildPublicationRecord,
-  planDocumentSync,
-} from "../src/lib/standard-site/records";
+  buildGuideDocumentSource,
+  buildReleaseDocumentSource,
+  parsePublicationUri,
+  STANDARD_SITE,
+} from "../src/lib/standard-site";
+import { planStandardSiteSync } from "../src/lib/standard-site/records";
 import type { StandardSiteRecord } from "../src/lib/standard-site/records";
 
 const syncEnv = createEnv({
@@ -29,18 +32,35 @@ const syncEnv = createEnv({
 const isDryRun = process.argv.includes("--dry-run");
 const publicationUri = syncEnv.VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI;
 const publication = parsePublicationUri(publicationUri);
-const releases = allReleases
-  .filter((release) => release.public)
-  .sort((a, b) => a.publish_date.localeCompare(b.publish_date));
 
-async function listDocumentRecords(agent: AtpAgent, repo: string) {
+async function loadDocuments() {
+  const contentCollectionsConfigPath = fileURLToPath(
+    new URL("../content-collections.ts", import.meta.url),
+  );
+  const builder = await createBuilder(contentCollectionsConfigPath);
+  await builder.build();
+
+  const { allBlogPosts, allReleases } = await import("content-collections");
+  const releaseDocuments = allReleases
+    .filter((release) => release.public)
+    .map(buildReleaseDocumentSource);
+  const guideDocuments = allBlogPosts
+    .filter((guide) => guide.public)
+    .map(buildGuideDocumentSource);
+
+  return [...releaseDocuments, ...guideDocuments].sort((a, b) =>
+    a.publishedAt.localeCompare(b.publishedAt),
+  );
+}
+
+async function listRecords(agent: AtpAgent, repo: string, collection: string) {
   const records: StandardSiteRecord[] = [];
   let cursor: string | undefined;
 
   do {
     const response = await agent.com.atproto.repo.listRecords({
       repo,
-      collection: STANDARD_SITE.documentCollection,
+      collection,
       limit: 100,
       cursor,
     });
@@ -53,6 +73,7 @@ async function listDocumentRecords(agent: AtpAgent, repo: string) {
 }
 
 async function syncStandardSite() {
+  const documents = await loadDocuments();
   const agent = new AtpAgent({ service: syncEnv.STANDARD_SITE_PDS_URL });
   await agent.login({
     identifier: syncEnv.STANDARD_SITE_IDENTIFIER,
@@ -65,48 +86,37 @@ async function syncStandardSite() {
     );
   }
 
-  const existingRecords = await listDocumentRecords(agent, publication.did);
-  const plan = planDocumentSync(releases, publicationUri, existingRecords);
+  const [existingPublications, existingDocuments] = await Promise.all([
+    listRecords(agent, publication.did, STANDARD_SITE.publicationCollection),
+    listRecords(agent, publication.did, STANDARD_SITE.documentCollection),
+  ]);
+  const plan = planStandardSiteSync({
+    documents,
+    publicationUri,
+    existingPublication: existingPublications.find(
+      ({ uri }) => uri === publicationUri,
+    ),
+    existingDocuments,
+  });
 
   console.log(
-    `${isDryRun ? "Would sync" : "Syncing"} publication, ${plan.upserts.length} release documents, and ${plan.deletes.length} stale document deletions.`,
+    `${isDryRun ? "Would apply" : "Applying"} ${plan.creates} creates, ${plan.updates} updates, and ${plan.deletes} deletes.`,
   );
 
   if (isDryRun) {
-    for (const { rkey, record } of plan.upserts) {
-      console.log(
-        `PUT ${STANDARD_SITE.documentCollection}/${rkey} ${record.path}`,
-      );
-    }
-    for (const rkey of plan.deletes) {
-      console.log(`DELETE ${STANDARD_SITE.documentCollection}/${rkey}`);
+    for (const write of plan.writes) {
+      const operation = write.$type.split("#").at(-1)?.toUpperCase();
+      console.log(`${operation} ${write.collection}/${write.rkey}`);
     }
     return;
   }
 
-  await agent.com.atproto.repo.putRecord({
+  if (!plan.writes.length) return;
+
+  await agent.com.atproto.repo.applyWrites({
     repo: publication.did,
-    collection: STANDARD_SITE.publicationCollection,
-    rkey: publication.rkey,
-    record: buildPublicationRecord(),
+    writes: plan.writes,
   });
-
-  for (const { rkey, record } of plan.upserts) {
-    await agent.com.atproto.repo.putRecord({
-      repo: publication.did,
-      collection: STANDARD_SITE.documentCollection,
-      rkey,
-      record,
-    });
-  }
-
-  for (const rkey of plan.deletes) {
-    await agent.com.atproto.repo.deleteRecord({
-      repo: publication.did,
-      collection: STANDARD_SITE.documentCollection,
-      rkey,
-    });
-  }
 }
 
 await syncStandardSite();

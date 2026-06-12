@@ -7,7 +7,10 @@ import { env } from "~/env";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getReleaseWithSlug } from "~/lib/markdown/loaders";
 import { buildReleaseMetadata } from "~/lib/og/releaseMetadata";
-import { buildDocumentLink } from "~/lib/standard-site";
+import {
+  buildDocumentLink,
+  buildReleaseDocumentSource,
+} from "~/lib/standard-site";
 import { fetchIsAuthed } from "~/server/auth/endpoints";
 
 export const Route = createFileRoute("/_web/releases/$slug")({
@@ -23,10 +26,13 @@ export const Route = createFileRoute("/_web/releases/$slug")({
       loaderData.release,
       env.VITE_PUBLIC_BASE_URL,
     );
-    const documentLink = buildDocumentLink(loaderData.release, {
-      isMainInstance: IS_MAIN_INSTANCE,
-      publicationUri: env.VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI,
-    });
+    const documentLink = buildDocumentLink(
+      buildReleaseDocumentSource(loaderData.release),
+      {
+        isMainInstance: IS_MAIN_INSTANCE,
+        publicationUri: env.VITE_PUBLIC_STANDARD_SITE_PUBLICATION_URI,
+      },
+    );
 
     return {
       ...metadata,

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - "content-collections.ts"
+      - "src/content/blog/**"
       - "src/content/releases/**"
       - "src/lib/standard-site/**"
       - "scripts/sync-standard-site.ts"

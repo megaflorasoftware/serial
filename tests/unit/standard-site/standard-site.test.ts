@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Release } from "content-collections";
+import type { BlogPost, Release } from "content-collections";
 import {
   buildDocumentLink,
   buildDocumentUri,
+  buildGuideDocumentSource,
   buildPublicationLink,
+  buildReleaseDocumentSource,
   createPublicationVerificationResponse,
-  getReleaseDocumentRkey,
+  getDocumentRkey,
   parsePublicationUri,
   STANDARD_SITE,
 } from "~/lib/standard-site";
@@ -13,7 +15,7 @@ import {
   buildDocumentRecord,
   buildPublicationRecord,
   markdownToPlaintext,
-  planDocumentSync,
+  planStandardSiteSync,
 } from "~/lib/standard-site/records";
 
 const PUBLICATION_URI =
@@ -40,29 +42,73 @@ function makeRelease(overrides: Partial<Release> = {}): Release {
   };
 }
 
+function makeGuide(overrides: Partial<BlogPost> = {}): BlogPost {
+  return {
+    slug: "export-youtube-subscriptions",
+    title: "Export YouTube subscriptions",
+    description: "A step-by-step export guide.",
+    icon: "youtube",
+    publish_date: "2026-06-11",
+    updated_at: "2026-06-12",
+    public: true,
+    content: "## Steps\n\n1. Open Google Takeout.",
+    excerpt: "",
+    _meta: {
+      filePath: "src/content/blog/export-youtube-subscriptions.md",
+      fileName: "export-youtube-subscriptions.md",
+      directory: "src/content/blog",
+      path: "export-youtube-subscriptions",
+      extension: "md",
+    },
+    ...overrides,
+  };
+}
+
 describe("Standard.Site record builders", () => {
-  it("builds the releases publication", () => {
+  it("builds the Serial publication", () => {
     expect(buildPublicationRecord()).toEqual({
       $type: "site.standard.publication",
-      url: "https://serial.tube/releases",
-      name: "Serial Releases",
+      url: "https://serial.tube",
+      name: "Serial",
       description: STANDARD_SITE.publicationDescription,
       preferences: { showInDiscover: true },
     });
   });
 
   it("builds a complete release document with plaintext content", () => {
-    const record = buildDocumentRecord(makeRelease(), PUBLICATION_URI);
+    const record = buildDocumentRecord(
+      buildReleaseDocumentSource(makeRelease()),
+      PUBLICATION_URI,
+    );
 
     expect(record).toEqual({
       $type: "site.standard.document",
       site: PUBLICATION_URI,
       title: "View sections",
       description: "Custom view sections and better navigation.",
-      path: "/2026-06-10",
+      path: "/releases/2026-06-10",
       publishedAt: "2026-06-10T00:00:00.000Z",
       tags: ["release"],
       textContent: "Features\n\nFast syncing\nUseful links",
+    });
+  });
+
+  it("builds a guide document with its updated timestamp", () => {
+    expect(
+      buildDocumentRecord(
+        buildGuideDocumentSource(makeGuide()),
+        PUBLICATION_URI,
+      ),
+    ).toEqual({
+      $type: "site.standard.document",
+      site: PUBLICATION_URI,
+      title: "Export YouTube subscriptions",
+      description: "A step-by-step export guide.",
+      path: "/guides/export-youtube-subscriptions",
+      publishedAt: "2026-06-11T00:00:00.000Z",
+      updatedAt: "2026-06-12T00:00:00.000Z",
+      tags: ["guide"],
+      textContent: "Steps\n\nOpen Google Takeout.",
     });
   });
 
@@ -75,14 +121,14 @@ describe("Standard.Site record builders", () => {
   });
 
   it("generates a stable valid TID and document URI", () => {
-    const release = makeRelease();
-    const rkey = getReleaseDocumentRkey(release);
+    const releaseDocument = buildReleaseDocumentSource(makeRelease());
+    const rkey = getDocumentRkey(releaseDocument);
 
     expect(rkey).toMatch(
       /^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/,
     );
-    expect(getReleaseDocumentRkey(release)).toBe(rkey);
-    expect(buildDocumentUri(PUBLICATION_URI, release)).toBe(
+    expect(getDocumentRkey(releaseDocument)).toBe(rkey);
+    expect(buildDocumentUri(PUBLICATION_URI, releaseDocument)).toBe(
       `at://did:plc:serialtest/site.standard.document/${rkey}`,
     );
   });
@@ -108,9 +154,10 @@ describe("Standard.Site web verification", () => {
       rel: "site.standard.publication",
       href: PUBLICATION_URI,
     });
-    expect(buildDocumentLink(makeRelease(), options)).toEqual({
+    const releaseDocument = buildReleaseDocumentSource(makeRelease());
+    expect(buildDocumentLink(releaseDocument, options)).toEqual({
       rel: "site.standard.document",
-      href: buildDocumentUri(PUBLICATION_URI, makeRelease()),
+      href: buildDocumentUri(PUBLICATION_URI, releaseDocument),
     });
   });
 
@@ -122,7 +169,7 @@ describe("Standard.Site web verification", () => {
       }),
     ).toBeUndefined();
     expect(
-      buildDocumentLink(makeRelease(), {
+      buildDocumentLink(buildReleaseDocumentSource(makeRelease()), {
         isMainInstance: true,
         publicationUri: undefined,
       }),
@@ -149,28 +196,104 @@ describe("Standard.Site web verification", () => {
 });
 
 describe("Standard.Site reconciliation", () => {
-  it("upserts public releases and only deletes stale records for this publication", () => {
-    const release = makeRelease();
-    const expectedRkey = getReleaseDocumentRkey(release);
-    const plan = planDocumentSync([release], PUBLICATION_URI, [
+  it("creates the publication and documents for an empty repository", () => {
+    const releaseDocument = buildReleaseDocumentSource(makeRelease());
+    const guideDocument = buildGuideDocumentSource(makeGuide());
+    const expectedReleaseRkey = getDocumentRkey(releaseDocument);
+    const expectedGuideRkey = getDocumentRkey(guideDocument);
+
+    const plan = planStandardSiteSync({
+      documents: [releaseDocument, guideDocument],
+      publicationUri: PUBLICATION_URI,
+      existingDocuments: [],
+    });
+
+    expect(plan).toMatchObject({
+      creates: 3,
+      updates: 0,
+      deletes: 0,
+    });
+    expect(plan.writes).toEqual([
       {
-        uri: `at://did:plc:serialtest/site.standard.document/${expectedRkey}`,
-        value: { site: PUBLICATION_URI },
+        $type: "com.atproto.repo.applyWrites#create",
+        collection: STANDARD_SITE.publicationCollection,
+        rkey: "3mnvfqfsk22zc",
+        value: buildPublicationRecord(),
       },
       {
-        uri: "at://did:plc:serialtest/site.standard.document/3aaaaaaaaaaaa",
-        value: { site: PUBLICATION_URI },
+        $type: "com.atproto.repo.applyWrites#create",
+        collection: STANDARD_SITE.documentCollection,
+        rkey: expectedReleaseRkey,
+        value: buildDocumentRecord(releaseDocument, PUBLICATION_URI),
       },
       {
-        uri: "at://did:plc:serialtest/site.standard.document/3bbbbbbbbbbbb",
-        value: {
-          site: "at://did:plc:other/site.standard.publication/3cccccccccccc",
-        },
+        $type: "com.atproto.repo.applyWrites#create",
+        collection: STANDARD_SITE.documentCollection,
+        rkey: expectedGuideRkey,
+        value: buildDocumentRecord(guideDocument, PUBLICATION_URI),
       },
     ]);
+  });
 
-    expect(plan.upserts).toHaveLength(1);
-    expect(plan.upserts[0]?.rkey).toBe(expectedRkey);
-    expect(plan.deletes).toEqual(["3aaaaaaaaaaaa"]);
+  it("only updates changed records and deletes stale records for this publication", () => {
+    const unchangedDocument = buildReleaseDocumentSource(makeRelease());
+    const changedDocument = buildReleaseDocumentSource(
+      makeRelease({
+        slug: "2026-06-11",
+        publish_date: "2026-06-11",
+        title: "Updated title",
+      }),
+    );
+    const unchangedRkey = getDocumentRkey(unchangedDocument);
+    const changedRkey = getDocumentRkey(changedDocument);
+    const changedRecord = buildDocumentRecord(changedDocument, PUBLICATION_URI);
+
+    const plan = planStandardSiteSync({
+      documents: [unchangedDocument, changedDocument],
+      publicationUri: PUBLICATION_URI,
+      existingPublication: {
+        uri: PUBLICATION_URI,
+        value: buildPublicationRecord(),
+      },
+      existingDocuments: [
+        {
+          uri: `at://did:plc:serialtest/site.standard.document/${unchangedRkey}`,
+          value: buildDocumentRecord(unchangedDocument, PUBLICATION_URI),
+        },
+        {
+          uri: `at://did:plc:serialtest/site.standard.document/${changedRkey}`,
+          value: { ...changedRecord, title: "Old title" },
+        },
+        {
+          uri: "at://did:plc:serialtest/site.standard.document/3aaaaaaaaaaaa",
+          value: { site: PUBLICATION_URI },
+        },
+        {
+          uri: "at://did:plc:serialtest/site.standard.document/3bbbbbbbbbbbb",
+          value: {
+            site: "at://did:plc:other/site.standard.publication/3cccccccccccc",
+          },
+        },
+      ],
+    });
+
+    expect(plan).toMatchObject({
+      creates: 0,
+      updates: 1,
+      deletes: 1,
+    });
+    expect(plan.writes).toEqual([
+      {
+        $type: "com.atproto.repo.applyWrites#update",
+        collection: STANDARD_SITE.documentCollection,
+        rkey: changedRkey,
+        value: changedRecord,
+      },
+      {
+        $type: "com.atproto.repo.applyWrites#delete",
+        collection: STANDARD_SITE.documentCollection,
+        rkey: "3aaaaaaaaaaaa",
+      },
+    ]);
   });
 });
