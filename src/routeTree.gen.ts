@@ -45,6 +45,7 @@ import { Route as AppAdminSettingsRouteImport } from './app/_app.admin.settings'
 import { Route as AppAdminInvitesRouteImport } from './app/_app.admin.invites'
 import { Route as AppAdminInfoRouteImport } from './app/_app.admin.info'
 import { Route as ApiOgReleasesSlugRouteImport } from './app/api/og/releases.$slug'
+import { Route as ApiOgGuidesSlugRouteImport } from './app/api/og/guides.$slug'
 import { Route as AppAdminUserIdRouteImport } from './app/_app.admin.user.$id'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -226,6 +227,11 @@ const ApiOgReleasesSlugRoute = ApiOgReleasesSlugRouteImport.update({
   path: '/api/og/releases/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOgGuidesSlugRoute = ApiOgGuidesSlugRouteImport.update({
+  id: '/api/og/guides/$slug',
+  path: '/api/og/guides/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAdminUserIdRoute = AppAdminUserIdRouteImport.update({
   id: '/admin/user/$id',
   path: '/admin/user/$id',
@@ -267,6 +273,7 @@ export interface FileRoutesByFullPath {
   '/guides/': typeof WebGuidesIndexRoute
   '/releases/': typeof WebReleasesIndexRoute
   '/admin/user/$id': typeof AppAdminUserIdRoute
+  '/api/og/guides/$slug': typeof ApiOgGuidesSlugRoute
   '/api/og/releases/$slug': typeof ApiOgReleasesSlugRoute
 }
 export interface FileRoutesByTo {
@@ -303,6 +310,7 @@ export interface FileRoutesByTo {
   '/guides': typeof WebGuidesIndexRoute
   '/releases': typeof WebReleasesIndexRoute
   '/admin/user/$id': typeof AppAdminUserIdRoute
+  '/api/og/guides/$slug': typeof ApiOgGuidesSlugRoute
   '/api/og/releases/$slug': typeof ApiOgReleasesSlugRoute
 }
 export interface FileRoutesById {
@@ -343,6 +351,7 @@ export interface FileRoutesById {
   '/_web/guides/': typeof WebGuidesIndexRoute
   '/_web/releases/': typeof WebReleasesIndexRoute
   '/_app/admin/user/$id': typeof AppAdminUserIdRoute
+  '/api/og/guides/$slug': typeof ApiOgGuidesSlugRoute
   '/api/og/releases/$slug': typeof ApiOgReleasesSlugRoute
 }
 export interface FileRouteTypes {
@@ -382,6 +391,7 @@ export interface FileRouteTypes {
     | '/guides/'
     | '/releases/'
     | '/admin/user/$id'
+    | '/api/og/guides/$slug'
     | '/api/og/releases/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -418,6 +428,7 @@ export interface FileRouteTypes {
     | '/guides'
     | '/releases'
     | '/admin/user/$id'
+    | '/api/og/guides/$slug'
     | '/api/og/releases/$slug'
   id:
     | '__root__'
@@ -457,6 +468,7 @@ export interface FileRouteTypes {
     | '/_web/guides/'
     | '/_web/releases/'
     | '/_app/admin/user/$id'
+    | '/api/og/guides/$slug'
     | '/api/og/releases/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -473,6 +485,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDemoProvisionRoute: typeof ApiDemoProvisionRoute
   ApiRpcSplatRoute: typeof ApiRpcSplatRoute
+  ApiOgGuidesSlugRoute: typeof ApiOgGuidesSlugRoute
   ApiOgReleasesSlugRoute: typeof ApiOgReleasesSlugRoute
 }
 
@@ -730,6 +743,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOgReleasesSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/og/guides/$slug': {
+      id: '/api/og/guides/$slug'
+      path: '/api/og/guides/$slug'
+      fullPath: '/api/og/guides/$slug'
+      preLoaderRoute: typeof ApiOgGuidesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/admin/user/$id': {
       id: '/_app/admin/user/$id'
       path: '/admin/user/$id'
@@ -836,6 +856,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDemoProvisionRoute: ApiDemoProvisionRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,
+  ApiOgGuidesSlugRoute: ApiOgGuidesSlugRoute,
   ApiOgReleasesSlugRoute: ApiOgReleasesSlugRoute,
 }
 export const routeTree = rootRouteImport

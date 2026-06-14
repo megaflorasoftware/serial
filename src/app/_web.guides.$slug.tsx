@@ -8,6 +8,7 @@ import { WebFooterCTA } from "~/components/welcome/WebFooterCTA";
 import { env } from "~/env";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { getGuidePostWithSlug } from "~/lib/markdown/loaders";
+import { buildGuideMetadata } from "~/lib/og/guideMetadata";
 import {
   buildDocumentLink,
   buildGuideDocumentSource,
@@ -23,6 +24,10 @@ export const Route = createFileRoute("/_web/guides/$slug")({
   head: ({ loaderData }) => {
     if (!loaderData) return {};
 
+    const metadata = buildGuideMetadata(
+      loaderData.post,
+      env.VITE_PUBLIC_BASE_URL,
+    );
     const documentLink = buildDocumentLink(
       buildGuideDocumentSource(loaderData.post),
       {
@@ -32,6 +37,7 @@ export const Route = createFileRoute("/_web/guides/$slug")({
     );
 
     return {
+      ...metadata,
       links: documentLink ? [documentLink] : [],
     };
   },
