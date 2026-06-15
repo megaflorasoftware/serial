@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { MinusIcon, PlusIcon } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
@@ -43,6 +43,13 @@ function FontSizeControl() {
     orpc.userConfig.setArticleFont.mutationOptions(),
   );
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    const saveTimer = saveTimerRef;
+
+    return () => clearTimeout(saveTimer.current);
+  }, []);
+
   const debouncedSave = useCallback(
     (size: number) => {
       clearTimeout(saveTimerRef.current);
