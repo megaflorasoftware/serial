@@ -80,16 +80,23 @@ export function EditContentCategoryDialogContent({
 
               setIsUpdatingContentCategory(true);
               try {
-                const added: FeedCategorization[] = selectedFeedIds
-                  .filter((id) => !initialFeedIds.includes(id))
-                  .map((feedId) => ({ feedId, selected: true }));
-                const removed: FeedCategorization[] = initialFeedIds
-                  .filter((id) => !selectedFeedIds.includes(id))
-                  .map((feedId) => ({ feedId, selected: false }));
+                const feedCategorizations: FeedCategorization[] = [];
+                const initialFeedIdSet = new Set(initialFeedIds);
+                const selectedFeedIdSet = new Set(selectedFeedIds);
+                for (const feedId of selectedFeedIds) {
+                  if (!initialFeedIdSet.has(feedId)) {
+                    feedCategorizations.push({ feedId, selected: true });
+                  }
+                }
+                for (const feedId of initialFeedIds) {
+                  if (!selectedFeedIdSet.has(feedId)) {
+                    feedCategorizations.push({ feedId, selected: false });
+                  }
+                }
                 const updateCategoryPromise = updateContentCategory({
                   name,
                   id: selectedContentCategoryId,
-                  feedCategorizations: [...added, ...removed],
+                  feedCategorizations,
                 });
                 toast.promise(updateCategoryPromise, {
                   loading: "Updating tag...",

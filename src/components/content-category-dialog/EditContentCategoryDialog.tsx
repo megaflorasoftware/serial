@@ -13,16 +13,18 @@ export function EditContentCategoryDialog({
 }) {
   const { contentCategories } = useContentCategories();
   const { feedCategories } = useFeedCategories();
+  const initialFeedIds: number[] = [];
+  for (const feedCategory of feedCategories) {
+    if (feedCategory.categoryId === selectedContentCategoryId) {
+      initialFeedIds.push(feedCategory.feedId);
+    }
+  }
   const initialForm = {
     name:
       contentCategories.find(
         (contentCategory) => contentCategory.id === selectedContentCategoryId,
       )?.name ?? "",
-    feedIds: feedCategories
-      .filter(
-        (feedCategory) => feedCategory.categoryId === selectedContentCategoryId,
-      )
-      .map((feedCategory) => feedCategory.feedId),
+    feedIds: initialFeedIds,
   };
   const contentKey = `${selectedContentCategoryId ?? "closed"}:${initialForm.name}:${initialForm.feedIds.join(",")}`;
 
