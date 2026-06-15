@@ -1,3 +1,4 @@
+import { applyPendingFeedItemOverrides } from "./pendingMutations";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 
 export type IncomingFeedItem = Omit<ApplicationFeedItem, "content"> &
@@ -50,15 +51,6 @@ function mergeItemMetadata(
   return mergedItem;
 }
 
-function getLatestMetadataItem(
-  existingItem: ApplicationFeedItem,
-  incomingItem: ApplicationFeedItem,
-) {
-  return existingItem.updatedAt.getTime() > incomingItem.updatedAt.getTime()
-    ? existingItem
-    : incomingItem;
-}
-
 export function mergeFeedItem(
   existingItem: ApplicationFeedItem | undefined,
   incomingItem: IncomingFeedItem,
@@ -66,25 +58,22 @@ export function mergeFeedItem(
   const normalizedIncomingItem = normalizeIncomingFeedItem(incomingItem);
 
   if (!existingItem) {
-    return normalizedIncomingItem;
+    return applyPendingFeedItemOverrides(normalizedIncomingItem);
   }
-
-  const latestMetadataItem = getLatestMetadataItem(
-    existingItem,
-    normalizedIncomingItem,
-  );
 
   if (!hasMatchingContentHash(existingItem, incomingItem)) {
-    return mergeItemMetadata(normalizedIncomingItem, latestMetadataItem);
+    return applyPendingFeedItemOverrides(normalizedIncomingItem);
   }
 
-  return mergeItemMetadata(
-    {
-      ...existingItem,
-      content: existingItem.content || normalizedIncomingItem.content,
-      contentSnippet:
-        existingItem.contentSnippet || normalizedIncomingItem.contentSnippet,
-    },
-    latestMetadataItem,
+  return applyPendingFeedItemOverrides(
+    mergeItemMetadata(
+      {
+        ...existingItem,
+        content: existingItem.content || normalizedIncomingItem.content,
+        contentSnippet:
+          existingItem.contentSnippet || normalizedIncomingItem.contentSnippet,
+      },
+      normalizedIncomingItem,
+    ),
   );
 }

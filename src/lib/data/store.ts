@@ -7,6 +7,7 @@ import { contentCategoriesStore } from "./content-categories/store";
 import { createSelectorHooks } from "./createSelectorHooks";
 import { feedCategoriesStore } from "./feed-categories/store";
 import { mergeFeedItem } from "./feed-items/mergeFeedItem";
+import { clearPendingFeedItemOverrides } from "./feed-items/pendingMutations";
 import { feedsStore } from "./feeds/store";
 import { createIDBStorage } from "./idb-storage";
 import { loadingActor } from "./loading-machine";
@@ -205,6 +206,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
   persist(
     (set, get) => ({
       reset: () => {
+        clearPendingFeedItemOverrides();
         set({
           feedItemsOrder: [],
           feedItemsDict: {},
