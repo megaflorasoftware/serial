@@ -161,22 +161,40 @@ export function BulkAssignFeedsToTagsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  return (
+    <ControlledResponsiveDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Assign Feeds"
+      description={`Assign feeds to ${selectedTagIds.length} tag${selectedTagIds.length > 1 ? "s" : ""}.`}
+    >
+      {open && (
+        <BulkAssignFeedsToTagsContent
+          selectedTagIds={selectedTagIds}
+          onClose={() => onOpenChange(false)}
+        />
+      )}
+    </ControlledResponsiveDialog>
+  );
+}
+
+function BulkAssignFeedsToTagsContent({
+  selectedTagIds,
+  onClose,
+}: {
+  selectedTagIds: number[];
+  onClose: () => void;
+}) {
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedFeedIds, setSelectedFeedIds] = useState<number[]>([]);
-  const [previousOpen, setPreviousOpen] = useState(open);
 
   const { mutateAsync: updateContentCategory } =
     useUpdateContentCategoryMutation();
   const { contentCategories } = useContentCategories();
 
-  if (open !== previousOpen) {
-    setPreviousOpen(open);
-    if (!open) setSelectedFeedIds([]);
-  }
-
   const handleSave = async () => {
     if (selectedTagIds.length === 0 || selectedFeedIds.length === 0) {
-      onOpenChange(false);
+      onClose();
       return;
     }
 
@@ -202,40 +220,29 @@ export function BulkAssignFeedsToTagsDialog({
       error: "Failed to assign feeds",
     });
 
-    onOpenChange(false);
+    onClose();
     setIsAssigning(false);
   };
 
   return (
-    <ControlledResponsiveDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Assign Feeds"
-      description={`Assign feeds to ${selectedTagIds.length} tag${selectedTagIds.length > 1 ? "s" : ""}.`}
-    >
-      <div className="grid gap-6">
-        <CategoryFeedsInput
-          selectedFeedIds={selectedFeedIds}
-          setSelectedFeedIds={setSelectedFeedIds}
-        />
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            className="flex-1"
-            onClick={handleSave}
-            disabled={isAssigning || selectedFeedIds.length === 0}
-          >
-            {isAssigning ? "Saving..." : "Assign"}
-          </Button>
-        </div>
+    <div className="grid gap-6">
+      <CategoryFeedsInput
+        selectedFeedIds={selectedFeedIds}
+        setSelectedFeedIds={setSelectedFeedIds}
+      />
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          className="flex-1"
+          onClick={handleSave}
+          disabled={isAssigning || selectedFeedIds.length === 0}
+        >
+          {isAssigning ? "Saving..." : "Assign"}
+        </Button>
       </div>
-    </ControlledResponsiveDialog>
+    </div>
   );
 }
 

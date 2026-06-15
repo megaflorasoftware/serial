@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
-import * as RechartsPrimitive from "recharts";
+import {
+  Legend as ChartLegend,
+  Tooltip as ChartTooltip,
+  ResponsiveContainer,
+} from "recharts";
+import type { DefaultLegendContentProps } from "recharts";
 
 import { cn } from "~/lib/utils";
 
@@ -43,15 +48,17 @@ const ChartContainer = ({
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig;
-  children: React.ComponentProps<
-    typeof RechartsPrimitive.ResponsiveContainer
-  >["children"];
+  children: React.ReactNode;
 } & React.RefAttributes<HTMLDivElement>) => {
   const uniqueId = React.useId();
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+  const chartContextValue = React.useMemo<ChartContextProps>(
+    () => ({ config }),
+    [config],
+  );
 
   return (
-    <ChartContext.Provider value={{ config }}>
+    <ChartContext.Provider value={chartContextValue}>
       <div
         data-chart={chartId}
         ref={ref}
@@ -62,9 +69,7 @@ const ChartContainer = ({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        <ResponsiveContainer>{children}</ResponsiveContainer>
       </div>
     </ChartContext.Provider>
   );
@@ -73,7 +78,7 @@ ChartContainer.displayName = "Chart";
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
-    ([, config]) => config.theme || config.color,
+    ([, itemConfig]) => itemConfig.theme || itemConfig.color,
   );
 
   if (!colorConfig.length) {
@@ -103,8 +108,6 @@ ${colorConfig
     />
   );
 };
-
-const ChartTooltip = RechartsPrimitive.Tooltip;
 
 const ChartTooltipContent = ({
   active,
@@ -267,8 +270,6 @@ const ChartTooltipContent = ({
 };
 ChartTooltipContent.displayName = "ChartTooltip";
 
-const ChartLegend = RechartsPrimitive.Legend;
-
 const ChartLegendContent = ({
   className,
   hideIcon = false,
@@ -277,10 +278,7 @@ const ChartLegendContent = ({
   nameKey,
   ref,
 }: React.ComponentProps<"div"> &
-  Pick<
-    RechartsPrimitive.DefaultLegendContentProps,
-    "payload" | "verticalAlign"
-  > & {
+  Pick<DefaultLegendContentProps, "payload" | "verticalAlign"> & {
     hideIcon?: boolean;
     nameKey?: string;
   } & React.RefAttributes<HTMLDivElement>) => {

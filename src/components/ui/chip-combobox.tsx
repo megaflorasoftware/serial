@@ -180,7 +180,7 @@ export function ChipCombobox({
 
   const goForward = useCallback(() => {
     prevOffsets.current.push(offset);
-    setOffset(offset + visibleCount);
+    setOffset((previousOffset) => previousOffset + visibleCount);
     setCurrentPage((p) => p + 1);
   }, [offset, visibleCount]);
 
