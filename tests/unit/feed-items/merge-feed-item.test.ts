@@ -82,6 +82,56 @@ describe("mergeFeedItem", () => {
     expect(mergedItem.thumbnail).toBe("https://example.com/incoming.jpg");
   });
 
+  it("preserves newer local metadata when an older server item arrives", () => {
+    const existingItem = makeItem({
+      isWatched: true,
+      isWatchLater: true,
+      isWatchedUpdatedAt: new Date("2026-01-04T12:00:00Z"),
+      isWatchLaterUpdatedAt: new Date("2026-01-04T12:00:00Z"),
+      progress: 42,
+      duration: 100,
+      updatedAt: new Date("2026-01-04T12:00:00Z"),
+    });
+    const incomingItem = makeItem({
+      updatedAt: new Date("2026-01-04T11:59:59Z"),
+    });
+
+    const mergedItem = mergeFeedItem(existingItem, incomingItem);
+
+    expect(mergedItem.isWatched).toBe(true);
+    expect(mergedItem.isWatchLater).toBe(true);
+    expect(mergedItem.isWatchedUpdatedAt).toEqual(
+      new Date("2026-01-04T12:00:00Z"),
+    );
+    expect(mergedItem.isWatchLaterUpdatedAt).toEqual(
+      new Date("2026-01-04T12:00:00Z"),
+    );
+    expect(mergedItem.progress).toBe(42);
+    expect(mergedItem.duration).toBe(100);
+    expect(mergedItem.updatedAt).toEqual(new Date("2026-01-04T12:00:00Z"));
+  });
+
+  it("preserves newer local metadata when older changed content arrives", () => {
+    const existingItem = makeItem({
+      isWatched: true,
+      updatedAt: new Date("2026-01-04T12:00:00Z"),
+    });
+    const incomingItem = makeItem({
+      title: "Updated server title",
+      content: "Updated server content",
+      contentHash: "hash-2",
+      updatedAt: new Date("2026-01-04T11:59:59Z"),
+    });
+
+    const mergedItem = mergeFeedItem(existingItem, incomingItem);
+
+    expect(mergedItem.title).toBe("Updated server title");
+    expect(mergedItem.content).toBe("Updated server content");
+    expect(mergedItem.contentHash).toBe("hash-2");
+    expect(mergedItem.isWatched).toBe(true);
+    expect(mergedItem.updatedAt).toEqual(new Date("2026-01-04T12:00:00Z"));
+  });
+
   it("fills missing cached content when the hash matches", () => {
     const existingItem = makeItem({ content: "", contentSnippet: "" });
     const incomingItem = makeItem({ contentHash: "hash-1" });

@@ -37,10 +37,12 @@ export function useSaveToInstapaperMutation(contentId: string) {
         const currentFeedItem =
           feedItemsStore.getState().feedItemsDict[contentId];
         if (currentFeedItem) {
+          const updatedAt = new Date();
           setFeedItem({
             ...currentFeedItem,
             isWatched: true,
-            isWatchedUpdatedAt: new Date(),
+            isWatchedUpdatedAt: updatedAt,
+            updatedAt,
           });
         }
         toast.success("Saved to Instapaper");

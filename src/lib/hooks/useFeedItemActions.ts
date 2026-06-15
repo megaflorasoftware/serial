@@ -16,6 +16,7 @@ export function useFeedItemActions(itemId: string) {
     if (!item) return;
     if (item.isWatched) return;
 
+    const updatedAt = new Date();
     void orpcRouterClient.feedItem.setWatchedValue({
       id: itemId,
       feedId: item.feedId,
@@ -24,7 +25,8 @@ export function useFeedItemActions(itemId: string) {
     feedItemsStore.getState().setFeedItem(itemId, {
       ...item,
       isWatched: true,
-      isWatchedUpdatedAt: new Date(),
+      isWatchedUpdatedAt: updatedAt,
+      updatedAt,
     });
   }, [item, itemId]);
 
@@ -32,6 +34,7 @@ export function useFeedItemActions(itemId: string) {
     if (!item) return false;
 
     const newIsWatched = !item.isWatched;
+    const updatedAt = new Date();
     void orpcRouterClient.feedItem.setWatchedValue({
       id: itemId,
       feedId: item.feedId,
@@ -40,7 +43,8 @@ export function useFeedItemActions(itemId: string) {
     feedItemsStore.getState().setFeedItem(itemId, {
       ...item,
       isWatched: newIsWatched,
-      isWatchedUpdatedAt: newIsWatched ? new Date() : null,
+      isWatchedUpdatedAt: newIsWatched ? updatedAt : null,
+      updatedAt,
     });
 
     return true;
@@ -49,6 +53,7 @@ export function useFeedItemActions(itemId: string) {
   const toggleWatchLater = useCallback(() => {
     if (!item) return;
 
+    const updatedAt = new Date();
     void orpcRouterClient.feedItem.setWatchLaterValue({
       id: itemId,
       feedId: item.feedId,
@@ -57,7 +62,8 @@ export function useFeedItemActions(itemId: string) {
     feedItemsStore.getState().setFeedItem(itemId, {
       ...item,
       isWatchLater: !item.isWatchLater,
-      isWatchLaterUpdatedAt: new Date(),
+      isWatchLaterUpdatedAt: updatedAt,
+      updatedAt,
     });
   }, [item, itemId]);
 

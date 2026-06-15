@@ -39,15 +39,24 @@ function hasMatchingContentHash(
 
 function mergeItemMetadata(
   baseItem: ApplicationFeedItem,
-  incomingItem: IncomingFeedItem,
+  metadataItem: ApplicationFeedItem,
 ) {
   const mergedItem = { ...baseItem };
 
   for (const field of FEED_ITEM_MERGE_FIELDS.metadata) {
-    mergedItem[field] = incomingItem[field] as never;
+    mergedItem[field] = metadataItem[field] as never;
   }
 
   return mergedItem;
+}
+
+function getLatestMetadataItem(
+  existingItem: ApplicationFeedItem,
+  incomingItem: ApplicationFeedItem,
+) {
+  return existingItem.updatedAt.getTime() > incomingItem.updatedAt.getTime()
+    ? existingItem
+    : incomingItem;
 }
 
 export function mergeFeedItem(
@@ -60,8 +69,13 @@ export function mergeFeedItem(
     return normalizedIncomingItem;
   }
 
+  const latestMetadataItem = getLatestMetadataItem(
+    existingItem,
+    normalizedIncomingItem,
+  );
+
   if (!hasMatchingContentHash(existingItem, incomingItem)) {
-    return normalizedIncomingItem;
+    return mergeItemMetadata(normalizedIncomingItem, latestMetadataItem);
   }
 
   return mergeItemMetadata(
@@ -71,6 +85,6 @@ export function mergeFeedItem(
       contentSnippet:
         existingItem.contentSnippet || normalizedIncomingItem.contentSnippet,
     },
-    incomingItem,
+    latestMetadataItem,
   );
 }

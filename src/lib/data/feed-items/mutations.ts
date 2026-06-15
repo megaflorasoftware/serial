@@ -18,10 +18,12 @@ function applyBulkWatchedValue({
   items.forEach(({ id }) => {
     const feedItem = store.feedItemsDict[id];
     if (feedItem) {
+      const updatedAt = new Date();
       store.setFeedItem(id, {
         ...feedItem,
         isWatched,
-        isWatchedUpdatedAt: isWatched ? new Date() : null,
+        isWatchedUpdatedAt: isWatched ? updatedAt : null,
+        updatedAt,
       });
     }
   });
@@ -47,10 +49,12 @@ export function useFeedItemsSetWatchedValueMutation(contentId: string) {
     orpc.feedItem.setWatchedValue.mutationOptions({
       onMutate: ({ isWatched }) => {
         if (!feedItem) return;
+        const updatedAt = new Date();
         setFeedItem({
           ...feedItem,
           isWatched,
-          isWatchedUpdatedAt: isWatched ? new Date() : null,
+          isWatchedUpdatedAt: isWatched ? updatedAt : null,
+          updatedAt,
         });
       },
     }),
@@ -66,10 +70,12 @@ export function useFeedItemsSetWatchLaterValueMutation(contentId: string) {
     orpc.feedItem.setWatchLaterValue.mutationOptions({
       onMutate: ({ isWatchLater }) => {
         if (!feedItem) return;
+        const updatedAt = new Date();
         setFeedItem({
           ...feedItem,
           isWatchLater,
-          isWatchLaterUpdatedAt: new Date(),
+          isWatchLaterUpdatedAt: updatedAt,
+          updatedAt,
         });
       },
     }),
@@ -83,7 +89,7 @@ export function useSetProgressMutation(contentId: string) {
     orpc.feedItem.setProgress.mutationOptions({
       onMutate: ({ progress, duration }) => {
         if (!feedItem) return;
-        setFeedItem({ ...feedItem, progress, duration });
+        setFeedItem({ ...feedItem, progress, duration, updatedAt: new Date() });
       },
     }),
   );
