@@ -1,4 +1,3 @@
-import { BILLING_INTERVAL_DISPLAY } from "./constants";
 import type { SubscriptionDialogController } from "./useSubscriptionDialogController";
 import { Button } from "~/components/ui/button";
 import { env } from "~/env";
@@ -81,31 +80,4 @@ export function SubscriptionDialogFooter({
       </span>
     </p>
   );
-}
-
-export function getSubscriptionDialogCopy(
-  controller: SubscriptionDialogController,
-) {
-  const { showOverview, switchPreview } = controller;
-  if (switchPreview) {
-    const billingCycleLabel =
-      BILLING_INTERVAL_DISPLAY[switchPreview.billingInterval];
-    return {
-      title: "Switch Plan",
-      description:
-        switchPreview.currentPlanId === switchPreview.newPlanId
-          ? `Switch to ${billingCycleLabel} plan`
-          : `Switch from ${switchPreview.currentPlanName} to ${switchPreview.newPlanName}`,
-    };
-  }
-  if (showOverview) {
-    return {
-      title: "Your Plan",
-      description: "Manage your current subscription.",
-    };
-  }
-  return {
-    title: "Subscribe to Serial",
-    description: "All prices are taxes-included.",
-  };
 }

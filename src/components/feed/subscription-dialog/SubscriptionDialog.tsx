@@ -2,11 +2,9 @@
 
 import { SubscriptionDialogBody } from "./SubscriptionDialogBody";
 import { SubscriptionDialogContext } from "./context";
-import {
-  getSubscriptionDialogCopy,
-  SubscriptionDialogFooter,
-} from "./SubscriptionDialogFooter";
+import { SubscriptionDialogFooter } from "./SubscriptionDialogFooter";
 import { useSubscriptionDialogController } from "./useSubscriptionDialogController";
+import { getSubscriptionDialogCopy } from "./utils";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 
 export function SubscriptionDialog({
