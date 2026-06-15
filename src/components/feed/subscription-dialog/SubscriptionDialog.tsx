@@ -35,6 +35,22 @@ export function SubscriptionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  return (
+    <SubscriptionDialogContent
+      key={open ? "open" : "closed"}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  );
+}
+
+function SubscriptionDialogContent({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { planId } = useSubscription();
   const { data: session, refetch: refetchSession } = useSession();
   const queryClient = useQueryClient();
@@ -43,19 +59,10 @@ export function SubscriptionDialog({
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(
     null,
   );
-  const [showPlanPicker, setShowPlanPicker] = useState(false);
   const subscriptionView = useDialogStore((s) => s.subscriptionView);
-  const [previousOpen, setPreviousOpen] = useState(false);
-
-  // Reset dialog state when it opens, respecting the requested view
-  if (open !== previousOpen) {
-    setPreviousOpen(open);
-    if (open) {
-      setSwitchPreview(null);
-      setShowVerification(false);
-      setShowPlanPicker(subscriptionView === "picker");
-    }
-  }
+  const [showPlanPicker, setShowPlanPicker] = useState(
+    subscriptionView === "picker",
+  );
 
   const emailVerified = session?.user?.emailVerified ?? false;
   const isSubscribed = planId !== "free";

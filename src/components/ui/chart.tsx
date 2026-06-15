@@ -1,17 +1,26 @@
 "use client";
 
 import * as React from "react";
-import {
-  Legend as ChartLegend,
-  Tooltip as ChartTooltip,
-  ResponsiveContainer,
-} from "recharts";
 import type { DefaultLegendContentProps } from "recharts";
 
 import { cn } from "~/lib/utils";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
+
+const ChartLegend = React.lazy(async () => {
+  const { Legend } = await import("recharts");
+  return { default: Legend };
+});
+const ChartTooltip = React.lazy(async () => {
+  const { Tooltip } = await import("recharts");
+  return { default: Tooltip };
+});
+const ResponsiveContainer = React.lazy(async () => {
+  const { ResponsiveContainer: RechartsResponsiveContainer } =
+    await import("recharts");
+  return { default: RechartsResponsiveContainer };
+});
 
 export type ChartConfig = {
   [k in string]: {
@@ -69,7 +78,9 @@ const ChartContainer = ({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <ResponsiveContainer>{children}</ResponsiveContainer>
+        <React.Suspense fallback={null}>
+          <ResponsiveContainer>{children}</ResponsiveContainer>
+        </React.Suspense>
       </div>
     </ChartContext.Provider>
   );
@@ -146,47 +157,22 @@ const ChartTooltipContent = ({
 } & React.RefAttributes<HTMLDivElement>) => {
   const { config } = useChart();
 
-  const tooltipLabel = React.useMemo(() => {
-    if (hideLabel || !payload?.length) {
-      return null;
-    }
-
-    const [item] = payload;
-    const key = `${labelKey || item?.dataKey || item?.name || "value"}`;
-    const itemConfig = getPayloadConfigFromPayload(config, item, key);
-    const value =
-      !labelKey && typeof label === "string"
-        ? config[label]?.label || label
-        : itemConfig?.label;
-
-    if (labelFormatter) {
-      return (
-        <div className={cn("font-medium", labelClassName)}>
-          {labelFormatter(value, payload)}
-        </div>
-      );
-    }
-
-    if (!value) {
-      return null;
-    }
-
-    return <div className={cn("font-medium", labelClassName)}>{value}</div>;
-  }, [
-    label,
-    labelFormatter,
-    payload,
-    hideLabel,
-    labelClassName,
-    config,
-    labelKey,
-  ]);
-
   if (!active || !payload?.length) {
     return null;
   }
 
   const nestLabel = payload.length === 1 && indicator !== "dot";
+  const tooltipLabel = (
+    <ChartTooltipLabel
+      config={config}
+      hideLabel={hideLabel}
+      label={label}
+      labelClassName={labelClassName}
+      labelFormatter={labelFormatter}
+      labelKey={labelKey}
+      payload={payload}
+    />
+  );
 
   return (
     <div
@@ -269,6 +255,50 @@ const ChartTooltipContent = ({
   );
 };
 ChartTooltipContent.displayName = "ChartTooltip";
+
+const ChartTooltipLabel = React.memo(function TooltipLabelContent({
+  config,
+  hideLabel,
+  label,
+  labelClassName,
+  labelFormatter,
+  labelKey,
+  payload,
+}: {
+  config: ChartConfig;
+  hideLabel: boolean;
+  label?: string;
+  labelClassName?: string;
+  labelFormatter?: (label: any, payload: any[]) => React.ReactNode;
+  labelKey?: string;
+  payload: Array<Record<string, any>>;
+}) {
+  if (hideLabel) {
+    return null;
+  }
+
+  const [item] = payload;
+  const key = `${labelKey || item?.dataKey || item?.name || "value"}`;
+  const itemConfig = getPayloadConfigFromPayload(config, item, key);
+  const value =
+    !labelKey && typeof label === "string"
+      ? config[label]?.label || label
+      : itemConfig?.label;
+
+  if (labelFormatter) {
+    return (
+      <div className={cn("font-medium", labelClassName)}>
+        {labelFormatter(value, payload)}
+      </div>
+    );
+  }
+
+  if (!value) {
+    return null;
+  }
+
+  return <div className={cn("font-medium", labelClassName)}>{value}</div>;
+});
 
 const ChartLegendContent = ({
   className,

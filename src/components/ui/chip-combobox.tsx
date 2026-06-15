@@ -52,6 +52,12 @@ const MAX_ROWS = 5;
  */
 const RENDER_CHUNK = 100;
 
+type PaginationState = {
+  totalCount: number;
+  offset: number;
+  currentPage: number;
+};
+
 function measureVisibleCount(container: HTMLElement): {
   count: number;
   clipHeight: number;
@@ -103,9 +109,7 @@ export function ChipCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Pagination state
-  const [offset, setOffset] = useState(0);
   const [visibleCount, setVisibleCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
   const [firstPageCount, setFirstPageCount] = useState(0);
   const maxClipHeightRef = useRef(0);
   const prevOffsets = useRef<number[]>([]);
@@ -116,23 +120,27 @@ export function ChipCombobox({
     .filter((o) => selectedSet.has(o.id))
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const totalCount = selectedOptions.length;
+  const [pagination, setPagination] = useState<PaginationState>({
+    totalCount,
+    offset: 0,
+    currentPage: 1,
+  });
+  const { offset, currentPage } = pagination;
+  const measuredTotalCountRef = useRef(totalCount);
+
+  if (totalCount !== pagination.totalCount) {
+    setPagination({ totalCount, offset: 0, currentPage: 1 });
+  }
+
   // Badges to render — enough to fill 5 rows and detect overflow
   const renderOptions = selectedOptions.slice(offset, offset + RENDER_CHUNK);
-  const totalCount = selectedOptions.length;
-  const [previousTotalCount, setPreviousTotalCount] = useState(totalCount);
-  const measuredTotalCountRef = useRef(totalCount);
   const hasMore = totalCount > 0 && offset + visibleCount < totalCount;
   const hasPrev = offset > 0;
   const showPagination = hasMore || hasPrev;
   // Estimate total pages from first page's count (best available approximation)
   const estimatedTotalPages =
     firstPageCount > 0 ? Math.ceil(totalCount / firstPageCount) : 1;
-
-  if (totalCount !== previousTotalCount) {
-    setPreviousTotalCount(totalCount);
-    setOffset(0);
-    setCurrentPage(1);
-  }
 
   // Measure how many badges fit in MAX_ROWS rows and clip the container.
   // useLayoutEffect runs synchronously before paint, so there's no flicker.
@@ -180,17 +188,23 @@ export function ChipCombobox({
 
   const goForward = useCallback(() => {
     prevOffsets.current.push(offset);
-    setOffset((previousOffset) => previousOffset + visibleCount);
-    setCurrentPage((p) => p + 1);
-  }, [offset, visibleCount]);
+    setPagination((previousPagination) => ({
+      totalCount,
+      offset: previousPagination.offset + visibleCount,
+      currentPage: previousPagination.currentPage + 1,
+    }));
+  }, [offset, totalCount, visibleCount]);
 
   const goBack = useCallback(() => {
     const prev = prevOffsets.current.pop();
     if (prev !== undefined) {
-      setOffset(prev);
-      setCurrentPage((p) => p - 1);
+      setPagination((previousPagination) => ({
+        totalCount,
+        offset: prev,
+        currentPage: previousPagination.currentPage - 1,
+      }));
     }
-  }, []);
+  }, [totalCount]);
 
   // Search / filter state
   const trimmedSearch = search.trim();
