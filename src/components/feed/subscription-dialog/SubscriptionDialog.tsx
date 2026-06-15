@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { BILLING_INTERVAL_DISPLAY } from "./constants";
 import { SubscriptionDialogContext } from "./context";
@@ -45,17 +45,17 @@ export function SubscriptionDialog({
   );
   const [showPlanPicker, setShowPlanPicker] = useState(false);
   const subscriptionView = useDialogStore((s) => s.subscriptionView);
-  const prevOpenRef = useRef(false);
+  const [previousOpen, setPreviousOpen] = useState(false);
 
   // Reset dialog state when it opens, respecting the requested view
-  useEffect(() => {
-    if (open && !prevOpenRef.current) {
+  if (open !== previousOpen) {
+    setPreviousOpen(open);
+    if (open) {
       setSwitchPreview(null);
       setShowVerification(false);
       setShowPlanPicker(subscriptionView === "picker");
     }
-    prevOpenRef.current = open;
-  }, [open, subscriptionView]);
+  }
 
   const emailVerified = session?.user?.emailVerified ?? false;
   const isSubscribed = planId !== "free";

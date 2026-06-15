@@ -163,14 +163,16 @@ export function BulkAssignFeedsToTagsDialog({
 }) {
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedFeedIds, setSelectedFeedIds] = useState<number[]>([]);
+  const [previousOpen, setPreviousOpen] = useState(open);
 
   const { mutateAsync: updateContentCategory } =
     useUpdateContentCategoryMutation();
   const { contentCategories } = useContentCategories();
 
-  useEffect(() => {
+  if (open !== previousOpen) {
+    setPreviousOpen(open);
     if (!open) setSelectedFeedIds([]);
-  }, [open]);
+  }
 
   const handleSave = async () => {
     if (selectedTagIds.length === 0 || selectedFeedIds.length === 0) {

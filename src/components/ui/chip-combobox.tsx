@@ -7,13 +7,7 @@ import {
   PlusIcon,
   XIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -125,6 +119,8 @@ export function ChipCombobox({
   // Badges to render — enough to fill 5 rows and detect overflow
   const renderOptions = selectedOptions.slice(offset, offset + RENDER_CHUNK);
   const totalCount = selectedOptions.length;
+  const [previousTotalCount, setPreviousTotalCount] = useState(totalCount);
+  const measuredTotalCountRef = useRef(totalCount);
   const hasMore = totalCount > 0 && offset + visibleCount < totalCount;
   const hasPrev = offset > 0;
   const showPagination = hasMore || hasPrev;
@@ -132,22 +128,21 @@ export function ChipCombobox({
   const estimatedTotalPages =
     firstPageCount > 0 ? Math.ceil(totalCount / firstPageCount) : 1;
 
-  // Reset pagination navigation when selection count changes.
-  // Note: visibleCount and firstPageCount are measurement outputs —
-  // they are recalculated by the useLayoutEffect below whenever
-  // offset or totalCount changes.  Resetting them here (in a regular
-  // useEffect that fires *after* paint) would clobber the values the
-  // layout effect already computed, leaving pagination stuck at "1/1".
-  useEffect(() => {
+  if (totalCount !== previousTotalCount) {
+    setPreviousTotalCount(totalCount);
     setOffset(0);
     setCurrentPage(1);
-    maxClipHeightRef.current = 0;
-    prevOffsets.current = [];
-  }, [totalCount]);
+  }
 
   // Measure how many badges fit in MAX_ROWS rows and clip the container.
   // useLayoutEffect runs synchronously before paint, so there's no flicker.
   useLayoutEffect(() => {
+    if (totalCount !== measuredTotalCountRef.current) {
+      measuredTotalCountRef.current = totalCount;
+      maxClipHeightRef.current = 0;
+      prevOffsets.current = [];
+    }
+
     const container = badgeContainerRef.current;
     if (!container) return;
 
