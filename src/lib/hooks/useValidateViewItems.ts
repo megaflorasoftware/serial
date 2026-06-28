@@ -88,10 +88,5 @@ export function useValidateViewItems() {
       .finally(() => {
         validatingCombos.delete(key);
       });
-  }, [
-    viewFilter,
-    visibilityFilter,
-    feedFilter,
-    categoryFilter,
-  ]);
+  }, [viewFilter, visibilityFilter, feedFilter, categoryFilter]);
 }
