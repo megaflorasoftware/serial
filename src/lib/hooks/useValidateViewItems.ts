@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import type { ClientManifestEntry } from "~/server/api/routers/initialRouter";
 import {
@@ -37,6 +37,17 @@ export function useValidateViewItems() {
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const filteredItemIds = useFilteredFeedItemsOrder();
 
+  // Keep the latest filtered ids in a ref so building the manifest never makes
+  // them an effect dependency. Re-running validation on every item-list change
+  // is what we explicitly want to avoid: a validation diff replaces the view
+  // scope with just its first page (`replacesScope`), so re-validating after
+  // pagination would drop the paginated items. Only view/filter changes should
+  // trigger validation.
+  const filteredItemIdsRef = useRef(filteredItemIds);
+  useEffect(() => {
+    filteredItemIdsRef.current = filteredItemIds;
+  }, [filteredItemIds]);
+
   useEffect(() => {
     // Feed / category selections use separate endpoints — skip here
     if (feedFilter >= 0 || categoryFilter >= 0) return;
@@ -52,7 +63,7 @@ export function useValidateViewItems() {
     // visibility. Keep the manifest scoped to that same client-side page;
     // otherwise cached read/later items outside the first page look deleted.
     const state = feedItemsStore.getState();
-    const manifestItemIds = filteredItemIds.slice(0, ITEMS_PER_PAGE);
+    const manifestItemIds = filteredItemIdsRef.current.slice(0, ITEMS_PER_PAGE);
     const manifest: ClientManifestEntry[] = [];
     for (const id of manifestItemIds) {
       const item = state.feedItemsDict[id];
@@ -82,6 +93,5 @@ export function useValidateViewItems() {
     visibilityFilter,
     feedFilter,
     categoryFilter,
-    filteredItemIds,
   ]);
 }
