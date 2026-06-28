@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useAtomValue } from "jotai";
 import type { ClientManifestEntry } from "~/server/api/routers/initialRouter";
 import {
@@ -37,15 +37,6 @@ export function useValidateViewItems() {
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const filteredItemIds = useFilteredFeedItemsOrder();
 
-  // Keep a ref so the effect always sees the latest item IDs at fire time
-  // without re-triggering when the list changes due to optimistic updates.
-  // Updated in useLayoutEffect (not during render) to satisfy react-hooks/refs,
-  // and layout effects run before regular effects so the main effect sees the latest value.
-  const filteredItemIdsRef = useRef(filteredItemIds);
-  useLayoutEffect(() => {
-    filteredItemIdsRef.current = filteredItemIds;
-  });
-
   useEffect(() => {
     // Feed / category selections use separate endpoints — skip here
     if (feedFilter >= 0 || categoryFilter >= 0) return;
@@ -61,7 +52,7 @@ export function useValidateViewItems() {
     // visibility. Keep the manifest scoped to that same client-side page;
     // otherwise cached read/later items outside the first page look deleted.
     const state = feedItemsStore.getState();
-    const manifestItemIds = filteredItemIdsRef.current.slice(0, ITEMS_PER_PAGE);
+    const manifestItemIds = filteredItemIds.slice(0, ITEMS_PER_PAGE);
     const manifest: ClientManifestEntry[] = [];
     for (const id of manifestItemIds) {
       const item = state.feedItemsDict[id];
@@ -86,5 +77,11 @@ export function useValidateViewItems() {
       .finally(() => {
         validatingCombos.delete(key);
       });
-  }, [viewFilter, visibilityFilter, feedFilter, categoryFilter]);
+  }, [
+    viewFilter,
+    visibilityFilter,
+    feedFilter,
+    categoryFilter,
+    filteredItemIds,
+  ]);
 }
