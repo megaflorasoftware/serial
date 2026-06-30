@@ -1,4 +1,3 @@
-// Vim-style movement keys that mirror the arrow keys (h/j/k/l).
 export const VIM_MOVEMENT_KEYS = {
   UP: "k",
   DOWN: "j",
