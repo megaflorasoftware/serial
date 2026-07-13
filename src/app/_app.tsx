@@ -22,7 +22,7 @@ import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
 import { useAltKeyHeld } from "~/lib/hooks/useAltKeyHeld";
 import { authMiddleware } from "~/server/auth";
-import { getMostRecentRelease } from "~/lib/markdown/loaders";
+import { getMostRecentReleaseServerFn } from "~/server/releases";
 import { orpc, orpcRouterClient } from "~/lib/orpc";
 import { PLANS } from "~/server/subscriptions/plans";
 import {
@@ -43,8 +43,8 @@ export const Route = createFileRoute("/_app")({
       });
     }
   },
-  loader: () => {
-    const mostRecentRelease = getMostRecentRelease();
+  loader: async () => {
+    const mostRecentRelease = await getMostRecentReleaseServerFn();
     return { mostRecentRelease };
   },
 });
