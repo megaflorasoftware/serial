@@ -22,13 +22,17 @@ type ReleaseSummary = z.infer<
 >["releases"][number];
 
 let cachedMostRecentRelease: ReleaseSummary | undefined;
-let cachedAtMs = 0;
+let lastFetchAttemptAtMs = 0;
 
 async function fetchMostRecentRelease(): Promise<ReleaseSummary | undefined> {
-  const isCacheFresh = Date.now() - cachedAtMs < RELEASES_CACHE_TTL_MS;
-  if (cachedMostRecentRelease && isCacheFresh) {
+  // Failed attempts also count as fresh so an unreachable site isn't
+  // re-fetched (with a 5s timeout) on every call.
+  const isCacheFresh =
+    Date.now() - lastFetchAttemptAtMs < RELEASES_CACHE_TTL_MS;
+  if (isCacheFresh) {
     return cachedMostRecentRelease;
   }
+  lastFetchAttemptAtMs = Date.now();
 
   try {
     const response = await fetch(RELEASES_URL, {
@@ -38,7 +42,6 @@ async function fetchMostRecentRelease(): Promise<ReleaseSummary | undefined> {
 
     const { releases } = releasesResponseSchema.parse(await response.json());
     cachedMostRecentRelease = releases[0];
-    cachedAtMs = Date.now();
     return cachedMostRecentRelease;
   } catch {
     // The release notifier is best-effort; fall back to whatever we have.
