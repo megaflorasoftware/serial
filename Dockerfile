@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/root/.npm \
 # platform-agnostic JavaScript, so it can be copied into any target platform.
 ################################################################################
 FROM --platform=$BUILDPLATFORM base AS build
+ARG VITE_PUBLIC_BASE_URL
+ENV VITE_PUBLIC_BASE_URL=$VITE_PUBLIC_BASE_URL
 
 # Download all dependencies (including devDependencies) needed for building.
 RUN --mount=type=bind,source=package.json,target=package.json \
