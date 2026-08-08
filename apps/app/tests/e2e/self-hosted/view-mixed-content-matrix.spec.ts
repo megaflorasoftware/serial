@@ -10,6 +10,7 @@ import {
   SELF_HOSTED_TURSO_PORT,
 } from "../fixtures/ports";
 import {
+  archiveMixedViewItems,
   cleanupUser,
   seedMixedViewSectionCase,
   seedSavedViewClientStateData,
@@ -35,21 +36,28 @@ async function renderedItemIds(locator: Locator) {
   ).sort();
 }
 
-async function beginSkeletonObservation(page: Page) {
-  await page.evaluate(() => {
+function visibilityTab(page: Page, name: string | RegExp) {
+  return page
+    .locator('[data-slot="tabs-list"]')
+    .filter({ has: page.getByRole("tab", { name: /Saved/ }) })
+    .getByRole("tab", { name, exact: false });
+}
+
+async function beginSkeletonObservation(locator: Locator) {
+  await locator.evaluate((root) => {
     const state = window as typeof window & {
       __serialMatrixSkeletonSeen?: boolean;
       __serialMatrixSkeletonObserver?: MutationObserver;
     };
     state.__serialMatrixSkeletonSeen = Boolean(
-      document.querySelector(".animate-pulse"),
+      root.querySelector(".animate-pulse"),
     );
     state.__serialMatrixSkeletonObserver = new MutationObserver(() => {
-      if (document.querySelector(".animate-pulse")) {
+      if (root.querySelector(".animate-pulse")) {
         state.__serialMatrixSkeletonSeen = true;
       }
     });
-    state.__serialMatrixSkeletonObserver.observe(document.body, {
+    state.__serialMatrixSkeletonObserver.observe(root, {
       childList: true,
       subtree: true,
     });
@@ -122,7 +130,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
         email: fixture.email,
         password: fixture.password,
       });
-      await page.getByRole("tab", { name: /Saved/ }).click();
+      await visibilityTab(page, "Saved").click();
 
       const feedMain = page
         .locator("main")
@@ -143,7 +151,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
         )
         .toBe(expectedItemIds.length === 0);
 
-      await beginSkeletonObservation(page);
+      await beginSkeletonObservation(feedMain);
       await viewChip.click();
 
       const renderedItems = feedMain.locator("article[data-item-id]");
@@ -154,11 +162,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
       const sections = [0, 1, 2].map((sectionIndex) =>
         feedMain.locator(`#section-${sectionIndex}`),
       );
-      if (expectedItemIds.length > 0) {
-        await expect(feedMain.locator('[id^="section-"]')).toHaveCount(3);
-      } else {
-        await expect(feedMain.locator('[id^="section-"]')).toHaveCount(0);
-      }
+      await expect(feedMain.locator('[id^="section-"]')).toHaveCount(3);
 
       for (const [itemId, expectedSectionIndex] of expectedSectionByItemId) {
         const globalItem = feedMain.locator(`[data-item-id="${itemId}"]`);
@@ -196,11 +200,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
           name: expectedHeadings[sectionIndex],
           exact: true,
         });
-        if (expectedSectionItemIds[sectionIndex]?.length) {
-          await expect(heading).toBeVisible();
-        } else {
-          await expect(heading).toHaveCount(0);
-        }
+        await expect(heading).toBeVisible();
       }
 
       expect(await finishSkeletonObservation(page)).toBe(false);
@@ -237,7 +237,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
         email: fixture.email,
         password: fixture.password,
       });
-      await page.getByRole("tab", { name: tabName, exact: false }).click();
+      await visibilityTab(page, tabName).click();
 
       const feedMain = page
         .locator("main")
@@ -289,6 +289,161 @@ test.describe("exhaustive mixed-content View section matrix", () => {
     });
   }
 
+  test("advances in Saved Unread and retains selection in Saved All", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    const fixture = await seedMixedViewSectionCase(
+      SELF_HOSTED_TURSO_PORT,
+      SELF_HOSTED_APP_PORT,
+      {
+        feedSectionFeedItem: true,
+        tagSectionFeedItem: true,
+        tagSectionBookmark: true,
+        uncategorizedFeedItem: true,
+        uncategorizedBookmark: true,
+      },
+      "later",
+    );
+    testEmail = fixture.email;
+
+    await signIn({
+      page,
+      email: fixture.email,
+      password: fixture.password,
+    });
+    await visibilityTab(page, "Saved").click();
+
+    const feedMain = page
+      .locator("main")
+      .filter({
+        has: page.getByRole("heading", { name: "Serial", exact: true }),
+      })
+      .last();
+    await feedMain
+      .getByRole("radio", { name: fixture.viewName, exact: true })
+      .click();
+
+    const feedItem = feedMain.locator(
+      `article[data-item-id="${fixture.items.feedSectionFeedItem}"]`,
+    );
+    const bookmark = feedMain.locator(
+      `article[data-item-id="${fixture.items.tagSectionBookmark}"]`,
+    );
+    const nextFeedItem = feedMain.locator(
+      `article[data-item-id="${fixture.items.tagSectionFeedItem}"]`,
+    );
+    await expect(feedItem).toBeVisible({ timeout: 30_000 });
+    await expect(bookmark).toBeVisible();
+
+    await feedItem.getByRole("link").hover();
+    await page.keyboard.press("e");
+    await expect(feedItem).toHaveCount(0);
+    await expect(nextFeedItem.getByRole("link")).toHaveClass(/md:bg-muted/);
+    await expect(
+      feedMain.getByRole("heading", { name: "Test Blog", exact: true }),
+    ).toBeVisible();
+
+    const feedSection = feedMain.locator("#section-0");
+    const tagSection = feedMain.locator("#section-1");
+    await expect(feedMain.getByRole("tab", { name: "All" })).toHaveCount(3);
+
+    await expect(
+      feedSection.getByRole("tab", { name: "Unread" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await feedSection.getByRole("tab", { name: "All" }).click();
+    await expect(feedSection.getByRole("tab", { name: "All" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(feedItem).toBeVisible();
+    await expect(bookmark).toBeVisible();
+
+    await tagSection.getByRole("tab", { name: "All" }).click();
+    await bookmark.getByRole("link").hover();
+    await page.keyboard.press("e");
+    await expect(bookmark).toBeVisible();
+    await expect(bookmark.getByRole("link")).toHaveClass(/md:bg-muted/);
+
+    await tagSection.getByRole("tab", { name: "Unread" }).click();
+    await expect(bookmark).toHaveCount(0);
+
+    await feedSection.getByRole("tab", { name: "Unread" }).click();
+    await expect(feedItem).toHaveCount(0);
+  });
+
+  test("loads archived Saved content only for the selected section", async ({
+    page,
+  }) => {
+    test.setTimeout(45_000);
+    const fixture = await seedMixedViewSectionCase(
+      SELF_HOSTED_TURSO_PORT,
+      SELF_HOSTED_APP_PORT,
+      {
+        feedSectionFeedItem: true,
+        tagSectionFeedItem: true,
+        tagSectionBookmark: true,
+        uncategorizedFeedItem: false,
+        uncategorizedBookmark: false,
+      },
+      "later",
+    );
+    await archiveMixedViewItems(SELF_HOSTED_TURSO_PORT, {
+      feedItemIds: [fixture.items.feedSectionFeedItem],
+      bookmarkIds: [fixture.items.tagSectionBookmark],
+    });
+    testEmail = fixture.email;
+
+    const archiveRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("mixedContent/getSavedSectionPage")) {
+        archiveRequests.push(request.postData() ?? "");
+      }
+    });
+    await signIn({
+      page,
+      email: fixture.email,
+      password: fixture.password,
+    });
+    await visibilityTab(page, "Saved").click();
+
+    const feedMain = page
+      .locator("main")
+      .filter({
+        has: page.getByRole("heading", { name: "Serial", exact: true }),
+      })
+      .last();
+    await feedMain
+      .getByRole("radio", { name: fixture.viewName, exact: true })
+      .click();
+
+    const feedSection = feedMain.locator("#section-0");
+    const tagSection = feedMain.locator("#section-1");
+    const archivedFeedItem = feedSection.locator(
+      `article[data-item-id="${fixture.items.feedSectionFeedItem}"]`,
+    );
+    const archivedBookmark = tagSection.locator(
+      `article[data-item-id="${fixture.items.tagSectionBookmark}"]`,
+    );
+    await expect(archivedFeedItem).toHaveCount(0);
+    await expect(archivedBookmark).toHaveCount(0);
+    await expect(
+      tagSection.locator(
+        `article[data-item-id="${fixture.items.tagSectionFeedItem}"]`,
+      ),
+    ).toBeVisible();
+
+    await feedSection.getByRole("tab", { name: "All" }).click();
+    await expect(archivedFeedItem).toBeVisible({ timeout: 10_000 });
+    await expect(archivedBookmark).toHaveCount(0);
+    expect(archiveRequests).toHaveLength(1);
+
+    await tagSection.getByRole("tab", { name: "All" }).click();
+    await expect(archivedBookmark).toBeVisible({ timeout: 10_000 });
+    expect(archiveRequests).toHaveLength(2);
+    expect(archiveRequests[0]).not.toEqual(archiveRequests[1]);
+  });
+
   test("shows a feed item immediately after saving it and entering its View", async ({
     page,
   }) => {
@@ -327,7 +482,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
     await item.getByRole("link").hover();
     await page.keyboard.press("s");
 
-    await page.getByRole("tab", { name: "Saved", exact: false }).click();
+    await visibilityTab(page, "Saved").click();
     await feedMain
       .getByRole("radio", { name: fixture.viewName, exact: true })
       .click();
@@ -360,7 +515,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
       exact: true,
     });
 
-    await page.getByRole("tab", { name: "Saved", exact: false }).click();
+    await visibilityTab(page, "Saved").click();
     await targetViewChip.click();
     await expect(feedMain.locator("article[data-item-id]").first()).toBeVisible(
       {
@@ -382,7 +537,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
       )
       .toBe(true);
 
-    await page.getByRole("tab", { name: "Unread", exact: false }).click();
+    await visibilityTab(page, "Unread").click();
     const targetItem = feedMain.locator(
       `article[data-item-id="${fixture.targetItemId}"]`,
     );
@@ -390,7 +545,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
     await targetItem.getByRole("link").hover();
     await page.keyboard.press("s");
 
-    await page.getByRole("tab", { name: "Saved", exact: false }).click();
+    await visibilityTab(page, "Saved").click();
     await expect(targetItem).toBeVisible({ timeout: 5_000 });
   });
 
@@ -418,7 +573,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
       email: fixture.email,
       password: fixture.password,
     });
-    await page.getByRole("tab", { name: /Archived/ }).click();
+    await visibilityTab(page, "Archived").click();
 
     const feedMain = page
       .locator("main")

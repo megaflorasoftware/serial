@@ -5,6 +5,7 @@ import { getMixedScopeKey, mixedContentStore } from "./mixed-content/store";
 import { viewsStore } from "./views/store";
 import { isBookmarkProjectionChange } from "./mixed-content/bookmarkProjection";
 import { refreshNavigationSnapshotSafely } from "./navigation/store";
+import { hasFeedItemListProjectionChanged } from "./feed-items/listProjection";
 import type { LoadedMixedScope } from "./mixed-content/store";
 import type { PublishedChunk } from "~/server/api/publisher";
 import type { BookmarkSyncBucketPage } from "~/server/mixed-content/sync";
@@ -70,7 +71,11 @@ function completeBookmarkSyncPages(payloads: PublishedChunk[]) {
 
 export function processPublishedChunks(payloads: PublishedChunk[]) {
   const affectedScopes = new Map<string, LoadedMixedScope>();
-  let navigationSnapshotChanged = false;
+  let navigationSnapshotChanged = payloads.some(
+    ({ chunk }) =>
+      "refreshNavigationSnapshot" in chunk &&
+      chunk.refreshNavigationSnapshot === true,
+  );
   const feedPayloads = payloads.filter(
     (payload) => payload.source !== "bookmark" && payload.source !== "mixed",
   );
@@ -83,6 +88,15 @@ export function processPublishedChunks(payloads: PublishedChunk[]) {
       ]),
     );
     feedItemsStore.getState().processChunks(feedPayloads);
+    for (const itemId of incomingItemIds) {
+      const item = feedItemsStore.getState().feedItemsDict[itemId];
+      if (item) {
+        navigationSnapshotChanged ||= hasFeedItemListProjectionChanged(
+          previousFeedItems[itemId],
+          item,
+        );
+      }
+    }
     const affected = mixedContentStore.getState().reprojectFeedItems({
       itemIds: incomingItemIds,
       previousFeedItems,
