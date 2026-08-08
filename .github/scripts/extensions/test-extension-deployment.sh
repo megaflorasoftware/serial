@@ -140,11 +140,25 @@ run_readiness_check() {
 
 : > "$temp_dir/curl.log"
 FAKE_STATUS_RESPONSE='{}'
-FAKE_FIREFOX_VERSIONS_RESPONSE='{"results":[{"version":"2026.214.10.1","file":{"status":"public"}}]}'
+FAKE_FIREFOX_VERSIONS_RESPONSE='{"results":[{"version":"2026.214.10.1","file":{"status":"public"}},{"version":"2026.213.9.1","file":{"status":"disabled"}}]}'
 export FAKE_STATUS_RESPONSE FAKE_FIREFOX_VERSIONS_RESPONSE
 run_readiness_check > "$temp_dir/ready.out"
 if ! grep -q "ready for a synchronized" "$temp_dir/ready.out"; then
   echo "Ready stores did not pass the synchronized release gate" >&2
+  exit 1
+fi
+
+: > "$temp_dir/curl.log"
+FAKE_STATUS_RESPONSE='{}'
+FAKE_FIREFOX_VERSIONS_RESPONSE='{"results":[{"version":"2026.215.9.0","file":{"status":"future_review_state"}}]}'
+export FAKE_STATUS_RESPONSE FAKE_FIREFOX_VERSIONS_RESPONSE
+if run_readiness_check >"$temp_dir/firefox-unknown-status.out" 2>&1; then
+  echo "Expected an unknown Firefox status to block the synchronized release" >&2
+  exit 1
+fi
+if ! grep -q "future_review_state" "$temp_dir/firefox-unknown-status.out" || \
+  ! grep -q "synchronized browser-extension release is blocked" "$temp_dir/firefox-unknown-status.out"; then
+  echo "The synchronized release gate did not report the unknown Firefox status" >&2
   exit 1
 fi
 

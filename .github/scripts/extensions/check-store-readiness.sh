@@ -69,16 +69,16 @@ if ! jq -e '.results | type == "array"' "$firefox_response" > /dev/null; then
   jq . "$firefox_response" >&2
   exit 1
 fi
-firefox_pending_versions="$(
+firefox_nonterminal_versions="$(
   jq -r \
     '[.results[]? | select(
-      .file.status == "unreviewed" or .file.status == "awaiting_review"
-    ) | .version] | join(", ")' \
+      .file.status != "public" and .file.status != "disabled"
+    ) | "\(.version) (\(.file.status // "missing status"))"] | join(", ")' \
     "$firefox_response"
 )"
-if [[ -n "$firefox_pending_versions" ]]; then
+if [[ -n "$firefox_nonterminal_versions" ]]; then
   echo \
-    "Firefox revision(s) $firefox_pending_versions are awaiting review." \
+    "Firefox revision(s) $firefox_nonterminal_versions are not in a terminal store state." \
     >&2
   blocked=true
 fi
