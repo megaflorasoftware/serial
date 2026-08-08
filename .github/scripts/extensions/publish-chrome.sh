@@ -11,6 +11,13 @@ if [[ ! -f "$chrome_zip" ]]; then
   echo "Chrome extension package not found: $chrome_zip" >&2
   exit 1
 fi
+if ! package_version="$(
+  unzip -p "$chrome_zip" manifest.json | \
+    jq -er '.version | strings | select(length > 0)'
+)"; then
+  echo "Chrome extension package has no valid manifest version: $chrome_zip" >&2
+  exit 1
+fi
 
 curl_bin="${CURL_BIN:-curl}"
 sleep_bin="${SLEEP_BIN:-sleep}"
@@ -63,41 +70,56 @@ submitted_version="$(
     "$status_response"
 )"
 
+resume_staged=false
 case "$submitted_state" in
-  PENDING_REVIEW | STAGED)
+  PENDING_REVIEW)
     echo \
       "Chrome revision ${submitted_version:-unknown} is $submitted_state; preserve it and rerun this job after the store finishes processing it." \
       >&2
     exit 2
     ;;
+  STAGED)
+    if [[ -z "$submitted_version" || "$submitted_version" != "$package_version" ]]; then
+      echo \
+        "Chrome revision ${submitted_version:-unknown} is STAGED and does not match retained package $package_version; preserve it and resolve the staged revision before retrying." \
+        >&2
+      exit 2
+    fi
+    echo \
+      "Chrome revision $submitted_version is STAGED and matches the retained package; resuming publication."
+    resume_staged=true
+    ;;
 esac
 
-upload_response="$response_dir/upload.json"
-request \
-  "$upload_response" \
-  --request POST \
-  --header "Content-Type: application/zip" \
-  --upload-file "$chrome_zip" \
-  "$upload_url"
+uploaded_version="$submitted_version"
+if [[ "$resume_staged" != "true" ]]; then
+  upload_response="$response_dir/upload.json"
+  request \
+    "$upload_response" \
+    --request POST \
+    --header "Content-Type: application/zip" \
+    --upload-file "$chrome_zip" \
+    "$upload_url"
 
-upload_state="$(jq -r '.uploadState // empty' "$upload_response")"
-uploaded_version="$(jq -r '.crxVersion // empty' "$upload_response")"
+  upload_state="$(jq -r '.uploadState // empty' "$upload_response")"
+  uploaded_version="$(jq -r '.crxVersion // empty' "$upload_response")"
 
-if [[ "$upload_state" == "IN_PROGRESS" ]]; then
-  for _ in {1..12}; do
-    "$sleep_bin" 5
-    fetch_status "$status_response"
-    upload_state="$(jq -r '.lastAsyncUploadState // empty' "$status_response")"
-    if [[ "$upload_state" != "IN_PROGRESS" ]]; then
-      break
-    fi
-  done
-fi
+  if [[ "$upload_state" == "IN_PROGRESS" ]]; then
+    for _ in {1..12}; do
+      "$sleep_bin" 5
+      fetch_status "$status_response"
+      upload_state="$(jq -r '.lastAsyncUploadState // empty' "$status_response")"
+      if [[ "$upload_state" != "IN_PROGRESS" ]]; then
+        break
+      fi
+    done
+  fi
 
-if [[ "$upload_state" != "SUCCEEDED" ]]; then
-  echo "Chrome package upload did not succeed (state: ${upload_state:-missing})." >&2
-  jq . "$upload_response" >&2
-  exit 1
+  if [[ "$upload_state" != "SUCCEEDED" ]]; then
+    echo "Chrome package upload did not succeed (state: ${upload_state:-missing})." >&2
+    jq . "$upload_response" >&2
+    exit 1
+  fi
 fi
 
 publish_response="$response_dir/publish.json"

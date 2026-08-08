@@ -49,7 +49,12 @@ if RELEASE_TIMESTAMP="not-a-date" node "$version_generator" >/dev/null 2>&1; the
 fi
 
 chrome_zip="$temp_dir/chrome.zip"
-printf 'test package\n' > "$chrome_zip"
+mkdir "$temp_dir/chrome-package"
+printf '{"version":"2026.215.14.1832"}\n' > "$temp_dir/chrome-package/manifest.json"
+(
+  cd "$temp_dir/chrome-package"
+  zip -q "$chrome_zip" manifest.json
+)
 
 run_publisher() {
   CHROME_ACCESS_TOKEN=test-token \
@@ -79,6 +84,36 @@ if ! grep -q "preserve it and rerun" "$temp_dir/pending.out"; then
 fi
 if [[ "$(wc -l < "$temp_dir/curl.log" | tr -d ' ')" != "1" ]]; then
   echo "Pending-review deployment called Chrome after the status check" >&2
+  exit 1
+fi
+
+: > "$temp_dir/curl.log"
+FAKE_STATUS_RESPONSE='{"submittedItemRevisionStatus":{"state":"STAGED","distributionChannels":[{"crxVersion":"2026.215.14.1832"}]}}'
+FAKE_PUBLISH_RESPONSE='{"itemId":"abcdefghijklmnopabcdefghijklmnop","state":"PENDING_REVIEW"}'
+export FAKE_STATUS_RESPONSE FAKE_PUBLISH_RESPONSE
+run_publisher > "$temp_dir/staged-retry.out"
+if ! grep -q "submitted successfully" "$temp_dir/staged-retry.out"; then
+  echo "Matching staged Chrome revision was not resumed" >&2
+  exit 1
+fi
+if [[ "$(wc -l < "$temp_dir/curl.log" | tr -d ' ')" != "2" ]]; then
+  echo "Staged Chrome retry did not call only status and publish" >&2
+  exit 1
+fi
+
+: > "$temp_dir/curl.log"
+FAKE_STATUS_RESPONSE='{"submittedItemRevisionStatus":{"state":"STAGED","distributionChannels":[{"crxVersion":"2026.215.14.999"}]}}'
+export FAKE_STATUS_RESPONSE
+if run_publisher >"$temp_dir/unrelated-staged.out" 2>&1; then
+  echo "Expected an unrelated staged Chrome revision to stop deployment" >&2
+  exit 1
+fi
+if ! grep -q "does not match retained package" "$temp_dir/unrelated-staged.out"; then
+  echo "Unrelated staged Chrome revision did not report the version mismatch" >&2
+  exit 1
+fi
+if [[ "$(wc -l < "$temp_dir/curl.log" | tr -d ' ')" != "1" ]]; then
+  echo "Unrelated staged Chrome revision called Chrome after the status check" >&2
   exit 1
 fi
 

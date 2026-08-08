@@ -143,5 +143,8 @@ condition.
 The two store submissions are independent API calls after the shared gate. If
 exactly one deployment job fails, rerun only that failed job from the same
 workflow run. It reuses the retained package and shared version without
-replacing the successful store's active review. Do not dispatch a new release
+replacing the successful store's active review. On a Chrome retry, a staged
+revision is published without another upload only when its reported manifest
+version matches the retained package; an unrelated or unidentified staged
+revision remains blocked for manual resolution. Do not dispatch a new release
 to recover a partial submission.
