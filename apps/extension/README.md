@@ -19,6 +19,25 @@ pnpm --filter @serial/extension dev:firefox
 The root `build`, `typecheck`, `lint`, and `format` commands include this
 workspace automatically.
 
+Production Chrome and Firefox store deployment is documented in
+[`../../.github/EXTENSION_DEPLOYMENT.md`](../../.github/EXTENSION_DEPLOYMENT.md).
+The first store listings are created manually; affected updates are submitted
+from `main` by GitHub Actions after that bootstrap is complete.
+
+The Firefox source archive contains the locked monorepo inputs needed to
+reproduce the submitted package. From the archive root, use the version from
+the submitted extension's `manifest.json`:
+
+```sh
+corepack pnpm install --frozen-lockfile
+SERIAL_EXTENSION_STORE_BUILD=true SERIAL_EXTENSION_VERSION=<manifest-version> corepack pnpm --filter @serial/extension zip:firefox
+corepack pnpm --filter @serial/extension lint:firefox
+```
+
+Firefox lint is expected to pass with five reviewed warnings from unmodified
+Mozilla Readability, DOMPurify, and React DOM code. Any additional or changed
+warning fails validation.
+
 Run the app in demo mode and open it in WXT's extension-enabled Chrome test
 browser:
 
@@ -49,9 +68,10 @@ save:
 - `identity` completes the approved connection to a Serial instance.
 - `storage` keeps the selected instance and its opaque extension session token
   in the browser.
-- Optional host access is requested for the selected HTTPS Serial instance, or
-  for a loopback HTTP instance during local development. Signing out removes
-  that host access.
+- Optional host access is requested for the selected HTTPS Serial instance.
+  Development builds additionally allow loopback HTTP instances; production
+  and store builds omit those permissions and reject loopback instance
+  addresses. Signing out removes the selected instance's host access.
 
 The Firefox manifest declares `authenticationInfo`, `browsingActivity`,
 `websiteActivity`, and `websiteContent` because signing in and opening the popup
@@ -66,6 +86,8 @@ pre-extraction page source. The selected Serial server stores the Bookmark and
 may perform bounded Feed discovery only when the page declares no Feeds.
 
 Before the first Chrome Web Store release, replace the checked-in manifest key
-with the key assigned to the uploaded extension. The identity tests derive the
-Chrome and Firefox redirect URLs from their manifest identities and ensure the
-server allowlist stays in sync.
+with the key assigned to the uploaded extension. Local and unpacked builds use
+that key to preserve the Chrome extension ID. Store submission ZIPs omit the
+development-only `key` field because the Chrome Web Store assigns identity from
+the listing. The identity tests derive the Chrome and Firefox redirect URLs from
+their manifest identities and ensure the server allowlist stays in sync.
