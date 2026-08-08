@@ -71,7 +71,9 @@ if ! jq -e '.results | type == "array"' "$firefox_response" > /dev/null; then
 fi
 firefox_pending_versions="$(
   jq -r \
-    '[.results[]? | select(.file.status == "unreviewed") | .version] | join(", ")' \
+    '[.results[]? | select(
+      .file.status == "unreviewed" or .file.status == "awaiting_review"
+    ) | .version] | join(", ")' \
     "$firefox_response"
 )"
 if [[ -n "$firefox_pending_versions" ]]; then

@@ -149,6 +149,20 @@ if ! grep -q "ready for a synchronized" "$temp_dir/ready.out"; then
 fi
 
 : > "$temp_dir/curl.log"
+FAKE_STATUS_RESPONSE='{}'
+FAKE_FIREFOX_VERSIONS_RESPONSE='{"results":[{"version":"2026.215.10.0","file":{"status":"awaiting_review"}}]}'
+export FAKE_STATUS_RESPONSE FAKE_FIREFOX_VERSIONS_RESPONSE
+if run_readiness_check >"$temp_dir/firefox-awaiting-review.out" 2>&1; then
+  echo "Expected an awaiting-review Firefox revision to block the synchronized release" >&2
+  exit 1
+fi
+if ! grep -q "Firefox revision" "$temp_dir/firefox-awaiting-review.out" || \
+  ! grep -q "synchronized browser-extension release is blocked" "$temp_dir/firefox-awaiting-review.out"; then
+  echo "The synchronized release gate did not report the awaiting-review Firefox revision" >&2
+  exit 1
+fi
+
+: > "$temp_dir/curl.log"
 FAKE_STATUS_RESPONSE='{"submittedItemRevisionStatus":{"state":"PENDING_REVIEW","distributionChannels":[{"crxVersion":"2026.215.10.1"}]}}'
 FAKE_FIREFOX_VERSIONS_RESPONSE='{"results":[{"version":"2026.215.10.1","file":{"status":"unreviewed"}}]}'
 export FAKE_STATUS_RESPONSE FAKE_FIREFOX_VERSIONS_RESPONSE
