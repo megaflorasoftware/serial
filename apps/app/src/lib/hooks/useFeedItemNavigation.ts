@@ -32,6 +32,7 @@ import {
   useShowInstapaperAction,
 } from "~/lib/data/instapaper";
 import { getNextRootItemId } from "~/lib/root-scroll-restoration";
+import { registerRootContentNavigation } from "~/lib/root-content-actions";
 import { canMutateNow } from "~/lib/data/offline-mutations";
 
 interface SectionInfo {
@@ -555,14 +556,10 @@ export function useFeedItemNavigation(
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_LEFT),
   });
 
-  const handleToggleRead = useCallback(
-    (event: KeyboardEvent) => {
-      event.preventDefault();
-      if (pathname !== "/" || !selectedItemId) return;
-
-      const idx = items.indexOf(selectedItemId);
-      const didToggleRead = selectedItemActions.toggleRead();
-      if (!didToggleRead) return;
+  const toggleReadWithAdvance = useCallback(
+    (contentId: string, toggleRead: () => boolean) => {
+      const idx = items.indexOf(contentId);
+      if (!toggleRead()) return;
 
       if (
         shouldAdvanceAfterToggleRead({
@@ -572,14 +569,44 @@ export function useFeedItemNavigation(
         selectItemAfterCurrentItemLeavesView(idx);
       }
     },
-    [
-      pathname,
-      selectedItemId,
-      selectedItemActions,
-      items,
-      contentStatusFilter,
-      selectItemAfterCurrentItemLeavesView,
-    ],
+    [items, contentStatusFilter, selectItemAfterCurrentItemLeavesView],
+  );
+
+  const toggleSavedWithAdvance = useCallback(
+    (contentId: string, toggleSaved: () => boolean) => {
+      const idx = items.indexOf(contentId);
+      if (!toggleSaved()) return;
+
+      selectItemAfterCurrentItemLeavesView(idx);
+    },
+    [items, selectItemAfterCurrentItemLeavesView],
+  );
+
+  const advanceAfterSendToInstapaper = useCallback(
+    (contentId: string) => {
+      selectNextItem(items.indexOf(contentId));
+    },
+    [items, selectNextItem],
+  );
+
+  useEffect(
+    () =>
+      registerRootContentNavigation({
+        toggleReadWithAdvance,
+        toggleSavedWithAdvance,
+        advanceAfterSendToInstapaper,
+      }),
+    [toggleReadWithAdvance, toggleSavedWithAdvance, advanceAfterSendToInstapaper],
+  );
+
+  const handleToggleRead = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/" || !selectedItemId) return;
+
+      toggleReadWithAdvance(selectedItemId, selectedItemActions.toggleRead);
+    },
+    [pathname, selectedItemId, selectedItemActions, toggleReadWithAdvance],
   );
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ), handleToggleRead);
@@ -589,9 +616,7 @@ export function useFeedItemNavigation(
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_SAVED), () => {
     if (pathname !== "/" || !selectedItemId) return;
 
-    if (!selectedItemActions.toggleWatchLater()) return;
-    const idx = items.indexOf(selectedItemId);
-    selectItemAfterCurrentItemLeavesView(idx);
+    toggleSavedWithAdvance(selectedItemId, selectedItemActions.toggleWatchLater);
   });
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.COPY_URL), (event) => {
@@ -618,8 +643,7 @@ export function useFeedItemNavigation(
     }
 
     void saveToInstapaper({ feedItemId: selectedItemId });
-    const idx = items.indexOf(selectedItemId);
-    selectNextItem(idx);
+    advanceAfterSendToInstapaper(selectedItemId);
   });
 
   useEffect(() => {

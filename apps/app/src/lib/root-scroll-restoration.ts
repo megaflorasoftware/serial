@@ -98,6 +98,48 @@ export function useRootScrollResetBeforePaint(enabled: boolean) {
   }, [enabled]);
 }
 
+export type RootRestorationAction =
+  | { type: "select"; itemId: string | null }
+  | { type: "scroll"; itemId: string | null }
+  | { type: "recycle-anchor" }
+  | { type: "clear-stale-selection" }
+  | { type: "none" };
+
+// Restoration may scroll only during the initial pass after the list mounts
+// (returning from the reader or a fresh load). Once the list is live, an item
+// leaving it must never move the scroll position; at most the now-stale
+// selection is cleared.
+export function resolveRootRestorationAction({
+  isInitialRestorationPass,
+  activeItemIds,
+  selectedItemId,
+  anchor,
+}: {
+  isInitialRestorationPass: boolean;
+  activeItemIds: readonly string[];
+  selectedItemId: string | null;
+  anchor: RootNavigationAnchor;
+}): RootRestorationAction {
+  if (isInitialRestorationPass) {
+    const restorationItemId = resolveRootRestorationItemId({
+      activeItemIds,
+      ...anchor,
+    });
+    if (selectedItemId !== restorationItemId) {
+      return { type: "select", itemId: restorationItemId };
+    }
+    return { type: "scroll", itemId: restorationItemId };
+  }
+
+  if (selectedItemId !== anchor.selectedItemId) {
+    return { type: "recycle-anchor" };
+  }
+  if (selectedItemId && !activeItemIds.includes(selectedItemId)) {
+    return { type: "clear-stale-selection" };
+  }
+  return { type: "none" };
+}
+
 export function useRootItemScrollRestoration({
   activeItemIds,
   selectedItemId,
@@ -127,40 +169,46 @@ export function useRootItemScrollRestoration({
       successorItemId: null,
     };
     const restorationAnchor = restorationAnchorRef.current;
-    const restorationItemId = resolveRootRestorationItemId({
+    const action = resolveRootRestorationAction({
+      isInitialRestorationPass: needsRestorationRef.current,
       activeItemIds,
-      ...restorationAnchor,
+      selectedItemId,
+      anchor: restorationAnchor,
     });
-    const selectedAnchorLeftList =
-      selectedItemId === restorationAnchor.selectedItemId &&
-      restorationItemId !== restorationAnchor.selectedItemId;
-    const shouldRestore = needsRestorationRef.current || selectedAnchorLeftList;
 
-    if (!shouldRestore) {
-      if (selectedItemId !== restorationAnchor.selectedItemId) {
-        restorationAnchorRef.current = null;
+    switch (action.type) {
+      case "select": {
+        setSelectedItemId(action.itemId);
+        return;
       }
-      return;
-    }
+      case "scroll": {
+        if (action.itemId) {
+          const itemElement = getFeedItemElement(action.itemId);
+          if (!itemElement) return;
+          scrollRootItemToTarget(itemElement, "instant");
+        } else {
+          getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
+        }
 
-    if (selectedItemId !== restorationItemId) {
-      needsRestorationRef.current = true;
-      setSelectedItemId(restorationItemId);
-      return;
-    }
-
-    if (restorationItemId) {
-      const itemElement = getFeedItemElement(restorationItemId);
-      if (!itemElement) return;
-      scrollRootItemToTarget(itemElement, "instant");
-    } else {
-      getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
-    }
-
-    pendingRootNavigationAnchor = null;
-    needsRestorationRef.current = false;
-    if (restorationItemId !== restorationAnchor.selectedItemId) {
-      restorationAnchorRef.current = null;
+        pendingRootNavigationAnchor = null;
+        needsRestorationRef.current = false;
+        if (action.itemId !== restorationAnchor.selectedItemId) {
+          restorationAnchorRef.current = null;
+        }
+        return;
+      }
+      case "recycle-anchor": {
+        restorationAnchorRef.current = null;
+        return;
+      }
+      case "clear-stale-selection": {
+        setSelectedItemId(null);
+        restorationAnchorRef.current = null;
+        return;
+      }
+      case "none": {
+        return;
+      }
     }
   }, [activeItemIds, ready, selectedItemId, setSelectedItemId]);
 }

@@ -327,4 +327,66 @@ test.describe("feed item actions", () => {
       .click();
     await expect(itemLink(firstSavedItemId)).toBeVisible({ timeout: 5000 });
   });
+
+  for (const trigger of ["archive button", "keyboard shortcut"] as const) {
+    test(`archiving with the ${trigger} keeps scroll and advances to the successor`, async ({
+      page,
+    }) => {
+      const { email, password, feedItemIds } = await seedMultipleArticleData(
+        SELF_HOSTED_TURSO_PORT,
+        SELF_HOSTED_APP_PORT,
+        20,
+      );
+      testEmail = email;
+
+      await signIn({ page, email, password });
+      await expect(page.locator("article").first()).toBeVisible({
+        timeout: 30000,
+      });
+
+      // Exit keyboard-navigation mode before selecting by hover.
+      await page.mouse.move(1, 1);
+      await page.mouse.move(10, 10);
+
+      const targetItemId = feedItemIds[10]!;
+      const successorItemId = feedItemIds[11]!;
+      const targetItem = page.locator(
+        `article[data-item-id="${targetItemId}"]`,
+      );
+      await targetItem.scrollIntoViewIfNeeded();
+
+      const scrollContainer = page.locator('[data-slot="sidebar-inset"]');
+      const scrollBefore = await scrollContainer.evaluate((el) => el.scrollTop);
+      expect(scrollBefore).toBeGreaterThan(200);
+
+      await targetItem.getByRole("link").hover();
+      if (trigger === "archive button") {
+        await targetItem.getByRole("button", { name: "Archive" }).click();
+      } else {
+        await page.keyboard.press("e");
+      }
+
+      await expect(targetItem).toHaveCount(0, { timeout: 10000 });
+
+      const successorItem = page.locator(
+        `article[data-item-id="${successorItemId}"]`,
+      );
+      await expect(successorItem.getByRole("link")).toHaveClass(/md:bg-muted/);
+
+      // The advance scroll re-centers the successor; wait for it to settle,
+      // then confirm the list did not jump back toward the top.
+      let settledScrollTop = Number.NaN;
+      await expect
+        .poll(async () => {
+          const currentScrollTop = await scrollContainer.evaluate(
+            (el) => el.scrollTop,
+          );
+          const isSettled = currentScrollTop === settledScrollTop;
+          settledScrollTop = currentScrollTop;
+          return isSettled;
+        })
+        .toBe(true);
+      expect(settledScrollTop).toBeGreaterThan(scrollBefore * 0.5);
+    });
+  }
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getNextRootItemId,
+  resolveRootRestorationAction,
   resolveRootRestorationItemId,
 } from "~/lib/root-scroll-restoration";
 import { scrollRootItemToTarget } from "~/lib/hooks/useScrollToFeedItem";
@@ -53,6 +54,70 @@ describe("root scroll restoration", () => {
         successorItemId: "next",
       }),
     ).toBeNull();
+  });
+
+  it("selects then scrolls the restoration target during the initial pass", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: true,
+        activeItemIds: ["first", "next"],
+        selectedItemId: "selected",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+      }),
+    ).toEqual({ type: "select", itemId: "next" });
+
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: true,
+        activeItemIds: ["first", "next"],
+        selectedItemId: "next",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+      }),
+    ).toEqual({ type: "scroll", itemId: "next" });
+  });
+
+  it("scrolls to the top on the initial pass only when nothing is restorable", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: true,
+        activeItemIds: ["first"],
+        selectedItemId: null,
+        anchor: { selectedItemId: null, successorItemId: null },
+      }),
+    ).toEqual({ type: "scroll", itemId: null });
+  });
+
+  it("never scrolls when an anchored item leaves the live list", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: false,
+        activeItemIds: ["first", "next"],
+        selectedItemId: "selected",
+        anchor: { selectedItemId: "selected", successorItemId: null },
+      }),
+    ).toEqual({ type: "clear-stale-selection" });
+  });
+
+  it("recycles the anchor when the selection moves on", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: false,
+        activeItemIds: ["first", "next"],
+        selectedItemId: "next",
+        anchor: { selectedItemId: "selected", successorItemId: null },
+      }),
+    ).toEqual({ type: "recycle-anchor" });
+  });
+
+  it("leaves a live selection untouched after the initial pass", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: false,
+        activeItemIds: ["first", "selected"],
+        selectedItemId: "selected",
+        anchor: { selectedItemId: "selected", successorItemId: null },
+      }),
+    ).toEqual({ type: "none" });
   });
 
   it("places the selected item's center one-third down the viewport", () => {
