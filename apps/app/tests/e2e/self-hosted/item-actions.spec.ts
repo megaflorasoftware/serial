@@ -369,6 +369,9 @@ test.describe("feed item actions", () => {
         expect(scrollBefore).toBeGreaterThan(200);
 
         await targetItem.getByRole("link").hover();
+        // Wait for the hover selection to commit before acting, so the
+        // keyboard handler cannot fire against a null selection.
+        await expect(targetItem.getByRole("link")).toHaveClass(/md:bg-muted/);
         if (trigger === "button") {
           await targetItem.getByRole("button", { name: buttonName }).click();
         } else {

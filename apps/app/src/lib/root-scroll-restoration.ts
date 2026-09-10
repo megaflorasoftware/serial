@@ -103,7 +103,6 @@ export type RootRestorationAction =
   | { type: "scroll"; itemId: string | null }
   | { type: "abort" }
   | { type: "recycle-anchor" }
-  | { type: "clear-stale-selection" }
   | { type: "none" };
 
 // Restoration may scroll only during the mount restoration (returning from
@@ -146,9 +145,10 @@ export function resolveRootRestorationAction({
   if (selectedItemId !== anchor.selectedItemId) {
     return { type: "recycle-anchor" };
   }
-  if (selectedItemId && !activeItemIds.includes(selectedItemId)) {
-    return { type: "clear-stale-selection" };
-  }
+  // A selection pointing at an item missing from activeItemIds is left alone:
+  // the list can be in a transient hydration state, and clearing it here has
+  // wrongly wiped a just-restored selection. Stale selections resolve on the
+  // next arrow-key or hover interaction.
   return { type: "none" };
 }
 
@@ -180,15 +180,29 @@ export function useRootItemScrollRestoration({
   useIsomorphicLayoutEffect(() => {
     if (!ready) return;
 
+    // Seed the abort guard with the first selection the mount restoration
+    // observes, so a later selection change aborts it even when restoration
+    // never applied a selection of its own (e.g. it is stuck retrying a
+    // scroll target that has not rendered).
+    if (
+      needsRestorationRef.current &&
+      restorationSelectionRef.current === undefined
+    ) {
+      restorationSelectionRef.current = selectedItemId;
+    }
+
     if (restorationAnchorRef.current === null) {
-      restorationAnchorRef.current = pendingRootNavigationAnchor ?? {
+      // A pending anchor is meant for the next mount's restoration only. Live
+      // passes must not read it: a capture fired just before navigating away
+      // would otherwise be swallowed by a pass that slips in before unmount,
+      // and a capture that never leads to a remount (a new-tab open) would
+      // otherwise re-seed a stale anchor on every later pass.
+      restorationAnchorRef.current = (needsRestorationRef.current
+        ? pendingRootNavigationAnchor
+        : null) ?? {
         selectedItemId,
         successorItemId: null,
       };
-      // Consume the pending anchor as soon as it seeds this mount's anchor so
-      // a capture that never led to a remount (for example a new-tab open)
-      // cannot re-seed a stale anchor on every later pass.
-      pendingRootNavigationAnchor = null;
     }
     const restorationAnchor = restorationAnchorRef.current;
     const action = resolveRootRestorationAction({
@@ -214,6 +228,7 @@ export function useRootItemScrollRestoration({
           getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
         }
 
+        pendingRootNavigationAnchor = null;
         needsRestorationRef.current = false;
         if (action.itemId !== restorationAnchor.selectedItemId) {
           restorationAnchorRef.current = null;
@@ -221,16 +236,12 @@ export function useRootItemScrollRestoration({
         return;
       }
       case "abort": {
+        pendingRootNavigationAnchor = null;
         needsRestorationRef.current = false;
         restorationAnchorRef.current = null;
         return;
       }
       case "recycle-anchor": {
-        restorationAnchorRef.current = null;
-        return;
-      }
-      case "clear-stale-selection": {
-        setSelectedItemId(null);
         restorationAnchorRef.current = null;
         return;
       }

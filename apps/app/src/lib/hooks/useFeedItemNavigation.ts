@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { useAtom, useAtomValue } from "jotai";
 import { useLocation } from "@tanstack/react-router";
 import { useShortcut } from "./useShortcut";
@@ -596,7 +602,9 @@ export function useFeedItemNavigation(
     [items, selectNextItem],
   );
 
-  useEffect(
+  // Register before paint so a click can never observe a stale handler set
+  // (or the plain-mutation fallback) between a commit and its passive flush.
+  useLayoutEffect(
     () =>
       registerRootContentNavigation({
         toggleReadWithAdvance,

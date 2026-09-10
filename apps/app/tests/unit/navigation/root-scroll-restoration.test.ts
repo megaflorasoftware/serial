@@ -121,7 +121,7 @@ describe("root scroll restoration", () => {
     ).toEqual({ type: "scroll", itemId: null });
   });
 
-  it("never scrolls when an anchored item leaves the live list", () => {
+  it("never scrolls or reselects when an anchored item leaves the live list", () => {
     expect(
       resolveRootRestorationAction({
         isInitialRestorationPass: false,
@@ -129,7 +129,7 @@ describe("root scroll restoration", () => {
         selectedItemId: "selected",
         anchor: { selectedItemId: "selected", successorItemId: null },
       }),
-    ).toEqual({ type: "clear-stale-selection" });
+    ).toEqual({ type: "none" });
   });
 
   it("recycles the anchor when the selection moves on", () => {
