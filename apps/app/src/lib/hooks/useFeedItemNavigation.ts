@@ -556,10 +556,13 @@ export function useFeedItemNavigation(
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_LEFT),
   });
 
+  // An unknown item still gets its mutation, but never navigation: advancing
+  // from index -1 would treat the list end as reached and scroll to the top.
   const toggleReadWithAdvance = useCallback(
     (contentId: string, toggleRead: () => boolean) => {
       const idx = items.indexOf(contentId);
       if (!toggleRead()) return;
+      if (idx === -1) return;
 
       if (
         shouldAdvanceAfterToggleRead({
@@ -576,6 +579,7 @@ export function useFeedItemNavigation(
     (contentId: string, toggleSaved: () => boolean) => {
       const idx = items.indexOf(contentId);
       if (!toggleSaved()) return;
+      if (idx === -1) return;
 
       selectItemAfterCurrentItemLeavesView(idx);
     },
@@ -584,7 +588,10 @@ export function useFeedItemNavigation(
 
   const advanceAfterSendToInstapaper = useCallback(
     (contentId: string) => {
-      selectNextItem(items.indexOf(contentId));
+      const idx = items.indexOf(contentId);
+      if (idx === -1) return;
+
+      selectNextItem(idx);
     },
     [items, selectNextItem],
   );

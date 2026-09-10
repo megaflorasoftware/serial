@@ -10,6 +10,7 @@ import {
 import {
   cleanupUser,
   seedArticleData,
+  seedBookmarkProjectionData,
   seedMultipleArticleData,
   setFeedItemAsYouTubeVideo,
 } from "../fixtures/seed-db";
@@ -328,65 +329,166 @@ test.describe("feed item actions", () => {
     await expect(itemLink(firstSavedItemId)).toBeVisible({ timeout: 5000 });
   });
 
-  for (const trigger of ["archive button", "keyboard shortcut"] as const) {
-    test(`archiving with the ${trigger} keeps scroll and advances to the successor`, async ({
+  const contentActionCases = [
+    { action: "archiving", buttonName: "Archive", key: "e" },
+    { action: "saving", buttonName: "Save", key: "s" },
+  ] as const;
+
+  for (const { action, buttonName, key } of contentActionCases) {
+    for (const trigger of ["button", "keyboard shortcut"] as const) {
+      test(`${action} with the ${trigger} keeps scroll and advances to the successor`, async ({
+        page,
+      }) => {
+        const { email, password, feedItemIds } = await seedMultipleArticleData(
+          SELF_HOSTED_TURSO_PORT,
+          SELF_HOSTED_APP_PORT,
+          20,
+        );
+        testEmail = email;
+
+        await signIn({ page, email, password });
+        await expect(page.locator("article").first()).toBeVisible({
+          timeout: 30000,
+        });
+
+        // Exit keyboard-navigation mode before selecting by hover.
+        await page.mouse.move(1, 1);
+        await page.mouse.move(10, 10);
+
+        const targetItemId = feedItemIds[10]!;
+        const successorItemId = feedItemIds[11]!;
+        const targetItem = page.locator(
+          `article[data-item-id="${targetItemId}"]`,
+        );
+        await targetItem.scrollIntoViewIfNeeded();
+
+        const scrollContainer = page.locator('[data-slot="sidebar-inset"]');
+        const scrollBefore = await scrollContainer.evaluate(
+          (el) => el.scrollTop,
+        );
+        expect(scrollBefore).toBeGreaterThan(200);
+
+        await targetItem.getByRole("link").hover();
+        if (trigger === "button") {
+          await targetItem.getByRole("button", { name: buttonName }).click();
+        } else {
+          await page.keyboard.press(key);
+        }
+
+        // Park the cursor off the list so hover selection cannot mask a
+        // missing advance while rows slide under the old cursor position.
+        await page.mouse.move(5, 5);
+
+        await expect(targetItem).toHaveCount(0, { timeout: 10000 });
+
+        const successorItem = page.locator(
+          `article[data-item-id="${successorItemId}"]`,
+        );
+        await expect(successorItem.getByRole("link")).toHaveClass(
+          /md:bg-muted/,
+        );
+
+        // The advance re-centers the successor toward the 1/3-viewport
+        // target. The scroll is computed before the removal animation
+        // reflows, so allow one removed-row height on top of the tolerance.
+        await expect
+          .poll(async () => {
+            const [containerBox, itemBox] = await Promise.all([
+              scrollContainer.boundingBox(),
+              successorItem.boundingBox(),
+            ]);
+            if (!containerBox || !itemBox) return Number.POSITIVE_INFINITY;
+
+            const itemCenter = itemBox.y + itemBox.height / 2;
+            const target = containerBox.y + containerBox.height / 3;
+            const delta = getScrollPositionDelta(itemCenter, target);
+            return Math.max(
+              0,
+              delta - itemBox.height - SCROLL_POSITION_TOLERANCE_PX,
+            );
+          })
+          .toBe(0);
+
+        const scrollAfter = await scrollContainer.evaluate(
+          (el) => el.scrollTop,
+        );
+        expect(scrollAfter).toBeGreaterThan(scrollBefore * 0.5);
+      });
+    }
+  }
+
+  for (const bookmarkCase of [
+    // Archiving moves the bookmark to saved/archived; unsaving moves it to
+    // inbox/unread. Both leave the saved list, so both must advance.
+    { action: "archiving", buttonName: "Archive", destinationKey: "y" },
+    { action: "unsaving", buttonName: "Unsave", destinationKey: "i" },
+  ] as const) {
+    test(`${bookmarkCase.action} a bookmark with its button advances to the successor`, async ({
       page,
     }) => {
       const { email, password, feedItemIds } = await seedMultipleArticleData(
         SELF_HOSTED_TURSO_PORT,
         SELF_HOSTED_APP_PORT,
-        20,
+        5,
       );
       testEmail = email;
+      const seededBookmarks = [
+        await seedBookmarkProjectionData(
+          SELF_HOSTED_TURSO_PORT,
+          email,
+          feedItemIds[0]!,
+        ),
+        await seedBookmarkProjectionData(
+          SELF_HOSTED_TURSO_PORT,
+          email,
+          feedItemIds[1]!,
+        ),
+      ];
+      const bookmarkIds = seededBookmarks.map(({ bookmarkId }) => bookmarkId);
 
       await signIn({ page, email, password });
       await expect(page.locator("article").first()).toBeVisible({
         timeout: 30000,
       });
-
-      // Exit keyboard-navigation mode before selecting by hover.
       await page.mouse.move(1, 1);
       await page.mouse.move(10, 10);
 
-      const targetItemId = feedItemIds[10]!;
-      const successorItemId = feedItemIds[11]!;
-      const targetItem = page.locator(
-        `article[data-item-id="${targetItemId}"]`,
+      await page.keyboard.press("b");
+      await expect(page.locator("article")).toHaveCount(2, { timeout: 10000 });
+
+      // Act on whichever bookmark renders first so the test does not depend
+      // on how the saved list orders same-day items.
+      const renderedIds = await page
+        .locator("article")
+        .evaluateAll((articles) =>
+          articles
+            .map((article) => article.getAttribute("data-item-id"))
+            .filter((itemId): itemId is string => itemId !== null),
+        );
+      expect(renderedIds).toHaveLength(2);
+      expect(new Set(renderedIds)).toEqual(new Set(bookmarkIds));
+      const [targetBookmarkId, successorBookmarkId] = renderedIds as [
+        string,
+        string,
+      ];
+
+      const bookmarkItem = page.locator(
+        `article[data-item-id="${targetBookmarkId}"]`,
       );
-      await targetItem.scrollIntoViewIfNeeded();
+      await bookmarkItem.getByRole("link").hover();
+      await bookmarkItem
+        .getByRole("button", { name: bookmarkCase.buttonName })
+        .click();
+      await page.mouse.move(5, 5);
 
-      const scrollContainer = page.locator('[data-slot="sidebar-inset"]');
-      const scrollBefore = await scrollContainer.evaluate((el) => el.scrollTop);
-      expect(scrollBefore).toBeGreaterThan(200);
-
-      await targetItem.getByRole("link").hover();
-      if (trigger === "archive button") {
-        await targetItem.getByRole("button", { name: "Archive" }).click();
-      } else {
-        await page.keyboard.press("e");
-      }
-
-      await expect(targetItem).toHaveCount(0, { timeout: 10000 });
-
+      await expect(bookmarkItem).toHaveCount(0, { timeout: 10000 });
       const successorItem = page.locator(
-        `article[data-item-id="${successorItemId}"]`,
+        `article[data-item-id="${successorBookmarkId}"]`,
       );
       await expect(successorItem.getByRole("link")).toHaveClass(/md:bg-muted/);
 
-      // The advance scroll re-centers the successor; wait for it to settle,
-      // then confirm the list did not jump back toward the top.
-      let settledScrollTop = Number.NaN;
-      await expect
-        .poll(async () => {
-          const currentScrollTop = await scrollContainer.evaluate(
-            (el) => el.scrollTop,
-          );
-          const isSettled = currentScrollTop === settledScrollTop;
-          settledScrollTop = currentScrollTop;
-          return isSettled;
-        })
-        .toBe(true);
-      expect(settledScrollTop).toBeGreaterThan(scrollBefore * 0.5);
+      await page.keyboard.press(bookmarkCase.destinationKey);
+      await expect(bookmarkItem).toBeVisible({ timeout: 10000 });
     });
   }
 });

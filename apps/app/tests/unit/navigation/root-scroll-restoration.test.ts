@@ -76,6 +76,40 @@ describe("root scroll restoration", () => {
     ).toEqual({ type: "scroll", itemId: "next" });
   });
 
+  it("aborts the mount restoration when something else moves the selection", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: true,
+        activeItemIds: ["first", "next", "hovered"],
+        selectedItemId: "hovered",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "next",
+      }),
+    ).toEqual({ type: "abort" });
+  });
+
+  it("continues the mount restoration while its own selection holds", () => {
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: true,
+        activeItemIds: ["first", "next"],
+        selectedItemId: "next",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "next",
+      }),
+    ).toEqual({ type: "scroll", itemId: "next" });
+
+    expect(
+      resolveRootRestorationAction({
+        isInitialRestorationPass: true,
+        activeItemIds: ["first"],
+        selectedItemId: null,
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: null,
+      }),
+    ).toEqual({ type: "scroll", itemId: null });
+  });
+
   it("scrolls to the top on the initial pass only when nothing is restorable", () => {
     expect(
       resolveRootRestorationAction({

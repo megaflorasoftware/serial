@@ -24,6 +24,7 @@ import { useFeedItemValue, useHasRetainedFeedItemBody } from "~/lib/data/store";
 import { timeAgo } from "~/lib/utils";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { useContentItemActions } from "~/lib/hooks/useContentItemActions";
+import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 import { useShowShortcuts } from "~/lib/hooks/useShowShortcuts";
 import { captureRootScrollRestoration } from "~/lib/root-scroll-restoration";
 import {
@@ -316,7 +317,9 @@ function ItemActions({
   layout,
   isSelected,
 }: ItemActionsProps) {
-  const { toggleRead, toggleWatchLater } = useContentItemActions(contentId);
+  // ItemActions only ever renders for confirmed feed items (bookmark rows use
+  // BookmarkActions), so the feed-item endpoint is used directly.
+  const { toggleRead, toggleWatchLater } = useFeedItemActions(contentId);
 
   const showInstapaperAction = useShowInstapaperAction(contentId);
   const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
