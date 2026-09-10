@@ -596,7 +596,11 @@ export function useFeedItemNavigation(
         toggleSavedWithAdvance,
         advanceAfterSendToInstapaper,
       }),
-    [toggleReadWithAdvance, toggleSavedWithAdvance, advanceAfterSendToInstapaper],
+    [
+      toggleReadWithAdvance,
+      toggleSavedWithAdvance,
+      advanceAfterSendToInstapaper,
+    ],
   );
 
   const handleToggleRead = useCallback(
@@ -616,7 +620,10 @@ export function useFeedItemNavigation(
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_SAVED), () => {
     if (pathname !== "/" || !selectedItemId) return;
 
-    toggleSavedWithAdvance(selectedItemId, selectedItemActions.toggleWatchLater);
+    toggleSavedWithAdvance(
+      selectedItemId,
+      selectedItemActions.toggleWatchLater,
+    );
   });
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.COPY_URL), (event) => {
