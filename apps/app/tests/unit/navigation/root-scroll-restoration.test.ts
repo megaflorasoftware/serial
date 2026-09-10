@@ -56,22 +56,22 @@ describe("root scroll restoration", () => {
     ).toBeNull();
   });
 
-  it("selects then scrolls the restoration target during the initial pass", () => {
+  it("selects then scrolls the restoration target during the mount restoration", () => {
     expect(
       resolveRootRestorationAction({
-        isInitialRestorationPass: true,
         activeItemIds: ["first", "next"],
         selectedItemId: "selected",
         anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "selected",
       }),
     ).toEqual({ type: "select", itemId: "next" });
 
     expect(
       resolveRootRestorationAction({
-        isInitialRestorationPass: true,
         activeItemIds: ["first", "next"],
         selectedItemId: "next",
         anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "next",
       }),
     ).toEqual({ type: "scroll", itemId: "next" });
   });
@@ -79,7 +79,6 @@ describe("root scroll restoration", () => {
   it("aborts the mount restoration when something else moves the selection", () => {
     expect(
       resolveRootRestorationAction({
-        isInitialRestorationPass: true,
         activeItemIds: ["first", "next", "hovered"],
         selectedItemId: "hovered",
         anchor: { selectedItemId: "selected", successorItemId: "next" },
@@ -91,7 +90,6 @@ describe("root scroll restoration", () => {
   it("continues the mount restoration while its own selection holds", () => {
     expect(
       resolveRootRestorationAction({
-        isInitialRestorationPass: true,
         activeItemIds: ["first", "next"],
         selectedItemId: "next",
         anchor: { selectedItemId: "selected", successorItemId: "next" },
@@ -101,7 +99,6 @@ describe("root scroll restoration", () => {
 
     expect(
       resolveRootRestorationAction({
-        isInitialRestorationPass: true,
         activeItemIds: ["first"],
         selectedItemId: null,
         anchor: { selectedItemId: "selected", successorItemId: "next" },
@@ -110,48 +107,15 @@ describe("root scroll restoration", () => {
     ).toEqual({ type: "scroll", itemId: null });
   });
 
-  it("scrolls to the top on the initial pass only when nothing is restorable", () => {
+  it("scrolls to the top only when nothing is restorable", () => {
     expect(
       resolveRootRestorationAction({
-        isInitialRestorationPass: true,
         activeItemIds: ["first"],
         selectedItemId: null,
         anchor: { selectedItemId: null, successorItemId: null },
+        restorationSelection: null,
       }),
     ).toEqual({ type: "scroll", itemId: null });
-  });
-
-  it("never scrolls or reselects when an anchored item leaves the live list", () => {
-    expect(
-      resolveRootRestorationAction({
-        isInitialRestorationPass: false,
-        activeItemIds: ["first", "next"],
-        selectedItemId: "selected",
-        anchor: { selectedItemId: "selected", successorItemId: null },
-      }),
-    ).toEqual({ type: "none" });
-  });
-
-  it("recycles the anchor when the selection moves on", () => {
-    expect(
-      resolveRootRestorationAction({
-        isInitialRestorationPass: false,
-        activeItemIds: ["first", "next"],
-        selectedItemId: "next",
-        anchor: { selectedItemId: "selected", successorItemId: null },
-      }),
-    ).toEqual({ type: "recycle-anchor" });
-  });
-
-  it("leaves a live selection untouched after the initial pass", () => {
-    expect(
-      resolveRootRestorationAction({
-        isInitialRestorationPass: false,
-        activeItemIds: ["first", "selected"],
-        selectedItemId: "selected",
-        anchor: { selectedItemId: "selected", successorItemId: null },
-      }),
-    ).toEqual({ type: "none" });
   });
 
   it("places the selected item's center one-third down the viewport", () => {

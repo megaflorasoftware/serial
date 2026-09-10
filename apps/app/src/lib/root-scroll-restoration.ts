@@ -101,55 +101,41 @@ export function useRootScrollResetBeforePaint(enabled: boolean) {
 export type RootRestorationAction =
   | { type: "select"; itemId: string | null }
   | { type: "scroll"; itemId: string | null }
-  | { type: "abort" }
-  | { type: "recycle-anchor" }
-  | { type: "none" };
+  | { type: "abort" };
 
 // Restoration may scroll only during the mount restoration (returning from
 // the reader or a fresh load), and only while nothing else has moved the
-// selection out from under it. Once the list is live, an item leaving it must
-// never move the scroll position; at most the now-stale selection is cleared.
+// selection out from under it. Once the mount restoration finishes, the hook
+// does nothing at all: an item leaving the live list must never move the
+// scroll position or the selection.
 export function resolveRootRestorationAction({
-  isInitialRestorationPass,
   activeItemIds,
   selectedItemId,
   anchor,
   restorationSelection,
 }: {
-  isInitialRestorationPass: boolean;
   activeItemIds: readonly string[];
   selectedItemId: string | null;
   anchor: RootNavigationAnchor;
-  // The selection the restoration itself last applied; undefined until it has
-  // applied one. A live selection that differs was set by something else
+  // The selection the restoration has observed or applied; undefined until
+  // the first pass. A live selection that differs was set by something else
   // (hover, an action's advance), so restoration must stand down.
   restorationSelection?: string | null;
 }): RootRestorationAction {
-  if (isInitialRestorationPass) {
-    if (
-      restorationSelection !== undefined &&
-      selectedItemId !== restorationSelection
-    ) {
-      return { type: "abort" };
-    }
-    const restorationItemId = resolveRootRestorationItemId({
-      activeItemIds,
-      ...anchor,
-    });
-    if (selectedItemId !== restorationItemId) {
-      return { type: "select", itemId: restorationItemId };
-    }
-    return { type: "scroll", itemId: restorationItemId };
+  if (
+    restorationSelection !== undefined &&
+    selectedItemId !== restorationSelection
+  ) {
+    return { type: "abort" };
   }
-
-  if (selectedItemId !== anchor.selectedItemId) {
-    return { type: "recycle-anchor" };
+  const restorationItemId = resolveRootRestorationItemId({
+    activeItemIds,
+    ...anchor,
+  });
+  if (selectedItemId !== restorationItemId) {
+    return { type: "select", itemId: restorationItemId };
   }
-  // A selection pointing at an item missing from activeItemIds is left alone:
-  // the list can be in a transient hydration state, and clearing it here has
-  // wrongly wiped a just-restored selection. Stale selections resolve on the
-  // next arrow-key or hover interaction.
-  return { type: "none" };
+  return { type: "scroll", itemId: restorationItemId };
 }
 
 export function useRootItemScrollRestoration({
@@ -179,37 +165,30 @@ export function useRootItemScrollRestoration({
   // advance scroll executes.
   useIsomorphicLayoutEffect(() => {
     if (!ready) return;
+    // Restoration runs once per mount; afterwards this hook must never touch
+    // the scroll position or the selection again.
+    if (!needsRestorationRef.current) return;
 
     // Seed the abort guard with the first selection the mount restoration
     // observes, so a later selection change aborts it even when restoration
     // never applied a selection of its own (e.g. it is stuck retrying a
     // scroll target that has not rendered).
-    if (
-      needsRestorationRef.current &&
-      restorationSelectionRef.current === undefined
-    ) {
+    if (restorationSelectionRef.current === undefined) {
       restorationSelectionRef.current = selectedItemId;
     }
 
-    if (restorationAnchorRef.current === null) {
-      // A pending anchor is meant for the next mount's restoration only. Live
-      // passes must not read it: a capture fired just before navigating away
-      // would otherwise be swallowed by a pass that slips in before unmount,
-      // and a capture that never leads to a remount (a new-tab open) would
-      // otherwise re-seed a stale anchor on every later pass.
-      restorationAnchorRef.current = (needsRestorationRef.current
-        ? pendingRootNavigationAnchor
-        : null) ?? {
-        selectedItemId,
-        successorItemId: null,
-      };
-    }
-    const restorationAnchor = restorationAnchorRef.current;
+    // The pending anchor is meant for one mount's restoration only; reading
+    // it exclusively here (never on a live pass) keeps a capture fired just
+    // before navigating away intact for the next mount, and keeps a capture
+    // that never leads to a remount (a new-tab open) from ever re-seeding.
+    restorationAnchorRef.current ??= pendingRootNavigationAnchor ?? {
+      selectedItemId,
+      successorItemId: null,
+    };
     const action = resolveRootRestorationAction({
-      isInitialRestorationPass: needsRestorationRef.current,
       activeItemIds,
       selectedItemId,
-      anchor: restorationAnchor,
+      anchor: restorationAnchorRef.current,
       restorationSelection: restorationSelectionRef.current,
     });
 
@@ -230,22 +209,12 @@ export function useRootItemScrollRestoration({
 
         pendingRootNavigationAnchor = null;
         needsRestorationRef.current = false;
-        if (action.itemId !== restorationAnchor.selectedItemId) {
-          restorationAnchorRef.current = null;
-        }
         return;
       }
       case "abort": {
-        pendingRootNavigationAnchor = null;
+        // Do not clear the pending anchor here: an abort does not own it, and
+        // a capture fired just before the abort belongs to the next mount.
         needsRestorationRef.current = false;
-        restorationAnchorRef.current = null;
-        return;
-      }
-      case "recycle-anchor": {
-        restorationAnchorRef.current = null;
-        return;
-      }
-      case "none": {
         return;
       }
     }
