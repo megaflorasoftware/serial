@@ -15,7 +15,6 @@ import { getBookmarkAddedAt } from "./itemDate";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
-import { useFeedItemsSetWatchLaterValueMutation } from "~/lib/data/feed-items/mutations";
 import { useFeeds as useFeedsArray } from "~/lib/data/feeds/store";
 import {
   useSaveToInstapaperMutation,
@@ -24,14 +23,17 @@ import {
 import { useFeedItemValue, useHasRetainedFeedItemBody } from "~/lib/data/store";
 import { timeAgo } from "~/lib/utils";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
+import { useContentItemActions } from "~/lib/hooks/useContentItemActions";
 import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 import { useShowShortcuts } from "~/lib/hooks/useShowShortcuts";
 import { captureRootScrollRestoration } from "~/lib/root-scroll-restoration";
-import { useBookmarkValue } from "~/lib/data/bookmarks";
 import {
-  useDeleteBookmarkMutation,
-  useUpdateBookmarkStateMutation,
-} from "~/lib/data/bookmarks/mutations";
+  advanceAfterSendToInstapaper,
+  toggleContentRead,
+  toggleContentSaved,
+} from "~/lib/root-content-actions";
+import { useBookmarkValue } from "~/lib/data/bookmarks";
+import { useDeleteBookmarkMutation } from "~/lib/data/bookmarks/mutations";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import { contentDestination } from "~/lib/data/content-items/resolver";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
@@ -315,9 +317,9 @@ function ItemActions({
   layout,
   isSelected,
 }: ItemActionsProps) {
-  const { mutateAsync: setWatchLaterValue } =
-    useFeedItemsSetWatchLaterValueMutation(contentId);
-  const { toggleRead } = useFeedItemActions(contentId);
+  // ItemActions only ever renders for confirmed feed items (bookmark rows use
+  // BookmarkActions), so the feed-item endpoint is used directly.
+  const { toggleRead, toggleWatchLater } = useFeedItemActions(contentId);
 
   const showInstapaperAction = useShowInstapaperAction(contentId);
   const { mutateAsync: saveToInstapaper, isPending: isSavingToInstapaper } =
@@ -332,18 +334,15 @@ function ItemActions({
 
   const handleSaveToInstapaper = () => {
     void saveToInstapaper({ feedItemId: item.id });
+    advanceAfterSendToInstapaper(contentId);
   };
 
   const handleToggleWatchLater = () => {
-    void setWatchLaterValue({
-      id: item.id,
-      feedId: item.feedId,
-      isWatchLater: !item.isWatchLater,
-    });
+    toggleContentSaved(contentId, toggleWatchLater);
   };
 
   const handleToggleWatched = () => {
-    toggleRead();
+    toggleContentRead(contentId, toggleRead);
   };
 
   return (
@@ -364,6 +363,7 @@ function ItemActions({
         <Button
           size={isGrid ? "icon" : "icon"}
           variant="ghost"
+          aria-label="Send to Instapaper"
           disabled={!canMutate || isSavingToInstapaper}
           onClick={handleSaveToInstapaper}
           className={clsx("relative overflow-visible", {
@@ -379,6 +379,7 @@ function ItemActions({
       <Button
         size="icon"
         variant="ghost"
+        aria-label={item.isWatchLater ? "Unsave" : "Save"}
         disabled={!canMutate}
         onClick={handleToggleWatchLater}
         className={clsx("relative overflow-visible", {
@@ -395,6 +396,7 @@ function ItemActions({
       <Button
         size="icon"
         variant="ghost"
+        aria-label={item.isWatched ? "Unarchive" : "Archive"}
         disabled={!canMutate}
         onClick={handleToggleWatched}
         className={clsx("relative overflow-visible", {
@@ -512,7 +514,7 @@ function BookmarkActions({
   layout: ItemActionsLayout;
   isSelected?: boolean;
 }) {
-  const { mutate: updateState } = useUpdateBookmarkStateMutation(bookmark.id);
+  const { toggleRead, toggleWatchLater } = useContentItemActions(bookmark.id);
   const { mutate: deleteBookmark } = useDeleteBookmarkMutation();
   const launchDialog = useDialogStore((store) => store.launchDialog);
   const showShortcuts = useShowShortcuts();
@@ -550,12 +552,7 @@ function BookmarkActions({
         aria-label={bookmark.isSaved ? "Unsave" : "Save"}
         disabled={!canMutate}
         className={clsx({ "h-8 w-8 p-0": isGrid })}
-        onClick={() =>
-          updateState({
-            bookmarkId: bookmark.id,
-            isSaved: !bookmark.isSaved,
-          })
-        }
+        onClick={() => toggleContentSaved(bookmark.id, toggleWatchLater)}
       >
         {bookmark.isSaved ? (
           <BookmarkCheckIcon size={isGrid ? 14 : 16} />
@@ -569,12 +566,7 @@ function BookmarkActions({
         aria-label={bookmark.isRead ? "Unarchive" : "Archive"}
         disabled={!canMutate}
         className={clsx({ "h-8 w-8 p-0": isGrid })}
-        onClick={() =>
-          updateState({
-            bookmarkId: bookmark.id,
-            isRead: !bookmark.isRead,
-          })
-        }
+        onClick={() => toggleContentRead(bookmark.id, toggleRead)}
       >
         <ArchiveIcon size={isGrid ? 14 : 16} />
       </Button>
