@@ -126,3 +126,16 @@ const vanillaBookmarkStore = createStore<BookmarkStore>()(
 );
 
 export const bookmarksStore = createSelectorHooks(vanillaBookmarkStore);
+
+/**
+ * Re-judge capture retention against the live store when a capture
+ * response lands. Eligibility decided before the request cannot be
+ * trusted: a sign-out, archive, or unsave that happened mid-flight has
+ * already evicted the capture and must not see it re-persisted.
+ */
+export function isBookmarkCaptureRetainableNow(bookmarkId: string) {
+  const latestBookmark = bookmarksStore.getState().getBookmark(bookmarkId);
+  return (
+    latestBookmark !== undefined && shouldRetainBookmarkCapture(latestBookmark)
+  );
+}

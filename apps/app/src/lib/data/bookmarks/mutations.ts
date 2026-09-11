@@ -18,7 +18,7 @@ import {
 } from "../page-retention";
 import { viewsStore } from "../views/store";
 import { shouldRetainBookmarkCapture } from "../offline-content";
-import { bookmarksStore } from "./store";
+import { bookmarksStore, isBookmarkCaptureRetainableNow } from "./store";
 import { bookmarkCapturesStore } from "./capture-store";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import { orpc, orpcRouterClient } from "~/lib/orpc";
@@ -88,8 +88,7 @@ export async function reacquireRetainedCapture(bookmark: ApplicationBookmark) {
     .getCapture({ bookmarkId: bookmark.id })
     .catch(() => null);
   if (captureResult?.status !== "capture") return;
-  const latestBookmark = bookmarksStore.getState().getBookmark(bookmark.id);
-  if (!latestBookmark || !shouldRetainBookmarkCapture(latestBookmark)) return;
+  if (!isBookmarkCaptureRetainableNow(bookmark.id)) return;
   bookmarkCapturesStore.getState().upsert(captureResult.capture);
 }
 

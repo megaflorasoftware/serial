@@ -31,6 +31,7 @@ import type { BetterAuthPlugin } from "better-auth";
 import type { AtprotoLinkResult } from "~/lib/auth/atproto";
 import { enforceResolvedSignupPolicy } from "~/server/auth/policy";
 import { ATPROTO_LINK_RESULT_PARAM } from "~/lib/auth/atproto";
+import { extensionConnectCallbackSchema } from "~/lib/extension-auth";
 import { logError } from "~/server/logger";
 
 /**
@@ -106,6 +107,9 @@ export const atprotoPlugin = () => {
           body: z.object({
             identifier: identifierSchema,
             did: didSchema.optional(),
+            // Only the extension connect page is a valid destination, the
+            // same surface the sign-in page enforces for every method.
+            callbackURL: extensionConnectCallbackSchema.optional(),
           }),
         },
         async (ctx) => {
@@ -144,6 +148,7 @@ export const atprotoPlugin = () => {
             // no extra outbound call.
             const url = await startAtprotoAuth({
               identifier: ctx.body.did ?? ctx.body.identifier,
+              returnTo: ctx.body.callbackURL,
             });
             return ctx.json({ url: url.toString() });
           } catch (err) {
@@ -211,7 +216,7 @@ export const atprotoPlugin = () => {
               accountId: did,
               scope: result.grantedScope,
             },
-            callbackURL: "/",
+            callbackURL: result.returnTo ?? SIGN_IN_SUCCESS_REDIRECT,
             // Serial's providerId namespace is developer-controlled, but
             // atproto identities must never inherit linking trust from a
             // name match against generic trusted providers.
@@ -235,7 +240,7 @@ export const atprotoPlugin = () => {
             logError("[atproto] failed to finalize sign-in:", err);
             throw ctx.redirect(SIGN_IN_ERROR_REDIRECT);
           }
-          throw ctx.redirect(SIGN_IN_SUCCESS_REDIRECT);
+          throw ctx.redirect(result.returnTo ?? SIGN_IN_SUCCESS_REDIRECT);
         },
       ),
 

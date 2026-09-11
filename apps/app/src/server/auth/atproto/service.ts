@@ -18,6 +18,7 @@ import { db } from "~/server/db";
 import { account, atprotoConnections } from "~/server/db/schema";
 import { getKV } from "~/server/kv";
 import { captureException } from "~/server/logger";
+import { parseExtensionConnectCallback } from "~/lib/extension-auth";
 
 /**
  * The module boundary feature code talks to. Everything returns or consumes
@@ -41,6 +42,12 @@ export interface AtprotoCallbackResult {
    * verify it against the current session before attaching anything.
    */
   linkUserId: string | null;
+  /**
+   * Where a sign-in flow returns the user once the session exists, null
+   * when the flow started without a destination. Only the extension
+   * connect page is ever accepted (see `parseExtensionConnectCallback`).
+   */
+  returnTo: string | null;
 }
 
 /**
@@ -51,12 +58,17 @@ export interface AtprotoCallbackResult {
 export async function startAtprotoAuth(input: {
   identifier: string;
   scope?: string;
+  /** Validated extension connect path to land on after sign-in. */
+  returnTo?: string;
 }): Promise<URL> {
   const client = await getAtprotoClient();
   // Opportunistic cleanup of expired attempts; never blocks the flow.
   sweepStaleAtprotoConnections().catch(captureException);
   return client.authorize(input.identifier, {
     scope: input.scope ?? ATPROTO_SCOPE,
+    ...(input.returnTo
+      ? { state: JSON.stringify({ returnTo: input.returnTo }) }
+      : {}),
   });
 }
 
@@ -188,6 +200,7 @@ export async function finishAtprotoAuth(
     handle,
     grantedScope,
     linkUserId: appState.linkUserId ?? null,
+    returnTo: appState.returnTo ?? null,
   };
 }
 
@@ -218,25 +231,34 @@ export async function resolveAndStoreAtprotoHandle(
 
 /**
  * The app state Serial threads through authorize(): `expectedDid` pins an
- * upgrade's subject, `linkUserId` records who a link flow was started for.
- * Stored server-side by the SDK's state store, so neither is forgeable
- * from the callback URL.
+ * upgrade's subject, `linkUserId` records who a link flow was started for,
+ * `returnTo` carries a sign-in's post-session destination. Stored
+ * server-side by the SDK's state store, so none is forgeable from the
+ * callback URL. `returnTo` is still re-validated on the way out so a value
+ * that reached the store without passing the authorize schema cannot
+ * redirect anywhere but the extension connect page.
  */
 function parseAppState(state: string | null): {
   expectedDid?: string;
   linkUserId?: string;
+  returnTo?: string;
 } {
   if (!state) return {};
   try {
     const parsed = JSON.parse(state) as {
       expectedDid?: unknown;
       linkUserId?: unknown;
+      returnTo?: unknown;
     };
     return {
       expectedDid:
         typeof parsed.expectedDid === "string" ? parsed.expectedDid : undefined,
       linkUserId:
         typeof parsed.linkUserId === "string" ? parsed.linkUserId : undefined,
+      returnTo:
+        typeof parsed.returnTo === "string"
+          ? (parseExtensionConnectCallback(parsed.returnTo) ?? undefined)
+          : undefined,
     };
   } catch {
     return {};
