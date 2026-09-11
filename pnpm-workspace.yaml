@@ -20,6 +20,11 @@ allowBuilds:
   simple-git-hooks: false
   spawn-sync: false
   unrs-resolver: true
+peerDependencyRules:
+  allowedVersions:
+    # @polar-sh/better-auth 1.8.4 is the latest release and still declares ^0.47.0;
+    # its calls typecheck and pass against 0.49.0, which targets the 2026-04 spec.
+    "@polar-sh/better-auth>@polar-sh/sdk": "0.49"
 overrides:
   "@types/react": 19.2.17
   "@types/react-dom": 19.2.3
