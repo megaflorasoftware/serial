@@ -12,8 +12,10 @@ import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown"
 
 const HELP_TITLE = "What is the Atmosphere?";
 
-const HELP_BODY =
-  "The Atmosphere refers to a family of apps that give you control over your data and allow you to leverage it across different apps. Bluesky is the most popular app in this ecosystem, but the list of apps grows every day. Your Bluesky handle, or a domain you use as your handle, is your identity across these apps. You can use that handle to sign up for Serial or connect your Atmosphere account to an existing Serial account.";
+const HELP_PARAGRAPHS = [
+  "The Atmosphere refers to a family of apps that give you control over your data and allow you to leverage it across different apps. Bluesky is the most popular app in this ecosystem, but the list of apps grows every day.",
+  "Your Bluesky handle, or a domain you use as your handle, is your identity across these apps. You can use that handle to sign up for Serial or connect your Atmosphere account to an existing Serial account.",
+];
 
 export function AtmosphereHelpButton() {
   const [open, setOpen] = useState(false);
@@ -35,7 +37,11 @@ export function AtmosphereHelpButton() {
         onOpenChange={setOpen}
         title={HELP_TITLE}
       >
-        <p className="text-muted-foreground text-sm">{HELP_BODY}</p>
+        <div className="text-muted-foreground grid gap-3 text-sm">
+          {HELP_PARAGRAPHS.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </div>
       </ControlledResponsiveDialog>
     </>
   );
