@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionStateAtom } from "~/lib/data/atoms";
+import { markDataSubscriptionPaused } from "~/lib/data/subscriptionConnection";
 import { useDataSubscription } from "~/lib/data/useDataSubscription";
 
 /**
@@ -66,6 +67,8 @@ describe("useDataSubscription", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // The module-level connected flag outlives each mount.
+    markDataSubscriptionPaused();
     getDefaultStore().set(connectionStateAtom, "unknown");
   });
 

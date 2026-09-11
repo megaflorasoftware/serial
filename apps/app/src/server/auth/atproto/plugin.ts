@@ -203,6 +203,7 @@ export const atprotoPlugin = () => {
           }
 
           const { did, handle } = result;
+          const destination = result.returnTo ?? SIGN_IN_SUCCESS_REDIRECT;
           const outcome = await handleOAuthUserInfo(ctx, {
             userInfo: {
               id: did,
@@ -216,7 +217,7 @@ export const atprotoPlugin = () => {
               accountId: did,
               scope: result.grantedScope,
             },
-            callbackURL: result.returnTo ?? SIGN_IN_SUCCESS_REDIRECT,
+            callbackURL: destination,
             // Serial's providerId namespace is developer-controlled, but
             // atproto identities must never inherit linking trust from a
             // name match against generic trusted providers.
@@ -240,7 +241,7 @@ export const atprotoPlugin = () => {
             logError("[atproto] failed to finalize sign-in:", err);
             throw ctx.redirect(SIGN_IN_ERROR_REDIRECT);
           }
-          throw ctx.redirect(result.returnTo ?? SIGN_IN_SUCCESS_REDIRECT);
+          throw ctx.redirect(destination);
         },
       ),
 

@@ -262,10 +262,13 @@ test("keeps an opened Unread text item readable after an offline reload", async 
 
     // Ordinary reading loads the body; that alone retains it, without the
     // item ever being saved.
+    const listUrl = page.url();
     await card.getByRole("link").click();
     await expect(page).toHaveURL(new RegExp(`/read/${feedItemId}$`));
     await expect(page.getByText("Paragraph 1:")).toBeVisible();
     await page.goBack();
+    // The popstate must settle before persistence is polled.
+    await expect(page).toHaveURL(listUrl);
     await expect(card).toBeVisible();
     await expect
       .poll(async () => {
