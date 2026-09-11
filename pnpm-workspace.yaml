@@ -22,8 +22,10 @@ allowBuilds:
   unrs-resolver: true
 peerDependencyRules:
   allowedVersions:
-    # @polar-sh/better-auth 1.8.4 is the latest release and still declares ^0.47.0;
-    # its calls typecheck and pass against 0.49.0, which targets the 2026-04 spec.
+    # Suppresses the unmet-peer warning only; resolution already links the plugin
+    # to the single sdk 0.49.0 copy. @polar-sh/better-auth 1.8.4 is the latest
+    # release and still declares ^0.47.0; its calls typecheck and pass against
+    # 0.49.0, which targets the 2026-04 spec.
     "@polar-sh/better-auth>@polar-sh/sdk": "0.49"
 overrides:
   "@types/react": 19.2.17
