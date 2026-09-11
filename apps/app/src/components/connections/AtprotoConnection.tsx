@@ -21,7 +21,7 @@ export function AtprotoConnectionForm() {
   return (
     <AtprotoHandleField
       id="atproto-handle"
-      label="Handle"
+      label="Connect with your Atmosphere handle"
       submitLabel="Connect"
       busy={linkMutation.isPending}
       focusOnMount
