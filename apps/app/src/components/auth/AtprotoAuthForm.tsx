@@ -4,17 +4,16 @@ import type { AtprotoHandleSubmission } from "~/components/auth/AtprotoHandleFie
 import type { AuthIntent } from "~/lib/auth/method-view";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
 import { authClient } from "~/lib/auth-client";
+import { AUTH_SIGNED_IN_URL } from "~/lib/auth/constants";
 
 /**
  * The Atmosphere (AT Protocol) entry point on the auth pages: the shared
  * handle step (AtprotoHandleField) wired to the authorize endpoint.
  * Rendered expanded — inline when Atmosphere is the primary method, and
- * inside the secondary-method subscreen otherwise.
- *
- * Deliberately deferred: the page's ?callbackURL= is not threaded through
- * the OAuth round trip — the callback's success redirect is fixed at "/"
- * in the plugin. Carrying it through the encrypted state payload is a
- * follow-up once a flow (extension connect) actually needs it.
+ * inside the secondary-method subscreen otherwise. A non-default
+ * `signedInDestination` (the extension connect page) rides the encrypted
+ * state payload through the OAuth round trip, so the callback lands there
+ * like the other sign-in methods do.
  */
 
 const AUTHORIZE_PATH = "/atproto/authorize";
@@ -31,12 +30,14 @@ interface AtprotoAuthFormProps {
   intent: AuthIntent;
   /** The page's own submission state; busy-ness here stays internal. */
   disabled: boolean;
+  signedInDestination: string;
   focusOnMount?: boolean;
 }
 
 export function AtprotoAuthForm({
   intent,
   disabled,
+  signedInDestination,
   focusOnMount = false,
 }: AtprotoAuthFormProps) {
   const [busy, setBusy] = useState(false);
@@ -57,6 +58,9 @@ export function AtprotoAuthForm({
           body: {
             identifier: submission.identifier,
             ...(submission.did ? { did: submission.did } : {}),
+            ...(signedInDestination !== AUTH_SIGNED_IN_URL
+              ? { callbackURL: signedInDestination }
+              : {}),
           },
         },
       );

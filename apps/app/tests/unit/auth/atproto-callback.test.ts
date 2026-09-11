@@ -38,6 +38,7 @@ const {
   finishAtprotoAuth,
   resolveAndStoreAtprotoHandle,
   revokeAtprotoConnection,
+  startAtprotoAuth,
 } = await import("~/server/auth/atproto/service");
 
 type Session = ReturnType<typeof openBenchmarkDatabase>;
@@ -45,6 +46,16 @@ type Target = ReturnType<typeof createLocalBenchmarkTarget>;
 
 const DID = "did:plc:callbackuser";
 const OTHER_DID = "did:plc:someoneelse";
+
+const EXTENSION_CONNECT_RETURN_TO = `/auth/connect-extension?${new URLSearchParams(
+  {
+    redirect_uri:
+      "https://olpaonddchkbjpmjjfamplfaibopllam.chromiumapp.org/serial-auth",
+    state: "s".repeat(43),
+    code_challenge: "c".repeat(43),
+    code_challenge_method: "S256",
+  },
+).toString()}`;
 
 function oauthSession(did: string) {
   return {
@@ -56,11 +67,13 @@ function oauthSession(did: string) {
 
 function fakeClient(options: {
   callback?: () => Promise<unknown>;
+  authorize?: () => Promise<URL>;
   handle?: string;
   resolveError?: Error;
 }) {
   return {
     callback: options.callback ?? vi.fn(),
+    authorize: options.authorize ?? vi.fn(),
     oauthResolver: {
       resolveIdentity: options.resolveError
         ? vi.fn().mockRejectedValue(options.resolveError)
@@ -115,8 +128,44 @@ describe("finishAtprotoAuth", () => {
     expect(result.handle).toBe("reader.bsky.social");
     expect(result.grantedScope).toBe("atproto");
     expect(result.linkUserId).toBeNull();
+    expect(result.returnTo).toBeNull();
     expect((await connectionRow())?.handle).toBe("reader.bsky.social");
   });
+
+  it("returns the extension connect destination carried by the sign-in state", async () => {
+    const oauth = oauthSession(DID);
+    clientHolder.current = fakeClient({
+      callback: vi.fn().mockResolvedValue({
+        session: oauth,
+        state: JSON.stringify({ returnTo: EXTENSION_CONNECT_RETURN_TO }),
+      }),
+    });
+
+    const result = await finishAtprotoAuth(new URLSearchParams("code=abc"));
+
+    expect(result.returnTo).toBe(EXTENSION_CONNECT_RETURN_TO);
+  });
+
+  it.each([
+    ["a same-origin path", "/settings"],
+    ["an absolute URL", "https://evil.example/auth/connect-extension"],
+    ["a malformed connect path", "/auth/connect-extension?state=short"],
+  ])(
+    "drops %s carried by the state so the callback falls back to the feed",
+    async (_label, returnTo) => {
+      const oauth = oauthSession(DID);
+      clientHolder.current = fakeClient({
+        callback: vi.fn().mockResolvedValue({
+          session: oauth,
+          state: JSON.stringify({ returnTo }),
+        }),
+      });
+
+      const result = await finishAtprotoAuth(new URLSearchParams("code=abc"));
+
+      expect(result.returnTo).toBeNull();
+    },
+  );
 
   it("defers handle resolution on request so binding never waits on it", async () => {
     const oauth = oauthSession(DID);
@@ -248,6 +297,47 @@ describe("finishAtprotoAuth", () => {
 
     expect(result.handle).toBeNull();
     expect((await connectionRow())?.handle).toBeNull();
+  });
+});
+
+describe("startAtprotoAuth", () => {
+  let session: Session;
+  let target: Target;
+
+  beforeEach(async () => {
+    target = createLocalBenchmarkTarget();
+    session = openBenchmarkDatabase({ url: target.url });
+    await applyMigrations(session.baseClient);
+    dbHolder.current = session.database;
+  });
+
+  afterEach(() => {
+    session.close();
+    target.cleanup();
+    dbHolder.current = undefined;
+    clientHolder.current = undefined;
+  });
+
+  it("threads the return destination through the app state only when given one", async () => {
+    const authorize = vi
+      .fn()
+      .mockResolvedValue(new URL("https://pds.example/authorize"));
+    clientHolder.current = fakeClient({ authorize });
+
+    await startAtprotoAuth({ identifier: "user.example.com" });
+    expect(authorize).toHaveBeenLastCalledWith(
+      "user.example.com",
+      expect.not.objectContaining({ state: expect.anything() }),
+    );
+
+    await startAtprotoAuth({
+      identifier: "user.example.com",
+      returnTo: EXTENSION_CONNECT_RETURN_TO,
+    });
+    expect(authorize).toHaveBeenLastCalledWith("user.example.com", {
+      scope: "atproto",
+      state: JSON.stringify({ returnTo: EXTENSION_CONNECT_RETURN_TO }),
+    });
   });
 });
 

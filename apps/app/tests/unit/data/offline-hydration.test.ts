@@ -347,6 +347,36 @@ describe("hydrateOfflineBodiesForPage", () => {
     expect(mocks.getCaptures).toHaveBeenCalledTimes(3);
   });
 
+  it("drops a capture whose Bookmark was archived while the request was in flight", async () => {
+    const entity = bookmark();
+    bookmarksStore.getState().upsert(entity);
+    let resolveCaptures: (captures: unknown[]) => void = () => {};
+    mocks.getCaptures.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCaptures = resolve;
+      }),
+    );
+    const hydration = hydrateOfflineBodiesForPage({
+      feedItems: [],
+      bookmarks: [entity],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    bookmarksStore.getState().upsert({ ...entity, isRead: true });
+    resolveCaptures([
+      {
+        bookmarkId: entity.id,
+        contentHtml: "<p>Archived capture</p>",
+        contentHash: "capture-hash",
+        captureSource: "server-static-fetch",
+        extractorVersion: "test",
+        sanitizerPolicyVersion: 1,
+        capturedAt: now,
+      },
+    ]);
+    await hydration;
+    expect(bookmarkCapturesStore.getState().capturesDict).toEqual({});
+  });
+
   it("discards an in-flight capture response after invalidation", async () => {
     const entity = bookmark();
     bookmarksStore.getState().upsert(entity);

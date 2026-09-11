@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { db as defaultDb } from "~/server/db";
 import { account, user } from "~/server/db/schema";
+import { CREDENTIAL_PROVIDER_ID } from "~/lib/constants";
 
 type VerificationDatabase = typeof defaultDb;
 
@@ -39,7 +40,7 @@ export function computeEmailVerificationExempt(
   accounts: Array<{ providerId: string }>,
 ): boolean {
   if (accounts.length === 0) return false;
-  return !accounts.some((row) => row.providerId === "credential");
+  return !accounts.some((row) => row.providerId === CREDENTIAL_PROVIDER_ID);
 }
 
 /**

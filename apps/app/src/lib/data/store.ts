@@ -592,9 +592,11 @@ export async function retainFeedItemBody(itemId: string) {
     return;
   }
   if (retainLoadedFeedItemBody(itemId)) return;
-  const items = await orpcRouterClient.initial.requestFullTextForItems({
-    itemIds: [itemId],
-  });
+  // Retention is best effort; a failed fetch stays silent.
+  const items = await orpcRouterClient.initial
+    .requestFullTextForItems({ itemIds: [itemId] })
+    .catch(() => null);
+  if (!items) return;
   feedItemsStore.getState().applyFulltextItems(items);
 }
 

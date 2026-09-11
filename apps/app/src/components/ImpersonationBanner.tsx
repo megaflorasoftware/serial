@@ -6,6 +6,7 @@ import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { useSession } from "~/lib/auth-client";
+import { getDisplayableEmail } from "~/lib/auth/atproto";
 import { orpc } from "~/lib/orpc";
 
 export function ImpersonationBanner() {
@@ -38,7 +39,11 @@ export function ImpersonationBanner() {
           <UserIcon size={16} />
           <span>
             You are impersonating{" "}
-            <strong>{session.user.name || session.user.email}</strong>
+            <strong>
+              {session.user.name ||
+                getDisplayableEmail(session.user.email) ||
+                session.user.id}
+            </strong>
           </span>
         </div>
         <Button

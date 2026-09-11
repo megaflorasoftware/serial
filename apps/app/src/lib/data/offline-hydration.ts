@@ -2,7 +2,10 @@
 
 import { orpcRouterClient } from "../orpc";
 import { bookmarkCapturesStore } from "./bookmarks/capture-store";
-import { bookmarksStore } from "./bookmarks/store";
+import {
+  bookmarksStore,
+  isBookmarkCaptureRetainableNow,
+} from "./bookmarks/store";
 import {
   isEligibleFeedBody,
   shouldRetainBookmarkCapture,
@@ -209,6 +212,7 @@ async function hydrateBookmarkCaptures(bookmarkIds: string[], epoch: number) {
         }
       }
       for (const capture of captures) {
+        if (!isBookmarkCaptureRetainableNow(capture.bookmarkId)) continue;
         bookmarkCapturesStore.getState().upsert(capture);
       }
     } catch {

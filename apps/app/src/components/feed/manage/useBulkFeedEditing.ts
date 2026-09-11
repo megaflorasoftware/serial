@@ -142,6 +142,7 @@ export function useBulkFeedEditing({
   };
 
   const handleClear = () => {
+    if (!canMutate) return;
     const feedIds = Array.from(selectedFeedIds);
     const count = feedIds.length;
 

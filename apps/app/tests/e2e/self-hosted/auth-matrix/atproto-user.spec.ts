@@ -143,6 +143,47 @@ test.describe("atmosphere sign-in entry", () => {
     });
   });
 
+  test("carries the extension connect callback into the authorize request", async ({
+    page,
+  }) => {
+    const connectSearch = new URLSearchParams({
+      redirect_uri:
+        "https://olpaonddchkbjpmjjfamplfaibopllam.chromiumapp.org/serial-auth",
+      state: "s".repeat(43),
+      code_challenge: "c".repeat(43),
+      code_challenge_method: "S256",
+    }).toString();
+    const connectPath = `/auth/connect-extension?${connectSearch}`;
+
+    // Arriving from the extension without a session, the connect page
+    // hands the sign-in page its own URL as the destination.
+    await page.goto(connectPath);
+    await page.getByRole("link", { name: "Sign in to continue" }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-in\?callbackURL=/);
+    await expect(
+      page.getByRole("button", { name: "Sign in with Atmosphere" }),
+    ).toBeVisible({ timeout: 30000 });
+    const handleInput = await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with your Atmosphere handle",
+    );
+    await handleInput.fill("alice.test");
+
+    // The destination rides the authorize body so the callback can return
+    // there once the session exists, the same as email and OAuth sign-in.
+    const authorizeRequest = page.waitForRequest(
+      (request) => request.url().includes("/api/auth/atproto/authorize"),
+      { timeout: 10_000 },
+    );
+    await page.getByRole("button", { name: "Continue" }).click();
+    const request = await authorizeRequest;
+    expect(request.postDataJSON()).toEqual({
+      identifier: "alice.test",
+      callbackURL: connectPath,
+    });
+  });
+
   test("explains the Atmosphere from the handle step's help button", async ({
     page,
   }) => {

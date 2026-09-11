@@ -244,6 +244,64 @@ test("keeps only retained text interactive and read-only after an offline reload
   }
 });
 
+test("keeps an opened Unread text item readable after an offline reload", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(60_000);
+  const { feedItemId, email, password } = await seedArticleData(
+    SELF_HOSTED_TURSO_PORT,
+    SELF_HOSTED_APP_PORT,
+  );
+
+  try {
+    await signIn({ page, email, password });
+    const card = page.locator(`article[data-item-id="${feedItemId}"]`);
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await prepareControlledShell(page);
+
+    // Ordinary reading loads the body; that alone retains it, without the
+    // item ever being saved.
+    const listUrl = page.url();
+    await card.getByRole("link").click();
+    await expect(page).toHaveURL(new RegExp(`/read/${feedItemId}$`));
+    await expect(page.getByText("Paragraph 1:")).toBeVisible();
+    await page.goBack();
+    // The popstate must settle before persistence is polled.
+    await expect(page).toHaveURL(listUrl);
+    await expect(card).toBeVisible();
+    await expect
+      .poll(async () => {
+        await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+        return getFeedBodyPersistence(page, feedItemId);
+      })
+      .toEqual({
+        hasBody: true,
+        isWatchLater: false,
+        isWatched: false,
+        retained: true,
+      });
+
+    await context.setOffline(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText("Offline, some features may be disabled"),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const offlineCard = page.locator(`article[data-item-id="${feedItemId}"]`);
+    await expect(offlineCard.getByRole("link")).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await offlineCard.getByRole("link").click();
+    await expect(page).toHaveURL(new RegExp(`/read/${feedItemId}$`));
+    await expect(page.getByText("Paragraph 1:")).toBeVisible();
+  } finally {
+    await context.setOffline(false);
+    await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+  }
+});
+
 test("reloads a retained Bookmark capture through the production service worker", async ({
   page,
   context,
