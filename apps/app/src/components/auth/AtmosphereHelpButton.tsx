@@ -13,8 +13,8 @@ import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown"
 const HELP_TITLE = "What is the Atmosphere?";
 
 const HELP_PARAGRAPHS = [
-  "The Atmosphere refers to a family of apps that give you control over your data and allow you to leverage it across different apps. Bluesky is the most popular app in this ecosystem, but the list of apps grows every day.",
-  "Your Bluesky handle, or a domain you use as your handle, is your identity across these apps. You can use that handle to sign up for Serial or connect your Atmosphere account to an existing Serial account.",
+  "The Atmosphere refers to a family of apps that gives you control over your data and allows you to leverage that data across different apps in the ecosystem. Bluesky is the most popular app in the Atmosphere, but the list of apps grows every day.",
+  "Your Bluesky handle, or a domain you use as your handle, is your identity across these apps. You can use that handle to sign up for Serial, or to connect your Atmosphere account to an existing Serial account.",
 ];
 
 export function AtmosphereHelpButton() {
