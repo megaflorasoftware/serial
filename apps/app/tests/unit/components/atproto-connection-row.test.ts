@@ -61,7 +61,9 @@ describe("AtprotoConnectionRow", () => {
 
     expect(row.getAttribute("role")).toBeNull();
     expect(row.querySelector('[role="button"]')).toBeNull();
-    expect(row.textContent).toContain("alice.example");
+    expect(row.querySelector("span.text-muted-foreground")?.textContent).toBe(
+      "alice.example",
+    );
     const banner = row.querySelector(".bg-amber-500");
     expect(banner?.textContent).toContain("Sign-in expired");
     expect(buttons.map((button) => button.textContent)).toEqual([

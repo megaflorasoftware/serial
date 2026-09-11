@@ -87,21 +87,11 @@ function AtprotoConnectionStatusLine({
   if (!status.isConfigured) {
     return <span className="text-muted-foreground text-sm">Not available</span>;
   }
-  if (status.isConnected) {
+  if ((status.isConnected || status.needsReconnect) && status.handle) {
+    // A connection that needs reconnecting still identifies itself by its
+    // handle; the banner below the row carries the expired state.
     return (
       <span className="text-muted-foreground text-sm">{status.handle}</span>
-    );
-  }
-  if (status.needsReconnect) {
-    // Credentials were lost (revoked at the PDS, failed refresh) but
-    // the sign-in method still exists: the line describes the state and
-    // the Reconnect button beside it carries the verb.
-    return (
-      <span className="text-muted-foreground text-sm">
-        {status.handle
-          ? `Sign-in expired · ${status.handle}`
-          : "Sign-in expired"}
-      </span>
     );
   }
   return <span className="text-muted-foreground text-sm">Not connected</span>;
