@@ -13,6 +13,7 @@ import {
   CSS_TO_FONT_FAMILY,
   FONT_FAMILY_CSS,
 } from "~/lib/constants/article-fonts";
+import { useCanMutate } from "~/lib/data/offline-mutations";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 
 const MIN_FONT_SIZE = 12;
@@ -39,6 +40,7 @@ function getInitialFontSize(): number {
 }
 
 function FontSizeControl() {
+  const canMutate = useCanMutate();
   const [fontSize, setFontSize] = useState(getInitialFontSize);
   const { mutate: saveArticleFont } = useMutation(
     orpc.userConfig.setArticleFont.mutationOptions(),
@@ -61,7 +63,7 @@ function FontSizeControl() {
             size="icon"
             className="h-7 w-7"
             onClick={() => update(fontSize - 1)}
-            disabled={fontSize <= MIN_FONT_SIZE}
+            disabled={!canMutate || fontSize <= MIN_FONT_SIZE}
           >
             <MinusIcon className="h-3 w-3" />
           </Button>
@@ -73,7 +75,7 @@ function FontSizeControl() {
             size="icon"
             className="h-7 w-7"
             onClick={() => update(fontSize + 1)}
-            disabled={fontSize >= MAX_FONT_SIZE}
+            disabled={!canMutate || fontSize >= MAX_FONT_SIZE}
           >
             <PlusIcon className="h-3 w-3" />
           </Button>
@@ -91,6 +93,7 @@ function getInitialFontFamily(): string {
 }
 
 function FontFamilyControl() {
+  const canMutate = useCanMutate();
   const [fontFamily, setFontFamily] = useState(getInitialFontFamily);
   const { mutate: saveArticleFont } = useMutation(
     orpc.userConfig.setArticleFont.mutationOptions(),
@@ -112,6 +115,7 @@ function FontFamilyControl() {
         size="sm"
         value={fontFamily}
         onValueChange={update}
+        disabled={!canMutate}
       >
         <ToggleGroupItem className="w-full" value="sans-serif">
           Sans-serif

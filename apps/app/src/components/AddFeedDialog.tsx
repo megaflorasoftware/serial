@@ -616,6 +616,7 @@ function EditFeedViewsField({
     <SelectableChipList
       label="Views"
       options={viewOptions}
+      createDisabled={!canMutate}
       selectedIds={selectedViewIds}
       onToggle={(id) =>
         toggleSelectedId(selectedViewIds, setSelectedViewIds, id)
@@ -665,6 +666,7 @@ function EditFeedTagsField({
   return (
     <SelectableChipList
       label="Tags"
+      createDisabled={!canMutate}
       options={tagOptions}
       selectedIds={selectedCategories}
       prioritizedIds={prioritizedTagIds}

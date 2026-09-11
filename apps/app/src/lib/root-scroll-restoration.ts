@@ -77,6 +77,45 @@ export function captureRootScrollRestoration(
   }
 }
 
+type RootItemLinkClickEvent = {
+  preventDefault: () => void;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
+  button?: number;
+};
+
+function opensInNewContext(event: RootItemLinkClickEvent) {
+  return (
+    Boolean(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) ||
+    (event.button ?? 0) !== 0
+  );
+}
+
+// A modifier or non-primary click opens elsewhere (TanStack Link runs the
+// user's click handler before its own modifier check), so the list never
+// unmounts and a capture would sit until some unrelated remount.
+export function createRootItemLinkClickHandler({
+  canOpen,
+  target,
+  restorationId,
+}: {
+  canOpen: boolean;
+  target: "_blank" | undefined;
+  restorationId: string;
+}) {
+  return (event: RootItemLinkClickEvent) => {
+    if (!canOpen) {
+      event.preventDefault();
+      return;
+    }
+    if (!target && !opensInNewContext(event)) {
+      captureRootScrollRestoration(restorationId);
+    }
+  };
+}
+
 export function updateCurrentRootRenderedItemCount(
   listKey: string,
   renderedItemCount: number,
@@ -177,14 +216,18 @@ export function useRootItemScrollRestoration({
       restorationSelectionRef.current = selectedItemId;
     }
 
-    // The pending anchor is meant for one mount's restoration only; reading
-    // it exclusively here (never on a live pass) keeps a capture fired just
-    // before navigating away intact for the next mount, and keeps a capture
-    // that never leads to a remount (a new-tab open) from ever re-seeding.
-    restorationAnchorRef.current ??= pendingRootNavigationAnchor ?? {
-      selectedItemId,
-      successorItemId: null,
-    };
+    // The pending anchor is meant for one mount's restoration only. It is
+    // read exclusively here (never on a live pass) and consumed the moment
+    // this mount seeds from it, so a capture fired later in this mount's
+    // lifetime stays intact for the next mount, and a stale one (an abort
+    // that never scrolled) can't re-seed an unrelated later visit.
+    if (restorationAnchorRef.current === null) {
+      restorationAnchorRef.current = pendingRootNavigationAnchor ?? {
+        selectedItemId,
+        successorItemId: null,
+      };
+      pendingRootNavigationAnchor = null;
+    }
     const action = resolveRootRestorationAction({
       activeItemIds,
       selectedItemId,
@@ -207,13 +250,13 @@ export function useRootItemScrollRestoration({
           getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
         }
 
-        pendingRootNavigationAnchor = null;
         needsRestorationRef.current = false;
         return;
       }
       case "abort": {
-        // Do not clear the pending anchor here: an abort does not own it, and
-        // a capture fired just before the abort belongs to the next mount.
+        // The anchor this mount seeded from is already consumed; a capture
+        // fired since (the click that caused this abort) belongs to the next
+        // mount and must stay pending.
         needsRestorationRef.current = false;
         return;
       }

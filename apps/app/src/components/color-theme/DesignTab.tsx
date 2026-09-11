@@ -9,6 +9,7 @@ import { Slider } from "../ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { ShowShortcutsToggle } from "./ShowShortcutsToggle";
 import { authClient } from "~/lib/auth-client";
+import { useCanMutate } from "~/lib/data/offline-mutations";
 import { orpc } from "~/lib/orpc";
 
 function clamp(value: number, min: number, max: number) {
@@ -98,6 +99,7 @@ function useDebouncedCssValue(options: {
 
 function EditColorsForm() {
   const { data } = authClient.useSession();
+  const canMutate = useCanMutate();
 
   const { mutate: saveThemeHSLToDatabase } = useMutation(
     orpc.userConfig.setThemeHSL.mutationOptions(),
@@ -162,12 +164,14 @@ function EditColorsForm() {
             className="w-18 font-sans"
             type="number"
             value={hue.value}
+            disabled={!canMutate}
             onChange={(e) => hue.onChange(parseInt(e.target.value) || 0)}
             onBlur={(e) => hue.onCommit(parseInt(e.target.value) || 0)}
           />
         </div>
         <Slider
           value={[hue.value]}
+          disabled={!canMutate}
           min={0}
           max={360}
           step={1}
@@ -182,12 +186,14 @@ function EditColorsForm() {
             className="w-18 font-sans"
             type="number"
             value={saturation.value}
+            disabled={!canMutate}
             onChange={(e) => saturation.onChange(parseInt(e.target.value) || 0)}
             onBlur={(e) => saturation.onCommit(parseInt(e.target.value) || 0)}
           />
         </div>
         <Slider
           value={[saturation.value]}
+          disabled={!canMutate}
           min={0}
           max={100}
           step={1}
@@ -206,12 +212,14 @@ function EditColorsForm() {
             className="w-18 font-sans"
             type="number"
             value={lightness.value}
+            disabled={!canMutate}
             onChange={(e) => lightness.onChange(parseInt(e.target.value) || 0)}
             onBlur={(e) => lightness.onCommit(parseInt(e.target.value) || 0)}
           />
         </div>
         <Slider
           value={[lightness.value]}
+          disabled={!canMutate}
           min={brightnessMin}
           max={brightnessMax}
           step={1}

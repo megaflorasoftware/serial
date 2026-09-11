@@ -27,7 +27,7 @@ import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { useContentItemActions } from "~/lib/hooks/useContentItemActions";
 import { useFeedItemActions } from "~/lib/hooks/useFeedItemActions";
 import { useShowShortcuts } from "~/lib/hooks/useShowShortcuts";
-import { captureRootScrollRestoration } from "~/lib/root-scroll-restoration";
+import { createRootItemLinkClickHandler } from "~/lib/root-scroll-restoration";
 import {
   advanceAfterSendToInstapaper,
   toggleContentRead,
@@ -627,24 +627,6 @@ function deriveItemLink({
   return { isOffline, href, target, rel };
 }
 
-function createItemLinkClickHandler({
-  canOpen,
-  target,
-  restorationId,
-}: {
-  canOpen: boolean;
-  target: "_blank" | undefined;
-  restorationId: string;
-}) {
-  return (event: { preventDefault: () => void }) => {
-    if (!canOpen) {
-      event.preventDefault();
-      return;
-    }
-    if (!target) captureRootScrollRestoration(restorationId);
-  };
-}
-
 function BookmarkItemDisplay({
   bookmark,
   size,
@@ -677,7 +659,7 @@ function BookmarkItemDisplay({
     opensExternally: destination.external,
     relRequiresTarget: true,
   });
-  const handleLinkClick = createItemLinkClickHandler({
+  const handleLinkClick = createRootItemLinkClickHandler({
     canOpen,
     target,
     restorationId: bookmark.id,
@@ -887,7 +869,7 @@ function FeedItemDisplay({
   });
   const preload =
     canOpen && !target && !isOffline ? ("intent" as const) : undefined;
-  const handleLinkClick = createItemLinkClickHandler({
+  const handleLinkClick = createRootItemLinkClickHandler({
     canOpen,
     target,
     restorationId: contentId,
@@ -1013,7 +995,7 @@ function FeedGridItemDisplay({
   });
   const preload =
     canOpen && !target && !isOffline ? ("intent" as const) : undefined;
-  const handleLinkClick = createItemLinkClickHandler({
+  const handleLinkClick = createRootItemLinkClickHandler({
     canOpen,
     target,
     restorationId: contentId,

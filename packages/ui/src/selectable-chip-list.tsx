@@ -39,6 +39,8 @@ type SelectableChipListProps = {
   prioritizedIds?: ReadonlySet<number>;
   emptyMessage?: string;
   disabled?: boolean;
+  /** Keeps chips toggleable but blocks creating a new option. */
+  createDisabled?: boolean;
 };
 
 const MAX_ROWS = 5;
@@ -384,13 +386,18 @@ export function SelectableChipList({
   prioritizedIds = new Set(),
   emptyMessage = `No ${label.toLowerCase()} available`,
   disabled = false,
+  createDisabled = false,
 }: SelectableChipListProps) {
   const sortedOptions = sortSelectableChipOptions(options, prioritizedIds);
   const selectedSet = new Set(selectedIds);
   const totalCount = sortedOptions.length;
   const orderKey = sortedOptions.map((option) => option.id).join(",");
   const pagination = useChipRowPagination(totalCount, orderKey);
-  const createFlow = useChipCreateFlow(options, onCreate, disabled);
+  const createFlow = useChipCreateFlow(
+    options,
+    onCreate,
+    disabled || createDisabled,
+  );
   const renderOptions = sortedOptions.slice(
     pagination.offset,
     pagination.offset + RENDER_CHUNK,
@@ -410,7 +417,7 @@ export function SelectableChipList({
               label={label}
               createLabel={createLabel}
               createPlaceholder={createPlaceholder}
-              disabled={disabled}
+              disabled={disabled || createDisabled}
               createFlow={createFlow}
             />
           )}
