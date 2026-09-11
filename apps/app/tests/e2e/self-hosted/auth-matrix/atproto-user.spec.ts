@@ -36,8 +36,12 @@ async function gotoWithAtmosphere(
  * Open the handle step, retrying the click until it takes — the button
  * renders server-side but its onClick only attaches once React hydrates.
  */
-async function openHandleStep(page: Page, buttonName: string) {
-  const handleInput = page.getByLabel("Atmosphere handle");
+async function openHandleStep(
+  page: Page,
+  buttonName: string,
+  handleLabel: string,
+) {
+  const handleInput = page.getByLabel(handleLabel);
   await expect(async () => {
     if (await handleInput.isVisible()) return;
     await page.getByRole("button", { name: buttonName }).click();
@@ -76,7 +80,11 @@ test.describe("atmosphere sign-in entry", () => {
     });
 
     await gotoWithAtmosphere(page, "/auth/sign-in", "Sign in with Atmosphere");
-    const handleInput = await openHandleStep(page, "Sign in with Atmosphere");
+    const handleInput = await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with Atmosphere",
+    );
     await expect(handleInput).toBeFocused();
 
     // Keystrokes only ever reach the Serial proxy, never an AppView.
@@ -101,7 +109,11 @@ test.describe("atmosphere sign-in entry", () => {
     page,
   }) => {
     await gotoWithAtmosphere(page, "/auth/sign-in", "Sign in with Atmosphere");
-    const handleInput = await openHandleStep(page, "Sign in with Atmosphere");
+    const handleInput = await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with Atmosphere",
+    );
 
     // Two characters are enough to surface stub-AppView suggestions.
     await handleInput.fill("al");
@@ -158,7 +170,7 @@ test.describe("atmosphere sign-up entry", () => {
       "Sign up with Email",
     ]);
 
-    await openHandleStep(page, "Sign up with Atmosphere");
+    await openHandleStep(page, "Sign up with Atmosphere", "Atmosphere handle");
   });
 });
 

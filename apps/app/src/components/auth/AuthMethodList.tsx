@@ -136,7 +136,7 @@ export function AuthMethodList({
         {view.openMethod === "email" ? (
           emailForm
         ) : (
-          <AtprotoAuthForm disabled={disabled} focusOnMount />
+          <AtprotoAuthForm intent={intent} disabled={disabled} focusOnMount />
         )}
         {footer}
       </div>
@@ -147,7 +147,7 @@ export function AuthMethodList({
     <div className="grid gap-4">
       {view.primary === "email" && emailForm}
       {view.primary === "atproto" && (
-        <AtprotoAuthForm disabled={methodsDisabled} />
+        <AtprotoAuthForm intent={intent} disabled={methodsDisabled} />
       )}
       {view.primary === "oauth" && (
         <Button

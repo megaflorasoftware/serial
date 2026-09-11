@@ -1,4 +1,5 @@
 import { Polar } from "@polar-sh/sdk";
+import { createPolarHttpClient } from "./polar-http";
 import type { PlanId } from "./plans";
 import { IS_MAIN_INSTANCE } from "~/lib/constants";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
@@ -31,6 +32,7 @@ function createPolarClient(): Polar | null {
   return new Polar({
     accessToken: env.POLAR_ACCESS_TOKEN!,
     server: env.POLAR_ENVIRONMENT,
+    httpClient: createPolarHttpClient(),
   });
 }
 
