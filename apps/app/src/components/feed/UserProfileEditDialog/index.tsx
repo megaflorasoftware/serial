@@ -15,7 +15,7 @@ import { Label } from "~/components/ui/label";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { authClient } from "~/lib/auth-client";
-import { isAtprotoPlaceholderEmail } from "~/lib/auth/atproto";
+import { getDisplayableEmail } from "~/lib/auth/atproto";
 import { AUTH_RESET_PASSWORD_URL } from "~/lib/auth/constants";
 import { useUpdateNameMutation } from "~/lib/data/user/useUpdateNameMutation";
 import { userEmailSchema, userNameSchema } from "~/server/api/schemas";
@@ -33,12 +33,12 @@ export function UserProfileEditDialog() {
     launchDialog("edit-user-profile", { settingsPane: pane });
   };
 
-  // A DID-only (Atmosphere) user carries an internal placeholder email
-  // that is never surfaced: show the field empty and require a real email
-  // before a password can be set (the reset flow delivers by email).
-  const rawEmail = data?.user.email ?? "";
-  const hasRealEmail = !!rawEmail && !isAtprotoPlaceholderEmail(rawEmail);
-  const userEmail = hasRealEmail ? rawEmail : "";
+  // A DID-only (Atmosphere) user has no displayable email: show the field
+  // empty and require a real email before a password can be set (the reset
+  // flow delivers by email).
+  const displayableEmail = getDisplayableEmail(data?.user.email);
+  const hasRealEmail = displayableEmail !== undefined;
+  const userEmail = displayableEmail ?? "";
 
   // Password changes go through the emailed reset flow, which the reset
   // page refuses without transport — same gate the sign-in page puts on

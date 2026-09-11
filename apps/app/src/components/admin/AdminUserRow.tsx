@@ -3,6 +3,7 @@
 import { BanIcon, ChevronRightIcon, ShieldIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge } from "~/components/ui/badge";
+import { getDisplayableEmail } from "~/lib/auth/atproto";
 
 interface AdminUserRowProps {
   user: {
@@ -15,6 +16,8 @@ interface AdminUserRowProps {
 }
 
 export function AdminUserRow({ user }: AdminUserRowProps) {
+  const displayEmail = getDisplayableEmail(user.email);
+
   return (
     <Link
       to="/admin/user/$id"
@@ -37,9 +40,11 @@ export function AdminUserRow({ user }: AdminUserRowProps) {
             </Badge>
           )}
         </div>
-        <span className="text-muted-foreground truncate text-sm">
-          {user.email}
-        </span>
+        {displayEmail && (
+          <span className="text-muted-foreground truncate text-sm">
+            {displayEmail}
+          </span>
+        )}
       </div>
       <ChevronRightIcon className="text-muted-foreground shrink-0" size={20} />
     </Link>

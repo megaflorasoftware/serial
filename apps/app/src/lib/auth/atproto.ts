@@ -21,6 +21,18 @@ export function isAtprotoPlaceholderEmail(email: string): boolean {
 }
 
 /**
+ * The email a surface may show for a user, or undefined when the user has
+ * none. A DID-only user's placeholder counts as no email; every surface
+ * that renders an address (account menu, profile settings, admin user
+ * views) goes through this so the placeholder is never displayed.
+ */
+export function getDisplayableEmail(
+  email: string | null | undefined,
+): string | undefined {
+  return email && !isAtprotoPlaceholderEmail(email) ? email : undefined;
+}
+
+/**
  * Query param the link callback redirects back into the app with, carrying
  * one of the result codes below. The app shell toasts it and reopens the
  * connections dialog, mirroring the Polar portal-return convention.
