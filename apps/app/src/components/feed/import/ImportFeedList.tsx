@@ -1,15 +1,13 @@
 import { ItemGroup } from "@serial/ui";
 import { ImportFeedRow } from "./ImportFeedRow";
-import { compareImportTitles, IMPORT_MODE_OPTIONS } from "./importPageShared";
+import { compareImportTitles } from "./importPageShared";
 import type { RefObject } from "react";
 import type {
   FailedImportUrls,
-  ImportMode,
   SetFeedsFoundFromFile,
   UserFeeds,
 } from "./importPageShared";
 import type { ImportFeedDataItem } from "./utils/shared";
-import { CardRadioGroup } from "~/components/ui/card-radio-group";
 import { Button } from "~/components/ui/button";
 
 function ImportSelectionHeader({
@@ -63,37 +61,23 @@ export function ImportFeedList({
   feedsFoundFromFile,
   feeds,
   isPostImportScreen,
-  importMode,
-  setImportMode,
   channelImportCount,
   failedImportUrls,
+  leftOutByLimitUrls,
   setFeedsFoundFromFile,
   bottomRef,
 }: {
   feedsFoundFromFile: ImportFeedDataItem[];
   feeds: UserFeeds;
   isPostImportScreen: boolean;
-  importMode: ImportMode;
-  setImportMode: (mode: ImportMode) => void;
   channelImportCount: number | undefined;
   failedImportUrls: FailedImportUrls;
+  leftOutByLimitUrls: Set<string>;
   setFeedsFoundFromFile: SetFeedsFoundFromFile;
   bottomRef: RefObject<HTMLDivElement | null>;
 }) {
   return (
     <>
-      {!isPostImportScreen &&
-        feedsFoundFromFile.some((f) => f.categories.length > 0) && (
-          <div className="mt-12 grid gap-3">
-            <h3 className="font-semibold">Sections</h3>
-            <CardRadioGroup
-              value={importMode}
-              onValueChange={setImportMode}
-              options={IMPORT_MODE_OPTIONS}
-              orientation="vertical"
-            />
-          </div>
-        )}
       <div className="mt-12">
         {!isPostImportScreen && (
           <ImportSelectionHeader
@@ -110,6 +94,7 @@ export function ImportFeedList({
               feeds={feeds}
               isPostImportScreen={isPostImportScreen}
               failedImportUrls={failedImportUrls}
+              leftOutByLimitUrls={leftOutByLimitUrls}
               setFeedsFoundFromFile={setFeedsFoundFromFile}
             />
           ))}

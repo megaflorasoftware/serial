@@ -10,6 +10,8 @@ export type ViewsStore = {
   reset: () => void;
   views: ApplicationView[];
   viewsDict: Record<number, ApplicationView>;
+  /** Bumped on every write so an in-flight fetch can detect it went stale. */
+  revision: number;
   fetchStatus: "idle" | "fetching" | "success";
   fetch: () => Promise<void>;
   set: (views: ApplicationView[]) => void;
@@ -34,61 +36,134 @@ export function removeFeedReferencesFromViews(
   }));
 }
 
+function buildViewsDict(views: ApplicationView[]) {
+  const dict: Record<number, ApplicationView> = {};
+  views.forEach((view) => {
+    dict[view.id] = view;
+  });
+  return dict;
+}
+
+let inFlightFetch: Promise<void> | null = null;
+
+// Bumped by reset() so a severed run stops after its current request: it must
+// not write a later response into the cleared store or downgrade a newer
+// fetch's status.
+let fetchEpoch = 0;
+
+// A request that hangs rather than rejecting (dropped mobile radio) must not
+// gate every later view fetch for the browser's own multi-minute timeout.
+const VIEW_FETCH_TIMEOUT_MS = 30_000;
+
 export const viewsStoreApi = createStore<ViewsStore>()(
   persist<ViewsStore, [], [], PersistedViewsState>(
     (set, get) => ({
-      reset: () =>
+      reset: () => {
+        // Sever the in-flight fetch (sign-out clears the store for the next
+        // session): its eventual settle must not gate or short-circuit that
+        // session's first fetch, and its run must not keep writing.
+        inFlightFetch = null;
+        fetchEpoch += 1;
         set({
           views: [],
           viewsDict: {},
+          revision: get().revision + 1,
           fetchStatus: "idle",
-        }),
+        });
+      },
       views: [],
       viewsDict: {},
+      revision: 0,
       fetchStatus: "idle",
 
-      fetch: async () => {
-        if (get().fetchStatus === "fetching") return;
+      fetch: () => {
+        // Callers awaiting a refetch must wait for the actual result, so a
+        // concurrent call joins the in-flight request instead of resolving
+        // against whatever is in the store.
+        if (inFlightFetch) return inFlightFetch;
 
         set({ fetchStatus: "fetching" });
 
-        const data = await orpcRouterClient.view.getAll();
+        const epoch = fetchEpoch;
+        const applyFetchedViews = (data: ApplicationView[]) => {
+          set({
+            views: data,
+            viewsDict: buildViewsDict(data),
+            revision: get().revision + 1,
+            fetchStatus: "success",
+          });
+        };
+        let thisFetch: Promise<void> | null = null;
+        thisFetch = (async () => {
+          try {
+            // A write landing while the request is in flight (an import
+            // stream chunk, another mutation's reset) makes the response
+            // stale, and callers empty the store before fetching — so a
+            // stale response must be replaced by a fresh one, never applied
+            // or dropped.
+            let lastResponse: ApplicationView[] | null = null;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const startRevision = get().revision;
+              // Each attempt is a retry of the previous one, so the requests
+              // are sequential by design.
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop
+              const data = await orpcRouterClient.view.getAll(undefined, {
+                signal: AbortSignal.timeout(VIEW_FETCH_TIMEOUT_MS),
+              });
+              if (epoch !== fetchEpoch) return;
+              lastResponse = data;
+              if (get().revision !== startRevision) continue;
 
-        const dict: Record<number, ApplicationView> = {};
-        data.forEach((view) => {
-          dict[view.id] = view;
-        });
-
-        set({
-          views: data,
-          viewsDict: dict,
-          fetchStatus: "success",
-        });
+              applyFetchedViews(data);
+              return;
+            }
+            // Writes kept racing the refetches. A non-empty store keeps its
+            // latest written state; an empty one is a cleared store awaiting
+            // data, where even a slightly stale response beats stranding the
+            // caller with nothing.
+            if (get().views.length === 0 && lastResponse) {
+              applyFetchedViews(lastResponse);
+              return;
+            }
+            set({
+              fetchStatus: get().views.length > 0 ? "success" : "idle",
+            });
+          } catch (error) {
+            // A failed refresh must not hide a populated store behind
+            // skeletons; only an empty store is genuinely unfetched.
+            if (epoch === fetchEpoch) {
+              set({
+                fetchStatus: get().views.length > 0 ? "success" : "idle",
+              });
+            }
+            throw error;
+          } finally {
+            // A reset may have severed this run and a newer fetch may
+            // already be in flight; only clear our own registration.
+            if (inFlightFetch === thisFetch) inFlightFetch = null;
+          }
+        })();
+        inFlightFetch = thisFetch;
+        return thisFetch;
       },
 
       set: (views) => {
         const sortedViews = sortViewsByPlacement(views);
-        const dict: Record<number, ApplicationView> = {};
-        sortedViews.forEach((view) => {
-          dict[view.id] = view;
-        });
 
         set({
           views: sortedViews,
-          viewsDict: dict,
+          viewsDict: buildViewsDict(sortedViews),
+          revision: get().revision + 1,
         });
       },
 
       add: (view) => {
         const newViews = sortViewsByPlacement([...get().views, view]);
-        const dict: Record<number, ApplicationView> = {};
-        newViews.forEach((v) => {
-          dict[v.id] = v;
-        });
 
         set({
           views: newViews,
-          viewsDict: dict,
+          viewsDict: buildViewsDict(newViews),
+          revision: get().revision + 1,
         });
       },
 
@@ -101,14 +176,10 @@ export const viewsStoreApi = createStore<ViewsStore>()(
           get().views.map((v) => (v.id === id ? updatedView : v)),
         );
 
-        const dict: Record<number, ApplicationView> = {};
-        newViews.forEach((v) => {
-          dict[v.id] = v;
-        });
-
         set({
           views: newViews,
-          viewsDict: dict,
+          viewsDict: buildViewsDict(newViews),
+          revision: get().revision + 1,
         });
       },
 
@@ -120,6 +191,7 @@ export const viewsStoreApi = createStore<ViewsStore>()(
         set({
           views: newViews,
           viewsDict: rest,
+          revision: get().revision + 1,
         });
       },
 
@@ -128,12 +200,12 @@ export const viewsStoreApi = createStore<ViewsStore>()(
           get().views,
           new Set(feedIds),
         );
-        const viewsDict: Record<number, ApplicationView> = {};
-        updatedViews.forEach((view) => {
-          viewsDict[view.id] = view;
-        });
 
-        set({ views: updatedViews, viewsDict });
+        set({
+          views: updatedViews,
+          viewsDict: buildViewsDict(updatedViews),
+          revision: get().revision + 1,
+        });
       },
     }),
     {

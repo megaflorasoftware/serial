@@ -51,12 +51,14 @@ export function ImportFeedRow({
   feeds,
   isPostImportScreen,
   failedImportUrls,
+  leftOutByLimitUrls,
   setFeedsFoundFromFile,
 }: {
   channel: ImportFeedDataItem;
   feeds: UserFeeds;
   isPostImportScreen: boolean;
   failedImportUrls: FailedImportUrls;
+  leftOutByLimitUrls: Set<string>;
   setFeedsFoundFromFile: SetFeedsFoundFromFile;
 }) {
   const displayTitle = channel.title ?? channel.feedUrl;
@@ -127,6 +129,7 @@ export function ImportFeedRow({
           wasImported={wasImported}
           isPostImportScreen={isPostImportScreen}
           failedImportUrls={failedImportUrls}
+          leftOutByLimitUrls={leftOutByLimitUrls}
           setShouldImport={setShouldImport}
         />
       }

@@ -30,6 +30,113 @@ function ImportedFeedStatus({
   );
 }
 
+function ImportSelectionToggle({
+  channel,
+  displayTitle,
+  isAlreadyAdded,
+  setShouldImport,
+}: {
+  channel: ImportFeedDataItem;
+  displayTitle: string;
+  isAlreadyAdded: boolean;
+  setShouldImport: (shouldImport: boolean) => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant={channel.shouldImport ? "default" : "ghost"}
+          size="icon"
+          className="size-7"
+          aria-label={`${channel.shouldImport ? "Deselect" : "Select"} ${displayTitle}`}
+          disabled={isAlreadyAdded}
+          onClick={() => setShouldImport(!channel.shouldImport)}
+        >
+          {channel.shouldImport ? (
+            <CheckIcon size={16} />
+          ) : (
+            <PlusIcon size={16} />
+          )}
+        </Button>
+      </TooltipTrigger>
+      {!isAlreadyAdded && (
+        <TooltipContent>
+          {channel.shouldImport ? "Deselect" : "Select"} feed
+        </TooltipContent>
+      )}
+    </Tooltip>
+  );
+}
+
+function ImportSkippedStatus({
+  channel,
+  isAlreadyAdded,
+  leftOutByLimitUrls,
+}: {
+  channel: ImportFeedDataItem;
+  isAlreadyAdded: boolean;
+  leftOutByLimitUrls: Set<string>;
+}) {
+  if (isAlreadyAdded) return null;
+  const wasLeftOut = leftOutByLimitUrls.has(channel.feedUrl);
+  if (channel.shouldImport && !wasLeftOut) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger>
+        <MinusIcon size={20} />
+      </TooltipTrigger>
+      <TooltipContent>
+        {wasLeftOut
+          ? "This feed was left out: the import limit was reached."
+          : "This feed was excluded from the import."}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ImportOutcomeStatus({
+  channel,
+  feeds,
+  isAlreadyAdded,
+  wasImported,
+  failedImportUrls,
+  leftOutByLimitUrls,
+}: {
+  channel: ImportFeedDataItem;
+  feeds: UserFeeds;
+  isAlreadyAdded: boolean;
+  wasImported: boolean;
+  failedImportUrls: FailedImportUrls;
+  leftOutByLimitUrls: Set<string>;
+}) {
+  // A failure reported for this row wins over "already added": an
+  // already-subscribed feed is submitted on re-import and can still fail.
+  const hasFailed = failedImportUrls.has(channel.feedUrl);
+
+  return (
+    <>
+      {wasImported && !hasFailed && (
+        <ImportedFeedStatus feedUrl={channel.feedUrl} feeds={feeds} />
+      )}
+      {hasFailed && (
+        <Tooltip>
+          <TooltipTrigger>
+            <XIcon size={20} />
+          </TooltipTrigger>
+          <TooltipContent>Failed to import</TooltipContent>
+        </Tooltip>
+      )}
+      <ImportSkippedStatus
+        channel={channel}
+        isAlreadyAdded={isAlreadyAdded}
+        leftOutByLimitUrls={leftOutByLimitUrls}
+      />
+    </>
+  );
+}
+
 export function ImportFeedRowActions({
   channel,
   feeds,
@@ -38,6 +145,7 @@ export function ImportFeedRowActions({
   wasImported,
   isPostImportScreen,
   failedImportUrls,
+  leftOutByLimitUrls,
   setShouldImport,
 }: {
   channel: ImportFeedDataItem;
@@ -47,59 +155,28 @@ export function ImportFeedRowActions({
   wasImported: boolean;
   isPostImportScreen: boolean;
   failedImportUrls: FailedImportUrls;
+  leftOutByLimitUrls: Set<string>;
   setShouldImport: (shouldImport: boolean) => void;
 }) {
+  if (!isPostImportScreen) {
+    return (
+      <ImportSelectionToggle
+        channel={channel}
+        displayTitle={displayTitle}
+        isAlreadyAdded={isAlreadyAdded}
+        setShouldImport={setShouldImport}
+      />
+    );
+  }
+
   return (
-    <>
-      {!isPostImportScreen && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant={channel.shouldImport ? "default" : "ghost"}
-              size="icon"
-              className="size-7"
-              aria-label={`${channel.shouldImport ? "Deselect" : "Select"} ${displayTitle}`}
-              disabled={isAlreadyAdded}
-              onClick={() => setShouldImport(!channel.shouldImport)}
-            >
-              {channel.shouldImport ? (
-                <CheckIcon size={16} />
-              ) : (
-                <PlusIcon size={16} />
-              )}
-            </Button>
-          </TooltipTrigger>
-          {!isAlreadyAdded && (
-            <TooltipContent>
-              {channel.shouldImport ? "Deselect" : "Select"} feed
-            </TooltipContent>
-          )}
-        </Tooltip>
-      )}
-      {isPostImportScreen && wasImported && channel.shouldImport && (
-        <ImportedFeedStatus feedUrl={channel.feedUrl} feeds={feeds} />
-      )}
-      {isPostImportScreen &&
-        channel.shouldImport &&
-        failedImportUrls.has(channel.feedUrl) && (
-          <Tooltip>
-            <TooltipTrigger>
-              <XIcon size={20} />
-            </TooltipTrigger>
-            <TooltipContent>Failed to import</TooltipContent>
-          </Tooltip>
-        )}
-      {isPostImportScreen && !channel.shouldImport && (
-        <Tooltip>
-          <TooltipTrigger>
-            <MinusIcon size={20} />
-          </TooltipTrigger>
-          <TooltipContent>
-            This feed was excluded from the import.
-          </TooltipContent>
-        </Tooltip>
-      )}
-    </>
+    <ImportOutcomeStatus
+      channel={channel}
+      feeds={feeds}
+      isAlreadyAdded={isAlreadyAdded}
+      wasImported={wasImported}
+      failedImportUrls={failedImportUrls}
+      leftOutByLimitUrls={leftOutByLimitUrls}
+    />
   );
 }

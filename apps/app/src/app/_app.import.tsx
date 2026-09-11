@@ -3,14 +3,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSetAtom } from "jotai";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
 import type {
   ImportFeedDataFromFilesError,
   ImportFeedDataItem,
 } from "../components/feed/import/utils/shared";
-import type { ImportMode } from "~/components/feed/import/importPageShared";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import { ImportFeedList } from "~/components/feed/import/ImportFeedList";
 import {
@@ -25,6 +24,7 @@ import { useImportDropStore } from "~/lib/data/import-drop";
 import { useImportResults, useLoadingMode } from "~/lib/data/loading-machine";
 import { dataRequestActions } from "~/lib/data/directRequests";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
+import { MAX_BULK_MUTATION_ITEMS } from "~/lib/schemas/bulk";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 
 export const Route = createFileRoute("/_app/import")({
@@ -110,15 +110,99 @@ function useImportDeactivatedToast(
   }, [isImportComplete, importDeactivatedCount, launchDialog]);
 }
 
+// Already-added feeds are not selectable, but the ones carrying OPML
+// sections or tags are still sent so a re-import links them into the
+// matching views. The request schema caps items at MAX_BULK_MUTATION_ITEMS;
+// selected feeds take priority and organized already-added ones fill the
+// remainder, both keeping file order (section placement follows submission
+// order). Anything beyond the cap is left for a follow-up import.
+function getImportSubmission(
+  feedsFoundFromFile: ImportFeedDataItem[] | null,
+  existingFeedUrls: Set<string>,
+) {
+  const channels = feedsFoundFromFile ?? [];
+  const selectedChannels = channels.filter((channel) => channel.shouldImport);
+  const organizedAlreadyAddedChannels = channels.filter(
+    (channel) =>
+      !channel.shouldImport &&
+      existingFeedUrls.has(channel.feedUrl) &&
+      (channel.categoryPaths?.length ||
+        channel.tagNames?.length ||
+        channel.categories.length),
+  );
+  const alreadyAddedUrlsToSubmit = new Set(
+    organizedAlreadyAddedChannels
+      .slice(0, Math.max(0, MAX_BULK_MUTATION_ITEMS - selectedChannels.length))
+      .map((channel) => channel.feedUrl),
+  );
+  const channelsToSubmit = channels
+    .filter(
+      (channel) =>
+        channel.shouldImport || alreadyAddedUrlsToSubmit.has(channel.feedUrl),
+    )
+    .slice(0, MAX_BULK_MUTATION_ITEMS);
+  const leftOutByLimitCount =
+    selectedChannels.length +
+    organizedAlreadyAddedChannels.length -
+    channelsToSubmit.length;
+
+  return { selectedChannels, channelsToSubmit, leftOutByLimitCount };
+}
+
+// One import run's lifecycle changes together (submit, stream start, stream
+// end, settle, reset), so it lives in a single reducer.
+type ImportRunState = {
+  hasStartedImport: boolean;
+  isImportComplete: boolean;
+  isImportPending: boolean;
+  leftOutByLimitUrls: Set<string>;
+};
+
+type ImportRunAction =
+  | { type: "submitted"; leftOutByLimitUrls: Set<string> }
+  | { type: "started" }
+  | { type: "completed" }
+  | { type: "settled" }
+  | { type: "reset" };
+
+const INITIAL_IMPORT_RUN: ImportRunState = {
+  hasStartedImport: false,
+  isImportComplete: false,
+  isImportPending: false,
+  leftOutByLimitUrls: new Set(),
+};
+
+function importRunReducer(
+  state: ImportRunState,
+  action: ImportRunAction,
+): ImportRunState {
+  switch (action.type) {
+    case "submitted":
+      return {
+        ...state,
+        isImportPending: true,
+        leftOutByLimitUrls: action.leftOutByLimitUrls,
+      };
+    case "started":
+      return { ...state, hasStartedImport: true };
+    case "completed":
+      return { ...state, isImportComplete: true };
+    case "settled":
+      return { ...state, isImportPending: false };
+    case "reset":
+      return INITIAL_IMPORT_RUN;
+  }
+}
+
 function ImportFooter({
   isAtBottom,
-  channelImportCount,
+  submitCount,
   isImportPending,
   hasStartedImport,
   onFeedImport,
 }: {
   isAtBottom: boolean;
-  channelImportCount: number | undefined;
+  submitCount: number;
   isImportPending: boolean;
   hasStartedImport: boolean;
   onFeedImport: () => void;
@@ -135,7 +219,7 @@ function ImportFooter({
           className="w-full gap-2"
           size="lg"
           onClick={onFeedImport}
-          disabled={channelImportCount === 0 || isImportPending}
+          disabled={submitCount === 0 || isImportPending}
         >
           {isImportPending && !hasStartedImport ? (
             <>
@@ -143,7 +227,7 @@ function ImportFooter({
               <Loader2Icon size={16} className="animate-spin" />
             </>
           ) : (
-            <>Import {channelImportCount} feeds</>
+            <>Import {submitCount} feeds</>
           )}
         </Button>
       </div>
@@ -158,10 +242,16 @@ function EditFeedsPage() {
   const [feedsFoundFromFile, setFeedsFoundFromFile] = useState<
     ImportFeedDataItem[] | null
   >(null);
-  const [hasStartedImport, setHasStartedImport] = useState(false);
-  const [isImportComplete, setIsImportComplete] = useState(false);
-  const [isImportPending, setIsImportPending] = useState(false);
-  const [importMode, setImportMode] = useState<ImportMode>("views");
+  const [importRun, dispatchImportRun] = useReducer(
+    importRunReducer,
+    INITIAL_IMPORT_RUN,
+  );
+  const {
+    hasStartedImport,
+    isImportComplete,
+    isImportPending,
+    leftOutByLimitUrls,
+  } = importRun;
 
   const [fileInputErrorList, setFileInputErrorList] =
     useState<ImportFeedDataFromFilesError | null>(null);
@@ -183,6 +273,9 @@ function EditFeedsPage() {
   ).length;
 
   const { feeds } = useFeeds();
+  const existingFeedUrls = new Set(feeds.map((feed) => feed.url));
+  const { selectedChannels, channelsToSubmit, leftOutByLimitCount } =
+    getImportSubmission(feedsFoundFromFile, existingFeedUrls);
   const loading = useLoadingMode();
   const importResults = useImportResults();
   const isFetchingRss = loading.mode === "importing";
@@ -229,7 +322,9 @@ function EditFeedsPage() {
 
   useEffect(() => {
     if (isImportPending && loading.mode === "importing" && !hasStartedImport) {
-      const id = requestAnimationFrame(() => setHasStartedImport(true));
+      const id = requestAnimationFrame(() =>
+        dispatchImportRun({ type: "started" }),
+      );
       return () => cancelAnimationFrame(id);
     }
   }, [isImportPending, loading.mode, hasStartedImport]);
@@ -251,31 +346,45 @@ function EditFeedsPage() {
     if (!feedsFoundFromFile?.length) return;
 
     setShouldAlwaysKeepSSEConnectionAlive(true);
-    setIsImportPending(true);
 
-    const channelsToImport = feedsFoundFromFile
-      .filter((channel) => channel.shouldImport)
-      .map((feed) => ({
-        categories: feed.categories,
-        categoryPaths: feed.categoryPaths,
-        feedUrl: feed.feedUrl,
-        tagNames: feed.tagNames,
-      }));
+    const submittedUrls = new Set(
+      channelsToSubmit.map((channel) => channel.feedUrl),
+    );
+    dispatchImportRun({
+      type: "submitted",
+      leftOutByLimitUrls: new Set(
+        selectedChannels
+          .filter((channel) => !submittedUrls.has(channel.feedUrl))
+          .map((channel) => channel.feedUrl),
+      ),
+    });
+    if (leftOutByLimitCount > 0) {
+      toast.warning(
+        `${leftOutByLimitCount} feed${leftOutByLimitCount > 1 ? "s were" : " was"} left out: an import is limited to ${MAX_BULK_MUTATION_ITEMS} feeds. Import the file again to add the rest.`,
+      );
+    }
+
+    const channelsToImport = channelsToSubmit.map((feed) => ({
+      categories: feed.categories,
+      categoryPaths: feed.categoryPaths,
+      feedUrl: feed.feedUrl,
+      tagNames: feed.tagNames,
+    }));
 
     try {
-      await dataRequestActions.streamingImport(channelsToImport, importMode);
+      await dataRequestActions.streamingImport(channelsToImport);
 
-      setIsImportComplete(true);
+      dispatchImportRun({ type: "completed" });
+    } catch {
+      toast.error("Import failed. Please try again.");
     } finally {
-      setIsImportPending(false);
+      dispatchImportRun({ type: "settled" });
     }
   };
 
   const onReset = () => {
     setFeedsFoundFromFile(null);
-    setHasStartedImport(false);
-    setIsImportComplete(false);
-    setIsImportPending(false);
+    dispatchImportRun({ type: "reset" });
     setShouldAlwaysKeepSSEConnectionAlive(false);
   };
 
@@ -313,10 +422,9 @@ function EditFeedsPage() {
             feedsFoundFromFile={feedsFoundFromFile}
             feeds={feeds}
             isPostImportScreen={isPostImportScreen}
-            importMode={importMode}
-            setImportMode={setImportMode}
             channelImportCount={channelImportCount}
             failedImportUrls={failedImportUrls}
+            leftOutByLimitUrls={leftOutByLimitUrls}
             setFeedsFoundFromFile={setFeedsFoundFromFile}
             bottomRef={bottomRef}
           />
@@ -325,7 +433,7 @@ function EditFeedsPage() {
       {!!feedsFoundFromFile && !isPostImportScreen && (
         <ImportFooter
           isAtBottom={isAtBottom}
-          channelImportCount={channelImportCount}
+          submitCount={channelsToSubmit.length}
           isImportPending={isImportPending}
           hasStartedImport={hasStartedImport}
           onFeedImport={onFeedImport}
