@@ -133,10 +133,10 @@ export function useDataSubscription() {
             // Reconciliation must learn of the drop before the retry sleep,
             // not after it when the finally runs.
             dataReconciliation.sseConnectionChanged(false);
-            markDataSubscriptionFailed({
-              isOnline: navigator.onLine !== false,
-              isVisible: document.visibilityState === "visible",
-            });
+            // A clean server-side end is not a failure: keep the connection
+            // state as it was so controls and dialogs stay live across the
+            // retry, and let a failed reconnect establish `disconnected`.
+            markDataSubscriptionPaused();
             // A cleanly ended stream reconnects on the same pacing as an
             // errored one instead of re-dialing in a tight loop.
             await delayBeforeRetry();
