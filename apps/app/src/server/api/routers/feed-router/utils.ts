@@ -107,7 +107,7 @@ export async function verifyContentCategoriesOwnedByUser({
 /** Bulk statements stay well under SQLite's bind-variable limit. */
 export const BULK_INSERT_BATCH_SIZE = 200;
 
-export function chunkRows<T>(rows: T[], size: number = BULK_INSERT_BATCH_SIZE) {
+function chunkRows<T>(rows: T[], size: number = BULK_INSERT_BATCH_SIZE) {
   const chunks: T[][] = [];
   for (let index = 0; index < rows.length; index += size) {
     chunks.push(rows.slice(index, index + size));

@@ -182,7 +182,6 @@ describe("views store fetch", () => {
   });
 
   it("does not let a severed run's failure downgrade a newer fetch", async () => {
-    const view = makeView(1);
     let rejectHung: ((error: Error) => void) | undefined;
     mocks.getAll
       .mockImplementationOnce(
@@ -191,16 +190,19 @@ describe("views store fetch", () => {
             rejectHung = reject;
           }),
       )
-      .mockResolvedValueOnce([view]);
+      // The newer fetch legitimately returns an empty list (fresh account),
+      // which is exactly the store a failed run would otherwise mark idle.
+      .mockResolvedValueOnce([]);
 
     const hung = viewsStoreApi.getState().fetch();
     viewsStoreApi.getState().reset();
     await viewsStoreApi.getState().fetch();
+    expect(viewsStoreApi.getState().fetchStatus).toBe("success");
 
     rejectHung?.(new Error("timed out"));
     await expect(hung).rejects.toThrow("timed out");
 
-    expect(viewsStoreApi.getState().views).toEqual([view]);
+    expect(viewsStoreApi.getState().views).toEqual([]);
     expect(viewsStoreApi.getState().fetchStatus).toBe("success");
   });
 

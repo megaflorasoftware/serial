@@ -112,7 +112,9 @@ test.describe("import sections as views", () => {
     // Bare feed CGP Grey must NOT have a view created for it
     await expect(viewsSection.getByText("CGP Grey")).toHaveCount(0);
 
-    // Sections never become tags
+    // Sections never become tags. Anchor on the explicit serial:tags tag so
+    // the negatives run against a rendered Tags group, not a missing one.
+    await expect(tagsSection.getByText("Funk")).toBeVisible();
     await expect(tagsSection.getByText("Music")).toHaveCount(0);
     await expect(tagsSection.getByText("Tech")).toHaveCount(0);
 

@@ -36,6 +36,14 @@ export function removeFeedReferencesFromViews(
   }));
 }
 
+function buildViewsDict(views: ApplicationView[]) {
+  const dict: Record<number, ApplicationView> = {};
+  views.forEach((view) => {
+    dict[view.id] = view;
+  });
+  return dict;
+}
+
 let inFlightFetch: Promise<void> | null = null;
 
 // Bumped by reset() so a severed run stops after its current request: it must
@@ -77,6 +85,14 @@ export const viewsStoreApi = createStore<ViewsStore>()(
         set({ fetchStatus: "fetching" });
 
         const epoch = fetchEpoch;
+        const applyFetchedViews = (data: ApplicationView[]) => {
+          set({
+            views: data,
+            viewsDict: buildViewsDict(data),
+            revision: get().revision + 1,
+            fetchStatus: "success",
+          });
+        };
         let thisFetch: Promise<void> | null = null;
         thisFetch = (async () => {
           try {
@@ -98,17 +114,7 @@ export const viewsStoreApi = createStore<ViewsStore>()(
               lastResponse = data;
               if (get().revision !== startRevision) continue;
 
-              const dict: Record<number, ApplicationView> = {};
-              data.forEach((view) => {
-                dict[view.id] = view;
-              });
-
-              set({
-                views: data,
-                viewsDict: dict,
-                revision: get().revision + 1,
-                fetchStatus: "success",
-              });
+              applyFetchedViews(data);
               return;
             }
             // Writes kept racing the refetches. A non-empty store keeps its
@@ -116,16 +122,7 @@ export const viewsStoreApi = createStore<ViewsStore>()(
             // data, where even a slightly stale response beats stranding the
             // caller with nothing.
             if (get().views.length === 0 && lastResponse) {
-              const dict: Record<number, ApplicationView> = {};
-              lastResponse.forEach((view) => {
-                dict[view.id] = view;
-              });
-              set({
-                views: lastResponse,
-                viewsDict: dict,
-                revision: get().revision + 1,
-                fetchStatus: "success",
-              });
+              applyFetchedViews(lastResponse);
               return;
             }
             set({
@@ -152,28 +149,20 @@ export const viewsStoreApi = createStore<ViewsStore>()(
 
       set: (views) => {
         const sortedViews = sortViewsByPlacement(views);
-        const dict: Record<number, ApplicationView> = {};
-        sortedViews.forEach((view) => {
-          dict[view.id] = view;
-        });
 
         set({
           views: sortedViews,
-          viewsDict: dict,
+          viewsDict: buildViewsDict(sortedViews),
           revision: get().revision + 1,
         });
       },
 
       add: (view) => {
         const newViews = sortViewsByPlacement([...get().views, view]);
-        const dict: Record<number, ApplicationView> = {};
-        newViews.forEach((v) => {
-          dict[v.id] = v;
-        });
 
         set({
           views: newViews,
-          viewsDict: dict,
+          viewsDict: buildViewsDict(newViews),
           revision: get().revision + 1,
         });
       },
@@ -187,14 +176,9 @@ export const viewsStoreApi = createStore<ViewsStore>()(
           get().views.map((v) => (v.id === id ? updatedView : v)),
         );
 
-        const dict: Record<number, ApplicationView> = {};
-        newViews.forEach((v) => {
-          dict[v.id] = v;
-        });
-
         set({
           views: newViews,
-          viewsDict: dict,
+          viewsDict: buildViewsDict(newViews),
           revision: get().revision + 1,
         });
       },
@@ -216,14 +200,10 @@ export const viewsStoreApi = createStore<ViewsStore>()(
           get().views,
           new Set(feedIds),
         );
-        const viewsDict: Record<number, ApplicationView> = {};
-        updatedViews.forEach((view) => {
-          viewsDict[view.id] = view;
-        });
 
         set({
           views: updatedViews,
-          viewsDict,
+          viewsDict: buildViewsDict(updatedViews),
           revision: get().revision + 1,
         });
       },
