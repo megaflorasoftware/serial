@@ -23,8 +23,8 @@ const GENERIC_ERROR_MESSAGE =
   "Could not start Atmosphere sign in. Please try again.";
 
 const HANDLE_LABELS: Record<AuthIntent, string> = {
-  "sign-in": "Login with Atmosphere",
-  "sign-up": "Atmosphere handle",
+  "sign-in": "Login with your Atmosphere handle",
+  "sign-up": "Sign up with your Atmosphere handle",
 };
 
 interface AtprotoAuthFormProps {

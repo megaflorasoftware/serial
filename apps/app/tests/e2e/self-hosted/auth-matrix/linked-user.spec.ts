@@ -89,7 +89,9 @@ test.describe("atproto connection management", () => {
       .last();
     await expect(atmosphereRow).toBeVisible();
     await atmosphereRow.click();
-    await expect(page.getByLabel("Handle")).toBeVisible();
+    await expect(
+      page.getByLabel("Connect with your Atmosphere handle"),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect" })).toBeDisabled();
     await page.keyboard.press("Escape");
 
@@ -154,7 +156,7 @@ test.describe("atproto connection management", () => {
 
     // Two characters are enough to surface stub-AppView suggestions; the
     // same shared field the auth pages use drives the link form.
-    const handleInput = page.getByLabel("Handle");
+    const handleInput = page.getByLabel("Connect with your Atmosphere handle");
     await handleInput.fill("al");
     const suggestions = page.getByLabel("Suggested accounts");
     await expect(suggestions.getByText("Alice Test")).toBeVisible();

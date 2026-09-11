@@ -10,6 +10,7 @@ import { AtSignIcon, Loader2, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, RefObject } from "react";
 import type { AtprotoActorSuggestion } from "~/server/auth/atproto/typeahead";
+import { AtmosphereHelpButton } from "~/components/auth/AtmosphereHelpButton";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/button";
 import {
@@ -153,7 +154,7 @@ export function AtprotoHandleField({
 
   return (
     <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      <AtprotoHandleLabel id={id} label={label} />
       <Combobox<AtprotoActorSuggestion>
         items={visibleSuggestions}
         filter={null}
@@ -220,6 +221,19 @@ export function AtprotoHandleField({
       >
         {busy ? <Loader2 size={16} className="animate-spin" /> : submitLabel}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * The label row every state of the field shares: the caller's label on the
+ * left, the Atmosphere explainer on the right.
+ */
+function AtprotoHandleLabel({ id, label }: { id: string; label: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <Label htmlFor={id}>{label}</Label>
+      <AtmosphereHelpButton />
     </div>
   );
 }
@@ -295,7 +309,7 @@ function AtprotoSelectedAccount({
 }) {
   return (
     <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      <AtprotoHandleLabel id={id} label={label} />
       <Item variant="outline" render={<div />}>
         <ItemMedia>
           <AtprotoSuggestionAvatar suggestion={selected} />

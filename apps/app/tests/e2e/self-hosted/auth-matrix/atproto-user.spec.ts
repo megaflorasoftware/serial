@@ -83,7 +83,7 @@ test.describe("atmosphere sign-in entry", () => {
     const handleInput = await openHandleStep(
       page,
       "Sign in with Atmosphere",
-      "Login with Atmosphere",
+      "Login with your Atmosphere handle",
     );
     await expect(handleInput).toBeFocused();
 
@@ -112,7 +112,7 @@ test.describe("atmosphere sign-in entry", () => {
     const handleInput = await openHandleStep(
       page,
       "Sign in with Atmosphere",
-      "Login with Atmosphere",
+      "Login with your Atmosphere handle",
     );
 
     // Two characters are enough to surface stub-AppView suggestions.
@@ -143,6 +143,26 @@ test.describe("atmosphere sign-in entry", () => {
     });
   });
 
+  test("explains the Atmosphere from the handle step's help button", async ({
+    page,
+  }) => {
+    await gotoWithAtmosphere(page, "/auth/sign-in", "Sign in with Atmosphere");
+    await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with your Atmosphere handle",
+    );
+
+    await page.getByRole("button", { name: "About the Atmosphere" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "What is the Atmosphere?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText(/Bluesky is the most popular app in this ecosystem/),
+    ).toBeVisible();
+  });
+
   test("surfaces a failed callback redirect as a toast", async ({ page }) => {
     await page.goto("/auth/sign-in?error=atproto");
     await expect(
@@ -170,7 +190,11 @@ test.describe("atmosphere sign-up entry", () => {
       "Sign up with Email",
     ]);
 
-    await openHandleStep(page, "Sign up with Atmosphere", "Atmosphere handle");
+    await openHandleStep(
+      page,
+      "Sign up with Atmosphere",
+      "Sign up with your Atmosphere handle",
+    );
   });
 });
 
