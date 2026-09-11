@@ -40,6 +40,8 @@ type ChipComboboxProps = {
   onRemove: (id: number) => void;
   onCreate?: (name: string) => void | Promise<void>;
   createLabel?: string;
+  /** Keeps selection editable but blocks creating a new option. */
+  createDisabled?: boolean;
   badgeVariant?: "default" | "outline" | "secondary";
   emptyMessage?: string;
 };
@@ -101,6 +103,7 @@ export function ChipCombobox({
   onRemove,
   onCreate,
   createLabel,
+  createDisabled = false,
   badgeVariant = "outline",
   emptyMessage = "No options found.",
 }: ChipComboboxProps) {
@@ -219,10 +222,11 @@ export function ChipCombobox({
   const hasExactMatch = options.some(
     (o) => o.label.toLowerCase() === lowerSearch,
   );
-  const canCreate = !!onCreate && !!trimmedSearch && !hasExactMatch;
+  const canCreate =
+    !!onCreate && !createDisabled && !!trimmedSearch && !hasExactMatch;
 
   const handleCreate = async () => {
-    if (!onCreate || !trimmedSearch) return;
+    if (!onCreate || !canCreate) return;
     await onCreate(trimmedSearch);
     setSearch("");
     requestAnimationFrame(() => {

@@ -15,6 +15,7 @@ import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { useCreateContentCategoryMutation } from "~/lib/data/content-categories/mutations";
 import { useFeeds } from "~/lib/data/feeds";
+import { useCanMutate } from "~/lib/data/offline-mutations";
 import { VIEW_LAYOUT } from "~/server/db/constants";
 import {
   CONTENT_FILTER_OPTION,
@@ -194,6 +195,7 @@ export function ViewCategoriesInput({
   setSelectedCategories: (categories: number[]) => void;
 }) {
   const categoryOptions = useCategoryOptions();
+  const canMutate = useCanMutate();
   const { mutateAsync: createContentCategory } =
     useCreateContentCategoryMutation();
 
@@ -201,6 +203,7 @@ export function ViewCategoriesInput({
     <ChipCombobox
       label="Tags"
       placeholder="Search tags..."
+      createDisabled={!canMutate}
       options={categoryOptions}
       selectedIds={selectedCategories}
       onAdd={(id) => setSelectedCategories([...selectedCategories, id])}

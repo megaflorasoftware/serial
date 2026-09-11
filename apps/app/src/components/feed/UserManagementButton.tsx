@@ -26,6 +26,7 @@ import { authClient, signOut } from "~/lib/auth-client";
 import { isAtprotoPlaceholderEmail } from "~/lib/auth/atproto";
 import { clearUserDataAfterSignOut } from "~/lib/auth/sign-out-cleanup";
 import { useClearAllUserData } from "~/lib/data/atoms";
+import { useCanMutate } from "~/lib/data/offline-mutations";
 import { useSubscription } from "~/lib/data/subscription";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
 
@@ -89,6 +90,7 @@ function AccountDropdownHeader({
 
 function AccountMenuItems({ billingEnabled }: { billingEnabled: boolean }) {
   const { launchDialog } = useDialogStore();
+  const canMutate = useCanMutate();
 
   return (
     <>
@@ -97,6 +99,7 @@ function AccountMenuItems({ billingEnabled }: { billingEnabled: boolean }) {
           <Button
             variant="outline"
             className="mb-2 w-full"
+            disabled={!canMutate}
             onClick={() => {
               launchDialog("connections");
             }}
@@ -111,6 +114,7 @@ function AccountMenuItems({ billingEnabled }: { billingEnabled: boolean }) {
           <Button
             variant="outline"
             className="mb-2 w-full"
+            disabled={!canMutate}
             onClick={() => launchDialog("subscription")}
           >
             <CreditCardIcon size={16} />
@@ -127,7 +131,8 @@ function AccountMenuItems({ billingEnabled }: { billingEnabled: boolean }) {
         <Button
           variant="outline"
           className="mb-2 w-full"
-          onClick={async () => {
+          disabled={!canMutate}
+          onClick={() => {
             launchDialog("edit-user-profile");
           }}
         >
@@ -179,9 +184,14 @@ function SignOutMenuItem({
   isSigningOut: boolean;
   onSignOut: () => void;
 }) {
+  const canMutate = useCanMutate();
   return (
     <ResponsiveDropdownMenuItem asChild>
-      <Button className="w-full" disabled={isSigningOut} onClick={onSignOut}>
+      <Button
+        className="w-full"
+        disabled={!canMutate || isSigningOut}
+        onClick={onSignOut}
+      >
         {isSigningOut ? (
           <Loader2Icon className="animate-spin" size={16} />
         ) : (

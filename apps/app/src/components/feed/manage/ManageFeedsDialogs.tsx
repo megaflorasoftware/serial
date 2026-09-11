@@ -131,6 +131,7 @@ export function EditFeedsDialog({
         <ChipCombobox
           label="Views"
           placeholder="Search views..."
+          createDisabled={!canMutate}
           options={customViewOptions}
           selectedIds={selectedViewIds}
           onAdd={(id) => setSelectedViewIds([...selectedViewIds, id])}
