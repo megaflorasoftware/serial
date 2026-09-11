@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { connectionStateAtom } from "~/lib/data/atoms";
 import {
   initializeDataSubscriptionConnection,
+  isDataSubscriptionConnected,
   markDataSubscriptionConnected,
   markDataSubscriptionFailed,
   markDataSubscriptionPaused,
@@ -37,5 +38,15 @@ describe("subscription connection state", () => {
     markDataSubscriptionPaused();
     markDataSubscriptionFailed({ isOnline: true, isVisible: false });
     expect(store.get(connectionStateAtom)).toBe("connected");
+  });
+
+  it("preserves the previous state for a cleanly ended stream", () => {
+    markDataSubscriptionConnected();
+    markDataSubscriptionPaused();
+    expect(store.get(connectionStateAtom)).toBe("connected");
+    expect(isDataSubscriptionConnected()).toBe(false);
+
+    markDataSubscriptionFailed({ isOnline: true, isVisible: true });
+    expect(store.get(connectionStateAtom)).toBe("disconnected");
   });
 });

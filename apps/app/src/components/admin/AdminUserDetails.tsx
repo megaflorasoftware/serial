@@ -14,6 +14,7 @@ import { AdminUserActions } from "./AdminUserActions";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { useSession } from "~/lib/auth-client";
+import { getDisplayableEmail } from "~/lib/auth/atproto";
 
 interface AdminUserDetailsProps {
   data: {
@@ -42,6 +43,7 @@ export function AdminUserDetails({ data }: AdminUserDetailsProps) {
   const { data: session } = useSession();
   const { user, sessions } = data;
   const isCurrentUser = session?.user.id === user.id;
+  const displayEmail = getDisplayableEmail(user.email);
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,10 +72,12 @@ export function AdminUserDetails({ data }: AdminUserDetailsProps) {
                 </Badge>
               )}
             </div>
-            <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-              <MailIcon size={14} />
-              {user.email}
-            </div>
+            {displayEmail && (
+              <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                <MailIcon size={14} />
+                {displayEmail}
+              </div>
+            )}
           </div>
           <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
             <UserIcon size={14} />

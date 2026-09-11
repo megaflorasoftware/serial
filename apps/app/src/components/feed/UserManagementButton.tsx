@@ -23,7 +23,7 @@ import {
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
 import { authClient, signOut } from "~/lib/auth-client";
-import { isAtprotoPlaceholderEmail } from "~/lib/auth/atproto";
+import { getDisplayableEmail } from "~/lib/auth/atproto";
 import { clearUserDataAfterSignOut } from "~/lib/auth/sign-out-cleanup";
 import { useClearAllUserData } from "~/lib/data/atoms";
 import { useCanMutate } from "~/lib/data/offline-mutations";
@@ -211,11 +211,7 @@ export function UserManagementNavItem() {
   const { billingEnabled, planName } = useSubscription();
   const { isSigningOut, handleSignOut } = useSignOutAction();
 
-  // A DID-only user carries an internal placeholder address; treat it as
-  // having no email rather than surfacing the garbled value.
-  const email = data?.user.email;
-  const displayEmail =
-    email && !isAtprotoPlaceholderEmail(email) ? email : undefined;
+  const displayEmail = getDisplayableEmail(data?.user.email);
 
   return (
     <SidebarMenu>
