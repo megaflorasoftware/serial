@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { undoStore } from "./store";
+import { canMutateNow } from "~/lib/data/offline-mutations";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 
@@ -11,6 +12,9 @@ export function UndoShortcutListener() {
     const activeToastId = state.activeToastId;
 
     if (!activeUndo || activeToastId === null) return;
+    // An undo replays a server mutation, so the shortcut is inert while
+    // disconnected; the toast simply expires on its normal timer.
+    if (!canMutateNow()) return;
 
     toast.dismiss(activeToastId);
     undoStore.getState().clearActiveUndo();

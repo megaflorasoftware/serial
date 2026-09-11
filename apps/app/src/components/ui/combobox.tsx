@@ -10,7 +10,8 @@ import { Input } from "~/components/ui/input";
  * style), trimmed to the parts this app composes: root, a plain-Input
  * field, and the anchored popup list. The upstream chips/trigger/clear
  * pieces are omitted — they depend on an input-group kit this app doesn't
- * have, and multi-select chips are already covered by ChipCombobox.
+ * have, and multi-select chips are already covered by ChipCombobox. The
+ * empty state is omitted too: the popup only opens with suggestions.
  */
 
 const Combobox = ComboboxPrimitive.Root;
@@ -107,24 +108,4 @@ function ComboboxItem({
   );
 }
 
-function ComboboxEmpty({ className, ...props }: ComboboxPrimitive.Empty.Props) {
-  return (
-    <ComboboxPrimitive.Empty
-      data-slot="combobox-empty"
-      className={cn(
-        "text-muted-foreground hidden w-full justify-center py-2 text-center text-sm group-data-empty/combobox-content:flex",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-export {
-  Combobox,
-  ComboboxInput,
-  ComboboxContent,
-  ComboboxList,
-  ComboboxItem,
-  ComboboxEmpty,
-};
+export { Combobox, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem };

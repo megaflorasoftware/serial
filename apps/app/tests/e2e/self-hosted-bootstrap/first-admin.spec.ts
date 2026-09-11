@@ -33,7 +33,7 @@ test("first-admin sign-up offers Atmosphere alongside email", async ({
     "Sign up with Email",
   ]);
 
-  const handleInput = page.getByLabel("Atmosphere handle");
+  const handleInput = page.getByLabel("Sign up with your Atmosphere handle");
   // Retry the click until the subscreen opens — the button renders
   // server-side but its onClick only attaches once React hydrates.
   await expect(async () => {

@@ -5,6 +5,7 @@ import type { UndoAction } from "./types";
 import { Button } from "~/components/ui/button";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
+import { useCanMutate } from "~/lib/data/offline-mutations";
 
 interface UndoToastProps {
   toastId: string | number;
@@ -12,6 +13,7 @@ interface UndoToastProps {
 }
 
 export function UndoToast({ toastId, action }: UndoToastProps) {
+  const canMutate = useCanMutate();
   const progressRef = useRef<HTMLDivElement>(null);
   const pausedDurationRef = useRef(0);
   const lastPauseTimeRef = useRef(0);
@@ -67,13 +69,20 @@ export function UndoToast({ toastId, action }: UndoToastProps) {
           {action.message}
         </span>
         <div className="relative">
-          <Button size="sm" variant="outline" onClick={handleUndo}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleUndo}
+            disabled={!canMutate}
+          >
             Undo
           </Button>
-          <KeyboardShortcutDisplay
-            shortcut={SHORTCUT_KEYS.UNDO}
-            className="-top-2 -right-3"
-          />
+          {canMutate && (
+            <KeyboardShortcutDisplay
+              shortcut={SHORTCUT_KEYS.UNDO}
+              className="-top-2 -right-3"
+            />
+          )}
         </div>
       </div>
       <div className="bg-muted h-1 w-full">

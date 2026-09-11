@@ -36,8 +36,12 @@ async function gotoWithAtmosphere(
  * Open the handle step, retrying the click until it takes — the button
  * renders server-side but its onClick only attaches once React hydrates.
  */
-async function openHandleStep(page: Page, buttonName: string) {
-  const handleInput = page.getByLabel("Atmosphere handle");
+async function openHandleStep(
+  page: Page,
+  buttonName: string,
+  handleLabel: string,
+) {
+  const handleInput = page.getByLabel(handleLabel);
   await expect(async () => {
     if (await handleInput.isVisible()) return;
     await page.getByRole("button", { name: buttonName }).click();
@@ -76,7 +80,11 @@ test.describe("atmosphere sign-in entry", () => {
     });
 
     await gotoWithAtmosphere(page, "/auth/sign-in", "Sign in with Atmosphere");
-    const handleInput = await openHandleStep(page, "Sign in with Atmosphere");
+    const handleInput = await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with your Atmosphere handle",
+    );
     await expect(handleInput).toBeFocused();
 
     // Keystrokes only ever reach the Serial proxy, never an AppView.
@@ -101,7 +109,11 @@ test.describe("atmosphere sign-in entry", () => {
     page,
   }) => {
     await gotoWithAtmosphere(page, "/auth/sign-in", "Sign in with Atmosphere");
-    const handleInput = await openHandleStep(page, "Sign in with Atmosphere");
+    const handleInput = await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with your Atmosphere handle",
+    );
 
     // Two characters are enough to surface stub-AppView suggestions.
     await handleInput.fill("al");
@@ -131,6 +143,26 @@ test.describe("atmosphere sign-in entry", () => {
     });
   });
 
+  test("explains the Atmosphere from the handle step's help button", async ({
+    page,
+  }) => {
+    await gotoWithAtmosphere(page, "/auth/sign-in", "Sign in with Atmosphere");
+    await openHandleStep(
+      page,
+      "Sign in with Atmosphere",
+      "Login with your Atmosphere handle",
+    );
+
+    await page.getByRole("button", { name: "About the Atmosphere" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "What is the Atmosphere?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText(/Bluesky is the most popular app in the Atmosphere/),
+    ).toBeVisible();
+  });
+
   test("surfaces a failed callback redirect as a toast", async ({ page }) => {
     await page.goto("/auth/sign-in?error=atproto");
     await expect(
@@ -158,7 +190,11 @@ test.describe("atmosphere sign-up entry", () => {
       "Sign up with Email",
     ]);
 
-    await openHandleStep(page, "Sign up with Atmosphere");
+    await openHandleStep(
+      page,
+      "Sign up with Atmosphere",
+      "Sign up with your Atmosphere handle",
+    );
   });
 });
 

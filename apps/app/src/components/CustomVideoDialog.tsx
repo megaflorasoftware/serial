@@ -7,7 +7,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { useDialogStore } from "~/components/feed/dialogStore";
-import { captureRootScrollRestoration } from "~/lib/root-scroll-restoration";
+import { captureRootScrollRestorationOnClick } from "~/lib/root-scroll-restoration";
 
 function getYouTubeVideoIdFromUrl(url: string) {
   const match = new RegExp(
@@ -55,9 +55,9 @@ export function CustomVideoDialog() {
           >
             <Button
               className="w-full"
-              onClick={() => {
+              onClick={(event) => {
                 if (pathname === "/") {
-                  captureRootScrollRestoration();
+                  captureRootScrollRestorationOnClick(event);
                 }
                 setVideoUrl("");
                 onOpenChange(false);

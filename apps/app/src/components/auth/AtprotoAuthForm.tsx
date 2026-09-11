@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import type { AtprotoHandleSubmission } from "~/components/auth/AtprotoHandleField";
+import type { AuthIntent } from "~/lib/auth/method-view";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
 import { authClient } from "~/lib/auth-client";
 
@@ -21,13 +22,20 @@ const AUTHORIZE_PATH = "/atproto/authorize";
 const GENERIC_ERROR_MESSAGE =
   "Could not start Atmosphere sign in. Please try again.";
 
+const HANDLE_LABELS: Record<AuthIntent, string> = {
+  "sign-in": "Login with your Atmosphere handle",
+  "sign-up": "Sign up with your Atmosphere handle",
+};
+
 interface AtprotoAuthFormProps {
+  intent: AuthIntent;
   /** The page's own submission state; busy-ness here stays internal. */
   disabled: boolean;
   focusOnMount?: boolean;
 }
 
 export function AtprotoAuthForm({
+  intent,
   disabled,
   focusOnMount = false,
 }: AtprotoAuthFormProps) {
@@ -72,7 +80,7 @@ export function AtprotoAuthForm({
   return (
     <AtprotoHandleField
       id="atproto-identifier"
-      label="Atmosphere handle"
+      label={HANDLE_LABELS[intent]}
       submitLabel="Continue"
       submitVariant="default"
       size="lg"

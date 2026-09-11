@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { useAtom, useAtomValue } from "jotai";
 import { useLocation } from "@tanstack/react-router";
 import { useShortcut } from "./useShortcut";
@@ -32,6 +38,7 @@ import {
   useShowInstapaperAction,
 } from "~/lib/data/instapaper";
 import { getNextRootItemId } from "~/lib/root-scroll-restoration";
+import { registerRootContentNavigation } from "~/lib/root-content-actions";
 import { canMutateNow } from "~/lib/data/offline-mutations";
 
 interface SectionInfo {
@@ -555,14 +562,13 @@ export function useFeedItemNavigation(
     allowRepeat: getShortcutAllowRepeat(SHORTCUT_KEYS.ARROW_LEFT),
   });
 
-  const handleToggleRead = useCallback(
-    (event: KeyboardEvent) => {
-      event.preventDefault();
-      if (pathname !== "/" || !selectedItemId) return;
-
-      const idx = items.indexOf(selectedItemId);
-      const didToggleRead = selectedItemActions.toggleRead();
-      if (!didToggleRead) return;
+  // An unknown item still gets its mutation, but never navigation: advancing
+  // from index -1 would treat the list end as reached and scroll to the top.
+  const toggleReadWithAdvance = useCallback(
+    (contentId: string, toggleRead: () => boolean) => {
+      const idx = items.indexOf(contentId);
+      if (!toggleRead()) return;
+      if (idx === -1) return;
 
       if (
         shouldAdvanceAfterToggleRead({
@@ -572,14 +578,54 @@ export function useFeedItemNavigation(
         selectItemAfterCurrentItemLeavesView(idx);
       }
     },
+    [items, contentStatusFilter, selectItemAfterCurrentItemLeavesView],
+  );
+
+  const toggleSavedWithAdvance = useCallback(
+    (contentId: string, toggleSaved: () => boolean) => {
+      const idx = items.indexOf(contentId);
+      if (!toggleSaved()) return;
+      if (idx === -1) return;
+
+      selectItemAfterCurrentItemLeavesView(idx);
+    },
+    [items, selectItemAfterCurrentItemLeavesView],
+  );
+
+  const advanceAfterSendToInstapaper = useCallback(
+    (contentId: string) => {
+      const idx = items.indexOf(contentId);
+      if (idx === -1) return;
+
+      selectNextItem(idx);
+    },
+    [items, selectNextItem],
+  );
+
+  // Register before paint so a click can never observe a stale handler set
+  // (or the plain-mutation fallback) between a commit and its passive flush.
+  useLayoutEffect(
+    () =>
+      registerRootContentNavigation({
+        toggleReadWithAdvance,
+        toggleSavedWithAdvance,
+        advanceAfterSendToInstapaper,
+      }),
     [
-      pathname,
-      selectedItemId,
-      selectedItemActions,
-      items,
-      contentStatusFilter,
-      selectItemAfterCurrentItemLeavesView,
+      toggleReadWithAdvance,
+      toggleSavedWithAdvance,
+      advanceAfterSendToInstapaper,
     ],
+  );
+
+  const handleToggleRead = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (pathname !== "/" || !selectedItemId) return;
+
+      toggleReadWithAdvance(selectedItemId, selectedItemActions.toggleRead);
+    },
+    [pathname, selectedItemId, selectedItemActions, toggleReadWithAdvance],
   );
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_READ), handleToggleRead);
@@ -589,9 +635,10 @@ export function useFeedItemNavigation(
   useShortcut(getShortcutKey(SHORTCUT_KEYS.TOGGLE_SAVED), () => {
     if (pathname !== "/" || !selectedItemId) return;
 
-    if (!selectedItemActions.toggleWatchLater()) return;
-    const idx = items.indexOf(selectedItemId);
-    selectItemAfterCurrentItemLeavesView(idx);
+    toggleSavedWithAdvance(
+      selectedItemId,
+      selectedItemActions.toggleWatchLater,
+    );
   });
 
   useShortcut(getShortcutKey(SHORTCUT_KEYS.COPY_URL), (event) => {
@@ -618,8 +665,7 @@ export function useFeedItemNavigation(
     }
 
     void saveToInstapaper({ feedItemId: selectedItemId });
-    const idx = items.indexOf(selectedItemId);
-    selectNextItem(idx);
+    advanceAfterSendToInstapaper(selectedItemId);
   });
 
   useEffect(() => {
