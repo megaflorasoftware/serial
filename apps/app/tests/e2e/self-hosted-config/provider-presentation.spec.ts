@@ -64,7 +64,7 @@ test("email-and-atproto set promotes Atmosphere to the primary method", async ({
 
   // Atmosphere outranks email, so its handle field renders inline —
   // expanded, no extra click — and email drops to a secondary button.
-  await expect(page.getByLabel("Atmosphere handle")).toBeVisible({
+  await expect(page.getByLabel("Login with Atmosphere")).toBeVisible({
     timeout: 15000,
   });
   const secondaryButtons = await page
