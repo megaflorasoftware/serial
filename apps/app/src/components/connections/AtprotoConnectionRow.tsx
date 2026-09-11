@@ -91,11 +91,11 @@ function AtprotoConnectionStatusLine({
   }
   if (status.needsReconnect) {
     // Credentials were lost (revoked at the PDS, failed refresh) but
-    // the sign-in method still exists: the row offers Reconnect and keeps
-    // its disconnect affordance.
+    // the sign-in method still exists: the line describes the state and
+    // the Reconnect button beside it carries the verb.
     return (
       <span className="text-muted-foreground text-sm">
-        Reconnect {status.handle}
+        Sign-in expired · {status.handle}
       </span>
     );
   }

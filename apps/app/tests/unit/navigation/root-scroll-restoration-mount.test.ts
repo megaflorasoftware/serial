@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   captureRootScrollRestoration,
+  captureRootScrollRestorationOnClick,
   createRootItemLinkClickHandler,
   useRootItemScrollRestoration,
 } from "~/lib/root-scroll-restoration";
@@ -30,10 +31,11 @@ type ListProps = {
   activeItemIds: readonly string[];
   selectedItemId: string | null;
   setSelectedItemId: (itemId: string | null) => void;
+  ready?: boolean;
 };
 
-function RootList(props: ListProps) {
-  useRootItemScrollRestoration({ ...props, ready: true });
+function RootList({ ready = true, ...props }: ListProps) {
+  useRootItemScrollRestoration({ ...props, ready });
   return null;
 }
 
@@ -151,6 +153,44 @@ describe("root scroll restoration across mounts", () => {
     expect(setSelectedItemId).toHaveBeenCalledWith("b");
   });
 
+  it("leaves the pending anchor untouched until the list is ready", () => {
+    const setSelectedItemId = vi.fn();
+    const first = mountRootList({
+      activeItemIds: ITEMS,
+      selectedItemId: "a",
+      setSelectedItemId,
+    });
+    captureRootScrollRestoration("a");
+    first.unmount();
+    vi.clearAllMocks();
+
+    // The list remounts before its items have loaded; nothing may be
+    // consumed or scrolled on those passes.
+    const second = mountRootList({
+      activeItemIds: [],
+      selectedItemId: "a",
+      setSelectedItemId,
+      ready: false,
+    });
+    second.render({
+      activeItemIds: [],
+      selectedItemId: "a",
+      setSelectedItemId,
+      ready: false,
+    });
+    expect(setSelectedItemId).not.toHaveBeenCalled();
+    expect(mocks.scrollRootItemToTarget).not.toHaveBeenCalled();
+
+    // Items arrive without "a": the capture still drives the successor.
+    second.render({
+      activeItemIds: ["b", "c"],
+      selectedItemId: "a",
+      setSelectedItemId,
+      ready: true,
+    });
+    expect(setSelectedItemId).toHaveBeenCalledWith("b");
+  });
+
   it("restores to the current selection when nothing was captured", () => {
     const setSelectedItemId = vi.fn();
     const first = mountRootList({
@@ -201,6 +241,24 @@ describe("root item link click capture", () => {
       setSelectedItemId,
     });
     expect(setSelectedItemId).not.toHaveBeenCalled();
+  });
+
+  it("captures the current selection for a plain click without an item", () => {
+    const setSelectedItemId = vi.fn();
+    const list = mountRootList({
+      activeItemIds: ITEMS,
+      selectedItemId: "a",
+      setSelectedItemId,
+    });
+    captureRootScrollRestorationOnClick({ preventDefault: () => {} });
+    list.unmount();
+
+    mountRootList({
+      activeItemIds: ["b", "c"],
+      selectedItemId: "a",
+      setSelectedItemId,
+    });
+    expect(setSelectedItemId).toHaveBeenCalledWith("b");
   });
 
   it("captures for a plain click and blocks a link that cannot open", () => {

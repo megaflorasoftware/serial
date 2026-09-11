@@ -96,6 +96,14 @@ function opensInNewContext(event: RootItemLinkClickEvent) {
 // A modifier or non-primary click opens elsewhere (TanStack Link runs the
 // user's click handler before its own modifier check), so the list never
 // unmounts and a capture would sit until some unrelated remount.
+export function captureRootScrollRestorationOnClick(
+  event: RootItemLinkClickEvent,
+  departingItemId?: string,
+) {
+  if (opensInNewContext(event)) return;
+  captureRootScrollRestoration(departingItemId);
+}
+
 export function createRootItemLinkClickHandler({
   canOpen,
   target,
@@ -110,9 +118,7 @@ export function createRootItemLinkClickHandler({
       event.preventDefault();
       return;
     }
-    if (!target && !opensInNewContext(event)) {
-      captureRootScrollRestoration(restorationId);
-    }
+    if (!target) captureRootScrollRestorationOnClick(event, restorationId);
   };
 }
 
