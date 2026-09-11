@@ -63,4 +63,19 @@ describe("createPolarHttpClient", () => {
       EXPECTED_POLAR_API_VERSION,
     );
   });
+
+  it("overwrites a version header the caller already set", async () => {
+    const { fetcher, sent } = createCapturingFetcher();
+    const client = createPolarHttpClient({ fetcher });
+
+    await client.request(
+      new Request("https://api.polar.sh/v1/products", {
+        headers: { [POLAR_VERSION_HEADER]: "2020-01" },
+      }),
+    );
+
+    expect(sent[0]?.headers.get(POLAR_VERSION_HEADER)).toBe(
+      EXPECTED_POLAR_API_VERSION,
+    );
+  });
 });
