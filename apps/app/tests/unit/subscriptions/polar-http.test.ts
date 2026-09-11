@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Fetcher } from "@polar-sh/sdk/lib/http.js";
 import {
   createPolarHttpClient,
-  POLAR_API_VERSION,
   POLAR_VERSION_HEADER,
   resolvePolarApiVersion,
 } from "~/server/subscriptions/polar-http";
@@ -37,10 +36,6 @@ describe("resolvePolarApiVersion", () => {
 });
 
 describe("createPolarHttpClient", () => {
-  it("pins the version the installed SDK was generated from", () => {
-    expect(POLAR_API_VERSION).toBe(EXPECTED_POLAR_API_VERSION);
-  });
-
   it("pins every request to the Polar API version", async () => {
     const { fetcher, sent } = createCapturingFetcher();
     const client = createPolarHttpClient({ fetcher });

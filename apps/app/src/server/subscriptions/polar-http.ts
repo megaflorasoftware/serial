@@ -20,18 +20,25 @@ export function resolvePolarApiVersion(specVersion: string): string {
   return specVersion;
 }
 
-export const POLAR_API_VERSION = resolvePolarApiVersion(
-  SDK_METADATA.openapiDocVersion,
-);
-
-function pinPolarVersion(request: Request): Request {
-  request.headers.set(POLAR_VERSION_HEADER, POLAR_API_VERSION);
-  return request;
+function pinPolarVersion(version: string) {
+  return (request: Request): Request => {
+    request.headers.set(POLAR_VERSION_HEADER, version);
+    return request;
+  };
 }
 
-/** HTTP client for the Polar SDK that pins every request to POLAR_API_VERSION. */
+/**
+ * HTTP client for the Polar SDK that pins every request to the API version the
+ * installed SDK was generated from. Only called once billing is enabled, so an
+ * invalid SDK spec version fails the main instance at boot and never touches
+ * instances that do not use Polar.
+ */
 export function createPolarHttpClient(
   options?: ConstructorParameters<typeof HTTPClient>[0],
 ): HTTPClient {
-  return new HTTPClient(options).addHook("beforeRequest", pinPolarVersion);
+  const version = resolvePolarApiVersion(SDK_METADATA.openapiDocVersion);
+  return new HTTPClient(options).addHook(
+    "beforeRequest",
+    pinPolarVersion(version),
+  );
 }
