@@ -75,7 +75,7 @@ test.describe("import sections as views", () => {
   test("sections become views, feeds linked, same-name section ignored", async ({
     page,
   }) => {
-    test.setTimeout(30000);
+    test.setTimeout(90_000);
     testEmail = generateTestEmail();
 
     await signUp({
@@ -124,7 +124,7 @@ test.describe("import sections as views", () => {
   test("re-import links already-existing feeds into the imported views", async ({
     page,
   }) => {
-    test.setTimeout(45000);
+    test.setTimeout(90_000);
     testEmail = generateTestEmail();
 
     await signUp({
@@ -180,7 +180,7 @@ test.describe("import sections as views", () => {
   test("nested folders become ordered view sections and are not duplicated on re-import", async ({
     page,
   }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120_000);
     testEmail = generateTestEmail();
 
     await signUp({

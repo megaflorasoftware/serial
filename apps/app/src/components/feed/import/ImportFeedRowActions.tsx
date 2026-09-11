@@ -111,12 +111,16 @@ function ImportOutcomeStatus({
   failedImportUrls: FailedImportUrls;
   leftOutByLimitUrls: Set<string>;
 }) {
+  // A failure reported for this row wins over "already added": an
+  // already-subscribed feed is submitted on re-import and can still fail.
+  const hasFailed = failedImportUrls.has(channel.feedUrl);
+
   return (
     <>
-      {wasImported && (
+      {wasImported && !hasFailed && (
         <ImportedFeedStatus feedUrl={channel.feedUrl} feeds={feeds} />
       )}
-      {channel.shouldImport && failedImportUrls.has(channel.feedUrl) && (
+      {hasFailed && (
         <Tooltip>
           <TooltipTrigger>
             <XIcon size={20} />

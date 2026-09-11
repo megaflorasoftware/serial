@@ -887,6 +887,15 @@ export const streamingImport = protectedProcedure
         const linkableFeedsByCanonicalUrl = new Map(
           orderedLinkableFeeds.map((feed) => [feed.feed.url, feed]),
         );
+        // First feed wins for a display name, matching the previous
+        // first-match scan.
+        const linkableFeedsByDisplayName = new Map<string, LinkableFeed>();
+        for (const feed of orderedLinkableFeeds) {
+          const displayName = feed.feed.name || feed.feed.url;
+          if (!linkableFeedsByDisplayName.has(displayName)) {
+            linkableFeedsByDisplayName.set(displayName, feed);
+          }
+        }
 
         function findImportedFeedSectionItem(
           section: NormalizedImportCategoryPathItem,
@@ -899,11 +908,7 @@ export const streamingImport = protectedProcedure
             );
           }
 
-          return (
-            orderedLinkableFeeds.find(
-              (feed) => (feed.feed.name || feed.feed.url) === section.name,
-            ) ?? null
-          );
+          return linkableFeedsByDisplayName.get(section.name) ?? null;
         }
 
         for (const linkableFeed of orderedLinkableFeeds) {
