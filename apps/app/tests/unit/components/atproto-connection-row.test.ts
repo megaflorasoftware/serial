@@ -51,7 +51,7 @@ describe("AtprotoConnectionRow", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it("offers Reconnect and Disconnect as sibling buttons, not a clickable row", () => {
+  it("keeps the row inert and moves Reconnect into an amber banner", () => {
     const { row, buttons, onSelect, onDisconnect } = renderRow({
       isConfigured: true,
       isConnected: false,
@@ -61,13 +61,17 @@ describe("AtprotoConnectionRow", () => {
 
     expect(row.getAttribute("role")).toBeNull();
     expect(row.querySelector('[role="button"]')).toBeNull();
+    expect(row.textContent).toContain("alice.example");
+    const banner = row.querySelector(".bg-amber-500");
+    expect(banner?.textContent).toContain("Sign-in expired");
     expect(buttons.map((button) => button.textContent)).toEqual([
-      "Reconnect",
       "Disconnect",
+      "Reconnect",
     ]);
-    act(() => buttons[0]?.click());
-    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(banner?.contains(buttons[1] ?? null)).toBe(true);
     act(() => buttons[1]?.click());
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    act(() => buttons[0]?.click());
     expect(onDisconnect).toHaveBeenCalledTimes(1);
   });
 

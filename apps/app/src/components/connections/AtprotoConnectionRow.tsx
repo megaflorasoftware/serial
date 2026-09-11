@@ -29,6 +29,7 @@ export function AtprotoConnectionRow({
     status.isConfigured &&
     !status.isConnected &&
     !status.needsReconnect;
+  const showReconnectBanner = !isLoading && status.needsReconnect;
 
   return (
     <div
@@ -45,21 +46,23 @@ export function AtprotoConnectionRow({
             }
           : undefined
       }
-      className={`flex items-center justify-between rounded-lg border p-4 ${
+      className={`overflow-hidden rounded-lg border ${
         isClickable ? "hover:bg-muted cursor-pointer transition-colors" : ""
       }`}
     >
-      <div className="flex flex-col">
-        <span className="font-medium">Atmosphere</span>
-        <AtprotoConnectionStatusLine isLoading={isLoading} status={status} />
+      <div className="flex items-center justify-between p-4">
+        <div className="flex flex-col">
+          <span className="font-medium">Atmosphere</span>
+          <AtprotoConnectionStatusLine isLoading={isLoading} status={status} />
+        </div>
+        <AtprotoConnectionAction
+          isLoading={isLoading}
+          status={status}
+          disconnecting={disconnecting}
+          onDisconnect={onDisconnect}
+        />
       </div>
-      <AtprotoConnectionAction
-        isLoading={isLoading}
-        status={status}
-        disconnecting={disconnecting}
-        onReconnect={onSelect}
-        onDisconnect={onDisconnect}
-      />
+      {showReconnectBanner && <AtprotoReconnectBanner onReconnect={onSelect} />}
     </div>
   );
 }
@@ -108,13 +111,11 @@ function AtprotoConnectionAction({
   isLoading,
   status,
   disconnecting,
-  onReconnect,
   onDisconnect,
 }: {
   isLoading: boolean;
   status: AtprotoConnectionStatus;
   disconnecting: boolean;
-  onReconnect: () => void;
   onDisconnect: () => void;
 }) {
   if (isLoading) {
@@ -123,21 +124,7 @@ function AtprotoConnectionAction({
     );
   }
   if (!status.isConfigured) return null;
-  if (status.needsReconnect) {
-    return (
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onReconnect}>
-          <RefreshCwIcon size={16} />
-          <span className="ml-1.5">Reconnect</span>
-        </Button>
-        <DisconnectButton
-          disconnecting={disconnecting}
-          onDisconnect={onDisconnect}
-        />
-      </div>
-    );
-  }
-  if (status.isConnected) {
+  if (status.isConnected || status.needsReconnect) {
     return (
       <DisconnectButton
         disconnecting={disconnecting}
@@ -146,6 +133,27 @@ function AtprotoConnectionAction({
     );
   }
   return <ChevronRightIcon className="text-muted-foreground" size={20} />;
+}
+
+/**
+ * Credentials were lost (revoked at the PDS, failed refresh) but the
+ * sign-in method still exists. Same treatment as the demo banner: amber
+ * strip, state on the left, the one action on the right.
+ */
+function AtprotoReconnectBanner({ onReconnect }: { onReconnect: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950">
+      <span>Sign-in expired</span>
+      <Button
+        size="sm"
+        className="flex items-center gap-1.5"
+        onClick={onReconnect}
+      >
+        <RefreshCwIcon size={14} />
+        Reconnect
+      </Button>
+    </div>
+  );
 }
 
 function DisconnectButton({
