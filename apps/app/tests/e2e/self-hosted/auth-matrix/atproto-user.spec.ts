@@ -159,7 +159,7 @@ test.describe("atmosphere sign-in entry", () => {
     });
     await expect(dialog).toBeVisible();
     await expect(
-      dialog.getByText(/Bluesky is the most popular app in this ecosystem/),
+      dialog.getByText(/Bluesky is the most popular app in the Atmosphere/),
     ).toBeVisible();
   });
 
