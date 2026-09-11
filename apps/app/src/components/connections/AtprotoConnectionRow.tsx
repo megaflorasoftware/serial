@@ -8,8 +8,9 @@ import { Button } from "../ui/button";
 
 /**
  * Presentation for the connections-list row. A row is either clickable (to
- * start linking) or carries action buttons, never both — the Instapaper
- * row's rule — so no button ever nests inside the row's own button role.
+ * start linking) or carries action buttons (including the reconnect banner
+ * beneath it), never both — the Instapaper row's rule — so no button ever
+ * nests inside the row's own button role.
  */
 export function AtprotoConnectionRow({
   isLoading,

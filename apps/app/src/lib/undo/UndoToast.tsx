@@ -77,10 +77,12 @@ export function UndoToast({ toastId, action }: UndoToastProps) {
           >
             Undo
           </Button>
-          <KeyboardShortcutDisplay
-            shortcut={SHORTCUT_KEYS.UNDO}
-            className="-top-2 -right-3"
-          />
+          {canMutate && (
+            <KeyboardShortcutDisplay
+              shortcut={SHORTCUT_KEYS.UNDO}
+              className="-top-2 -right-3"
+            />
+          )}
         </div>
       </div>
       <div className="bg-muted h-1 w-full">
