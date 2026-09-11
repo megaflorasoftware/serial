@@ -12,8 +12,8 @@ export function UndoShortcutListener() {
     const activeToastId = state.activeToastId;
 
     if (!activeUndo || activeToastId === null) return;
-    // An undo replays a server mutation; while disconnected the toast stays
-    // so the shortcut can pick it up once the connection returns.
+    // An undo replays a server mutation, so the shortcut is inert while
+    // disconnected; the toast simply expires on its normal timer.
     if (!canMutateNow()) return;
 
     toast.dismiss(activeToastId);

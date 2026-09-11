@@ -95,7 +95,9 @@ function AtprotoConnectionStatusLine({
     // the Reconnect button beside it carries the verb.
     return (
       <span className="text-muted-foreground text-sm">
-        Sign-in expired · {status.handle}
+        {status.handle
+          ? `Sign-in expired · ${status.handle}`
+          : "Sign-in expired"}
       </span>
     );
   }
