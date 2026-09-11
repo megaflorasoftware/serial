@@ -4,10 +4,11 @@ import { publisher } from "../publisher";
 import { getUserChannel } from "../channels";
 import {
   applyFeedCategories,
-  chunkRows,
   insertFeedWithCategories,
+  runInChunks,
 } from "./feed-router/utils";
 import type { PublishedChunk } from "../publisher";
+import type { InsertFeedWithCategoriesResult } from "./feed-router/utils";
 import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type {
@@ -375,18 +376,17 @@ export const streamingImport = protectedProcedure
     const inputFeedUrls = getUniqueNames(
       input.feeds.map((feed) => feed.feedUrl),
     );
-    const ownedFeedByUrl = new Map<string, typeof feeds.$inferSelect>();
-    for (const urlChunk of chunkRows(inputFeedUrls)) {
-      const ownedFeeds = await context.db
+    const ownedFeeds = await runInChunks(inputFeedUrls, (urlChunk) =>
+      context.db
         .select()
         .from(feeds)
         .where(
           and(eq(feeds.userId, context.user.id), inArray(feeds.url, urlChunk)),
-        );
-      for (const feed of ownedFeeds) {
-        ownedFeedByUrl.set(feed.url, feed);
-      }
-    }
+        ),
+    );
+    const ownedFeedByUrl = new Map(
+      ownedFeeds.flat().map((feed) => [feed.url, feed]),
+    );
 
     // OPML sections always become views; only explicit Serial tag metadata
     // becomes feed tags.
@@ -519,38 +519,41 @@ export const streamingImport = protectedProcedure
           string,
           typeof contentCategories.$inferSelect
         >();
-        for (const nameChunk of chunkRows(nestedTagSectionNames)) {
-          const existingCategories = await tx
-            .select()
-            .from(contentCategories)
-            .where(
-              and(
-                eq(contentCategories.userId, context.user.id),
-                inArray(contentCategories.name, nameChunk),
+        const existingCategories = await runInChunks(
+          nestedTagSectionNames,
+          (nameChunk) =>
+            tx
+              .select()
+              .from(contentCategories)
+              .where(
+                and(
+                  eq(contentCategories.userId, context.user.id),
+                  inArray(contentCategories.name, nameChunk),
+                ),
               ),
-            );
-          for (const category of existingCategories) {
-            categoryByName.set(category.name, category);
-          }
+        );
+        for (const category of existingCategories.flat()) {
+          categoryByName.set(category.name, category);
         }
         const categoryNamesToCreate = nestedTagSectionNames.filter(
           (name) => !categoryByName.has(name),
         );
 
-        for (const nameChunk of chunkRows(categoryNamesToCreate)) {
-          const insertedCategories = await tx
-            .insert(contentCategories)
-            .values(
-              nameChunk.map((name) => ({
-                userId: context.user.id,
-                name,
-              })),
-            )
-            .returning();
-
-          for (const category of insertedCategories) {
-            categoryByName.set(category.name, category);
-          }
+        const insertedCategories = await runInChunks(
+          categoryNamesToCreate,
+          (nameChunk) =>
+            tx
+              .insert(contentCategories)
+              .values(
+                nameChunk.map((name) => ({
+                  userId: context.user.id,
+                  name,
+                })),
+              )
+              .returning(),
+        );
+        for (const category of insertedCategories.flat()) {
+          categoryByName.set(category.name, category);
         }
 
         return { viewByName, categoryByName };
@@ -658,15 +661,12 @@ export const streamingImport = protectedProcedure
         ownedTagEntries.length > 0
       ) {
         await context.db.transaction(async (tx) => {
-          for (const rowChunk of chunkRows(viewFeedRows)) {
-            await tx.insert(viewFeeds).values(rowChunk).onConflictDoNothing();
-          }
-          for (const rowChunk of chunkRows(feedCategoryRows)) {
-            await tx
-              .insert(feedCategories)
-              .values(rowChunk)
-              .onConflictDoNothing();
-          }
+          await runInChunks(viewFeedRows, (rowChunk) =>
+            tx.insert(viewFeeds).values(rowChunk).onConflictDoNothing(),
+          );
+          await runInChunks(feedCategoryRows, (rowChunk) =>
+            tx.insert(feedCategories).values(rowChunk).onConflictDoNothing(),
+          );
           // Exported per-feed tags apply to already-subscribed feeds too, so
           // a re-import restores the same organization a fresh import would.
           await applyFeedCategories(tx, context.user.id, ownedTagEntries);
@@ -692,8 +692,6 @@ export const streamingImport = protectedProcedure
     async function insertFeed(
       feedInput: (typeof feedsWithActivation)[0],
     ): Promise<ImportProgressChunk[]> {
-      const chunks: ImportProgressChunk[] = [];
-
       // Once the timeout fires the feed is reported as an error, so the
       // abandoned insert must not register the feed for the fetch phase or
       // emit a second terminal chunk.
@@ -705,6 +703,54 @@ export const streamingImport = protectedProcedure
           reject(new Error("Import timed out"));
         }, FEED_TIMEOUT_MS);
       });
+
+      const reportInsertResult = (
+        insertResult: InsertFeedWithCategoriesResult,
+      ): ImportProgressChunk[] => {
+        if (!insertResult.success) {
+          if (insertResult.existingFeed) {
+            // Already-subscribed feeds are not an import failure: they have
+            // been linked into the imported views above and just skip the
+            // fetch phase.
+            existingLinkedFeeds.push({
+              inputFeedUrl: feedInput.feedUrl,
+              feedId: insertResult.existingFeed.id,
+              feed: insertResult.existingFeed,
+              categoryPaths: feedInput.categoryPaths,
+            });
+            return [
+              {
+                type: "feed-status",
+                feedId: insertResult.existingFeed.id,
+                status: "skipped",
+              },
+            ];
+          }
+          return [
+            {
+              type: "import-feed-error",
+              feedUrl: feedInput.feedUrl,
+              error: insertResult.error,
+            },
+          ];
+        }
+
+        insertedFeeds.push({
+          inputFeedUrl: feedInput.feedUrl,
+          feedId: insertResult.feedId,
+          feed: insertResult.feed,
+          categoryPaths: feedInput.categoryPaths,
+        });
+
+        return [
+          {
+            type: "import-feed-inserted",
+            feedUrl: feedInput.feedUrl,
+            feedId: insertResult.feedId,
+            feed: insertResult.feed,
+          },
+        ];
+      };
 
       const insertPromise = (async () => {
         const insertResult = await dbSemaphore.run(() =>
@@ -725,18 +771,15 @@ export const streamingImport = protectedProcedure
                 linkableFeedId,
               );
 
-              for (const rowChunk of chunkRows(viewFeedRows)) {
-                await tx
-                  .insert(viewFeeds)
-                  .values(rowChunk)
-                  .onConflictDoNothing();
-              }
-              for (const rowChunk of chunkRows(feedCategoryRows)) {
-                await tx
+              await runInChunks(viewFeedRows, (rowChunk) =>
+                tx.insert(viewFeeds).values(rowChunk).onConflictDoNothing(),
+              );
+              await runInChunks(feedCategoryRows, (rowChunk) =>
+                tx
                   .insert(feedCategories)
                   .values(rowChunk)
-                  .onConflictDoNothing();
-              }
+                  .onConflictDoNothing(),
+              );
               // A duplicate resolved during insert skipped the tag block in
               // insertFeedWithCategories; apply its exported tags here.
               if (!result.success && feedInput.categories.length > 0) {
@@ -753,49 +796,9 @@ export const streamingImport = protectedProcedure
           }),
         );
 
-        if (timedOut) return chunks;
-
-        if (!insertResult.success) {
-          if (insertResult.existingFeed) {
-            // Already-subscribed feeds are not an import failure: they have
-            // been linked into the imported views above and just skip the
-            // fetch phase.
-            existingLinkedFeeds.push({
-              inputFeedUrl: feedInput.feedUrl,
-              feedId: insertResult.existingFeed.id,
-              feed: insertResult.existingFeed,
-              categoryPaths: feedInput.categoryPaths,
-            });
-            chunks.push({
-              type: "feed-status",
-              feedId: insertResult.existingFeed.id,
-              status: "skipped",
-            });
-            return chunks;
-          }
-          chunks.push({
-            type: "import-feed-error",
-            feedUrl: feedInput.feedUrl,
-            error: insertResult.error,
-          });
-          return chunks;
-        }
-
-        chunks.push({
-          type: "import-feed-inserted",
-          feedUrl: feedInput.feedUrl,
-          feedId: insertResult.feedId,
-          feed: insertResult.feed,
-        });
-
-        insertedFeeds.push({
-          inputFeedUrl: feedInput.feedUrl,
-          feedId: insertResult.feedId,
-          feed: insertResult.feed,
-          categoryPaths: feedInput.categoryPaths,
-        });
-
-        return chunks;
+        // The timer flips `timedOut` while the insert is in flight, so the
+        // check only means something once the transaction has settled.
+        return timedOut ? [] : reportInsertResult(insertResult);
       })();
 
       try {
@@ -848,17 +851,15 @@ export const streamingImport = protectedProcedure
       const { viewByName, categoryByName } = viewLinking;
       await context.db.transaction(async (tx) => {
         const viewIds = [...viewByName.values()].map((view) => view.id);
-        const existingViewSections: Array<typeof viewSections.$inferSelect> =
-          [];
-        for (const viewIdChunk of chunkRows(viewIds)) {
-          existingViewSections.push(
-            ...(await tx
+        const existingViewSections = (
+          await runInChunks(viewIds, (viewIdChunk) =>
+            tx
               .select()
               .from(viewSections)
               .where(inArray(viewSections.viewId, viewIdChunk))
-              .orderBy(asc(viewSections.placement))),
-          );
-        }
+              .orderBy(asc(viewSections.placement)),
+          )
+        ).flat();
         const existingSectionKeys = new Set(
           existingViewSections.map(
             (section) =>
@@ -947,9 +948,9 @@ export const streamingImport = protectedProcedure
           }
         }
 
-        for (const rowChunk of chunkRows(viewSectionRows)) {
-          await tx.insert(viewSections).values(rowChunk);
-        }
+        await runInChunks(viewSectionRows, (rowChunk) =>
+          tx.insert(viewSections).values(rowChunk),
+        );
       });
 
       // Memberships and sections are complete before the slow fetch phase.

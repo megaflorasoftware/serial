@@ -88,6 +88,9 @@ export const viewsStoreApi = createStore<ViewsStore>()(
             let lastResponse: ApplicationView[] | null = null;
             for (let attempt = 0; attempt < 5; attempt++) {
               const startRevision = get().revision;
+              // Each attempt is a retry of the previous one, so the requests
+              // are sequential by design.
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop
               const data = await orpcRouterClient.view.getAll(undefined, {
                 signal: AbortSignal.timeout(VIEW_FETCH_TIMEOUT_MS),
               });

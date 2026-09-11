@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSetAtom } from "jotai";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getInitialFeedDataFromFileInputElement } from "../components/feed/import/utils/getInitialFeedDataFromFileInputElement";
 import type {
@@ -149,6 +149,51 @@ function getImportSubmission(
   return { selectedChannels, channelsToSubmit, leftOutByLimitCount };
 }
 
+// One import run's lifecycle changes together (submit, stream start, stream
+// end, settle, reset), so it lives in a single reducer.
+type ImportRunState = {
+  hasStartedImport: boolean;
+  isImportComplete: boolean;
+  isImportPending: boolean;
+  leftOutByLimitUrls: Set<string>;
+};
+
+type ImportRunAction =
+  | { type: "submitted"; leftOutByLimitUrls: Set<string> }
+  | { type: "started" }
+  | { type: "completed" }
+  | { type: "settled" }
+  | { type: "reset" };
+
+const INITIAL_IMPORT_RUN: ImportRunState = {
+  hasStartedImport: false,
+  isImportComplete: false,
+  isImportPending: false,
+  leftOutByLimitUrls: new Set(),
+};
+
+function importRunReducer(
+  state: ImportRunState,
+  action: ImportRunAction,
+): ImportRunState {
+  switch (action.type) {
+    case "submitted":
+      return {
+        ...state,
+        isImportPending: true,
+        leftOutByLimitUrls: action.leftOutByLimitUrls,
+      };
+    case "started":
+      return { ...state, hasStartedImport: true };
+    case "completed":
+      return { ...state, isImportComplete: true };
+    case "settled":
+      return { ...state, isImportPending: false };
+    case "reset":
+      return INITIAL_IMPORT_RUN;
+  }
+}
+
 function ImportFooter({
   isAtBottom,
   submitCount,
@@ -197,12 +242,16 @@ function EditFeedsPage() {
   const [feedsFoundFromFile, setFeedsFoundFromFile] = useState<
     ImportFeedDataItem[] | null
   >(null);
-  const [hasStartedImport, setHasStartedImport] = useState(false);
-  const [isImportComplete, setIsImportComplete] = useState(false);
-  const [isImportPending, setIsImportPending] = useState(false);
-  const [leftOutByLimitUrls, setLeftOutByLimitUrls] = useState<Set<string>>(
-    () => new Set(),
+  const [importRun, dispatchImportRun] = useReducer(
+    importRunReducer,
+    INITIAL_IMPORT_RUN,
   );
+  const {
+    hasStartedImport,
+    isImportComplete,
+    isImportPending,
+    leftOutByLimitUrls,
+  } = importRun;
 
   const [fileInputErrorList, setFileInputErrorList] =
     useState<ImportFeedDataFromFilesError | null>(null);
@@ -273,7 +322,9 @@ function EditFeedsPage() {
 
   useEffect(() => {
     if (isImportPending && loading.mode === "importing" && !hasStartedImport) {
-      const id = requestAnimationFrame(() => setHasStartedImport(true));
+      const id = requestAnimationFrame(() =>
+        dispatchImportRun({ type: "started" }),
+      );
       return () => cancelAnimationFrame(id);
     }
   }, [isImportPending, loading.mode, hasStartedImport]);
@@ -295,18 +346,18 @@ function EditFeedsPage() {
     if (!feedsFoundFromFile?.length) return;
 
     setShouldAlwaysKeepSSEConnectionAlive(true);
-    setIsImportPending(true);
 
     const submittedUrls = new Set(
       channelsToSubmit.map((channel) => channel.feedUrl),
     );
-    setLeftOutByLimitUrls(
-      new Set(
+    dispatchImportRun({
+      type: "submitted",
+      leftOutByLimitUrls: new Set(
         selectedChannels
           .filter((channel) => !submittedUrls.has(channel.feedUrl))
           .map((channel) => channel.feedUrl),
       ),
-    );
+    });
     if (leftOutByLimitCount > 0) {
       toast.warning(
         `${leftOutByLimitCount} feed${leftOutByLimitCount > 1 ? "s were" : " was"} left out: an import is limited to ${MAX_BULK_MUTATION_ITEMS} feeds. Import the file again to add the rest.`,
@@ -323,20 +374,17 @@ function EditFeedsPage() {
     try {
       await dataRequestActions.streamingImport(channelsToImport);
 
-      setIsImportComplete(true);
+      dispatchImportRun({ type: "completed" });
     } catch {
       toast.error("Import failed. Please try again.");
     } finally {
-      setIsImportPending(false);
+      dispatchImportRun({ type: "settled" });
     }
   };
 
   const onReset = () => {
     setFeedsFoundFromFile(null);
-    setHasStartedImport(false);
-    setIsImportComplete(false);
-    setIsImportPending(false);
-    setLeftOutByLimitUrls(new Set());
+    dispatchImportRun({ type: "reset" });
     setShouldAlwaysKeepSSEConnectionAlive(false);
   };
 

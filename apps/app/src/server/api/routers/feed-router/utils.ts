@@ -116,6 +116,25 @@ export function chunkRows<T>(rows: T[], size: number = BULK_INSERT_BATCH_SIZE) {
 }
 
 /**
+ * Run one statement per chunk of `rows` and collect the results in order.
+ * The chunks exist only to stay under the bind-variable limit, not to fan
+ * work out: the statements run inside a transaction that shares a single
+ * connection, so they are issued sequentially by design.
+ */
+export async function runInChunks<T, TResult>(
+  rows: T[],
+  statement: (chunk: T[]) => Promise<TResult>,
+) {
+  const results: TResult[] = [];
+  for (const chunk of chunkRows(rows)) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const result = await statement(chunk);
+    results.push(result);
+  }
+  return results;
+}
+
+/**
  * Create any missing tags by name and link the given feeds to them.
  * Idempotent: existing tags are reused and existing links are kept.
  */
@@ -130,8 +149,8 @@ export async function applyFeedCategories(
   if (names.length === 0) return;
 
   const categoryByName = new Map<string, { id: number }>();
-  for (const nameChunk of chunkRows(names)) {
-    const matchingCategories = await db
+  const matchingCategories = await runInChunks(names, (nameChunk) =>
+    db
       .select()
       .from(schema.contentCategories)
       .where(
@@ -140,24 +159,24 @@ export async function applyFeedCategories(
           eq(schema.contentCategories.userId, userId),
         ),
       )
-      .all();
-    for (const category of matchingCategories) {
-      categoryByName.set(category.name, { id: category.id });
-    }
+      .all(),
+  );
+  for (const category of matchingCategories.flat()) {
+    categoryByName.set(category.name, { id: category.id });
   }
 
   const namesToCreate = names.filter((name) => !categoryByName.has(name));
-  for (const nameChunk of chunkRows(namesToCreate)) {
-    const created = await db
+  const createdCategories = await runInChunks(namesToCreate, (nameChunk) =>
+    db
       .insert(schema.contentCategories)
       .values(nameChunk.map((name) => ({ name, userId })))
       .returning({
         id: schema.contentCategories.id,
         name: schema.contentCategories.name,
-      });
-    for (const category of created) {
-      categoryByName.set(category.name, { id: category.id });
-    }
+      }),
+  );
+  for (const category of createdCategories.flat()) {
+    categoryByName.set(category.name, { id: category.id });
   }
 
   const feedCategoryRows = entries.flatMap((entry) =>
@@ -168,12 +187,9 @@ export async function applyFeedCategories(
         : [];
     }),
   );
-  for (const rowChunk of chunkRows(feedCategoryRows)) {
-    await db
-      .insert(schema.feedCategories)
-      .values(rowChunk)
-      .onConflictDoNothing();
-  }
+  await runInChunks(feedCategoryRows, (rowChunk) =>
+    db.insert(schema.feedCategories).values(rowChunk).onConflictDoNothing(),
+  );
 }
 
 export type InsertFeedWithCategoriesSuccess = {
