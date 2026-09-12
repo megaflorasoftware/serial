@@ -618,12 +618,18 @@ export const useFeedItemsListProjection = () => {
 export const {
   useFeedItemsOrder,
   useScopeFeedItemIds,
-  useFeedStatusDict,
   useHasInitialData,
   useFetchFeedItemsForFeed,
   useFetchNewData,
   useViewFeedIds,
 } = feedItemsStore;
+
+export const useFeedStatus = (feedId: number): FetchFeedsStatus => {
+  return useStore(
+    feedItemsStore,
+    (store) => store.feedStatusDict[feedId] ?? "success",
+  );
+};
 
 export const useFeedItemValue = (id: string) => {
   return useStore(
