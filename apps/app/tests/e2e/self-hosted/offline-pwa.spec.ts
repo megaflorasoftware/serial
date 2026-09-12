@@ -460,6 +460,19 @@ async function getReaderChunkCacheNames(page: Page) {
   }, READER_CHUNK_PATTERN);
 }
 
+// The preloader runs once per page lifetime, and on the very first load it
+// can fire before the freshly installed worker claims the page, so that
+// fetch never reaches the runtime cache. Every later visit boots under
+// worker control; start the assertions from such a visit.
+async function reloadUnderServiceWorkerControl(page: Page) {
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect
+    .poll(() =>
+      page.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+    )
+    .toBe(true);
+}
+
 // Deferred hydration retains the pre-saved body; flushing the throttled IDB
 // writer each attempt makes the offline reload start from persisted state.
 async function waitForRetainedFeedBody(page: Page, feedItemId: string) {
@@ -505,6 +518,7 @@ test("fetches the reader chunk for saved content before it is opened", async ({
   try {
     await signIn({ page, email, password });
     await prepareControlledShell(page);
+    await reloadUnderServiceWorkerControl(page);
     await waitForRetainedFeedBody(page, feedItemId);
 
     // Retained content plus a live connection is what triggers the preload;
@@ -552,6 +566,7 @@ test("keeps the app frame when the reader chunk cannot load offline", async ({
   try {
     await signIn({ page, email, password });
     await prepareControlledShell(page);
+    await reloadUnderServiceWorkerControl(page);
     await waitForRetainedFeedBody(page, feedItemId);
     await expect
       .poll(() => getReaderChunkCacheNames(page), { timeout: 20_000 })

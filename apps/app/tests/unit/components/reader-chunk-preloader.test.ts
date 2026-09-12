@@ -5,7 +5,11 @@ import { getDefaultStore } from "jotai";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ReaderChunkPreloader } from "~/components/pwa/ReaderChunkPreloader";
+import type { DatabasePageCapture } from "~/server/db/schema";
+import {
+  ReaderChunkPreloader,
+  resetReaderChunkPreloadForTests,
+} from "~/components/pwa/ReaderChunkPreloader";
 import { connectionStateAtom } from "~/lib/data/atoms";
 import { bookmarkCapturesStore } from "~/lib/data/bookmarks/capture-store";
 import { feedItemsStore } from "~/lib/data/store";
@@ -38,10 +42,24 @@ afterEach(() => {
   getDefaultStore().set(connectionStateAtom, "unknown");
   feedItemsStore.setState({ retainedFeedItemBodyIds: {} });
   bookmarkCapturesStore.getState().reset();
+  resetReaderChunkPreloadForTests();
   vi.clearAllMocks();
 });
 
 describe("ReaderChunkPreloader", () => {
+  it("treats a stored bookmark capture as offline content", () => {
+    getDefaultStore().set(connectionStateAtom, "connected");
+    render();
+    expect(mocks.loadRouteChunk).not.toHaveBeenCalled();
+
+    act(() =>
+      bookmarkCapturesStore.getState().upsert({
+        bookmarkId: "bookmark-1",
+      } as DatabasePageCapture),
+    );
+    expect(mocks.loadRouteChunk).toHaveBeenCalledTimes(1);
+  });
+
   it("fetches the reader chunk once retained content meets a live connection", () => {
     render();
     expect(mocks.loadRouteChunk).not.toHaveBeenCalled();

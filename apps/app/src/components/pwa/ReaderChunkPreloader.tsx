@@ -18,6 +18,10 @@ import {
 // is useful.
 let status: ReaderChunkPreloadStatus = "idle";
 
+export function resetReaderChunkPreloadForTests() {
+  status = "idle";
+}
+
 function useHasOfflineContent() {
   const hasRetainedFeedBody = useStore(feedItemsStore, (state) =>
     hasAnyKey(state.retainedFeedItemBodyIds),
@@ -46,7 +50,8 @@ export function ReaderChunkPreloader() {
         status = "loaded";
       },
       () => {
-        // The router already recorded the failure on the route; a later
+        // The router keeps the failed import on the route and skips further
+        // chunk loads for it, so a retry cannot fetch again; a later
         // navigation reloads the page once, which resets everything.
         status = "loaded";
       },

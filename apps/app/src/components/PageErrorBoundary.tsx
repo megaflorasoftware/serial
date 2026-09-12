@@ -60,21 +60,24 @@ export class PageErrorBoundary extends Component<
   }
 }
 
-export function getPageErrorCopy(input: {
+export function getPageErrorPresentation(input: {
   error: unknown;
   isDisconnected: boolean;
 }) {
   if (isChunkLoadError(input.error)) {
-    return input.isDisconnected
-      ? "This content isn't available offline."
-      : "This content couldn't load. Check your connection and try again.";
+    return {
+      copy: input.isDisconnected
+        ? "This content isn't available offline."
+        : "This content couldn't load. Check your connection and try again.",
+      canReload: false,
+    };
   }
-  return "Something went wrong.";
+  return { copy: "Something went wrong.", canReload: true };
 }
 
 function PageErrorMessage({ error }: { error: unknown }) {
   const connectionState = useAtomValue(connectionStateAtom);
-  const copy = getPageErrorCopy({
+  const { copy, canReload } = getPageErrorPresentation({
     error,
     isDisconnected: connectionState === "disconnected",
   });
@@ -82,7 +85,7 @@ function PageErrorMessage({ error }: { error: unknown }) {
   return (
     <div className="flex flex-col items-center gap-4 p-6 text-center">
       <p>{copy}</p>
-      {!isChunkLoadError(error) && (
+      {canReload && (
         <Button variant="outline" onClick={() => window.location.reload()}>
           Reload
         </Button>
