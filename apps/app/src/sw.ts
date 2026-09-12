@@ -119,6 +119,18 @@ registerRoute(
         maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
         maxEntries: 100,
       }),
+      {
+        // After a deploy the page can boot from new HTML while this (older)
+        // worker still controls it: the new code-split chunks are missing
+        // from this worker's precache and from the runtime cache, but the
+        // waiting worker has already installed them into its own precache
+        // storage. When the network is unavailable, look the request up in
+        // every cache before failing the import.
+        // Precache keys carry a `__WB_REVISION__` query parameter; hashed
+        // asset names make ignoring the search safe.
+        handlerDidError: ({ request }) =>
+          caches.match(request, { ignoreSearch: true }),
+      },
     ],
   }),
 );

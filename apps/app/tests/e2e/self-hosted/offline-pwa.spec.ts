@@ -439,3 +439,155 @@ test("opens pre-saved content offline after passive hydration alone", async ({
     await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
   }
 });
+
+// The production build under e2e fault controls leaves the reader route
+// chunk out of the precache manifest, reproducing a deploy where the
+// controlling service worker predates the chunk. Only the runtime script
+// cache can then serve it offline.
+const READER_CHUNK_PATTERN = "/assets/_app.read";
+
+async function getReaderChunkCacheNames(page: Page) {
+  return page.evaluate(async (pattern) => {
+    const names: string[] = [];
+    for (const cacheName of await caches.keys()) {
+      const cache = await caches.open(cacheName);
+      const keys = await cache.keys();
+      if (keys.some((request) => request.url.includes(pattern))) {
+        names.push(cacheName);
+      }
+    }
+    return names.sort();
+  }, READER_CHUNK_PATTERN);
+}
+
+// Deferred hydration retains the pre-saved body; flushing the throttled IDB
+// writer each attempt makes the offline reload start from persisted state.
+async function waitForRetainedFeedBody(page: Page, feedItemId: string) {
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+        return getFeedBodyPersistence(page, feedItemId);
+      },
+      { timeout: 20_000 },
+    )
+    .toMatchObject({ hasBody: true, retained: true });
+}
+
+async function evictReaderChunk(page: Page) {
+  await page.evaluate(async (pattern) => {
+    for (const cacheName of await caches.keys()) {
+      const cache = await caches.open(cacheName);
+      for (const request of await cache.keys()) {
+        if (request.url.includes(pattern)) await cache.delete(request);
+      }
+    }
+  }, READER_CHUNK_PATTERN);
+  // The browser HTTP cache would otherwise mask a missing service-worker
+  // cache entry while offline.
+  const session = await page.context().newCDPSession(page);
+  await session.send("Network.clearBrowserCache");
+  await session.detach();
+  expect(await getReaderChunkCacheNames(page)).toEqual([]);
+}
+
+test("fetches the reader chunk for saved content before it is opened", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(60_000);
+  const { feedItemId, email, password } = await seedArticleData(
+    SELF_HOSTED_TURSO_PORT,
+    SELF_HOSTED_APP_PORT,
+  );
+  await setFeedItemWatchLater(SELF_HOSTED_TURSO_PORT, feedItemId, true);
+
+  try {
+    await signIn({ page, email, password });
+    await prepareControlledShell(page);
+    await waitForRetainedFeedBody(page, feedItemId);
+
+    // Retained content plus a live connection is what triggers the preload;
+    // nothing hovers or opens the item.
+    await expect
+      .poll(() => getReaderChunkCacheNames(page), { timeout: 20_000 })
+      .toEqual(["static-assets"]);
+
+    const session = await context.newCDPSession(page);
+    await session.send("Network.clearBrowserCache");
+    await session.detach();
+
+    await context.setOffline(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText("Offline, some features may be disabled"),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("tab", { name: "Saved" }).click();
+    const savedCard = page.locator(`article[data-item-id="${feedItemId}"]`);
+    await expect(savedCard.getByRole("link")).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await savedCard.getByRole("link").click();
+    await expect(page).toHaveURL(new RegExp(`/read/${feedItemId}$`));
+    await expect(page.getByText("Paragraph 1:")).toBeVisible();
+  } finally {
+    await context.setOffline(false);
+    await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+  }
+});
+
+test("keeps the app frame when the reader chunk cannot load offline", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(60_000);
+  const { feedItemId, email, password } = await seedArticleData(
+    SELF_HOSTED_TURSO_PORT,
+    SELF_HOSTED_APP_PORT,
+  );
+  await setFeedItemWatchLater(SELF_HOSTED_TURSO_PORT, feedItemId, true);
+
+  try {
+    await signIn({ page, email, password });
+    await prepareControlledShell(page);
+    await waitForRetainedFeedBody(page, feedItemId);
+    await expect
+      .poll(() => getReaderChunkCacheNames(page), { timeout: 20_000 })
+      .toEqual(["static-assets"]);
+    await evictReaderChunk(page);
+
+    await context.setOffline(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText("Offline, some features may be disabled"),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("tab", { name: "Saved" }).click();
+    const savedCard = page.locator(`article[data-item-id="${feedItemId}"]`);
+    await expect(savedCard.getByRole("link")).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await savedCard.getByRole("link").click();
+
+    // The router reloads once on a failed import, then surfaces the error;
+    // the layout boundary renders it inside the frame.
+    await expect(
+      page.getByText("This content isn't available offline."),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(new RegExp(`/read/${feedItemId}$`));
+    await expect(page.getByRole("link", { name: "Home" })).toBeVisible();
+    await expect(page.getByText("Something went wrong")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Home" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(
+      page.getByText("This content isn't available offline."),
+    ).toHaveCount(0);
+  } finally {
+    await context.setOffline(false);
+    await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+  }
+});

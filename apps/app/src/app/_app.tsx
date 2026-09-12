@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
   useLocation,
+  useRouterState,
 } from "@tanstack/react-router";
 import { useIsRestoring, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
@@ -23,6 +24,8 @@ import { DemoBanner } from "~/components/DemoBanner";
 import { ClientPerformanceProfiler } from "~/components/debug/ClientPerformanceProfiler";
 import { ImpersonationBanner } from "~/components/ImpersonationBanner";
 import { OfflineBanner } from "~/components/OfflineBanner";
+import { PageErrorBoundary } from "~/components/PageErrorBoundary";
+import { ReaderChunkPreloader } from "~/components/pwa/ReaderChunkPreloader";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
@@ -303,6 +306,12 @@ function RootLayout() {
   usePortalReturn();
   useAtprotoLinkReturn();
   const { pathname } = useLocation();
+  // The location changes before the rendered matches swap, so a reset keyed
+  // on the pathname would re-render the failed page once more; the leaf
+  // match id changes exactly when the outlet does.
+  const renderedMatchId = useRouterState({
+    select: (state) => state.matches[state.matches.length - 1]?.id ?? "",
+  });
   const { awaitingUpgrade, billingEnabled } = useCheckoutSuccess();
   const showPlanSuccess = usePlanSuccessStore((s) => s.showDialog);
   const closePlanSuccess = usePlanSuccessStore((s) => s.closeDialog);
@@ -321,6 +330,7 @@ function RootLayout() {
             <ImpersonationBanner />
             <DemoBanner />
             <OfflineBanner />
+            <ReaderChunkPreloader />
             <SidebarProvider
               className="h-auto min-h-0 flex-1"
               style={
@@ -341,7 +351,9 @@ function RootLayout() {
                 <Header />
                 <main className="flex flex-col">
                   <div className="h-full w-full pb-6">
-                    <Outlet />
+                    <PageErrorBoundary resetKey={renderedMatchId}>
+                      <Outlet />
+                    </PageErrorBoundary>
                   </div>
                   <AppDialogs />
                   {billingEnabled && (
