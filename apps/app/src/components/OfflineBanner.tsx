@@ -26,7 +26,7 @@ function DelayedOfflineBanner() {
 
   return (
     <div
-      className="bg-sidebar text-sidebar-foreground shrink-0 px-4 py-2 text-center text-sm font-medium"
+      className="bg-sidebar text-sidebar-foreground shrink-0 px-4 py-2 text-center text-sm font-medium lg:pb-0"
       role="status"
     >
       Offline, some features may be disabled
