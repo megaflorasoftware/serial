@@ -1,12 +1,17 @@
-import { randomInt } from "node:crypto";
+import { randomBytes, randomInt, webcrypto } from "node:crypto";
 import { existsSync } from "node:fs";
 import net from "node:net";
 import { spawn, spawnSync } from "node:child_process";
 
 type TestEnvironment = "main" | "self-hosted" | "demo";
 
+// Ports are checked for availability only at allocation time, then bound
+// much later (after a production build and a dozen sibling processes have
+// started). Staying below the kernel's ephemeral range (Linux 32768-60999,
+// macOS 49152-65535) keeps an outbound connection from claiming a test port
+// in between and failing the web server with "Address already in use".
 const MIN_FIVE_DIGIT_PORT = 10_000;
-const MAX_TCP_PORT = 65_535;
+const MAX_TEST_PORT = 32_767;
 const LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
 
 const environments: Record<
@@ -33,6 +38,12 @@ const environments: Record<
     additionalPortVariables: [
       "SERIAL_TEST_SELF_HOSTED_BOOTSTRAP_APP_PORT",
       "SERIAL_TEST_SELF_HOSTED_BOOTSTRAP_TURSO_PORT",
+      "SERIAL_TEST_SELF_HOSTED_APPVIEW_PORT",
+      "SERIAL_TEST_SELF_HOSTED_CONFIG_APP_PORT",
+      "SERIAL_TEST_SELF_HOSTED_CONFIG_TURSO_PORT",
+      "SERIAL_TEST_SELF_HOSTED_UNCONFIGURED_APP_PORT",
+      "SERIAL_TEST_SELF_HOSTED_UNCONFIGURED_TURSO_PORT",
+      "SERIAL_TEST_SELF_HOSTED_EMAIL_PORT",
     ],
   },
   demo: {
@@ -45,7 +56,7 @@ const environments: Record<
 
 async function findAvailablePort(excludedPorts: Set<number>) {
   while (true) {
-    const port = randomInt(MIN_FIVE_DIGIT_PORT, MAX_TCP_PORT + 1);
+    const port = randomInt(MIN_FIVE_DIGIT_PORT, MAX_TEST_PORT + 1);
     if (excludedPorts.has(port)) continue;
 
     const availability = await Promise.all(
@@ -109,12 +120,44 @@ const additionalPortEnvironment = Object.fromEntries(
     String(additionalPorts[index]),
   ]),
 );
+// The stub AppView backing the atproto typeahead runs only in the
+// self-hosted environment; both its app servers (main and bootstrap) must
+// point at it so no spec can reach a real AppView. The atproto key
+// material is generated fresh per run rather than committed — no private
+// key ever lives in the repo, test-only or otherwise.
+async function generateAtprotoTestKeys() {
+  const keyPair = await webcrypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign"],
+  );
+  const jwk = await webcrypto.subtle.exportKey("jwk", keyPair.privateKey);
+  return {
+    ATPROTO_CLIENT_PRIVATE_KEYS: JSON.stringify([
+      { kid: "serial-e2e-atproto", ...jwk },
+    ]),
+    ATPROTO_STORE_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+  };
+}
+
+const appviewPort =
+  additionalPortEnvironment.SERIAL_TEST_SELF_HOSTED_APPVIEW_PORT;
+const appviewEnvironment = appviewPort
+  ? {
+      ATPROTO_APPVIEW_URL: `http://127.0.0.1:${appviewPort}`,
+      SERIAL_TEST_APPVIEW_ALLOW_LOOPBACK: "1",
+      SERIAL_TEST_APPVIEW_ORIGIN: `http://127.0.0.1:${appviewPort}`,
+      ...(await generateAtprotoTestKeys()),
+    }
+  : {};
+
 const childEnvironment = {
   ...process.env,
   [environment.appPortVariable]: String(appPort),
   [environment.tursoPortVariable]: String(tursoPort),
   [environment.rssPortVariable]: String(rssPort),
   ...additionalPortEnvironment,
+  ...appviewEnvironment,
   DATABASE_URL: `http://127.0.0.1:${tursoPort}`,
   PUBLIC_BASE_URL: appUrl,
   VITE_PUBLIC_BASE_URL: appUrl,

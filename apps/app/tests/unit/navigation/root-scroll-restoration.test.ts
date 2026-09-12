@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getNextRootItemId,
+  resolveRootRestorationAction,
   resolveRootRestorationItemId,
 } from "~/lib/root-scroll-restoration";
 import { scrollRootItemToTarget } from "~/lib/hooks/useScrollToFeedItem";
@@ -53,6 +54,68 @@ describe("root scroll restoration", () => {
         successorItemId: "next",
       }),
     ).toBeNull();
+  });
+
+  it("selects then scrolls the restoration target during the mount restoration", () => {
+    expect(
+      resolveRootRestorationAction({
+        activeItemIds: ["first", "next"],
+        selectedItemId: "selected",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "selected",
+      }),
+    ).toEqual({ type: "select", itemId: "next" });
+
+    expect(
+      resolveRootRestorationAction({
+        activeItemIds: ["first", "next"],
+        selectedItemId: "next",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "next",
+      }),
+    ).toEqual({ type: "scroll", itemId: "next" });
+  });
+
+  it("aborts the mount restoration when something else moves the selection", () => {
+    expect(
+      resolveRootRestorationAction({
+        activeItemIds: ["first", "next", "hovered"],
+        selectedItemId: "hovered",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "next",
+      }),
+    ).toEqual({ type: "abort" });
+  });
+
+  it("continues the mount restoration while its own selection holds", () => {
+    expect(
+      resolveRootRestorationAction({
+        activeItemIds: ["first", "next"],
+        selectedItemId: "next",
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: "next",
+      }),
+    ).toEqual({ type: "scroll", itemId: "next" });
+
+    expect(
+      resolveRootRestorationAction({
+        activeItemIds: ["first"],
+        selectedItemId: null,
+        anchor: { selectedItemId: "selected", successorItemId: "next" },
+        restorationSelection: null,
+      }),
+    ).toEqual({ type: "scroll", itemId: null });
+  });
+
+  it("scrolls to the top only when nothing is restorable", () => {
+    expect(
+      resolveRootRestorationAction({
+        activeItemIds: ["first"],
+        selectedItemId: null,
+        anchor: { selectedItemId: null, successorItemId: null },
+        restorationSelection: null,
+      }),
+    ).toEqual({ type: "scroll", itemId: null });
   });
 
   it("places the selected item's center one-third down the viewport", () => {

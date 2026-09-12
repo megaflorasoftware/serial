@@ -15,8 +15,24 @@ import {
   NetworkFirst,
   StaleWhileRevalidate,
 } from "workbox-strategies";
+import { getCacheableNavigationResponse } from "~/lib/pwa/navigation-cache";
 
 declare let self: ServiceWorkerGlobalScope;
+
+const NAVIGATION_CACHE_NAME = "navigation-cache";
+
+async function warmNavigationCache() {
+  const request = new Request("/", {
+    credentials: "include",
+    headers: { Accept: "text/html" },
+    redirect: "follow",
+  });
+  const response = await fetch(request);
+  const cacheable = getCacheableNavigationResponse(request.url, response);
+  if (!cacheable) return;
+  const cache = await caches.open(NAVIGATION_CACHE_NAME);
+  await cache.put("/", cacheable);
+}
 
 // Take control of all open clients as soon as the SW activates, and warm
 // the navigation cache so offline works even before the user's first
@@ -33,12 +49,9 @@ self.addEventListener("activate", (event) => {
       // build output, so precacheAndRoute never caches any document. Warm
       // the navigation cache with the root page so there's always *something*
       // to serve when the user opens the app offline.
-      caches.open("navigation-cache").then((cache) =>
-        cache.add("/").catch(() => {
-          // Non-critical — the next real navigation will populate the cache
-          // via the NetworkFirst handler.
-        }),
-      ),
+      warmNavigationCache().catch(() => {
+        // Non-critical. The next real navigation will populate the cache.
+      }),
     ]),
   );
 });
@@ -52,8 +65,14 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 // Navigation requests - NetworkFirst with 3s timeout for fresh content with offline fallback
 const navigationHandler = new NetworkFirst({
-  cacheName: "navigation-cache",
+  cacheName: NAVIGATION_CACHE_NAME,
   networkTimeoutSeconds: 3,
+  plugins: [
+    {
+      cacheWillUpdate: ({ request, response }) =>
+        Promise.resolve(getCacheableNavigationResponse(request.url, response)),
+    },
+  ],
 });
 
 registerRoute(new NavigationRoute(navigationHandler));
@@ -67,7 +86,7 @@ registerRoute(new NavigationRoute(navigationHandler));
 setCatchHandler(async ({ request }) => {
   if (request.destination === "document") {
     // Layer 1: try the runtime navigation cache (SSR HTML with hydration data)
-    const cache = await caches.open("navigation-cache");
+    const cache = await caches.open(NAVIGATION_CACHE_NAME);
     // ignoreVary prevents mismatches between the warm-up request's headers
     // (Accept: */*) and the real navigation request's headers (Accept:
     // text/html,...) when the server sends a Vary header.
@@ -100,6 +119,20 @@ registerRoute(
         maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
         maxEntries: 100,
       }),
+      {
+        // After a deploy the page can boot from new HTML while this (older)
+        // worker still controls it: the new code-split chunks are missing
+        // from this worker's manifest and from the runtime cache, but the
+        // waiting worker has already installed them into the shared
+        // precache. When the network is unavailable, look the request up in
+        // every cache before failing the import. Precache keys carry a
+        // `__WB_REVISION__` query parameter; content-hashed asset names make
+        // ignoring the search safe, so the fallback stays scoped to them.
+        handlerDidError: ({ request }) =>
+          new URL(request.url).pathname.startsWith("/assets/")
+            ? caches.match(request, { ignoreSearch: true })
+            : Promise.resolve(undefined),
+      },
     ],
   }),
 );
@@ -172,9 +205,9 @@ self.addEventListener("message", (event) => {
   // cached data after ~7 days of inactivity, so the activate-time warm-up
   // alone isn't enough — each online visit needs to reset that clock.
   if (event.data && event.data.type === "WARM_NAVIGATION_CACHE") {
-    void caches.open("navigation-cache").then((cache) =>
-      cache.add("/").catch(() => {
-        // Non-critical — the NetworkFirst handler will cache on next navigation.
+    event.waitUntil(
+      warmNavigationCache().catch(() => {
+        // Non-critical. The NetworkFirst handler will cache a later navigation.
       }),
     );
   }

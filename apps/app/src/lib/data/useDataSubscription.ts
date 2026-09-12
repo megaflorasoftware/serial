@@ -1,19 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { getDefaultStore } from "jotai";
 import { orpcRouterClient } from "../orpc";
+import { createFrameBatch } from "../frameBatch";
 import { combineAbortSignals } from "./combineAbortSignals";
 import { loadingActor } from "./loading-machine";
 import { shouldAlwaysKeepSSEConnectionAlive } from "./atoms";
-import { setDataSubscriptionConnected } from "./subscriptionConnection";
+import {
+  initializeDataSubscriptionConnection,
+  markDataSubscriptionConnected,
+  markDataSubscriptionFailed,
+  markDataSubscriptionPaused,
+} from "./subscriptionConnection";
 import { dataReconciliation } from "./reconciliation";
 import type { PublishedChunk } from "~/server/api/publisher";
 
-// Exponential backoff configuration
+// Retry quickly at first so a brief disconnect recovers within a second,
+// then back off so an extended offline session doesn't hot-spin on mobile.
 const INITIAL_RETRY_DELAY = 1000; // 1 second
-const MAX_RETRY_DELAY = 30000; // 30 seconds
-const BACKOFF_MULTIPLIER = 2;
+const EXTENDED_RETRY_DELAY = 5000; // 5 seconds
+const EXTENDED_RETRY_AFTER_MS = 60_000; // 1 minute of continuous failure
 
 function waitForAbortableDelay(delay: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
@@ -45,19 +52,7 @@ function waitForVisibilityChange(signal: AbortSignal) {
  */
 export function useDataSubscription() {
   const abortControllerRef = useRef<AbortController | null>(null);
-  const retryDelayRef = useRef(INITIAL_RETRY_DELAY);
-
-  // Buffer chunks and flush via requestAnimationFrame for micro-batching
-  const chunkBufferRef = useRef<PublishedChunk[]>([]);
-  const rafIdRef = useRef<number | null>(null);
-
-  const flushBuffer = useCallback(() => {
-    rafIdRef.current = null;
-    const chunks = chunkBufferRef.current;
-    if (chunks.length === 0) return;
-    chunkBufferRef.current = [];
-    dataReconciliation.receivePublishedChunks(chunks);
-  }, []);
+  const failingSinceRef = useRef<number | null>(null);
 
   // Cleanup aborts the stream and removes both direct subscriptions. The
   // subscription loop also combines its connection signal with this abort.
@@ -66,11 +61,26 @@ export function useDataSubscription() {
     const controller = new AbortController();
     const { signal } = controller;
     abortControllerRef.current = controller;
+    initializeDataSubscriptionConnection(navigator.onLine !== false);
+    // Chunks decoded from one network read land together; apply them once
+    // per frame so each burst costs a single reconciliation pass.
+    const liveChunks = createFrameBatch<PublishedChunk>((chunks) =>
+      dataReconciliation.receivePublishedChunks(chunks),
+    );
 
     // Per-connection controller — aborted on visibility change to force
     // a reconnect without tearing down the entire subscription lifecycle.
     let connectionController: AbortController | null = null;
     let paused = false;
+
+    async function delayBeforeRetry() {
+      failingSinceRef.current ??= Date.now();
+      const retryDelay =
+        Date.now() - failingSinceRef.current >= EXTENDED_RETRY_AFTER_MS
+          ? EXTENDED_RETRY_DELAY
+          : INITIAL_RETRY_DELAY;
+      await waitForAbortableDelay(retryDelay, controller.signal);
+    }
 
     async function runSubscriptionLoop() {
       while (!signal.aborted) {
@@ -84,53 +94,65 @@ export function useDataSubscription() {
         }
 
         const conn = new AbortController();
+        const connSignal = conn.signal;
         connectionController = conn;
         const { signal: connectionSignal, cleanup: cleanupConnectionSignal } =
-          combineAbortSignals([signal, conn.signal]);
+          combineAbortSignals([signal, connSignal]);
 
         try {
-          retryDelayRef.current = INITIAL_RETRY_DELAY;
-
           // Each reconnect depends on the prior connection closing.
           // oxlint-disable-next-line react-doctor/async-await-in-loop
           const iterator = await orpcRouterClient.initial.subscribe(
             {},
             { signal: connectionSignal },
           );
-          setDataSubscriptionConnected(true);
+          markDataSubscriptionConnected();
           dataReconciliation.sseConnectionChanged(true);
 
           for await (const payload of iterator as AsyncIterable<PublishedChunk>) {
-            if (conn.signal.aborted) break;
+            if (connSignal.aborted) break;
 
-            // Buffer the chunk and schedule a flush via RAF
-            chunkBufferRef.current.push(payload);
-            if (rafIdRef.current === null) {
-              rafIdRef.current = requestAnimationFrame(flushBuffer);
-            }
+            // Only a connection that actually delivers data clears the
+            // failure clock; an accepted-then-dropped stream keeps it, so
+            // flapping still escalates to the extended delay.
+            failingSinceRef.current = null;
+
+            liveChunks.push(payload);
+          }
+          if (!connSignal.aborted && !signal.aborted) {
+            // Reconciliation must learn of the drop before the retry sleep,
+            // not after it when the finally runs.
+            dataReconciliation.sseConnectionChanged(false);
+            // A clean server-side end is not a failure: keep the connection
+            // state as it was so controls and dialogs stay live across the
+            // retry, and let a failed reconnect establish `disconnected`.
+            markDataSubscriptionPaused();
+            // A cleanly ended stream reconnects on the same pacing as an
+            // errored one instead of re-dialing in a tight loop.
+            await delayBeforeRetry();
           }
         } catch (error) {
-          setDataSubscriptionConnected(false);
           dataReconciliation.sseConnectionChanged(false);
           dataReconciliation.subscriptionAttemptFailed();
 
           if (controller.signal.aborted) break;
 
           // Skip backoff for visibility-triggered reconnects
-          if (conn.signal.aborted) continue;
+          if (connSignal.aborted) {
+            markDataSubscriptionPaused();
+            continue;
+          }
+
+          markDataSubscriptionFailed({
+            isOnline: navigator.onLine !== false,
+            isVisible: document.visibilityState === "visible",
+          });
 
           console.error("Subscription error, retrying...", error);
 
-          // Wait with exponential backoff before retrying
-          await waitForAbortableDelay(retryDelayRef.current, controller.signal);
-
-          // Increase retry delay for next attempt
-          retryDelayRef.current = Math.min(
-            retryDelayRef.current * BACKOFF_MULTIPLIER,
-            MAX_RETRY_DELAY,
-          );
+          await delayBeforeRetry();
         } finally {
-          setDataSubscriptionConnected(false);
+          markDataSubscriptionPaused();
           dataReconciliation.sseConnectionChanged(false);
           cleanupConnectionSignal();
         }
@@ -175,9 +197,16 @@ export function useDataSubscription() {
       dataReconciliation.environmentChanged();
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    const handleNetworkChange = () => dataReconciliation.environmentChanged();
-    window.addEventListener("online", handleNetworkChange);
-    window.addEventListener("offline", handleNetworkChange);
+    const handleOnline = () => dataReconciliation.environmentChanged();
+    const handleOffline = () => {
+      markDataSubscriptionFailed({
+        isOnline: false,
+        isVisible: document.visibilityState === "visible",
+      });
+      dataReconciliation.environmentChanged();
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     // Recompute connection logic when the keep-alive atom changes
     const unsubscribeAtom = getDefaultStore().sub(
@@ -191,22 +220,14 @@ export function useDataSubscription() {
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("online", handleNetworkChange);
-      window.removeEventListener("offline", handleNetworkChange);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       unsubscribeAtom();
       controller.abort();
-      setDataSubscriptionConnected(false);
+      markDataSubscriptionPaused();
       dataReconciliation.sseConnectionChanged(false);
-      // Cancel any pending RAF flush
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      // Flush remaining chunks synchronously on unmount
-      if (chunkBufferRef.current.length > 0) {
-        dataReconciliation.receivePublishedChunks(chunkBufferRef.current);
-        chunkBufferRef.current = [];
-      }
+      // Apply whatever is still buffered before the hook goes away.
+      liveChunks.flush();
     };
-  }, [flushBuffer]);
+  }, []);
 }

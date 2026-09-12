@@ -5,10 +5,12 @@ import {
   Outlet,
   redirect,
   useLocation,
+  useRouterState,
 } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsRestoring, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
 import { GlobalImportDropzone } from "../components/feed/import/GlobalImportDropzone";
@@ -21,12 +23,16 @@ import { useDialogStore } from "~/components/feed/dialogStore";
 import { DemoBanner } from "~/components/DemoBanner";
 import { ClientPerformanceProfiler } from "~/components/debug/ClientPerformanceProfiler";
 import { ImpersonationBanner } from "~/components/ImpersonationBanner";
+import { OfflineBanner } from "~/components/OfflineBanner";
+import { PageErrorBoundary } from "~/components/PageErrorBoundary";
+import { ReaderChunkPreloader } from "~/components/pwa/ReaderChunkPreloader";
 import { ReleaseNotifier } from "~/components/releases/ReleaseNotifier";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
 import { loadingActor } from "~/lib/data/loading-machine";
 import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
+import { ATPROTO_LINK_RESULT_PARAM } from "~/lib/auth/atproto";
 import { useAltKeyHeld } from "~/lib/hooks/useAltKeyHeld";
 import { authMiddleware } from "~/server/auth";
 import { orpc, orpcRouterClient } from "~/lib/orpc";
@@ -178,6 +184,60 @@ function useCheckoutSuccess() {
   return { awaitingUpgrade, billingEnabled };
 }
 
+const ATPROTO_LINK_ERROR_MESSAGES: Record<string, string> = {
+  conflict: "That Atmosphere account is already connected to another user.",
+  exists:
+    "You already have an Atmosphere account connected. Disconnect it first.",
+};
+
+/**
+ * Detect the ?atproto_link= result param the AT Protocol link callback
+ * redirects back with, toast failures, and re-open the connections
+ * dialog so the user sees the connection's state.
+ */
+function useAtprotoLinkReturn() {
+  const launchDialog = useDialogStore((s) => s.launchDialog);
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
+
+  useEffect(() => {
+    // Wait for the persisted query cache to restore: dropping the status
+    // entry before restoration finishes would be undone by it.
+    if (isRestoring) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get(ATPROTO_LINK_RESULT_PARAM);
+    if (!result) return;
+
+    // Clean the query param from the URL
+    params.delete(ATPROTO_LINK_RESULT_PARAM);
+    const newUrl =
+      window.location.pathname +
+      (params.size > 0 ? `?${params.toString()}` : "");
+    window.history.replaceState({}, "", newUrl);
+
+    // The persisted cache restores the pre-flight connection status as
+    // fresh (the OAuth round trip usually beats staleTime), so the reopened
+    // dialog would render "Not connected" and never refetch. Drop the entry
+    // outright: the row shows its loading state, then the live result.
+    queryClient.removeQueries({
+      queryKey: orpc.atproto.getConnectionStatus.queryKey(),
+    });
+
+    // Success needs no toast — the reopened dialog's connected row says it.
+    if (result !== "success") {
+      // Own-property lookup only: `result` is an unvalidated query param, so
+      // a plain `map[result]` would resolve inherited keys ("toString") to a
+      // function and defeat the `??` fallback.
+      const message = Object.hasOwn(ATPROTO_LINK_ERROR_MESSAGES, result)
+        ? ATPROTO_LINK_ERROR_MESSAGES[result]
+        : "Couldn't connect your Atmosphere account. Please try again.";
+      toast.error(message);
+    }
+    launchDialog("connections");
+  }, [launchDialog, queryClient, isRestoring]);
+}
+
 /**
  * Detect ?subscription=open query param (set by the Polar portal return URL)
  * and re-open the subscription dialog.
@@ -244,7 +304,14 @@ function CheckoutSuccessDialog({
 function RootLayout() {
   useAltKeyHeld();
   usePortalReturn();
+  useAtprotoLinkReturn();
   const { pathname } = useLocation();
+  // The location changes before the rendered matches swap, so a reset keyed
+  // on the pathname would re-render the failed page once more; the leaf
+  // match id changes exactly when the outlet does.
+  const renderedMatchId = useRouterState({
+    select: (state) => state.matches[state.matches.length - 1]?.id ?? "",
+  });
   const { awaitingUpgrade, billingEnabled } = useCheckoutSuccess();
   const showPlanSuccess = usePlanSuccessStore((s) => s.showDialog);
   const closePlanSuccess = usePlanSuccessStore((s) => s.closeDialog);
@@ -262,6 +329,8 @@ function RootLayout() {
           <div className="flex h-svh flex-col overflow-hidden">
             <ImpersonationBanner />
             <DemoBanner />
+            <OfflineBanner />
+            <ReaderChunkPreloader />
             <SidebarProvider
               className="h-auto min-h-0 flex-1"
               style={
@@ -282,7 +351,9 @@ function RootLayout() {
                 <Header />
                 <main className="flex flex-col">
                   <div className="h-full w-full pb-6">
-                    <Outlet />
+                    <PageErrorBoundary resetKey={renderedMatchId}>
+                      <Outlet />
+                    </PageErrorBoundary>
                   </div>
                   <AppDialogs />
                   {billingEnabled && (
