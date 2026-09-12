@@ -447,6 +447,47 @@ describe("direct request transport", () => {
       expect(loadingActor.getSnapshot().value).toBe("idle");
     });
 
+    it("rejects the import when applying a frame fails, still completing", async () => {
+      const feed = importedFeed(1);
+      mocks.streamingImport.mockResolvedValue(
+        (async function* () {
+          yield { type: "import-start" as const, totalFeeds: 1 };
+          yield {
+            type: "import-feed-inserted" as const,
+            feedUrl: feed.url,
+            feedId: feed.id,
+            feed,
+          };
+          // Let the buffered chunks apply in their own frame before the
+          // stream ends, so the failure surfaces through the next push.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          yield {
+            type: "feed-status" as const,
+            feedId: feed.id,
+            status: "success" as const,
+          };
+        })(),
+      );
+      const unsubscribe = feedsStore.subscribe((next, previous) => {
+        if (next.feeds !== previous.feeds) throw new Error("subscriber broke");
+      });
+
+      try {
+        await expect(
+          dataRequestActions.streamingImport([
+            { feedUrl: feed.url, categories: [] },
+          ]),
+        ).rejects.toThrow("subscriber broke");
+      } finally {
+        unsubscribe();
+      }
+
+      expect(loadingActor.getSnapshot().value).toBe("idle");
+      expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["subscription", "getStatus"],
+      });
+    });
+
     it("keeps statuses and control chunks in server order within a flush", async () => {
       const feeds = [1, 2, 3, 4].map(importedFeed);
       mocks.streamingImport.mockResolvedValue(

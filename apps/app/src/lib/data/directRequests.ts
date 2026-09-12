@@ -105,10 +105,6 @@ export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
   });
 }
 
-export function applyImportProgressChunk(chunk: ImportProgressChunk) {
-  applyImportProgressChunks([chunk]);
-}
-
 export const dataRequestActions = {
   requestMixedContentPage: (
     scope: Parameters<
@@ -156,8 +152,17 @@ export const dataRequestActions = {
       const progress = createFrameBatch(applyImportProgressChunks);
       try {
         for await (const chunk of stream) progress.push(chunk);
-      } finally {
         progress.flush();
+      } catch (error) {
+        // Apply whatever arrived before the failure so the stores match the
+        // server, then let the original error win.
+        try {
+          progress.flush();
+        } catch {
+          // Already failing; the first error is the one to report.
+        }
+        throw error;
+      } finally {
         loadingActor.send({ type: "IMPORT_COMPLETE" });
         // The imported views land in the store via import-views-updated
         // chunks, but their first content pages only load through a full

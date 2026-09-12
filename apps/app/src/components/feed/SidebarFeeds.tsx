@@ -13,6 +13,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
 import type { ApplicationFeed } from "~/server/db/schema";
+import type { NavigationSnapshot } from "~/server/navigation/snapshot";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { Input } from "~/components/ui/input";
@@ -72,6 +73,8 @@ function useDebouncedState(defaultValue: string, delay: number) {
 function sortFeedOptions(a: ApplicationFeed, b: ApplicationFeed) {
   return a.name.localeCompare(b.name);
 }
+
+const EMPTY_FEED_AVAILABILITY: NavigationSnapshot["feeds"] = {};
 
 type FeedOption = ApplicationFeed & {
   hasEntries: boolean;
@@ -248,7 +251,10 @@ export function SidebarFeeds() {
   const navigationSnapshotStatus = useNavigationSnapshotStatus();
   const currentViewFeedAvailability = useMemo(
     () =>
-      viewFilter ? (navigationSnapshot.viewFeeds[viewFilter.id] ?? {}) : {},
+      viewFilter
+        ? (navigationSnapshot.viewFeeds[viewFilter.id] ??
+          EMPTY_FEED_AVAILABILITY)
+        : EMPTY_FEED_AVAILABILITY,
     [navigationSnapshot, viewFilter],
   );
   const selectFeed = useCallback(

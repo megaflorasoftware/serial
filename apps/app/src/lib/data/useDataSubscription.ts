@@ -64,7 +64,7 @@ export function useDataSubscription() {
     initializeDataSubscriptionConnection(navigator.onLine !== false);
     // Chunks decoded from one network read land together; apply them once
     // per frame so each burst costs a single reconciliation pass.
-    const liveEvents = createFrameBatch<PublishedChunk>((chunks) =>
+    const liveChunks = createFrameBatch<PublishedChunk>((chunks) =>
       dataReconciliation.receivePublishedChunks(chunks),
     );
 
@@ -117,7 +117,7 @@ export function useDataSubscription() {
             // flapping still escalates to the extended delay.
             failingSinceRef.current = null;
 
-            liveEvents.push(payload);
+            liveChunks.push(payload);
           }
           if (!connSignal.aborted && !signal.aborted) {
             // Reconciliation must learn of the drop before the retry sleep,
@@ -227,7 +227,7 @@ export function useDataSubscription() {
       markDataSubscriptionPaused();
       dataReconciliation.sseConnectionChanged(false);
       // Apply whatever is still buffered before the hook goes away.
-      liveEvents.flush();
+      liveChunks.flush();
     };
   }, []);
 }

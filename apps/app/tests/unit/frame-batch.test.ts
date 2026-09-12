@@ -71,6 +71,22 @@ describe("createFrameBatch with animation frames", () => {
     expect(frames.cancelAnimationFrame).toHaveBeenCalledTimes(1);
   });
 
+  it("rethrows a failed frame flush from the next push or flush", () => {
+    const flush = vi
+      .fn<(items: number[]) => void>()
+      .mockImplementationOnce(() => {
+        throw new Error("apply failed");
+      });
+    const batch = createFrameBatch(flush);
+    batch.push(1);
+    expect(() => frames.runFrames()).not.toThrow();
+
+    expect(() => batch.push(2)).toThrow("apply failed");
+    // The failure is reported once; the item that tripped it is not lost.
+    expect(() => batch.flush()).not.toThrow();
+    expect(flush).toHaveBeenLastCalledWith([2]);
+  });
+
   it("schedules a fresh frame for items pushed after a flush", () => {
     const flush = vi.fn<(items: number[]) => void>();
     const batch = createFrameBatch(flush);
