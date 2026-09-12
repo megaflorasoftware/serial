@@ -24,6 +24,8 @@ function DelayedOfflineBanner() {
 
   if (!visible) return null;
 
+  // On desktop the inset content card below adds its own 8px top margin in
+  // the same sidebar color, so the banner drops its bottom padding there.
   return (
     <div
       className="bg-sidebar text-sidebar-foreground shrink-0 px-4 py-2 text-center text-sm font-medium lg:pb-0"
