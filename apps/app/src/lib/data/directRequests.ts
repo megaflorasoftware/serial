@@ -45,8 +45,9 @@ function applyImportedViews(views: ApplicationView[] | undefined) {
 
 /**
  * Applies a burst of import chunks as one store write per store. Feeds and
- * statuses are coalesced, only the last views chunk is kept, and the control
- * chunks (start, warning, error) are forwarded in order.
+ * statuses are coalesced, only the last views chunk is kept, and every control
+ * chunk (start, warning, error) first flushes what came before it so the
+ * loading machine sees events in the order the server emitted them.
  */
 export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
   let feeds: ApplicationFeed[] = [];
@@ -75,7 +76,6 @@ export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
           statuses.push(chunk);
           break;
         case "import-start":
-          // A new import resets everything that came before it.
           flushCoalesced();
           feedItemsStore.setState({ hasInitialData: true, feedStatusDict: {} });
           loadingActor.send({
@@ -84,6 +84,7 @@ export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
           });
           break;
         case "import-limit-warning":
+          flushCoalesced();
           loadingActor.send({
             type: "IMPORT_LIMIT_WARNING",
             deactivatedCount: chunk.deactivatedCount,
@@ -91,8 +92,6 @@ export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
           });
           break;
         case "import-feed-error":
-          // Errors count toward completion alongside statuses, so keep the
-          // relative order the server emitted.
           flushCoalesced();
           console.error(`Import error for ${chunk.feedUrl}: ${chunk.error}`);
           loadingActor.send({

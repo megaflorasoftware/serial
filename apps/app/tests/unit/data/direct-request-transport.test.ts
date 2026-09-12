@@ -447,11 +447,11 @@ describe("direct request transport", () => {
       expect(loadingActor.getSnapshot().value).toBe("idle");
     });
 
-    it("keeps statuses and errors in server order within a flush", async () => {
-      const feeds = [importedFeed(1), importedFeed(2), importedFeed(3)];
+    it("keeps statuses and control chunks in server order within a flush", async () => {
+      const feeds = [1, 2, 3, 4].map(importedFeed);
       mocks.streamingImport.mockResolvedValue(
         (async function* () {
-          yield { type: "import-start" as const, totalFeeds: 3 };
+          yield { type: "import-start" as const, totalFeeds: 4 };
           yield {
             type: "feed-status" as const,
             feedId: 1,
@@ -463,32 +463,60 @@ describe("direct request transport", () => {
             error: "unreachable",
           };
           yield {
+            type: "feed-status" as const,
+            feedId: 3,
+            status: "empty" as const,
+          };
+          yield {
             type: "import-limit-warning" as const,
             deactivatedCount: 1,
             maxActiveFeeds: 2,
           };
           yield {
             type: "feed-status" as const,
-            feedId: 3,
-            status: "empty" as const,
+            feedId: 4,
+            status: "success" as const,
           };
         })(),
       );
       vi.spyOn(console, "error").mockImplementation(() => {});
+      const machineEvents: string[] = [];
+      const inspection = loadingActor.system.inspect((event) => {
+        if (
+          event.type === "@xstate.event" &&
+          event.event.type !== "xstate.init"
+        ) {
+          machineEvents.push(event.event.type);
+        }
+      });
 
       await dataRequestActions.streamingImport(
         feeds.map((feed) => ({ feedUrl: feed.url, categories: [] })),
       );
+      inspection.unsubscribe();
 
+      // Every control chunk flushes the statuses buffered before it, so the
+      // machine sees the server's order even though the whole stream landed
+      // in one frame.
+      expect(machineEvents).toEqual([
+        "IMPORT_START",
+        "FEED_STATUS_BATCH",
+        "IMPORT_FEED_ERROR",
+        "FEED_STATUS_BATCH",
+        "IMPORT_LIMIT_WARNING",
+        "FEED_STATUS_BATCH",
+        "IMPORT_COMPLETE",
+      ]);
       const snapshot = loadingActor.getSnapshot();
       expect(snapshot.value).toBe("idle");
-      expect(snapshot.context.completedFeeds).toBe(2);
+      expect(snapshot.context.completedFeeds).toBe(3);
       expect(snapshot.context.importErrors).toBe(1);
       expect([...snapshot.context.failedImportUrls]).toEqual([feeds[1]!.url]);
       expect(snapshot.context.importDeactivatedCount).toBe(1);
       expect(feedItemsStore.getState().feedStatusDict).toEqual({
         1: "success",
         3: "empty",
+        4: "success",
       });
     });
   });
