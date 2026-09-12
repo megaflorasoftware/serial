@@ -5,8 +5,13 @@ import { spawn, spawnSync } from "node:child_process";
 
 type TestEnvironment = "main" | "self-hosted" | "demo";
 
+// Ports are checked for availability only at allocation time, then bound
+// much later (after a production build and a dozen sibling processes have
+// started). Staying below the kernel's ephemeral range (Linux 32768-60999,
+// macOS 49152-65535) keeps an outbound connection from claiming a test port
+// in between and failing the web server with "Address already in use".
 const MIN_FIVE_DIGIT_PORT = 10_000;
-const MAX_TCP_PORT = 65_535;
+const MAX_TEST_PORT = 32_767;
 const LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
 
 const environments: Record<
@@ -51,7 +56,7 @@ const environments: Record<
 
 async function findAvailablePort(excludedPorts: Set<number>) {
   while (true) {
-    const port = randomInt(MIN_FIVE_DIGIT_PORT, MAX_TCP_PORT + 1);
+    const port = randomInt(MIN_FIVE_DIGIT_PORT, MAX_TEST_PORT + 1);
     if (excludedPorts.has(port)) continue;
 
     const availability = await Promise.all(
