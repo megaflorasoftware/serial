@@ -618,7 +618,6 @@ export const useFeedItemsListProjection = () => {
 export const {
   useFeedItemsOrder,
   useScopeFeedItemIds,
-  useFeedStatusDict,
   useHasInitialData,
   useFetchFeedItemsForFeed,
   useFetchNewData,
