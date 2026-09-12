@@ -119,6 +119,20 @@ registerRoute(
         maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
         maxEntries: 100,
       }),
+      {
+        // After a deploy the page can boot from new HTML while this (older)
+        // worker still controls it: the new code-split chunks are missing
+        // from this worker's manifest and from the runtime cache, but the
+        // waiting worker has already installed them into the shared
+        // precache. When the network is unavailable, look the request up in
+        // every cache before failing the import. Precache keys carry a
+        // `__WB_REVISION__` query parameter; content-hashed asset names make
+        // ignoring the search safe, so the fallback stays scoped to them.
+        handlerDidError: ({ request }) =>
+          new URL(request.url).pathname.startsWith("/assets/")
+            ? caches.match(request, { ignoreSearch: true })
+            : Promise.resolve(undefined),
+      },
     ],
   }),
 );

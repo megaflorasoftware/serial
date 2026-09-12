@@ -39,7 +39,17 @@ async function generateServiceWorker() {
     globPatterns: [
       "**/*.{js,css,html,ico,png,svg,woff,woff2,webp,jpg,jpeg,gif}",
     ],
-    globIgnores: ["sw.js", "workbox-*.js"],
+    globIgnores: [
+      "sw.js",
+      "workbox-*.js",
+      // E2E fault control: leave the reader route chunks out of the
+      // precache so the production offline tests exercise the deploy-skew
+      // path, where the controlling worker's manifest predates the chunk
+      // and only the runtime script cache can serve it.
+      ...(process.env.SERIAL_E2E_FAULT_CONTROLS === "1"
+        ? ["assets/_app.read*"]
+        : []),
+    ],
     maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
   });
 
