@@ -4,23 +4,15 @@ import { useRouter } from "@tanstack/react-router";
 import { useAtomValue } from "jotai";
 import { useEffect } from "react";
 import { useStore } from "zustand";
-import type { ReaderChunkPreloadStatus } from "~/lib/pwa/reader-chunk-preload";
 import { connectionStateAtom } from "~/lib/data/atoms";
 import { bookmarkCapturesStore } from "~/lib/data/bookmarks/capture-store";
 import { feedItemsStore } from "~/lib/data/store";
 import {
+  getReaderChunkPreloadStatus,
   hasAnyKey,
+  setReaderChunkPreloadStatus,
   shouldPreloadReaderChunk,
 } from "~/lib/pwa/reader-chunk-preload";
-
-// Session-scoped: the router caches a loaded chunk, and a failed load cannot
-// be retried without a reload, so one attempt per page lifetime is all that
-// is useful.
-let status: ReaderChunkPreloadStatus = "idle";
-
-export function resetReaderChunkPreloadForTests() {
-  status = "idle";
-}
 
 function useHasOfflineContent() {
   const hasRetainedFeedBody = useStore(feedItemsStore, (state) =>
@@ -39,21 +31,25 @@ export function ReaderChunkPreloader() {
 
   useEffect(() => {
     if (
-      !shouldPreloadReaderChunk({ connectionState, hasOfflineContent, status })
+      !shouldPreloadReaderChunk({
+        connectionState,
+        hasOfflineContent,
+        status: getReaderChunkPreloadStatus(),
+      })
     ) {
       return;
     }
-    status = "loading";
+    setReaderChunkPreloadStatus("loading");
     const readerRoute = router.routesById["/_app/read/$id"];
     Promise.resolve(router.loadRouteChunk(readerRoute)).then(
       () => {
-        status = "loaded";
+        setReaderChunkPreloadStatus("loaded");
       },
       () => {
         // The router keeps the failed import on the route and skips further
         // chunk loads for it, so a retry cannot fetch again; a later
         // navigation reloads the page once, which resets everything.
-        status = "loaded";
+        setReaderChunkPreloadStatus("loaded");
       },
     );
   }, [connectionState, hasOfflineContent, router]);

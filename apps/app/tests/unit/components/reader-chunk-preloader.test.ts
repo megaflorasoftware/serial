@@ -6,13 +6,11 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DatabasePageCapture } from "~/server/db/schema";
-import {
-  ReaderChunkPreloader,
-  resetReaderChunkPreloadForTests,
-} from "~/components/pwa/ReaderChunkPreloader";
+import { ReaderChunkPreloader } from "~/components/pwa/ReaderChunkPreloader";
 import { connectionStateAtom } from "~/lib/data/atoms";
 import { bookmarkCapturesStore } from "~/lib/data/bookmarks/capture-store";
 import { feedItemsStore } from "~/lib/data/store";
+import { resetReaderChunkPreloadForTests } from "~/lib/pwa/reader-chunk-preload";
 
 const mocks = vi.hoisted(() => ({
   loadRouteChunk: vi.fn(() => Promise.resolve()),

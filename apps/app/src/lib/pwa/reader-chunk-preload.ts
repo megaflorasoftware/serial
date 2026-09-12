@@ -30,3 +30,20 @@ export function hasAnyKey(record: Record<string, unknown>) {
   }
   return false;
 }
+
+// Session-scoped: the router caches a loaded chunk, and a failed load cannot
+// be retried without a reload, so one attempt per page lifetime is all that
+// is useful.
+let status: ReaderChunkPreloadStatus = "idle";
+
+export function getReaderChunkPreloadStatus() {
+  return status;
+}
+
+export function setReaderChunkPreloadStatus(next: ReaderChunkPreloadStatus) {
+  status = next;
+}
+
+export function resetReaderChunkPreloadForTests() {
+  status = "idle";
+}

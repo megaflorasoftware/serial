@@ -60,7 +60,7 @@ export class PageErrorBoundary extends Component<
   }
 }
 
-export function getPageErrorPresentation(input: {
+function getPageErrorPresentation(input: {
   error: unknown;
   isDisconnected: boolean;
 }) {
