@@ -9,7 +9,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
 import type { ApplicationFeed } from "~/server/db/schema";
@@ -36,7 +36,7 @@ import {
   viewFilterAtom,
 } from "~/lib/data/atoms";
 import { useFeeds } from "~/lib/data/feeds";
-import { useFeedStatusDict } from "~/lib/data/store";
+import { useFeedStatus } from "~/lib/data/store";
 import {
   getNavigationAvailability,
   useNavigationSnapshot,
@@ -79,26 +79,31 @@ type FeedOption = ApplicationFeed & {
   hasEntriesInCurrentView: boolean;
 };
 
-function ActiveFeedSidebarItem({
-  feed,
-  feedStatus,
+// Memoized with primitive props and id-keyed callbacks so a store update that
+// touches one feed re-renders one row, not the whole list.
+const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
+  feedId,
+  name,
+  hasEntries,
   isSelected,
   onSelect,
   onEdit,
 }: {
-  feed: FeedOption;
-  feedStatus: "success" | "empty" | "error" | "skipped";
+  feedId: number;
+  name: string;
+  hasEntries: boolean;
   isSelected: boolean;
-  onSelect: () => void;
-  onEdit: () => void;
+  onSelect: (feedId: number) => void;
+  onEdit: (feedId: number) => void;
 }) {
+  const feedStatus = useFeedStatus(feedId);
   const isSuccess = feedStatus === "success" || feedStatus === "skipped";
 
   return (
     <SidebarMenuItem className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
-        onClick={onSelect}
+        onClick={() => onSelect(feedId)}
       >
         {feedStatus === "error" && (
           <Tooltip>
@@ -122,23 +127,105 @@ function ActiveFeedSidebarItem({
             </TooltipContent>
           </Tooltip>
         )}
-        {isSuccess && !feed.hasEntries && (
+        {isSuccess && !hasEntries && (
           <CircleSmall size={16} className="text-sidebar-accent" />
         )}
-        {isSuccess && feed.hasEntries && (
+        {isSuccess && hasEntries && (
           <div className="grid size-4 place-items-center">
             <div className="bg-sidebar-accent size-2.5 rounded-full" />
           </div>
         )}
-        <div className="line-clamp-1">{feed.name}</div>
+        <div className="line-clamp-1">{name}</div>
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
-        <SidebarMenuButton onClick={onEdit}>
+        <SidebarMenuButton onClick={() => onEdit(feedId)}>
           <Edit2Icon className="opacity-30 transition-opacity group-hover/button:opacity-100" />
         </SidebarMenuButton>
       </div>
     </SidebarMenuItem>
   );
+});
+
+const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
+  feedId,
+  name,
+  hasEntries,
+  isSelected,
+  onSelect,
+  onEdit,
+}: {
+  feedId: number;
+  name: string;
+  hasEntries: boolean;
+  isSelected: boolean;
+  onSelect: (feedId: number) => void;
+  onEdit: (feedId: number) => void;
+}) {
+  return (
+    <SidebarMenuItem className="group flex gap-1 opacity-50">
+      <SidebarMenuButton
+        variant={isSelected ? "outline" : "default"}
+        onClick={() => onSelect(feedId)}
+      >
+        {!hasEntries && (
+          <CircleSmall size={16} className="text-sidebar-accent" />
+        )}
+        {hasEntries && (
+          <div className="grid size-4 place-items-center">
+            <div className="bg-sidebar-accent size-2.5 rounded-full" />
+          </div>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PauseIcon size={16} className="text-muted-foreground" />
+          </TooltipTrigger>
+          <TooltipContent>
+            This feed is inactive and won&apos;t receive new content.
+          </TooltipContent>
+        </Tooltip>
+        <div className="text-muted-foreground line-clamp-1">{name}</div>
+      </SidebarMenuButton>
+      <div className="group/button flex w-fit items-center justify-end">
+        <SidebarMenuButton onClick={() => onEdit(feedId)}>
+          <Edit2Icon className="opacity-30 transition-opacity group-hover/button:opacity-100" />
+        </SidebarMenuButton>
+      </div>
+    </SidebarMenuItem>
+  );
+});
+
+function groupFeedOptions(feedOptions: FeedOption[]) {
+  const preferredFeedOptionsWithEntries: FeedOption[] = [];
+  const preferredFeedOptionsWithoutEntries: FeedOption[] = [];
+  const otherActiveFeedOptions: FeedOption[] = [];
+  const inactiveFeedOptions: FeedOption[] = [];
+
+  for (const feedOption of feedOptions) {
+    // Inactive feeds always go to the inactive section
+    if (!feedOption.isActive) {
+      inactiveFeedOptions.push(feedOption);
+    } else if (feedOption.hasEntriesInCurrentView) {
+      preferredFeedOptionsWithEntries.push(feedOption);
+    } else if (feedOption.belongsToCurrentView) {
+      preferredFeedOptionsWithoutEntries.push(feedOption);
+    } else {
+      otherActiveFeedOptions.push(feedOption);
+    }
+  }
+  preferredFeedOptionsWithEntries.sort(sortFeedOptions);
+  preferredFeedOptionsWithoutEntries.sort(sortFeedOptions);
+  otherActiveFeedOptions.sort(sortFeedOptions);
+  inactiveFeedOptions.sort(sortFeedOptions);
+
+  return {
+    // Combine preferred options: feeds with entries first, then feeds matching view but without entries
+    preferredFeedOptions: [
+      ...preferredFeedOptionsWithEntries,
+      ...preferredFeedOptionsWithoutEntries,
+    ],
+    otherActiveFeedOptions,
+    inactiveFeedOptions,
+  };
 }
 
 export function SidebarFeeds() {
@@ -157,12 +244,54 @@ export function SidebarFeeds() {
   const categoryFilter = useAtomValue(categoryFilterAtom);
   const viewFilter = useAtomValue(viewFilterAtom);
   const contentStatusFilter = useAtomValue(contentStatusFilterAtom);
-  const feedStatusDict = useFeedStatusDict();
   const navigationSnapshot = useNavigationSnapshot();
   const navigationSnapshotStatus = useNavigationSnapshotStatus();
-  const currentViewFeedAvailability = viewFilter
-    ? (navigationSnapshot.viewFeeds[viewFilter.id] ?? {})
-    : {};
+  const currentViewFeedAvailability = useMemo(
+    () =>
+      viewFilter ? (navigationSnapshot.viewFeeds[viewFilter.id] ?? {}) : {},
+    [navigationSnapshot, viewFilter],
+  );
+  const selectFeed = useCallback(
+    (feedId: number) => setFeedFilter(feedId),
+    [setFeedFilter],
+  );
+  const editFeed = useCallback(
+    (feedId: number) => setSelectedFeedForEditing(feedId),
+    [],
+  );
+
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+  const { preferredFeedOptions, otherActiveFeedOptions, inactiveFeedOptions } =
+    useMemo(
+      () =>
+        groupFeedOptions(
+          feeds
+            .filter(
+              (feed) =>
+                !normalizedSearchQuery ||
+                feed.name.toLocaleLowerCase().includes(normalizedSearchQuery),
+            )
+            .map((feed) => ({
+              ...feed,
+              hasEntries: isContentStatusAvailable(
+                getNavigationAvailability(navigationSnapshot.feeds, feed.id),
+                contentStatusFilter,
+              ),
+              belongsToCurrentView: feed.id in currentViewFeedAvailability,
+              hasEntriesInCurrentView: isContentStatusAvailable(
+                getNavigationAvailability(currentViewFeedAvailability, feed.id),
+                contentStatusFilter,
+              ),
+            })),
+        ),
+      [
+        feeds,
+        normalizedSearchQuery,
+        navigationSnapshot,
+        contentStatusFilter,
+        currentViewFeedAvailability,
+      ],
+    );
 
   if (navigationSnapshotStatus !== "success") {
     return (
@@ -207,71 +336,6 @@ export function SidebarFeeds() {
       </div>
     );
   }
-
-  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
-  const feedOptions = feeds
-    .filter(
-      (feed) =>
-        !normalizedSearchQuery ||
-        feed.name.toLocaleLowerCase().includes(normalizedSearchQuery),
-    )
-    .map((feed) => ({
-      ...feed,
-      hasEntries: isContentStatusAvailable(
-        getNavigationAvailability(navigationSnapshot.feeds, feed.id),
-        contentStatusFilter,
-      ),
-      belongsToCurrentView: feed.id in currentViewFeedAvailability,
-      hasEntriesInCurrentView: isContentStatusAvailable(
-        getNavigationAvailability(currentViewFeedAvailability, feed.id),
-        contentStatusFilter,
-      ),
-    }));
-
-  const {
-    preferredFeedOptionsWithEntries,
-    preferredFeedOptionsWithoutEntries,
-    otherActiveFeedOptions,
-    inactiveFeedOptions,
-  } = feedOptions.reduce(
-    (acc, feedOption) => {
-      // Inactive feeds always go to the inactive section
-      if (!feedOption.isActive) {
-        acc.inactiveFeedOptions.push(feedOption);
-        return acc;
-      }
-
-      if (feedOption.hasEntriesInCurrentView) {
-        acc.preferredFeedOptionsWithEntries.push(feedOption);
-        return acc;
-      }
-
-      if (feedOption.belongsToCurrentView) {
-        acc.preferredFeedOptionsWithoutEntries.push(feedOption);
-        return acc;
-      }
-
-      acc.otherActiveFeedOptions.push(feedOption);
-
-      return acc;
-    },
-    {
-      preferredFeedOptionsWithEntries: [] as typeof feedOptions,
-      preferredFeedOptionsWithoutEntries: [] as typeof feedOptions,
-      otherActiveFeedOptions: [] as typeof feedOptions,
-      inactiveFeedOptions: [] as typeof feedOptions,
-    },
-  );
-  preferredFeedOptionsWithEntries.sort(sortFeedOptions);
-  preferredFeedOptionsWithoutEntries.sort(sortFeedOptions);
-  otherActiveFeedOptions.sort(sortFeedOptions);
-  inactiveFeedOptions.sort(sortFeedOptions);
-
-  // Combine preferred options: feeds with entries first, then feeds matching view but without entries
-  const preferredFeedOptions = [
-    ...preferredFeedOptionsWithEntries,
-    ...preferredFeedOptionsWithoutEntries,
-  ];
 
   const hasAnyItems = Object.values(navigationSnapshot.feeds).some(
     (availability) =>
@@ -339,11 +403,12 @@ export function SidebarFeeds() {
           {preferredFeedOptions.map((feed) => (
             <ActiveFeedSidebarItem
               key={feed.id}
-              feed={feed}
-              feedStatus={feedStatusDict[feed.id] ?? "success"}
+              feedId={feed.id}
+              name={feed.name}
+              hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
-              onSelect={() => setFeedFilter(feed.id)}
-              onEdit={() => setSelectedFeedForEditing(feed.id)}
+              onSelect={selectFeed}
+              onEdit={editFeed}
             />
           ))}
           {!!preferredFeedOptions.length && !!otherActiveFeedOptions.length && (
@@ -352,11 +417,12 @@ export function SidebarFeeds() {
           {otherActiveFeedOptions.map((feed) => (
             <ActiveFeedSidebarItem
               key={feed.id}
-              feed={feed}
-              feedStatus={feedStatusDict[feed.id] ?? "success"}
+              feedId={feed.id}
+              name={feed.name}
+              hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
-              onSelect={() => setFeedFilter(feed.id)}
-              onEdit={() => setSelectedFeedForEditing(feed.id)}
+              onSelect={selectFeed}
+              onEdit={editFeed}
             />
           ))}
           {inactiveFeedOptions.length > 0 && (
@@ -366,46 +432,15 @@ export function SidebarFeeds() {
                 <hr className="my-2 opacity-50" />
               )}
               {inactiveFeedOptions.map((feed) => (
-                <SidebarMenuItem
+                <InactiveFeedSidebarItem
                   key={feed.id}
-                  className="group flex gap-1 opacity-50"
-                >
-                  <SidebarMenuButton
-                    variant={feed.id === feedFilter ? "outline" : "default"}
-                    onClick={() => setFeedFilter(feed.id)}
-                  >
-                    {!feed.hasEntries && (
-                      <CircleSmall size={16} className="text-sidebar-accent" />
-                    )}
-                    {feed.hasEntries && (
-                      <div className="grid size-4 place-items-center">
-                        <div className="bg-sidebar-accent size-2.5 rounded-full" />
-                      </div>
-                    )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <PauseIcon
-                          size={16}
-                          className="text-muted-foreground"
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        This feed is inactive and won&apos;t receive new
-                        content.
-                      </TooltipContent>
-                    </Tooltip>
-                    <div className="text-muted-foreground line-clamp-1">
-                      {feed.name}
-                    </div>
-                  </SidebarMenuButton>
-                  <div className="group/button flex w-fit items-center justify-end">
-                    <SidebarMenuButton
-                      onClick={() => setSelectedFeedForEditing(feed.id)}
-                    >
-                      <Edit2Icon className="opacity-30 transition-opacity group-hover/button:opacity-100" />
-                    </SidebarMenuButton>
-                  </div>
-                </SidebarMenuItem>
+                  feedId={feed.id}
+                  name={feed.name}
+                  hasEntries={feed.hasEntries}
+                  isSelected={feed.id === feedFilter}
+                  onSelect={selectFeed}
+                  onEdit={editFeed}
+                />
               ))}
             </>
           )}

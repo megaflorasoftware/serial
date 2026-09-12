@@ -625,6 +625,13 @@ export const {
   useViewFeedIds,
 } = feedItemsStore;
 
+export const useFeedStatus = (feedId: number): FetchFeedsStatus => {
+  return useStore(
+    feedItemsStore,
+    (store) => store.feedStatusDict[feedId] ?? "success",
+  );
+};
+
 export const useFeedItemValue = (id: string) => {
   return useStore(
     feedItemsStore,
