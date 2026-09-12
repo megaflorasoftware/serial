@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { getDefaultStore } from "jotai";
 import { orpcRouterClient } from "../orpc";
+import { createFrameBatch } from "../frameBatch";
 import { combineAbortSignals } from "./combineAbortSignals";
 import { loadingActor } from "./loading-machine";
 import { shouldAlwaysKeepSSEConnectionAlive } from "./atoms";
@@ -53,18 +54,6 @@ export function useDataSubscription() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const failingSinceRef = useRef<number | null>(null);
 
-  // Buffer chunks and flush via requestAnimationFrame for micro-batching
-  const chunkBufferRef = useRef<PublishedChunk[]>([]);
-  const rafIdRef = useRef<number | null>(null);
-
-  const flushBuffer = useCallback(() => {
-    rafIdRef.current = null;
-    const chunks = chunkBufferRef.current;
-    if (chunks.length === 0) return;
-    chunkBufferRef.current = [];
-    dataReconciliation.receivePublishedChunks(chunks);
-  }, []);
-
   // Cleanup aborts the stream and removes both direct subscriptions. The
   // subscription loop also combines its connection signal with this abort.
   // oxlint-disable-next-line react-doctor/effect-needs-cleanup
@@ -73,6 +62,11 @@ export function useDataSubscription() {
     const { signal } = controller;
     abortControllerRef.current = controller;
     initializeDataSubscriptionConnection(navigator.onLine !== false);
+    // Chunks decoded from one network read land together; apply them once
+    // per frame so each burst costs a single reconciliation pass.
+    const liveEvents = createFrameBatch<PublishedChunk>((chunks) =>
+      dataReconciliation.receivePublishedChunks(chunks),
+    );
 
     // Per-connection controller — aborted on visibility change to force
     // a reconnect without tearing down the entire subscription lifecycle.
@@ -123,11 +117,7 @@ export function useDataSubscription() {
             // flapping still escalates to the extended delay.
             failingSinceRef.current = null;
 
-            // Buffer the chunk and schedule a flush via RAF
-            chunkBufferRef.current.push(payload);
-            if (rafIdRef.current === null) {
-              rafIdRef.current = requestAnimationFrame(flushBuffer);
-            }
+            liveEvents.push(payload);
           }
           if (!connSignal.aborted && !signal.aborted) {
             // Reconciliation must learn of the drop before the retry sleep,
@@ -236,16 +226,8 @@ export function useDataSubscription() {
       controller.abort();
       markDataSubscriptionPaused();
       dataReconciliation.sseConnectionChanged(false);
-      // Cancel any pending RAF flush
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      // Flush remaining chunks synchronously on unmount
-      if (chunkBufferRef.current.length > 0) {
-        dataReconciliation.receivePublishedChunks(chunkBufferRef.current);
-        chunkBufferRef.current = [];
-      }
+      // Apply whatever is still buffered before the hook goes away.
+      liveEvents.flush();
     };
-  }, [flushBuffer]);
+  }, []);
 }

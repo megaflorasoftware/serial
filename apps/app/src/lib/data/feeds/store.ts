@@ -14,6 +14,7 @@ export type FeedsStore = {
   fetch: () => Promise<void>;
   set: (feeds: ApplicationFeed[]) => void;
   add: (feed: ApplicationFeed) => void;
+  addMany: (feeds: ApplicationFeed[]) => void;
   update: (id: number, feed: Partial<ApplicationFeed>) => void;
   remove: (id: number) => void;
 };
@@ -75,8 +76,13 @@ const vanillaFeedsStore = createStore<FeedsStore>()(
         });
       },
 
-      add: (feed) => {
-        const newFeeds = sortFeedsByUpdatedAt([...get().feeds, feed]);
+      add: (feed) => get().addMany([feed]),
+
+      // One sort and one dict rebuild for the whole batch, so a burst of
+      // imported feeds notifies subscribers once.
+      addMany: (feeds) => {
+        if (feeds.length === 0) return;
+        const newFeeds = sortFeedsByUpdatedAt([...get().feeds, ...feeds]);
         const dict: Record<number, ApplicationFeed> = {};
         newFeeds.forEach((f) => {
           dict[f.id] = f;

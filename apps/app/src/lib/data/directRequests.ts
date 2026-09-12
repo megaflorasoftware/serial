@@ -1,5 +1,7 @@
 "use client";
 
+import { unstable_batchedUpdates } from "react-dom";
+import { createFrameBatch } from "../frameBatch";
 import { orpc, orpcRouterClient } from "../orpc";
 import { getQueryClient } from "../query-client";
 import { feedsStore } from "./feeds/store";
@@ -14,48 +16,98 @@ import { feedItemsStore } from "./store";
 import { viewsStore } from "./views/store";
 import type { ContentStatusFilter } from "~/lib/content-status";
 import type { ImportProgressChunk } from "~/server/api/routers/initialRouter";
+import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
+
+type FeedStatusChunk = Extract<ImportProgressChunk, { type: "feed-status" }>;
+
+function applyFeedStatusChunks(chunks: FeedStatusChunk[]) {
+  if (chunks.length === 0) return;
+  const feedStatusDict = { ...feedItemsStore.getState().feedStatusDict };
+  for (const chunk of chunks) feedStatusDict[chunk.feedId] = chunk.status;
+  feedItemsStore.setState({ feedStatusDict });
+  loadingActor.send({ type: "FEED_STATUS_BATCH", count: chunks.length });
+}
+
+function applyImportedFeeds(feeds: ApplicationFeed[]) {
+  if (feeds.length === 0) return;
+  feedsStore.getState().addMany(feeds);
+}
+
+function applyImportedViews(views: ApplicationView[] | undefined) {
+  if (!views) return;
+  // Authoritative server state: mark it a success so it renders even if a
+  // concurrent fetch later fails. An in-flight fetch is unaffected — the
+  // revision bump from set() makes it refetch rather than apply a stale
+  // response.
+  viewsStore.getState().set(views);
+  viewsStore.setState({ fetchStatus: "success" });
+}
+
+/**
+ * Applies a burst of import chunks as one store write per store. Feeds and
+ * statuses are coalesced, only the last views chunk is kept, and the control
+ * chunks (start, warning, error) are forwarded in order.
+ */
+export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
+  let feeds: ApplicationFeed[] = [];
+  let statuses: FeedStatusChunk[] = [];
+  let views: ApplicationView[] | undefined;
+
+  const flushCoalesced = () => {
+    applyImportedFeeds(feeds);
+    applyImportedViews(views);
+    applyFeedStatusChunks(statuses);
+    feeds = [];
+    statuses = [];
+    views = undefined;
+  };
+
+  unstable_batchedUpdates(() => {
+    for (const chunk of chunks) {
+      switch (chunk.type) {
+        case "import-feed-inserted":
+          feeds.push(chunk.feed);
+          break;
+        case "import-views-updated":
+          views = chunk.views;
+          break;
+        case "feed-status":
+          statuses.push(chunk);
+          break;
+        case "import-start":
+          // A new import resets everything that came before it.
+          flushCoalesced();
+          feedItemsStore.setState({ hasInitialData: true, feedStatusDict: {} });
+          loadingActor.send({
+            type: "IMPORT_START",
+            totalFeeds: chunk.totalFeeds,
+          });
+          break;
+        case "import-limit-warning":
+          loadingActor.send({
+            type: "IMPORT_LIMIT_WARNING",
+            deactivatedCount: chunk.deactivatedCount,
+            maxActiveFeeds: chunk.maxActiveFeeds,
+          });
+          break;
+        case "import-feed-error":
+          // Errors count toward completion alongside statuses, so keep the
+          // relative order the server emitted.
+          flushCoalesced();
+          console.error(`Import error for ${chunk.feedUrl}: ${chunk.error}`);
+          loadingActor.send({
+            type: "IMPORT_FEED_ERROR",
+            feedUrl: chunk.feedUrl,
+          });
+          break;
+      }
+    }
+    flushCoalesced();
+  });
+}
 
 export function applyImportProgressChunk(chunk: ImportProgressChunk) {
-  switch (chunk.type) {
-    case "import-start":
-      feedItemsStore.setState({ hasInitialData: true, feedStatusDict: {} });
-      loadingActor.send({
-        type: "IMPORT_START",
-        totalFeeds: chunk.totalFeeds,
-      });
-      break;
-    case "import-limit-warning":
-      loadingActor.send({
-        type: "IMPORT_LIMIT_WARNING",
-        deactivatedCount: chunk.deactivatedCount,
-        maxActiveFeeds: chunk.maxActiveFeeds,
-      });
-      break;
-    case "import-feed-inserted":
-      feedsStore.getState().add(chunk.feed);
-      break;
-    case "import-feed-error":
-      console.error(`Import error for ${chunk.feedUrl}: ${chunk.error}`);
-      loadingActor.send({ type: "IMPORT_FEED_ERROR", feedUrl: chunk.feedUrl });
-      break;
-    case "import-views-updated":
-      // Authoritative server state: mark it a success so it renders even if a
-      // concurrent fetch later fails. An in-flight fetch is unaffected — the
-      // revision bump from set() makes it refetch rather than apply a stale
-      // response.
-      viewsStore.getState().set(chunk.views);
-      viewsStore.setState({ fetchStatus: "success" });
-      break;
-    case "feed-status":
-      feedItemsStore.setState({
-        feedStatusDict: {
-          ...feedItemsStore.getState().feedStatusDict,
-          [chunk.feedId]: chunk.status,
-        },
-      });
-      loadingActor.send({ type: "FEED_STATUS" });
-      break;
-  }
+  applyImportProgressChunks([chunk]);
 }
 
 export const dataRequestActions = {
@@ -100,9 +152,13 @@ export const dataRequestActions = {
     }>,
   ) =>
     orpcRouterClient.initial.streamingImport({ feeds }).then(async (stream) => {
+      // Chunks decoded from one network read arrive back to back; applying
+      // them per frame turns a burst into one render instead of one each.
+      const progress = createFrameBatch(applyImportProgressChunks);
       try {
-        for await (const chunk of stream) applyImportProgressChunk(chunk);
+        for await (const chunk of stream) progress.push(chunk);
       } finally {
+        progress.flush();
         loadingActor.send({ type: "IMPORT_COMPLETE" });
         // The imported views land in the store via import-views-updated
         // chunks, but their first content pages only load through a full
