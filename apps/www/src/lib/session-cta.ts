@@ -23,7 +23,7 @@ export function sessionEndpointUrl(appUrl: string): string {
  * 200 with a non-null session object in the body.
  */
 export async function isSignedIn(response: Response): Promise<boolean> {
-  if (!response.ok) return false;
+  if (response.status !== 200) return false;
   try {
     const body: unknown = await response.json();
     return (
