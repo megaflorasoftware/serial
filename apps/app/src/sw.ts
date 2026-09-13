@@ -26,6 +26,7 @@ import {
   NAVIGATION_CACHE_NAME,
   normalizeNavigationResponse,
 } from "~/lib/pwa/navigation-cache";
+import { waitForResultingClient } from "~/lib/pwa/resulting-client";
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -34,13 +35,15 @@ function isApplicationClient(client: Client) {
 }
 
 async function notifyClientsOfInvalidatedShell(resultingClientId: string) {
-  const clients = await self.clients.matchAll({
-    includeUncontrolled: true,
-    type: "window",
-  });
-  // The page that just booted from the stale shell may not be listed yet
-  // if its navigation has not committed; address it directly as well.
-  const resultingClient = await self.clients.get(resultingClientId);
+  // The page that just booted from the stale shell is not listed until its
+  // document commits, which a fast revalidation can beat; wait for it and
+  // address it directly as well.
+  const [clients, resultingClient] = await Promise.all([
+    self.clients.matchAll({ includeUncontrolled: true, type: "window" }),
+    waitForResultingClient({
+      getClient: () => self.clients.get(resultingClientId),
+    }),
+  ]);
   const recipients = new Map<string, Client>(
     clients.map((client) => [client.id, client]),
   );

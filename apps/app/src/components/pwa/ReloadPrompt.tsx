@@ -48,15 +48,14 @@ export function ReloadPrompt() {
     // it. When that revalidation finds the session has ended (the server
     // redirected the document), this page booted from a shell it can no
     // longer use; reloading follows the server redirect to sign-in.
-    navigator.serviceWorker.addEventListener(
-      "message",
-      (event: MessageEvent<{ type?: string } | null>) => {
-        if (event.data?.type === NAVIGATION_CACHE_INVALIDATED_MESSAGE) {
-          window.location.reload();
-        }
-      },
-      { signal: abortController.signal },
-    );
+    const handleWorkerMessage = (
+      event: MessageEvent<{ type?: string } | null>,
+    ) => {
+      if (event.data?.type === NAVIGATION_CACHE_INVALIDATED_MESSAGE) {
+        window.location.reload();
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handleWorkerMessage);
     // Worker messages queue until the page opts in; the invalidation may be
     // posted before hydration reaches this effect.
     navigator.serviceWorker.startMessages();
@@ -140,7 +139,13 @@ export function ReloadPrompt() {
 
     void registerServiceWorker();
 
-    return () => abortController.abort();
+    return () => {
+      navigator.serviceWorker.removeEventListener(
+        "message",
+        handleWorkerMessage,
+      );
+      abortController.abort();
+    };
   }, []);
 
   return null;
