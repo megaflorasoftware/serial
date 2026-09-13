@@ -18,9 +18,9 @@ Built with [Astro](https://astro.build) and Tailwind CSS 4.
 
 Guides live in `src/content/guides` and release notes in `src/content/releases`, both loaded through Astro content collections (`src/content.config.ts`).
 
-## Signed-in redirect
+## Signed-in call to action
 
-The site is fully static. Bunny middleware in `apps/www-edge-script` checks for the shared Better Auth session cookie on requests to `https://www.serial.tube/` and redirects likely signed-in visitors to the app before cached HTML is served. The edge script only acts on the `www` hostname and does not require CORS access to the app.
+The site is fully static and never redirects. A small script in `src/layouts/Site.astro` sends one credentialed request per tab to the app's Better Auth session endpoint (`WWW_APP_URL` + `/api/auth/get-session`). When the visitor has a session, every `AppLink` call-to-action is relabelled from "Get Started" to "Open Serial"; any failure leaves the static copy untouched. This relies on the production app setting `COOKIE_DOMAIN=.serial.tube`, which both scopes the session cookie to the `www` host and makes the app return credentialed CORS headers for it. Cached HTML is identical for every visitor, so no CDN rule or edge script is involved.
 
 ## Deployment
 

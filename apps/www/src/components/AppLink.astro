@@ -1,0 +1,19 @@
+---
+/**
+ * The call-to-action link into the app. Ships as "Get Started" and is
+ * relabelled to "Open Serial" by the session script in Site.astro when the
+ * visitor already has an app session.
+ */
+import { APP_LINK_ATTRIBUTE, SIGNED_OUT_LABEL } from "../lib/session-cta";
+import { APP_URL } from "../lib/site";
+
+interface Props {
+  class?: string;
+}
+
+const { class: className = "btn" } = Astro.props;
+---
+
+<a href={APP_URL} class={className} {...{ [APP_LINK_ATTRIBUTE]: "" }}
+  >{SIGNED_OUT_LABEL}</a
+>
