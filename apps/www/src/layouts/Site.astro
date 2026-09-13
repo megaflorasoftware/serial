@@ -133,8 +133,12 @@ const publicationUri = getConfiguredPublicationUri(
 
       // One credentialed request per tab. Module state survives client-router
       // navigations, so later pages reuse the answer; a full reload re-checks.
+      // Skipped in `astro dev`: the app refuses a localhost origin over CORS,
+      // so the check would only add a console error on every page.
       const appUrl = document.documentElement.dataset.appUrl ?? "";
-      const signedIn = checkSession(appUrl);
+      const signedIn = import.meta.env.DEV
+        ? Promise.resolve(false)
+        : checkSession(appUrl);
 
       async function relabelAppLinks() {
         if (!(await signedIn)) return;
