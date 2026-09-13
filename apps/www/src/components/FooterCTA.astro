@@ -1,10 +1,10 @@
 ---
 import {
-    APP_URL,
     DEMO_URL,
     SELF_HOSTING_URL,
     SUPPORT_EMAIL_ADDRESS,
 } from "../lib/site";
+import AppLink from "./AppLink.astro";
 import Icon from "./Icon.astro";
 ---
 
@@ -16,7 +16,7 @@ import Icon from "./Icon.astro";
     >
         <p>Ready to take back control of your content?</p>
         <div class="mt-6 flex items-center justify-center gap-2">
-            <a href={APP_URL} class="btn btn-lg text-base">Get Started</a>
+            <AppLink class="btn btn-lg text-base" />
             <a
                 href={DEMO_URL}
                 target="_blank"

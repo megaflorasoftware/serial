@@ -1,9 +1,10 @@
 ---
+import AppLink from "../components/AppLink.astro";
 import FooterCTA from "../components/FooterCTA.astro";
 import Icon from "../components/Icon.astro";
 import ThemeDemo from "../components/ThemeDemo.astro";
 import Site from "../layouts/Site.astro";
-import { APP_URL, DEMO_URL, SELF_HOSTING_URL } from "../lib/site";
+import { DEMO_URL, SELF_HOSTING_URL } from "../lib/site";
 ---
 
 <Site>
@@ -25,7 +26,7 @@ import { APP_URL, DEMO_URL, SELF_HOSTING_URL } from "../lib/site";
                 open source and easily self-hostable.
             </p>
             <div class="flex items-center justify-center gap-3">
-                <a href={APP_URL} class="btn btn-lg text-base">Get Started</a>
+                <AppLink class="btn btn-lg text-base" />
                 <a
                     href={DEMO_URL}
                     target="_blank"

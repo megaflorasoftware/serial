@@ -1,5 +1,6 @@
 ---
-import { APP_URL, GITHUB_URL } from "../lib/site";
+import { GITHUB_URL } from "../lib/site";
+import AppLink from "./AppLink.astro";
 import Icon from "./Icon.astro";
 ---
 
@@ -53,7 +54,7 @@ import Icon from "./Icon.astro";
             >
                 <Icon name="star" size={16} /> Star
             </a>
-            <a href={APP_URL} class="btn">Get Started</a>
+            <AppLink />
         </div>
     </nav>
 </header>

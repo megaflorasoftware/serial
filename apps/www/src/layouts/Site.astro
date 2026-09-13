@@ -3,6 +3,7 @@ import "@fontsource-variable/outfit";
 import "../styles/global.css";
 
 import { ClientRouter } from "astro:transitions";
+import { APP_URL } from "../lib/site";
 import Nav from "../components/Nav.astro";
 import ReleaseBanner from "../components/ReleaseBanner.astro";
 import {
@@ -43,7 +44,7 @@ const publicationUri = getConfiguredPublicationUri(
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-app-url={APP_URL}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -122,6 +123,31 @@ const publicationUri = getConfiguredPublicationUri(
         media.addEventListener("change", applyTheme);
         document.addEventListener("astro:after-swap", applyTheme);
       })();
+    </script>
+    <script>
+      import {
+        APP_LINK_ATTRIBUTE,
+        applySignedInLabel,
+        checkSession,
+      } from "../lib/session-cta";
+
+      // One credentialed request per tab. Module state survives client-router
+      // navigations, so later pages reuse the answer; a full reload re-checks.
+      // Skipped in `astro dev`: the app refuses a localhost origin over CORS,
+      // so the check would only add a console error on every page.
+      const appUrl = document.documentElement.dataset.appUrl ?? "";
+      const signedIn = import.meta.env.DEV
+        ? Promise.resolve(false)
+        : checkSession(appUrl);
+
+      async function relabelAppLinks() {
+        if (!(await signedIn)) return;
+        applySignedInLabel(
+          document.querySelectorAll(`[${APP_LINK_ATTRIBUTE}]`),
+        );
+      }
+
+      document.addEventListener("astro:page-load", relabelAppLinks);
     </script>
   </head>
   <body>

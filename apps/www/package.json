@@ -9,6 +9,7 @@
     "build:artifact": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
+    "test:unit": "vitest run",
     "og:generate": "node --import tsx ./scripts/generate-og-images.ts",
     "standard-site:sync": "node --import tsx ./scripts/sync-standard-site.ts"
   },
@@ -38,8 +39,10 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@types/node": "^25.5.2",
+    "jsdom": "^29.1.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22.12.0"
