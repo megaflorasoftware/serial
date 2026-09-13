@@ -59,10 +59,13 @@ async function prepareControlledShell(page: Page) {
 
 const CACHED_SHELL_MARKER = "data-serial-e2e-shell";
 
+// Reads through `caches.match` so a deleted cache is not recreated empty.
 async function getCachedRootShell(page: Page) {
   return page.evaluate(async () => {
-    const cache = await caches.open("navigation-cache");
-    const response = await cache.match("/", { ignoreVary: true });
+    const response = await caches.match("/", {
+      cacheName: "navigation-cache",
+      ignoreVary: true,
+    });
     return response ? await response.text() : null;
   });
 }
@@ -664,8 +667,16 @@ test("opens from the cached shell and refreshes it in the background", async ({
     ).toBeVisible({ timeout: 15_000 });
     // Background revalidation replaced the marked entry with the server's.
     await expect
-      .poll(() => getCachedRootShell(page), { timeout: 15_000 })
-      .not.toContain(CACHED_SHELL_MARKER);
+      .poll(
+        async () => {
+          const shell = await getCachedRootShell(page);
+          return shell === null
+            ? "missing"
+            : shell.includes(CACHED_SHELL_MARKER);
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(false);
   } finally {
     await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
   }
@@ -686,20 +697,12 @@ test("returns to sign-in when the session behind the cached shell has ended", as
     await prepareControlledShell(page);
 
     await context.clearCookies();
-    await page.reload({ waitUntil: "domcontentloaded" });
+    // The worker navigates this page away once revalidation lands, which
+    // can interrupt a wait for the stale document's DOMContentLoaded.
+    await page.reload({ waitUntil: "commit" });
 
     // The stale shell is served first; revalidation sees the server redirect
-    // and drops the cache.
-    await expect
-      .poll(
-        () =>
-          page
-            .evaluate(() => caches.has("navigation-cache"))
-            .catch(() => "reloading"),
-        { timeout: 15_000 },
-      )
-      .not.toBe(true);
-    // The page that booted from the stale shell reloads through the network.
+    // and reloads the page through the network.
     await expect(page).toHaveURL(/\/auth\/sign-in/, { timeout: 15_000 });
     await expect(
       page.getByRole("button", { name: "Sign in with Email" }),
@@ -707,6 +710,8 @@ test("returns to sign-in when the session behind the cached shell has ended", as
     await expect(
       page.getByText("Offline, some features may be disabled"),
     ).toHaveCount(0);
+    // The revalidation dropped the stale application shell; the sign-in
+    // document that replaced it is cached by the network-first auth route.
     expect(await getCachedRootShell(page)).toBeNull();
   } finally {
     await cleanupUser(SELF_HOSTED_TURSO_PORT, email);

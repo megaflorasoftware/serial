@@ -78,7 +78,7 @@ async function invalidateNavigationCache(resultingClientId?: string) {
   }
 }
 
-async function warmNavigationCache() {
+async function fetchRootShell() {
   const request = new Request("/", {
     credentials: "include",
     headers: { Accept: "text/html" },
@@ -87,12 +87,28 @@ async function warmNavigationCache() {
   const response = await fetch(request);
   if (classifyNavigationRevalidation(request.url, response) === "redirected") {
     await invalidateNavigationCache();
-    return;
+    return null;
   }
-  const cacheable = getCacheableNavigationResponse(request.url, response);
-  if (!cacheable) return;
+  return getCacheableNavigationResponse(request.url, response);
+}
+
+async function warmNavigationCache() {
+  const shell = await fetchRootShell();
+  if (!shell) return;
   const cache = await caches.open(NAVIGATION_CACHE_NAME);
-  await cache.put("/", cacheable);
+  await cache.put("/", shell);
+}
+
+// A new build's documents reference new content-hashed chunks, so the
+// previous build's cached documents must go. Fetch the fresh root first:
+// when the worker activates offline, the old shell stays in place rather
+// than leaving nothing to serve.
+async function replaceNavigationCache() {
+  const shell = await fetchRootShell();
+  if (!shell) return;
+  await deleteNavigationCache(self.caches);
+  const cache = await caches.open(NAVIGATION_CACHE_NAME);
+  await cache.put("/", shell);
 }
 
 /**
@@ -104,10 +120,12 @@ async function warmNavigationCache() {
  * and the cached shell is served. Scripts and styles are already cache-first,
  * so the document is the only piece that has to be served stale.
  *
- * A background revalidation that resolves to a different path means the
- * session behind the cached shell has ended: the cache is dropped and the
- * page that booted from the stale shell reloads so the server redirect
- * takes effect. A failed or non-OK revalidation keeps the stale shell.
+ * A navigation request carries manual redirect handling, so a background
+ * revalidation the server redirects (sign-in, demo provisioning,
+ * maintenance) surfaces as an opaque redirect: the session behind the
+ * cached shell has ended, the cache is dropped, and the page that booted
+ * from the stale shell reloads so the server redirect takes effect. A
+ * failed or non-OK revalidation keeps the stale shell.
  */
 class ShellFirstNavigationStrategy extends Strategy {
   protected async _handle(request: Request, handler: StrategyHandler) {
@@ -176,16 +194,12 @@ self.addEventListener("activate", (event) => {
     Promise.all([
       self.clients.claim(),
       // TanStack Start is fully SSR — there are no static HTML files in the
-      // build output, so precacheAndRoute never caches any document. Drop
-      // the previous build's documents, whose script references point at
-      // chunks that no longer exist, then warm the navigation cache with
-      // the root page so there's always *something* to serve when the user
-      // opens the app offline.
-      deleteNavigationCache(self.caches)
-        .then(warmNavigationCache)
-        .catch(() => {
-          // Non-critical. The next real navigation will populate the cache.
-        }),
+      // build output, so precacheAndRoute never caches any document. Replace
+      // the navigation cache with this build's root page so there's always
+      // *something* to serve when the user opens the app offline.
+      replaceNavigationCache().catch(() => {
+        // Non-critical. The next real navigation will populate the cache.
+      }),
     ]),
   );
 });
