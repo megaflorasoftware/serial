@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
+import { NAVIGATION_CACHE_INVALIDATED_MESSAGE } from "~/lib/pwa/navigation-cache";
 
 function showUpdatePrompt(reg: ServiceWorkerRegistration) {
   const toastId = toast("A new version of Serial is available!", {
@@ -42,6 +43,23 @@ export function ReloadPrompt() {
     }
 
     const abortController = new AbortController();
+
+    // The worker serves the cached application shell before revalidating
+    // it. When that revalidation finds the session has ended (the server
+    // redirected the document), this page booted from a shell it can no
+    // longer use; reloading follows the server redirect to sign-in.
+    navigator.serviceWorker.addEventListener(
+      "message",
+      (event: MessageEvent<{ type?: string } | null>) => {
+        if (event.data?.type === NAVIGATION_CACHE_INVALIDATED_MESSAGE) {
+          window.location.reload();
+        }
+      },
+      { signal: abortController.signal },
+    );
+    // Worker messages queue until the page opts in; the invalidation may be
+    // posted before hydration reaches this effect.
+    navigator.serviceWorker.startMessages();
 
     const registerServiceWorker = async () => {
       try {

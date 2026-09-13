@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  AUTH_NAVIGATION_PATTERN,
+  classifyNavigationRevalidation,
+  deleteNavigationCache,
   getCacheableNavigationResponse,
+  NAVIGATION_CACHE_NAME,
   normalizeNavigationResponse,
 } from "~/lib/pwa/navigation-cache";
 
@@ -49,5 +53,81 @@ describe("service-worker navigation cache", () => {
     expect(normalized).not.toBe(response);
     expect(normalized.redirected).toBe(false);
     expect(normalized.status).toBe(200);
+  });
+
+  describe("background revalidation", () => {
+    it("caches a valid shell for the requested path", () => {
+      const response = responseAt(ROOT_URL, { status: 200 });
+
+      expect(classifyNavigationRevalidation(ROOT_URL, response)).toBe("cache");
+    });
+
+    it("keeps the stale shell when the server fails without redirecting", () => {
+      const response = responseAt(ROOT_URL, { status: 503 });
+
+      expect(classifyNavigationRevalidation(ROOT_URL, response)).toBe(
+        "keep-stale",
+      );
+    });
+
+    it("invalidates when the session ended and the server redirected", () => {
+      const response = responseAt("https://app.example.com/auth/sign-in", {
+        status: 200,
+      });
+
+      expect(classifyNavigationRevalidation(ROOT_URL, response)).toBe(
+        "redirected",
+      );
+    });
+
+    it("invalidates on an opaque redirect the worker cannot follow", () => {
+      const response = new Response(null, { status: 200 });
+      Object.defineProperty(response, "type", { value: "opaqueredirect" });
+
+      expect(classifyNavigationRevalidation(ROOT_URL, response)).toBe(
+        "redirected",
+      );
+    });
+
+    it("treats a redirect to another path as ended even when it failed", () => {
+      const response = responseAt("https://app.example.com/maintenance", {
+        status: 503,
+      });
+
+      expect(classifyNavigationRevalidation(ROOT_URL, response)).toBe(
+        "redirected",
+      );
+    });
+  });
+
+  describe("authentication document routing", () => {
+    it.each(["/auth", "/auth/sign-in", "/auth/sign-in?method=email"])(
+      "never serves %s stale",
+      (path) => {
+        expect(AUTH_NAVIGATION_PATTERN.test(path)).toBe(true);
+      },
+    );
+
+    it.each(["/", "/read/abc", "/authors", "/feeds?auth=1"])(
+      "serves %s from the cached shell first",
+      (path) => {
+        expect(AUTH_NAVIGATION_PATTERN.test(path)).toBe(false);
+      },
+    );
+  });
+
+  describe("deleteNavigationCache", () => {
+    it("drops the navigation cache", async () => {
+      const del = vi.fn().mockResolvedValue(true);
+
+      await expect(
+        deleteNavigationCache({ delete: del } as unknown as CacheStorage),
+      ).resolves.toBe(true);
+      expect(del).toHaveBeenCalledWith(NAVIGATION_CACHE_NAME);
+    });
+
+    it("is a no-op where the Cache API is unavailable", async () => {
+      await expect(deleteNavigationCache(undefined)).resolves.toBe(false);
+    });
   });
 });

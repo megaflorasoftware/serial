@@ -57,6 +57,37 @@ async function prepareControlledShell(page: Page) {
     .toEqual({ redirected: false, status: 200 });
 }
 
+const CACHED_SHELL_MARKER = "data-serial-e2e-shell";
+
+async function getCachedRootShell(page: Page) {
+  return page.evaluate(async () => {
+    const cache = await caches.open("navigation-cache");
+    const response = await cache.match("/", { ignoreVary: true });
+    return response ? await response.text() : null;
+  });
+}
+
+// Marks the cached root document so a reload can prove it booted from the
+// cache rather than from the server, and so the background revalidation is
+// observable when the marker disappears. The attribute lives on <html>,
+// which suppresses hydration warnings, so the marked shell hydrates as the
+// real one does.
+async function markCachedRootShell(page: Page) {
+  await page.evaluate(async (marker) => {
+    const cache = await caches.open("navigation-cache");
+    const response = await cache.match("/", { ignoreVary: true });
+    if (!response) throw new Error("The root shell is not cached");
+    const html = (await response.text()).replace(
+      "<html",
+      `<html ${marker}="cached"`,
+    );
+    await cache.put(
+      "/",
+      new Response(html, { status: 200, headers: response.headers }),
+    );
+  }, CACHED_SHELL_MARKER);
+}
+
 async function getFeedBodyPersistence(page: Page, itemId: string) {
   return page.evaluate(async (id) => {
     const itemKey =
@@ -603,6 +634,81 @@ test("keeps the app frame when the reader chunk cannot load offline", async ({
     ).toHaveCount(0);
   } finally {
     await context.setOffline(false);
+    await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+  }
+});
+
+test("opens from the cached shell and refreshes it in the background", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { feedItemId, email, password } = await seedArticleData(
+    SELF_HOSTED_TURSO_PORT,
+    SELF_HOSTED_APP_PORT,
+  );
+
+  try {
+    await signIn({ page, email, password });
+    await prepareControlledShell(page);
+    await markCachedRootShell(page);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    // The document came from the navigation cache, not the server.
+    await expect(
+      page.locator(`html[${CACHED_SHELL_MARKER}="cached"]`),
+    ).toHaveCount(1);
+    // The stale shell still boots the live application.
+    await expect(
+      page.locator(`article[data-item-id="${feedItemId}"]`),
+    ).toBeVisible({ timeout: 15_000 });
+    // Background revalidation replaced the marked entry with the server's.
+    await expect
+      .poll(() => getCachedRootShell(page), { timeout: 15_000 })
+      .not.toContain(CACHED_SHELL_MARKER);
+  } finally {
+    await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+  }
+});
+
+test("returns to sign-in when the session behind the cached shell has ended", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(60_000);
+  const { email, password } = await seedArticleData(
+    SELF_HOSTED_TURSO_PORT,
+    SELF_HOSTED_APP_PORT,
+  );
+
+  try {
+    await signIn({ page, email, password });
+    await prepareControlledShell(page);
+
+    await context.clearCookies();
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    // The stale shell is served first; revalidation sees the server redirect
+    // and drops the cache.
+    await expect
+      .poll(
+        () =>
+          page
+            .evaluate(() => caches.has("navigation-cache"))
+            .catch(() => "reloading"),
+        { timeout: 15_000 },
+      )
+      .not.toBe(true);
+    // The page that booted from the stale shell reloads through the network.
+    await expect(page).toHaveURL(/\/auth\/sign-in/, { timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: "Sign in with Email" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText("Offline, some features may be disabled"),
+    ).toHaveCount(0);
+    expect(await getCachedRootShell(page)).toBeNull();
+  } finally {
     await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
   }
 });
