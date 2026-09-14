@@ -30,42 +30,15 @@ import { waitForResultingClient } from "~/lib/pwa/resulting-client";
 
 declare let self: ServiceWorkerGlobalScope;
 
-function isApplicationClient(client: Client) {
-  return !AUTH_NAVIGATION_PATTERN.test(new URL(client.url).pathname);
-}
-
-async function notifyClientsOfInvalidatedShell(
-  resultingClientId: string | undefined,
-) {
-  // The page that just booted from the stale shell is not listed until its
-  // document commits, which a fast revalidation can beat; when the fetch
-  // event named it, wait for it and address it directly as well. Every
-  // other application window shares the ended session and reloads too.
-  const [clients, resultingClient] = await Promise.all([
-    self.clients.matchAll({ includeUncontrolled: true, type: "window" }),
-    resultingClientId === undefined
-      ? undefined
-      : waitForResultingClient({
-          getClient: () => self.clients.get(resultingClientId),
-        }),
-  ]);
-  const recipients = new Map<string, Client>(
-    clients.map((client) => [client.id, client]),
-  );
-  if (resultingClient) recipients.set(resultingClient.id, resultingClient);
-  await Promise.all(
-    [...recipients.values()]
-      // Authentication pages are exactly where the redirect leads; reloading
-      // one under the user would discard a form in progress.
-      .filter(isApplicationClient)
-      .map(reloadClientThroughNetwork),
-  );
+function postInvalidation(client: Client) {
+  client.postMessage({ type: NAVIGATION_CACHE_INVALIDATED_MESSAGE });
 }
 
 // The page that booted from the stale shell may not have hydrated far enough
-// to listen for worker messages yet, so navigate it directly; a message is
-// the fallback for a client this worker does not control.
-async function reloadClientThroughNetwork(client: Client) {
+// to listen for worker messages yet, so navigate it directly; its URL is the
+// navigation that was just served, so it cannot have moved elsewhere. A
+// message is the fallback for a client this worker does not control.
+async function reloadResultingClient(client: Client) {
   if (client instanceof WindowClient) {
     try {
       await client.navigate(client.url);
@@ -74,7 +47,30 @@ async function reloadClientThroughNetwork(client: Client) {
       // Not controlled by this worker; fall through to the message.
     }
   }
-  client.postMessage({ type: NAVIGATION_CACHE_INVALIDATED_MESSAGE });
+  postInvalidation(client);
+}
+
+async function notifyClientsOfInvalidatedShell(
+  resultingClientId: string | undefined,
+) {
+  // The page that just booted from the stale shell is not listed until its
+  // document commits, which a fast revalidation can beat; when the fetch
+  // event named it, wait for it and address it directly. Every other window
+  // shares the ended session and is told to reload; a worker only knows a
+  // window's creation URL, so each page decides from its live location
+  // whether it is an application page or a sign-in form in progress.
+  const [clients, resultingClient] = await Promise.all([
+    self.clients.matchAll({ includeUncontrolled: true, type: "window" }),
+    resultingClientId === undefined
+      ? undefined
+      : waitForResultingClient({
+          getClient: () => self.clients.get(resultingClientId),
+        }),
+  ]);
+  for (const client of clients) {
+    if (client.id !== resultingClient?.id) postInvalidation(client);
+  }
+  if (resultingClient) await reloadResultingClient(resultingClient);
 }
 
 // The server sent the document elsewhere (sign-in, demo provisioning,

@@ -164,7 +164,10 @@ function useSignOutAction() {
               clearQueryCache: () => queryClient.clear(),
               clearPersistedUserData: clearAllUserData,
               clearNavigationCache: () => {
-                void deleteNavigationCache(window.caches);
+                deleteNavigationCache(window.caches).catch(() => {
+                  // Storage denied the delete; the stale shell invalidates
+                  // itself on the next launch.
+                });
               },
               localStorage: window.localStorage,
             });

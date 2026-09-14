@@ -3,7 +3,10 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
-import { NAVIGATION_CACHE_INVALIDATED_MESSAGE } from "~/lib/pwa/navigation-cache";
+import {
+  AUTH_NAVIGATION_PATTERN,
+  NAVIGATION_CACHE_INVALIDATED_MESSAGE,
+} from "~/lib/pwa/navigation-cache";
 
 function showUpdatePrompt(reg: ServiceWorkerRegistration) {
   const toastId = toast("A new version of Serial is available!", {
@@ -47,15 +50,19 @@ function isNavigationCacheInvalidation(event: MessageEvent<unknown>) {
 /**
  * The worker serves the cached application shell before revalidating it.
  * When that revalidation finds the session has ended (the server redirected
- * the document), this page booted from a shell it can no longer use;
- * reloading follows the server redirect to sign-in.
+ * the document), every application page is running on a shell it can no
+ * longer use; reloading follows the server redirect to sign-in. A page that
+ * has already moved to an authentication route is exactly where that
+ * redirect leads and keeps its form.
  */
 function useReloadOnNavigationCacheInvalidation() {
   useEffect(() => {
     const container =
       typeof navigator === "undefined" ? undefined : navigator.serviceWorker;
     const reloadOnInvalidation = (event: MessageEvent<unknown>) => {
-      if (isNavigationCacheInvalidation(event)) window.location.reload();
+      if (!isNavigationCacheInvalidation(event)) return;
+      if (AUTH_NAVIGATION_PATTERN.test(window.location.pathname)) return;
+      window.location.reload();
     };
     container?.addEventListener("message", reloadOnInvalidation);
     // Worker messages queue until the page opts in; the invalidation may be
