@@ -34,31 +34,48 @@ function showUpdatePrompt(reg: ServiceWorkerRegistration) {
   });
 }
 
-export function ReloadPrompt() {
-  const hasPromptedRef = useRef(false);
+function isNavigationCacheInvalidation(event: MessageEvent<unknown>) {
+  const data = event.data;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "type" in data &&
+    data.type === NAVIGATION_CACHE_INVALIDATED_MESSAGE
+  );
+}
 
+/**
+ * The worker serves the cached application shell before revalidating it.
+ * When that revalidation finds the session has ended (the server redirected
+ * the document), this page booted from a shell it can no longer use;
+ * reloading follows the server redirect to sign-in.
+ */
+function useReloadOnNavigationCacheInvalidation() {
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
-      return;
-    }
-
-    const abortController = new AbortController();
-
-    // The worker serves the cached application shell before revalidating
-    // it. When that revalidation finds the session has ended (the server
-    // redirected the document), this page booted from a shell it can no
-    // longer use; reloading follows the server redirect to sign-in.
-    const handleWorkerMessage = (
-      event: MessageEvent<{ type?: string } | null>,
-    ) => {
-      if (event.data?.type === NAVIGATION_CACHE_INVALIDATED_MESSAGE) {
-        window.location.reload();
-      }
+    const container =
+      typeof navigator === "undefined" ? undefined : navigator.serviceWorker;
+    const reloadOnInvalidation = (event: MessageEvent<unknown>) => {
+      if (isNavigationCacheInvalidation(event)) window.location.reload();
     };
-    navigator.serviceWorker.addEventListener("message", handleWorkerMessage);
+    container?.addEventListener("message", reloadOnInvalidation);
     // Worker messages queue until the page opts in; the invalidation may be
     // posted before hydration reaches this effect.
-    navigator.serviceWorker.startMessages();
+    container?.startMessages();
+    return () => {
+      container?.removeEventListener("message", reloadOnInvalidation);
+    };
+  }, []);
+}
+
+export function ReloadPrompt() {
+  const hasPromptedRef = useRef(false);
+  useReloadOnNavigationCacheInvalidation();
+
+  // Cleanup aborts the controller whose signal owns every registration
+  // listener added below.
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+  useEffect(() => {
+    const abortController = new AbortController();
 
     const registerServiceWorker = async () => {
       try {
@@ -137,15 +154,11 @@ export function ReloadPrompt() {
       }
     };
 
-    void registerServiceWorker();
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      void registerServiceWorker();
+    }
 
-    return () => {
-      navigator.serviceWorker.removeEventListener(
-        "message",
-        handleWorkerMessage,
-      );
-      abortController.abort();
-    };
+    return () => abortController.abort();
   }, []);
 
   return null;
