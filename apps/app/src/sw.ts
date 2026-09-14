@@ -104,16 +104,14 @@ async function warmNavigationCache() {
   await cache.put("/", shell);
 }
 
-// A new build's documents reference new content-hashed chunks, so the
-// previous build's cached documents must go. Fetch the fresh root first:
-// when the worker activates offline, the old shell stays in place rather
-// than leaving nothing to serve.
+// A new build's documents reference new content-hashed chunks, and the
+// precache drops the previous build's chunks at activation, so its cached
+// documents cannot boot any more and must go before the fresh root is
+// fetched. An activation without network leaves the static offline page as
+// the only fallback until the next online launch warms the cache again.
 async function replaceNavigationCache() {
-  const shell = await fetchRootShell();
-  if (!shell) return;
   await deleteNavigationCache(self.caches);
-  const cache = await caches.open(NAVIGATION_CACHE_NAME);
-  await cache.put("/", shell);
+  await warmNavigationCache();
 }
 
 /**
@@ -135,25 +133,34 @@ async function replaceNavigationCache() {
 class ShellFirstNavigationStrategy extends Strategy {
   protected async _handle(request: Request, handler: StrategyHandler) {
     const cachedResponse = await handler.cacheMatch(request);
-    const resultingClientId =
-      handler.event instanceof FetchEvent
-        ? handler.event.resultingClientId
-        : undefined;
-    const revalidation = handler.fetch(request).then((response) =>
-      this.revalidate(request, response, handler, {
-        servedStale: cachedResponse !== undefined,
-        resultingClientId,
-      }),
-    );
+    const servedStale = cachedResponse !== undefined;
+    const resultingClientId = getResultingClientId(handler);
+    // The live document is handed to the browser as soon as it arrives;
+    // storing it (or dropping the cache after a redirect) extends the fetch
+    // event instead of delaying the response, and a failed cache write can
+    // never fail the navigation.
+    const liveResponse = handler.fetch(request).then((response) => {
+      void handler.waitUntil(
+        this.revalidate(request, response, handler, {
+          servedStale,
+          resultingClientId,
+        }).catch(() => {
+          // The stale shell (or the live document) is already on its way.
+        }),
+      );
+      return response;
+    });
     if (cachedResponse) {
       void handler.waitUntil(
-        revalidation.catch(() => {
+        liveResponse.catch(() => {
           // Offline or unreachable: the stale shell stays in place.
         }),
       );
       return cachedResponse;
     }
-    return revalidation;
+    // No shell for this URL: a network failure here reaches the catch
+    // handler, which serves the cached root or the static offline page.
+    return liveResponse;
   }
 
   private async revalidate(
@@ -168,12 +175,16 @@ class ShellFirstNavigationStrategy extends Strategy {
       resultingClientId: string | undefined;
     },
   ) {
-    switch (classifyNavigationRevalidation(request.url, response)) {
+    // Classify and clone synchronously, before the browser starts reading
+    // the body that is being returned alongside this work.
+    const revalidation = classifyNavigationRevalidation(request.url, response);
+    const cacheable =
+      revalidation === "cache"
+        ? normalizeNavigationResponse(response.clone())
+        : undefined;
+    switch (revalidation) {
       case "cache":
-        await handler.cachePut(
-          request,
-          normalizeNavigationResponse(response.clone()),
-        );
+        if (cacheable) await handler.cachePut(request, cacheable);
         break;
       case "redirected":
         // Only a shell served stale proves its session ended. A redirect
@@ -185,8 +196,14 @@ class ShellFirstNavigationStrategy extends Strategy {
       case "keep-stale":
         break;
     }
-    return response;
   }
+}
+
+// Only a navigation fetch event names the page it is booting; the id is the
+// empty string when there is no resulting client.
+function getResultingClientId(handler: StrategyHandler) {
+  if (!(handler.event instanceof FetchEvent)) return undefined;
+  return handler.event.resultingClientId || undefined;
 }
 
 // Take control of all open clients as soon as the SW activates, and warm
@@ -202,8 +219,8 @@ self.addEventListener("activate", (event) => {
       self.clients.claim(),
       // TanStack Start is fully SSR — there are no static HTML files in the
       // build output, so precacheAndRoute never caches any document. Replace
-      // the navigation cache with this build's root page so there's always
-      // *something* to serve when the user opens the app offline.
+      // the navigation cache with this build's root page so there's
+      // *something* that can boot when the user opens the app offline.
       replaceNavigationCache().catch(() => {
         // Non-critical. The next real navigation will populate the cache.
       }),
