@@ -682,38 +682,45 @@ test("opens from the cached shell and refreshes it in the background", async ({
   }
 });
 
-test("returns to sign-in when the session behind the cached shell has ended", async ({
-  page,
-  context,
-}) => {
-  test.setTimeout(60_000);
-  const { email, password } = await seedArticleData(
-    SELF_HOSTED_TURSO_PORT,
-    SELF_HOSTED_APP_PORT,
-  );
+// A fragment on the served URL must not turn the worker's reload into a
+// same-document fragment navigation.
+for (const launchUrl of ["/", "/#notes"]) {
+  test(`returns to sign-in when the session behind the cached shell has ended (${launchUrl})`, async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(60_000);
+    const { email, password } = await seedArticleData(
+      SELF_HOSTED_TURSO_PORT,
+      SELF_HOSTED_APP_PORT,
+    );
 
-  try {
-    await signIn({ page, email, password });
-    await prepareControlledShell(page);
+    try {
+      await signIn({ page, email, password });
+      await prepareControlledShell(page);
+      await page.goto(launchUrl);
 
-    await context.clearCookies();
-    // The worker navigates this page away once revalidation lands, which
-    // can interrupt a wait for the stale document's DOMContentLoaded.
-    await page.reload({ waitUntil: "commit" });
+      await context.clearCookies();
+      // The worker navigates this page away once revalidation lands, which
+      // can interrupt a wait for the stale document's DOMContentLoaded.
+      await page.reload({ waitUntil: "commit" });
 
-    // The stale shell is served first; revalidation sees the server redirect
-    // and reloads the page through the network.
-    await expect(page).toHaveURL(/\/auth\/sign-in/, { timeout: 15_000 });
-    await expect(
-      page.getByRole("button", { name: "Sign in with Email" }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByText("Offline, some features may be disabled"),
-    ).toHaveCount(0);
-    // The revalidation dropped the stale application shell; the sign-in
-    // document that replaced it is cached by the network-first auth route.
-    expect(await getCachedRootShell(page)).toBeNull();
-  } finally {
-    await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
-  }
-});
+      // The stale shell is served first; revalidation sees the server
+      // redirect and reloads the page through the network. The bound sits
+      // below the worker's ten-second wait for the booting client, so a
+      // reload that only happens after that wait expires is a failure.
+      await expect(page).toHaveURL(/\/auth\/sign-in/, { timeout: 5_000 });
+      await expect(
+        page.getByRole("button", { name: "Sign in with Email" }),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByText("Offline, some features may be disabled"),
+      ).toHaveCount(0);
+      // The revalidation dropped the stale application shell; the sign-in
+      // document that replaced it is cached by the network-first auth route.
+      expect(await getCachedRootShell(page)).toBeNull();
+    } finally {
+      await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+    }
+  });
+}

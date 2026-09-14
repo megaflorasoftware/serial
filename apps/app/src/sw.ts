@@ -22,6 +22,7 @@ import {
   classifyNavigationRevalidation,
   deleteNavigationCache,
   getCacheableNavigationResponse,
+  getShellReloadUrl,
   NAVIGATION_CACHE_INVALIDATED_MESSAGE,
   NAVIGATION_CACHE_NAME,
   normalizeNavigationResponse,
@@ -41,7 +42,7 @@ function postInvalidation(client: Client) {
 async function reloadResultingClient(client: Client) {
   if (client instanceof WindowClient) {
     try {
-      await client.navigate(client.url);
+      await client.navigate(getShellReloadUrl(client.url));
       return;
     } catch {
       // Not controlled by this worker; fall through to the message.

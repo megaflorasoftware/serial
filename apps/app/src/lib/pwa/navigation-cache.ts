@@ -91,3 +91,15 @@ export function deleteNavigationCache(cacheStorage: CacheStorage | undefined) {
   if (!cacheStorage) return Promise.resolve(false);
   return cacheStorage.delete(NAVIGATION_CACHE_NAME);
 }
+
+/**
+ * The URL a window is sent back through the network after its shell was
+ * invalidated. Navigating a window to its own URL with the fragment intact
+ * is a fragment navigation that never leaves the document, so the fragment
+ * is dropped.
+ */
+export function getShellReloadUrl(clientUrl: string) {
+  const url = new URL(clientUrl);
+  url.hash = "";
+  return url.href;
+}

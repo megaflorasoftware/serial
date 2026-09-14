@@ -4,6 +4,7 @@ import {
   classifyNavigationRevalidation,
   deleteNavigationCache,
   getCacheableNavigationResponse,
+  getShellReloadUrl,
   NAVIGATION_CACHE_NAME,
   normalizeNavigationResponse,
 } from "~/lib/pwa/navigation-cache";
@@ -128,6 +129,20 @@ describe("service-worker navigation cache", () => {
 
     it("is a no-op where the Cache API is unavailable", async () => {
       await expect(deleteNavigationCache(undefined)).resolves.toBe(false);
+    });
+  });
+
+  describe("getShellReloadUrl", () => {
+    it("drops the fragment so the navigation leaves the document", () => {
+      expect(getShellReloadUrl("https://app.example.com/read/abc#notes")).toBe(
+        "https://app.example.com/read/abc",
+      );
+    });
+
+    it("keeps the path and query of the served navigation", () => {
+      expect(getShellReloadUrl("https://app.example.com/?tab=saved")).toBe(
+        "https://app.example.com/?tab=saved",
+      );
     });
   });
 });
