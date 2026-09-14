@@ -34,15 +34,20 @@ function isApplicationClient(client: Client) {
   return !AUTH_NAVIGATION_PATTERN.test(new URL(client.url).pathname);
 }
 
-async function notifyClientsOfInvalidatedShell(resultingClientId: string) {
+async function notifyClientsOfInvalidatedShell(
+  resultingClientId: string | undefined,
+) {
   // The page that just booted from the stale shell is not listed until its
-  // document commits, which a fast revalidation can beat; wait for it and
-  // address it directly as well.
+  // document commits, which a fast revalidation can beat; when the fetch
+  // event named it, wait for it and address it directly as well. Every
+  // other application window shares the ended session and reloads too.
   const [clients, resultingClient] = await Promise.all([
     self.clients.matchAll({ includeUncontrolled: true, type: "window" }),
-    waitForResultingClient({
-      getClient: () => self.clients.get(resultingClientId),
-    }),
+    resultingClientId === undefined
+      ? undefined
+      : waitForResultingClient({
+          getClient: () => self.clients.get(resultingClientId),
+        }),
   ]);
   const recipients = new Map<string, Client>(
     clients.map((client) => [client.id, client]),
@@ -78,10 +83,7 @@ async function invalidateNavigationCache(
   resultingClientId: string | undefined,
 ) {
   await deleteNavigationCache(self.caches);
-  // Only a fetch event names the page that booted from the stale shell.
-  if (resultingClientId !== undefined) {
-    await notifyClientsOfInvalidatedShell(resultingClientId);
-  }
+  await notifyClientsOfInvalidatedShell(resultingClientId);
 }
 
 async function fetchRootShell() {
