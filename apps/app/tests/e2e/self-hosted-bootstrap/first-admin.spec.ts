@@ -59,11 +59,15 @@ test("first administrator can sign up and return after a reload", async ({
     email,
     password,
   });
-  await expect(page.getByRole("heading", { name: "Serial" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Serial", exact: true }),
+  ).toBeVisible();
 
   await page.reload();
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { name: "Serial" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Serial", exact: true }),
+  ).toBeVisible();
 
   await page.goto("/admin/settings");
   await expect(page).toHaveURL("/admin/settings");
@@ -71,9 +75,13 @@ test("first administrator can sign up and return after a reload", async ({
 
   await signOut(page);
   await signIn({ page, email, password });
-  await expect(page.getByRole("heading", { name: "Serial" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Serial", exact: true }),
+  ).toBeVisible();
 
   await page.reload();
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { name: "Serial" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Serial", exact: true }),
+  ).toBeVisible();
 });
