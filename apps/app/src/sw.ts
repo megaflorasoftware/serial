@@ -14,24 +14,195 @@ import {
   CacheFirst,
   NetworkFirst,
   StaleWhileRevalidate,
+  Strategy,
 } from "workbox-strategies";
-import { getCacheableNavigationResponse } from "~/lib/pwa/navigation-cache";
+import type { StrategyHandler } from "workbox-strategies";
+import {
+  AUTH_NAVIGATION_PATTERN,
+  classifyNavigationRevalidation,
+  deleteNavigationCache,
+  getCacheableNavigationResponse,
+  getShellReloadUrl,
+  NAVIGATION_CACHE_INVALIDATED_MESSAGE,
+  NAVIGATION_CACHE_NAME,
+  normalizeNavigationResponse,
+} from "~/lib/pwa/navigation-cache";
+import { waitForResultingClient } from "~/lib/pwa/resulting-client";
 
 declare let self: ServiceWorkerGlobalScope;
 
-const NAVIGATION_CACHE_NAME = "navigation-cache";
+function postInvalidation(client: Client) {
+  client.postMessage({ type: NAVIGATION_CACHE_INVALIDATED_MESSAGE });
+}
 
-async function warmNavigationCache() {
+// The page that booted from the stale shell may not have hydrated far enough
+// to listen for worker messages yet, so navigate it directly; its URL is the
+// navigation that was just served, so it cannot have moved elsewhere. A
+// message is the fallback for a client this worker does not control.
+async function reloadResultingClient(client: Client) {
+  if (client instanceof WindowClient) {
+    try {
+      await client.navigate(getShellReloadUrl(client.url));
+      return;
+    } catch {
+      // Not controlled by this worker; fall through to the message.
+    }
+  }
+  postInvalidation(client);
+}
+
+async function notifyClientsOfInvalidatedShell(
+  resultingClientId: string | undefined,
+) {
+  // The page that just booted from the stale shell is not listed until its
+  // document commits, which a fast revalidation can beat; when the fetch
+  // event named it, wait for it and address it directly. Every other window
+  // shares the ended session and is told to reload; a worker only knows a
+  // window's creation URL, so each page decides from its live location
+  // whether it is an application page or a sign-in form in progress.
+  const [clients, resultingClient] = await Promise.all([
+    self.clients.matchAll({ includeUncontrolled: true, type: "window" }),
+    resultingClientId === undefined
+      ? undefined
+      : waitForResultingClient({
+          getClient: () => self.clients.get(resultingClientId),
+        }),
+  ]);
+  for (const client of clients) {
+    if (client.id !== resultingClient?.id) postInvalidation(client);
+  }
+  if (resultingClient) await reloadResultingClient(resultingClient);
+}
+
+// The server sent the document elsewhere (sign-in, demo provisioning,
+// maintenance), so every cached shell belongs to a session that has ended.
+async function invalidateNavigationCache(
+  resultingClientId: string | undefined,
+) {
+  await deleteNavigationCache(self.caches);
+  await notifyClientsOfInvalidatedShell(resultingClientId);
+}
+
+async function fetchRootShell() {
   const request = new Request("/", {
     credentials: "include",
     headers: { Accept: "text/html" },
     redirect: "follow",
   });
   const response = await fetch(request);
-  const cacheable = getCacheableNavigationResponse(request.url, response);
-  if (!cacheable) return;
+  // A redirect (signed out) leaves the cache alone: the sign-in document the
+  // auth route just cached must survive, and a stale application shell
+  // invalidates itself on its next launch.
+  return getCacheableNavigationResponse(request.url, response);
+}
+
+async function warmNavigationCache() {
+  const shell = await fetchRootShell();
+  if (!shell) return;
   const cache = await caches.open(NAVIGATION_CACHE_NAME);
-  await cache.put("/", cacheable);
+  await cache.put("/", shell);
+}
+
+// A new build's documents reference new content-hashed chunks, and the
+// precache drops the previous build's chunks at activation, so its cached
+// documents cannot boot any more and must go before the fresh root is
+// fetched. An activation without network leaves the static offline page as
+// the only fallback until the next online launch warms the cache again.
+async function replaceNavigationCache() {
+  await deleteNavigationCache(self.caches);
+  await warmNavigationCache();
+}
+
+/**
+ * Serve the cached document immediately and refresh it in the background.
+ *
+ * A full load of the installed app is a navigation request. Waiting for the
+ * server-rendered document (session lookup, user config, render) made every
+ * online launch slower than an offline one, where the fetch fails at once
+ * and the cached shell is served. Scripts and styles are already cache-first,
+ * so the document is the only piece that has to be served stale.
+ *
+ * A navigation request carries manual redirect handling, so a background
+ * revalidation the server redirects (sign-in, demo provisioning,
+ * maintenance) surfaces as an opaque redirect: the session behind the
+ * cached shell has ended, the cache is dropped, and the page that booted
+ * from the stale shell reloads so the server redirect takes effect. A
+ * failed or non-OK revalidation keeps the stale shell.
+ */
+class ShellFirstNavigationStrategy extends Strategy {
+  protected async _handle(request: Request, handler: StrategyHandler) {
+    const cachedResponse = await handler.cacheMatch(request);
+    const servedStale = cachedResponse !== undefined;
+    const resultingClientId = getResultingClientId(handler);
+    // The live document is handed to the browser as soon as it arrives;
+    // storing it (or dropping the cache after a redirect) extends the fetch
+    // event instead of delaying the response, and a failed cache write can
+    // never fail the navigation.
+    const liveResponse = handler.fetch(request).then((response) => {
+      void handler.waitUntil(
+        this.revalidate(request, response, handler, {
+          servedStale,
+          resultingClientId,
+        }).catch(() => {
+          // The stale shell (or the live document) is already on its way.
+        }),
+      );
+      return response;
+    });
+    if (cachedResponse) {
+      void handler.waitUntil(
+        liveResponse.catch(() => {
+          // Offline or unreachable: the stale shell stays in place.
+        }),
+      );
+      return cachedResponse;
+    }
+    // No shell for this URL: a network failure here reaches the catch
+    // handler, which serves the cached root or the static offline page.
+    return liveResponse;
+  }
+
+  private async revalidate(
+    request: Request,
+    response: Response,
+    handler: StrategyHandler,
+    {
+      servedStale,
+      resultingClientId,
+    }: {
+      servedStale: boolean;
+      resultingClientId: string | undefined;
+    },
+  ) {
+    // Classify and clone synchronously, before the browser starts reading
+    // the body that is being returned alongside this work.
+    const revalidation = classifyNavigationRevalidation(request.url, response);
+    const cacheable =
+      revalidation === "cache"
+        ? normalizeNavigationResponse(response.clone())
+        : undefined;
+    switch (revalidation) {
+      case "cache":
+        if (cacheable) await handler.cachePut(request, cacheable);
+        break;
+      case "redirected":
+        // Only a shell served stale proves its session ended. A redirect
+        // answered live (an unauthenticated launch, or a signed-in route
+        // such as /admin that forwards elsewhere) is already being followed
+        // by the browser and says nothing about the cached shells.
+        if (servedStale) await invalidateNavigationCache(resultingClientId);
+        break;
+      case "keep-stale":
+        break;
+    }
+  }
+}
+
+// Only a navigation fetch event names the page it is booting; the id is the
+// empty string when there is no resulting client.
+function getResultingClientId(handler: StrategyHandler) {
+  if (!(handler.event instanceof FetchEvent)) return undefined;
+  return handler.event.resultingClientId || undefined;
 }
 
 // Take control of all open clients as soon as the SW activates, and warm
@@ -46,10 +217,10 @@ self.addEventListener("activate", (event) => {
     Promise.all([
       self.clients.claim(),
       // TanStack Start is fully SSR — there are no static HTML files in the
-      // build output, so precacheAndRoute never caches any document. Warm
-      // the navigation cache with the root page so there's always *something*
-      // to serve when the user opens the app offline.
-      warmNavigationCache().catch(() => {
+      // build output, so precacheAndRoute never caches any document. Replace
+      // the navigation cache with this build's root page so there's
+      // *something* that can boot when the user opens the app offline.
+      replaceNavigationCache().catch(() => {
         // Non-critical. The next real navigation will populate the cache.
       }),
     ]),
@@ -63,19 +234,38 @@ cleanupOutdatedCaches();
 // self.__WB_MANIFEST is injected by workbox-build at build time
 precacheAndRoute(self.__WB_MANIFEST);
 
-// Navigation requests - NetworkFirst with 3s timeout for fresh content with offline fallback
-const navigationHandler = new NetworkFirst({
-  cacheName: NAVIGATION_CACHE_NAME,
-  networkTimeoutSeconds: 3,
-  plugins: [
-    {
-      cacheWillUpdate: ({ request, response }) =>
-        Promise.resolve(getCacheableNavigationResponse(request.url, response)),
-    },
-  ],
-});
+// Authentication documents redirect on session state and are loaded rarely,
+// so they are never served stale: NetworkFirst with a 3s timeout keeps them
+// fresh with an offline fallback.
+registerRoute(
+  new NavigationRoute(
+    new NetworkFirst({
+      cacheName: NAVIGATION_CACHE_NAME,
+      networkTimeoutSeconds: 3,
+      plugins: [
+        {
+          cacheWillUpdate: ({ request, response }) =>
+            Promise.resolve(
+              getCacheableNavigationResponse(request.url, response),
+            ),
+        },
+      ],
+    }),
+    { allowlist: [AUTH_NAVIGATION_PATTERN] },
+  ),
+);
 
-registerRoute(new NavigationRoute(navigationHandler));
+// Every other application document is served from the cache first. API
+// navigations (demo provisioning) are redirects, never documents to keep.
+registerRoute(
+  new NavigationRoute(
+    new ShellFirstNavigationStrategy({
+      cacheName: NAVIGATION_CACHE_NAME,
+      matchOptions: { ignoreVary: true },
+    }),
+    { denylist: [AUTH_NAVIGATION_PATTERN, /^\/api\//] },
+  ),
+);
 
 // Offline navigation fallback.
 // TanStack Start is fully SSR — there are no static HTML files in the build

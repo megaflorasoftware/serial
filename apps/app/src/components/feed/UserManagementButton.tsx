@@ -26,6 +26,7 @@ import { authClient, signOut } from "~/lib/auth-client";
 import { getDisplayableEmail } from "~/lib/auth/atproto";
 import { clearUserDataAfterSignOut } from "~/lib/auth/sign-out-cleanup";
 import { useClearAllUserData } from "~/lib/data/atoms";
+import { deleteNavigationCache } from "~/lib/pwa/navigation-cache";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 import { useSubscription } from "~/lib/data/subscription";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
@@ -162,6 +163,12 @@ function useSignOutAction() {
             clearUserDataAfterSignOut({
               clearQueryCache: () => queryClient.clear(),
               clearPersistedUserData: clearAllUserData,
+              clearNavigationCache: () => {
+                deleteNavigationCache(window.caches).catch(() => {
+                  // Storage denied the delete; the stale shell invalidates
+                  // itself on the next launch.
+                });
+              },
               localStorage: window.localStorage,
             });
             void router.navigate({ to: "/auth/sign-in" });
