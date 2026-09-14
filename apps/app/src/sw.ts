@@ -74,8 +74,11 @@ async function reloadClientThroughNetwork(client: Client) {
 
 // The server sent the document elsewhere (sign-in, demo provisioning,
 // maintenance), so every cached shell belongs to a session that has ended.
-async function invalidateNavigationCache(resultingClientId?: string) {
+async function invalidateNavigationCache(
+  resultingClientId: string | undefined,
+) {
   await deleteNavigationCache(self.caches);
+  // Only a fetch event names the page that booted from the stale shell.
   if (resultingClientId !== undefined) {
     await notifyClientsOfInvalidatedShell(resultingClientId);
   }
@@ -88,10 +91,9 @@ async function fetchRootShell() {
     redirect: "follow",
   });
   const response = await fetch(request);
-  if (classifyNavigationRevalidation(request.url, response) === "redirected") {
-    await invalidateNavigationCache();
-    return null;
-  }
+  // A redirect (signed out) leaves the cache alone: the sign-in document the
+  // auth route just cached must survive, and a stale application shell
+  // invalidates itself on its next launch.
   return getCacheableNavigationResponse(request.url, response);
 }
 
@@ -174,9 +176,11 @@ class ShellFirstNavigationStrategy extends Strategy {
         );
         break;
       case "redirected":
-        await invalidateNavigationCache(
-          servedStale ? resultingClientId : undefined,
-        );
+        // Only a shell served stale proves its session ended. A redirect
+        // answered live (an unauthenticated launch, or a signed-in route
+        // such as /admin that forwards elsewhere) is already being followed
+        // by the browser and says nothing about the cached shells.
+        if (servedStale) await invalidateNavigationCache(resultingClientId);
         break;
       case "keep-stale":
         break;
