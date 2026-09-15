@@ -26,22 +26,66 @@ import { env } from "~/env";
 // Canonical definition lives in ~/lib/constants, beside the other provider ids.
 export { ATPROTO_PROVIDER_ID } from "~/lib/constants";
 
-/** The identity-only v1 scope; broader grants arrive via upgrade(). */
+/** The identity-only scope: what a fresh link requests. */
 export const ATPROTO_SCOPE = "atproto";
+
+/**
+ * The standard.site social permission set: repo write to
+ * `site.standard.graph.subscription` and `site.standard.graph.recommend`.
+ * Exporting Feeds as Publication subscriptions needs it.
+ */
+export const ATPROTO_SOCIAL_SCOPE = "include:site.standard.authSocial";
+
+/**
+ * The full grant: identity plus the social set. Sign-in and sign-up request
+ * it (every sign-in replaces the stored grant, so a narrower sign-in would
+ * strip write scope from a user who exports subscriptions), and a Consent
+ * upgrade requests it for a linked connection that needs to write. Linking
+ * stays identity-only.
+ */
+export const ATPROTO_FULL_SCOPE = `${ATPROTO_SCOPE} ${ATPROTO_SOCIAL_SCOPE}`;
 
 /**
  * Scopes this instance is allowed to request. upgrade() validates against
  * this so a future caller cannot request an arbitrary grant; broaden it
  * deliberately (per space-delimited token) as capabilities are wired.
  */
-export const ATPROTO_ALLOWED_SCOPES = new Set([ATPROTO_SCOPE]);
+export const ATPROTO_ALLOWED_SCOPES = new Set([
+  ATPROTO_SCOPE,
+  ATPROTO_SOCIAL_SCOPE,
+]);
+
+function scopeTokens(scope: string): string[] {
+  return scope.trim().split(/\s+/).filter(Boolean);
+}
+
+/** Whether a stored grant covers subscription writes. */
+export function hasAtprotoWriteScope(
+  scope: string | null | undefined,
+): boolean {
+  return !!scope && scopeTokens(scope).includes(ATPROTO_SOCIAL_SCOPE);
+}
+
+/**
+ * The tokens of a previously granted scope this instance may request
+ * again, so a reconnect restores what the user consented to without ever
+ * forwarding an unknown token. Falls back to the identity scope.
+ */
+export function retainAllowedAtprotoScope(
+  scope: string | null | undefined,
+): string {
+  const allowed = scopeTokens(scope ?? "").filter((token) =>
+    ATPROTO_ALLOWED_SCOPES.has(token),
+  );
+  return allowed.length > 0 ? allowed.join(" ") : ATPROTO_SCOPE;
+}
 
 /**
  * Reject an authorization scope that is not on the allowlist. Scope is a
  * space-delimited token list; every token must be allowed.
  */
 export function assertAllowedAtprotoScope(scope: string): void {
-  const tokens = scope.trim().split(/\s+/).filter(Boolean);
+  const tokens = scopeTokens(scope);
   if (tokens.length === 0) {
     throw new Error("An AT Protocol scope is required");
   }
@@ -78,6 +122,10 @@ export const ATPROTO_ROUTES = {
   // classifiers in server/auth/index.tsx (which gate the sign-in callback
   // path) never treat an add-on link as a sign-in or roll it back.
   linkCallback: `${ATPROTO_ROUTE_PREFIX}link-callback`,
+  // A Consent upgrade lands on its own redirect URI for the same reason:
+  // it broadens an existing connection's grant and must never be treated
+  // as a sign-in.
+  upgradeCallback: `${ATPROTO_ROUTE_PREFIX}upgrade-callback`,
 } as const;
 
 const AUTH_MOUNT = "/api/auth";
@@ -87,6 +135,7 @@ export const ATPROTO_PATHS = {
   jwks: `${AUTH_MOUNT}${ATPROTO_ROUTES.jwks}`,
   callback: `${AUTH_MOUNT}${ATPROTO_ROUTES.callback}`,
   linkCallback: `${AUTH_MOUNT}${ATPROTO_ROUTES.linkCallback}`,
+  upgradeCallback: `${AUTH_MOUNT}${ATPROTO_ROUTES.upgradeCallback}`,
 } as const;
 
 /** https everywhere except the dev loopback client's 127.0.0.1 URIs. */
@@ -108,16 +157,33 @@ function redirectBaseUrl(): string {
 }
 
 /**
- * Absolute redirect URI of the link callback. authorize() defaults to the
- * first registered redirect URI (the sign-in callback); link flows pass
- * this one explicitly at both the authorize and the code-exchange leg.
+ * Absolute redirect URI of a registered callback path. authorize()
+ * defaults to the first registered redirect URI (the sign-in callback);
+ * link and upgrade flows pass theirs explicitly at both the authorize and
+ * the code-exchange leg. PUBLIC_BASE_URL is https-served everywhere
+ * atproto is enabled except the dev loopback client (the authorization
+ * server refuses other plain-http redirect URIs anyway); the assertion
+ * satisfies the SDK's template-literal redirect_uri type.
  */
+function redirectUriFor(path: string): AtprotoRedirectUri {
+  return `${redirectBaseUrl()}${path}` as AtprotoRedirectUri;
+}
+
 export function getAtprotoLinkRedirectUri(): AtprotoRedirectUri {
-  // PUBLIC_BASE_URL is https-served everywhere atproto is enabled except
-  // the dev loopback client (the authorization server refuses other
-  // plain-http redirect URIs anyway); the assertion satisfies the SDK's
-  // template-literal redirect_uri type.
-  return `${redirectBaseUrl()}${ATPROTO_PATHS.linkCallback}` as AtprotoRedirectUri;
+  return redirectUriFor(ATPROTO_PATHS.linkCallback);
+}
+
+export function getAtprotoUpgradeRedirectUri(): AtprotoRedirectUri {
+  return redirectUriFor(ATPROTO_PATHS.upgradeCallback);
+}
+
+/** Order matters: the SDK defaults to the first entry, the sign-in callback. */
+function registeredRedirectUris(base: string): [string, ...string[]] {
+  return [
+    `${base}${ATPROTO_PATHS.callback}`,
+    `${base}${ATPROTO_PATHS.linkCallback}`,
+    `${base}${ATPROTO_PATHS.upgradeCallback}`,
+  ];
 }
 
 export function getAtprotoClientMetadata(): OAuthClientMetadataInput {
@@ -131,12 +197,8 @@ export function getAtprotoClientMetadata(): OAuthClientMetadataInput {
   // deployment to validate.
   if (getAtprotoClientMode() === "loopback") {
     return buildAtprotoLoopbackClientMetadata({
-      scope: ATPROTO_SCOPE,
-      redirect_uris: [
-        // Same order rule as below: the SDK defaults to the first entry.
-        `${redirectBaseUrl()}${ATPROTO_PATHS.callback}`,
-        `${redirectBaseUrl()}${ATPROTO_PATHS.linkCallback}`,
-      ],
+      scope: ATPROTO_FULL_SCOPE,
+      redirect_uris: registeredRedirectUris(redirectBaseUrl()),
     });
   }
   const base = baseUrl();
@@ -144,15 +206,12 @@ export function getAtprotoClientMetadata(): OAuthClientMetadataInput {
     client_id: `${base}${ATPROTO_PATHS.clientMetadata}`,
     client_name: "Serial",
     client_uri: base,
-    redirect_uris: [
-      // Order matters: the SDK defaults to the first entry, which must stay
-      // the sign-in callback.
-      `${base}${ATPROTO_PATHS.callback}`,
-      `${base}${ATPROTO_PATHS.linkCallback}`,
-    ],
+    redirect_uris: registeredRedirectUris(base),
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
-    scope: ATPROTO_SCOPE,
+    // The metadata scope bounds every grant this client may request, so it
+    // carries the full set; individual flows request subsets.
+    scope: ATPROTO_FULL_SCOPE,
     application_type: "web",
     token_endpoint_auth_method: "private_key_jwt",
     token_endpoint_auth_signing_alg: "ES256",

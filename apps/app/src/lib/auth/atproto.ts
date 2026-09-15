@@ -40,3 +40,12 @@ export function getDisplayableEmail(
 export const ATPROTO_LINK_RESULT_PARAM = "atproto_link";
 
 export type AtprotoLinkResult = "success" | "conflict" | "exists" | "error";
+
+/**
+ * Query param the consent-upgrade callback redirects back into the app
+ * with. Kept separate from the link result so a consent return can trigger
+ * a subscription sync while a link return never does.
+ */
+export const ATPROTO_CONSENT_RESULT_PARAM = "atproto_consent";
+
+export type AtprotoConsentResult = "success" | "denied" | "state" | "error";
