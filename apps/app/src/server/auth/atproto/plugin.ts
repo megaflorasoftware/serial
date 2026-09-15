@@ -207,12 +207,17 @@ export const atprotoPlugin = () => {
             throw ctx.redirect(SIGN_IN_ERROR_REDIRECT);
           }
 
-          // A link flow's code can only be exchanged against the link
-          // redirect URI, so this should be unreachable — but sign-in and
-          // link state must never cross, and that invariant belongs to us,
-          // not the authorization server.
-          if (result.linkUserId) {
-            logError("[atproto] link state arrived on the sign-in callback");
+          // A link or upgrade flow's code can only be exchanged against its
+          // own redirect URI, so this should be unreachable — but an add-on
+          // flow must never complete as a sign-in (it would issue a session
+          // for the DID it was started for), and that invariant belongs to
+          // us, not the authorization server.
+          if (
+            result.linkUserId ||
+            result.upgradeUserId ||
+            result.pendingSyncPreferences
+          ) {
+            logError("[atproto] add-on state arrived on the sign-in callback");
             throw ctx.redirect(SIGN_IN_ERROR_REDIRECT);
           }
 
@@ -401,9 +406,14 @@ export const atprotoPlugin = () => {
         max: 60,
       },
       {
-        // Consent upgrades get their own, tighter budget: they are rare
-        // per user, and a burst of sign-in callbacks from the same address
-        // must not consume the returns of legitimate consent round trips.
+        // Consent upgrades get their own budget so a burst of sign-in
+        // callbacks cannot consume the returns of legitimate consent round
+        // trips. Every bucket here keys on a client address Better Auth
+        // only resolves from a forwarded header: until the deployment
+        // names its proxies, a single-value header is taken at face value
+        // and a multi-hop one resolves to nothing at all. Treat these as
+        // budgets per path, not per caller — the same caveat the sign-in
+        // and link callbacks above have always carried.
         pathMatcher: (path: string) => path === ATPROTO_ROUTES.upgradeCallback,
         window: 60,
         max: 30,
