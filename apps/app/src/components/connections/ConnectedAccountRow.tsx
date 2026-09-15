@@ -11,12 +11,14 @@ export function ConnectedAccountRow({
   disconnecting,
   onDisconnect,
   onReconnect,
+  reconnecting = false,
 }: {
   label: string;
   disconnecting: boolean;
   onDisconnect: () => void;
   /** Present only while the connection needs reconnecting. */
   onReconnect?: () => void;
+  reconnecting?: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border">
@@ -27,7 +29,12 @@ export function ConnectedAccountRow({
           onDisconnect={onDisconnect}
         />
       </div>
-      {onReconnect && <ReconnectBanner onReconnect={onReconnect} />}
+      {onReconnect && (
+        <ReconnectBanner
+          onReconnect={onReconnect}
+          reconnecting={reconnecting}
+        />
+      )}
     </div>
   );
 }
@@ -37,7 +44,13 @@ export function ConnectedAccountRow({
  * sign-in method still exists. Same treatment as the demo banner: amber
  * strip, state on the left, the one action on the right.
  */
-function ReconnectBanner({ onReconnect }: { onReconnect: () => void }) {
+function ReconnectBanner({
+  onReconnect,
+  reconnecting,
+}: {
+  onReconnect: () => void;
+  reconnecting: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950">
       <span>Sign-in expired</span>
@@ -45,8 +58,13 @@ function ReconnectBanner({ onReconnect }: { onReconnect: () => void }) {
         size="sm"
         className="flex items-center gap-1.5"
         onClick={onReconnect}
+        disabled={reconnecting}
       >
-        <RefreshCwIcon size={14} />
+        {reconnecting ? (
+          <Loader2Icon className="animate-spin" size={14} />
+        ) : (
+          <RefreshCwIcon size={14} />
+        )}
         Reconnect
       </Button>
     </div>

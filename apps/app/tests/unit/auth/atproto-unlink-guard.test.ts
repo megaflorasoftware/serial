@@ -262,7 +262,7 @@ describe("atproto connection procedures", () => {
       .where(eq(atprotoConnections.did, DID));
     authorizeMock.mockResolvedValue(new URL("https://pds.example/authorize"));
 
-    await api().atproto.linkAccount({ identifier: DID });
+    await api().atproto.reconnectAccount();
 
     expect(authorizeMock).toHaveBeenCalledWith(
       DID,
@@ -270,6 +270,17 @@ describe("atproto connection procedures", () => {
         scope: "atproto include:site.standard.authSocial",
       }),
     );
+  });
+
+  it("a reconnect is refused while the connection is healthy or absent", async () => {
+    await expect(api().atproto.reconnectAccount()).rejects.toThrow(
+      /no Atmosphere account to reconnect/,
+    );
+    await seedLinked({ extraProviderId: "credential" });
+    await expect(api().atproto.reconnectAccount()).rejects.toThrow(
+      /already connected/,
+    );
+    expect(authorizeMock).not.toHaveBeenCalled();
   });
 
   it("saves settings directly when the grant covers them", async () => {

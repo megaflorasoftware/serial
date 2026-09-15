@@ -47,8 +47,8 @@ export const DEFAULT_ATPROTO_SYNC_SETTINGS: AtprotoSyncSettings = {
 
 export const ATPROTO_SYNC_METHOD_LABELS: Record<AtprotoSyncMethod, string> = {
   none: "None",
-  import: "Atmosphere → Serial",
-  export: "Serial → Atmosphere",
+  import: "Import to Serial",
+  export: "Export to Atmosphere",
   bidirectional: "Bidirectional",
 };
 
