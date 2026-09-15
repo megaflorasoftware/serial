@@ -40,12 +40,9 @@ async function openAtmospherePane(page: Page) {
   }).toPass({ timeout: 20000, intervals: [500, 1000, 2000] });
   await connections.click();
   await expect(page.getByText("Manage your connected services")).toBeVisible();
-  // Every row navigates to its subpane; the status line names the state.
-  await page
-    .locator('[role="button"]')
-    .filter({ has: page.getByText("Atmosphere", { exact: true }) })
-    .last()
-    .click();
+  // Every row navigates to its subpane; its accessible name starts with
+  // the service name and carries the status line.
+  await page.getByRole("button", { name: /^Atmosphere/ }).click();
   await expect(page.getByText("Connect your Atmosphere account")).toBeVisible();
 }
 

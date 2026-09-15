@@ -123,11 +123,18 @@ export const saveSyncSettings = protectedProcedure
       }
     }
 
-    await saveAtprotoSyncSettings({
+    const saved = await saveAtprotoSyncSettings({
       userId: context.user.id,
       did: connection.did,
       preferences: input,
     });
+    if (!saved) {
+      // The connection was unlinked between the read and the write.
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message:
+          "Connect your Atmosphere account before changing sync settings.",
+      });
+    }
     return { saved: true as const, consentUrl: null };
   });
 

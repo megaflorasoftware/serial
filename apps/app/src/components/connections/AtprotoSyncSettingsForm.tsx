@@ -42,6 +42,9 @@ export function AtprotoSyncSettingsForm({
   const [importAsInactive, setImportAsInactive] = useState(
     savedPreferences.importAsInactive,
   );
+  // Stays busy through the navigation to the consent screen; a completed
+  // save clears through the refetch and the caller's remount.
+  const [redirecting, setRedirecting] = useState(false);
   const queryClient = useQueryClient();
 
   const saveMutation = useMutation(
@@ -50,6 +53,7 @@ export function AtprotoSyncSettingsForm({
         if (!result.saved) {
           // Nothing is saved yet: the authorization server's consent
           // screen is the confirmation, and the upgrade callback saves.
+          setRedirecting(true);
           window.location.assign(result.consentUrl);
           return;
         }
@@ -68,7 +72,7 @@ export function AtprotoSyncSettingsForm({
     method !== savedPreferences.method ||
     importAsInactive !== savedPreferences.importAsInactive;
   const needsConsent = syncMethodNeedsWriteScope(method) && !hasWriteScope;
-  const busy = saveMutation.isPending || saveMutation.isSuccess;
+  const busy = saveMutation.isPending || redirecting;
 
   return (
     <form
