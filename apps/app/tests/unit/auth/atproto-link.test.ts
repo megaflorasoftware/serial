@@ -411,6 +411,17 @@ describe("atproto consent upgrade", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    // The sign-in account row a link or sign-in left behind, with the
+    // identity-only grant it was created with.
+    await session.database.insert(account).values({
+      id: "acc-upgrade",
+      accountId: DID,
+      providerId: "atproto",
+      userId: "user-1",
+      scope: "atproto",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
   });
 
   afterEach(() => {
@@ -466,6 +477,7 @@ describe("atproto consent upgrade", () => {
   it("saves the pending settings once consent comes back for the same user", async () => {
     const saved = await completeAtprotoUpgrade({
       did: DID,
+      grantedScope: "atproto include:site.standard.authSocial",
       sessionUserId: "user-1",
       upgradeUserId: "user-1",
       pendingSyncPreferences: {
@@ -480,12 +492,21 @@ describe("atproto consent upgrade", () => {
       exportSubscriptions: true,
       importAsInactive: true,
     });
+    // The sign-in account row records the broader grant too, so a later
+    // reconnect that finds only that row re-requests the same scope.
+    const accountRow = await session.database
+      .select({ scope: account.scope })
+      .from(account)
+      .where(eq(account.accountId, DID))
+      .get();
+    expect(accountRow?.scope).toBe("atproto include:site.standard.authSocial");
   });
 
   it("rejects a callback whose state names a different user and saves nothing", async () => {
     await expect(
       completeAtprotoUpgrade({
         did: DID,
+        grantedScope: "atproto include:site.standard.authSocial",
         sessionUserId: "user-2",
         upgradeUserId: "user-1",
         pendingSyncPreferences: { method: "export", importAsInactive: false },
@@ -498,6 +519,7 @@ describe("atproto consent upgrade", () => {
     await expect(
       completeAtprotoUpgrade({
         did: DID,
+        grantedScope: "atproto include:site.standard.authSocial",
         sessionUserId: "user-1",
         upgradeUserId: "user-1",
         pendingSyncPreferences: null,
@@ -520,6 +542,7 @@ describe("atproto consent upgrade", () => {
     await expect(
       completeAtprotoUpgrade({
         did: OTHER_DID,
+        grantedScope: "atproto include:site.standard.authSocial",
         sessionUserId: "user-1",
         upgradeUserId: "user-1",
         pendingSyncPreferences: { method: "export", importAsInactive: false },

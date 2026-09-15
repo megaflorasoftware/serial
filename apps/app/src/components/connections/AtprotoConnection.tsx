@@ -117,7 +117,12 @@ function useAtprotoReconnect() {
  * the credentials are back.
  */
 export function AtprotoConnectionPane() {
-  const { data: status, isError, refetch } = useAtprotoConnectionStatus();
+  const {
+    data: status,
+    isError,
+    isFetching,
+    refetch,
+  } = useAtprotoConnectionStatus();
   const unlinkMutation = useAtprotoUnlink();
   const reconnectMutation = useAtprotoReconnect();
   // Either round trip leaves the page; neither action may start while the
@@ -128,7 +133,10 @@ export function AtprotoConnectionPane() {
   // a pane with nothing to show falls back to the retry card.
   if (!status) {
     return isError ? (
-      <AtprotoStatusUnavailable onRetry={() => void refetch()} />
+      <AtprotoStatusUnavailable
+        retrying={isFetching}
+        onRetry={() => void refetch()}
+      />
     ) : (
       <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
     );
@@ -143,14 +151,15 @@ export function AtprotoConnectionPane() {
     <div className="grid gap-6">
       <ConnectedAccountRow
         label={status.handle ?? "Connected"}
-        disconnecting={accountBusy}
+        disabled={accountBusy}
+        disconnecting={unlinkMutation.isPending}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
           status.needsReconnect
             ? () => reconnectMutation.mutate(undefined)
             : undefined
         }
-        reconnecting={accountBusy}
+        reconnecting={reconnectMutation.isPending}
       />
       <AtprotoSyncSettingsForm
         key={JSON.stringify(status.syncPreferences)}
@@ -163,14 +172,24 @@ export function AtprotoConnectionPane() {
 }
 
 /** The status request failed: say so and offer a retry, never a bare spinner. */
-function AtprotoStatusUnavailable({ onRetry }: { onRetry: () => void }) {
+function AtprotoStatusUnavailable({
+  retrying,
+  onRetry,
+}: {
+  retrying: boolean;
+  onRetry: () => void;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
       <span className="text-muted-foreground text-sm">
         Couldn&apos;t load your Atmosphere connection.
       </span>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        <RefreshCwIcon size={16} />
+      <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
+        {retrying ? (
+          <Loader2Icon className="animate-spin" size={16} />
+        ) : (
+          <RefreshCwIcon size={16} />
+        )}
         <span className="ml-1.5">Retry</span>
       </Button>
     </div>
