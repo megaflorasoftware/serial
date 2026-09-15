@@ -6,8 +6,8 @@ import {
   embedPlaceholder,
   escapeText,
   figure,
-  heading,
   image,
+  interactivePlaceholder,
   linkCard,
   list,
   paragraph,
@@ -15,14 +15,22 @@ import {
   taskListItem,
   voidElement,
 } from "./html";
-import { ConversionContext, textParagraph, unknownBlock } from "./shared";
-import { blobRefSchema, strongRefSchema } from "../lexicons";
-import { buildBlueskyPostUrl, buildBlueskyProfileUrl } from "../uris";
+import {
+  blockName,
+  blueskyPostCard,
+  ConversionContext,
+  richTextHeading,
+  richTextParagraph,
+  stringProperty,
+  unknownBlock,
+  type Block,
+} from "./shared";
+import { blobRefSchema } from "../lexicons";
+import { buildBlueskyProfileUrl, isDid } from "../uris";
 
 const PREFIX = "blog.pckt.block.";
 
-const blockSchema = z.object({ $type: z.string() }).passthrough();
-type PcktBlock = z.infer<typeof blockSchema>;
+const blockSchema = z.looseObject({ $type: z.string() });
 
 const containerSchema = z.object({ content: z.array(blockSchema) });
 
@@ -59,14 +67,25 @@ export const pcktBlobSchema = z.union([
   z.object({ items: z.array(blockSchema) }).transform((value) => value.items),
 ]);
 
-function renderInline(blocks: PcktBlock[], context: ConversionContext) {
-  return blocks
-    .map((block) => {
-      const text = richTextSchema.safeParse(block);
-      if (text.success) return renderRichText(text.data, context);
-      return renderBlock(block, context);
-    })
-    .join("");
+/** Text blocks inside cells and items render inline; anything else keeps its block markup. */
+function renderInline(blocks: Block[], context: ConversionContext) {
+  return context.nested(() =>
+    blocks
+      .map((block) => {
+        const text = richTextSchema.safeParse(block);
+        if (text.success && blockName(block, PREFIX) === "text") {
+          return renderRichText(text.data, context);
+        }
+        return renderBlock(block, context);
+      })
+      .join(""),
+  );
+}
+
+function renderBlocks(blocks: Block[], context: ConversionContext) {
+  return context.nested(() =>
+    blocks.map((block) => renderBlock(block, context)).join(""),
+  );
 }
 
 function renderImageAttrs(value: unknown, context: ConversionContext) {
@@ -89,49 +108,54 @@ function renderImageAttrs(value: unknown, context: ConversionContext) {
 }
 
 function renderListItems(
-  blocks: PcktBlock[],
+  blocks: Block[],
   ordered: boolean,
   start: number | undefined,
   context: ConversionContext,
 ) {
   const items = blocks.map((item) => {
     const parsed = containerSchema.safeParse(item);
-    if (!parsed.success) return element("li", undefined, "");
-    const inner = parsed.data.content
-      .map((child) => {
-        const text = richTextSchema.safeParse(child);
-        if (text.success && child.$type === `${PREFIX}text`) {
-          return renderRichText(text.data, context);
-        }
-        return renderBlock(child, context);
-      })
-      .join("");
-    return element("li", undefined, inner);
+    return element(
+      "li",
+      undefined,
+      parsed.success ? renderInline(parsed.data.content, context) : "",
+    );
   });
   return list(ordered, items, { start });
 }
 
-function renderBlock(block: PcktBlock, context: ConversionContext): string {
-  const type = block.$type.startsWith(PREFIX)
-    ? block.$type.slice(PREFIX.length)
-    : block.$type;
-  switch (type) {
-    case "text": {
-      const text = richTextSchema.safeParse(block);
-      return text.success ? textParagraph(text.data, context) : "";
-    }
-    case "heading": {
-      const text = richTextSchema.safeParse(block);
-      if (!text.success) return "";
-      const level = typeof block.level === "number" ? block.level : 2;
-      return heading(level, renderRichText(text.data, context));
-    }
+function renderTable(block: Block, context: ConversionContext) {
+  const parsed = tableSchema.safeParse(block);
+  if (!parsed.success) return "";
+  const span = (value: number | undefined) =>
+    value && value > 1 ? String(value) : undefined;
+  const rows = parsed.data.content.map((row) => {
+    const cells = row.content.map((cell) =>
+      element(
+        cell.$type === `${PREFIX}tableHeader` ? "th" : "td",
+        { colspan: span(cell.colspan), rowspan: span(cell.rowspan) },
+        renderInline(cell.content, context),
+      ),
+    );
+    return element("tr", undefined, cells.join(""));
+  });
+  return element(
+    "table",
+    undefined,
+    element("tbody", undefined, rows.join("")),
+  );
+}
+
+function renderBlock(block: Block, context: ConversionContext): string {
+  switch (blockName(block, PREFIX)) {
+    case "text":
+      return richTextParagraph(block, context);
+    case "heading":
+      return richTextHeading(block, context);
     case "blockquote": {
       const parsed = containerSchema.safeParse(block);
       if (!parsed.success) return "";
-      const inner = parsed.data.content
-        .map((child) => renderBlock(child, context))
-        .join("");
+      const inner = renderBlocks(parsed.data.content, context);
       return inner ? element("blockquote", undefined, inner) : "";
     }
     case "bulletList":
@@ -141,7 +165,7 @@ function renderBlock(block: PcktBlock, context: ConversionContext): string {
       const start = typeof block.start === "number" ? block.start : undefined;
       return renderListItems(
         parsed.data.content,
-        type === "orderedList",
+        blockName(block, PREFIX) === "orderedList",
         start,
         context,
       );
@@ -151,50 +175,21 @@ function renderBlock(block: PcktBlock, context: ConversionContext): string {
       if (!parsed.success) return "";
       const items = parsed.data.content.map((item) => {
         const inner = containerSchema.safeParse(item);
-        const checked = (item as { checked?: unknown }).checked === true;
         return taskListItem(
-          checked,
+          item.checked === true,
           inner.success ? renderInline(inner.data.content, context) : "",
         );
       });
       return list(false, items, { task: true });
     }
-    case "table": {
-      const parsed = tableSchema.safeParse(block);
-      if (!parsed.success) return "";
-      const rows = parsed.data.content.map((row) => {
-        const cells = row.content.map((cell) => {
-          const tag = cell.$type === `${PREFIX}tableHeader` ? "th" : "td";
-          return element(
-            tag,
-            {
-              colspan:
-                cell.colspan && cell.colspan > 1
-                  ? String(cell.colspan)
-                  : undefined,
-              rowspan:
-                cell.rowspan && cell.rowspan > 1
-                  ? String(cell.rowspan)
-                  : undefined,
-            },
-            renderInline(cell.content, context),
-          );
-        });
-        return element("tr", undefined, cells.join(""));
-      });
-      return element(
-        "table",
-        undefined,
-        element("tbody", undefined, rows.join("")),
-      );
+    case "table":
+      return renderTable(block, context);
+    case "codeBlock": {
+      const code = stringProperty(block, "plaintext");
+      return code === undefined
+        ? ""
+        : codeBlock(code, stringProperty(block, "language"));
     }
-    case "codeBlock":
-      return typeof block.plaintext === "string"
-        ? codeBlock(
-            block.plaintext,
-            typeof block.language === "string" ? block.language : undefined,
-          )
-        : "";
     case "hardBreak":
       return voidElement("br");
     case "horizontalRule":
@@ -202,35 +197,27 @@ function renderBlock(block: PcktBlock, context: ConversionContext): string {
     case "image":
       return renderImageAttrs(block.attrs, context);
     case "iframe": {
-      const url = typeof block.url === "string" ? block.url : undefined;
-      return url ? embedPlaceholder(url, url) : "";
+      const url = stringProperty(block, "url");
+      return url ? embedPlaceholder(url, url) : interactivePlaceholder(null);
     }
     case "website":
       return linkCard({
-        href: typeof block.src === "string" ? block.src : "",
-        title: typeof block.title === "string" ? block.title : undefined,
-        description:
-          typeof block.description === "string" ? block.description : undefined,
+        href: stringProperty(block, "src") ?? "",
+        title: stringProperty(block, "title"),
+        description: stringProperty(block, "description"),
         imageUrl:
-          safeSourceUrl(
-            typeof block.previewImage === "string"
-              ? block.previewImage
-              : undefined,
-          ) ?? undefined,
+          safeSourceUrl(stringProperty(block, "previewImage")) ?? undefined,
       });
-    case "blueskyEmbed": {
-      const ref = strongRefSchema.safeParse(block.postRef);
-      const href = ref.success ? buildBlueskyPostUrl(ref.data.uri) : null;
-      return href ? linkCard({ href, title: "View post on Bluesky" }) : "";
-    }
+    case "blueskyEmbed":
+      return blueskyPostCard(block.postRef);
     case "mention": {
-      if (typeof block.did !== "string") return "";
-      const handle =
-        typeof block.handle === "string" ? block.handle : block.did;
+      const did = stringProperty(block, "did");
+      if (!did || !isDid(did)) return "";
+      const handle = stringProperty(block, "handle") ?? did;
       return paragraph(
         element(
           "a",
-          { href: buildBlueskyProfileUrl(block.did) },
+          { href: buildBlueskyProfileUrl(did) },
           escapeText(`@${handle}`),
         ),
       );
@@ -243,7 +230,7 @@ function renderBlock(block: PcktBlock, context: ConversionContext): string {
   }
 }
 
-export function convertPcktItems(items: PcktBlock[], did: string) {
+export function convertPcktItems(items: Block[], did: string) {
   const context = new ConversionContext(did);
   const html = items.map((item) => renderBlock(item, context)).join("");
   return context.finish(html);

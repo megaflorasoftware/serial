@@ -5,7 +5,6 @@ import {
   element,
   embedPlaceholder,
   figure,
-  heading,
   image,
   interactivePlaceholder,
   linkCard,
@@ -15,59 +14,55 @@ import {
   voidElement,
 } from "./html";
 import {
+  blockName,
+  blueskyPostCard,
   ConversionContext,
-  textParagraph,
-  typeName,
+  richTextHeading,
+  richTextParagraph,
+  stringProperty,
   unknownBlock,
+  type Block,
 } from "./shared";
-import { blobRefSchema, strongRefSchema } from "../lexicons";
+import { blobRefSchema } from "../lexicons";
 import { sanitizeArticleHtml } from "../sanitize";
-import { buildBlueskyPostUrl, buildPdslsUrl } from "../uris";
+import { buildPdslsUrl } from "../uris";
 
 const PREFIX = "pub.leaflet.blocks.";
+
+const blockSchema = z.looseObject({ $type: z.string() });
 
 const imageSchema = z.object({
   image: blobRefSchema,
   alt: z.string().optional(),
 });
 
-const listItemSchema: z.ZodType<LeafletListItem> = z.lazy(() =>
-  z.object({
-    content: z.object({ $type: z.string() }).passthrough(),
-    checked: z.boolean().optional(),
-    children: z.array(listItemSchema).optional(),
-    orderedListChildren: z
-      .object({
-        children: z.array(listItemSchema),
-        startIndex: z.number().optional(),
-      })
-      .optional(),
-    unorderedListChildren: z
-      .object({ children: z.array(listItemSchema) })
-      .optional(),
-  }),
-);
-
-type LeafletListItem = {
-  content: { $type: string } & Record<string, unknown>;
-  checked?: boolean;
-  children?: LeafletListItem[];
-  orderedListChildren?: { children: LeafletListItem[]; startIndex?: number };
-  unorderedListChildren?: { children: LeafletListItem[] };
-};
-
-const listSchema = z.object({
-  children: z.array(listItemSchema),
-  startIndex: z.number().optional(),
+// List items are parsed one level at a time so nesting depth is bounded by the
+// context rather than by the schema.
+const listItemSchema = z.object({
+  content: blockSchema,
+  checked: z.boolean().optional(),
+  children: z.array(z.unknown()).optional(),
+  orderedListChildren: z
+    .object({
+      children: z.array(z.unknown()),
+      startIndex: z.number().optional(),
+    })
+    .optional(),
+  unorderedListChildren: z
+    .object({ children: z.array(z.unknown()) })
+    .optional(),
 });
 
-const linearBlockSchema = z.object({
-  block: z.object({ $type: z.string() }).passthrough(),
+type LeafletListItem = z.infer<typeof listItemSchema>;
+
+const listSchema = z.object({
+  children: z.array(z.unknown()),
+  startIndex: z.number().optional(),
 });
 
 const pageSchema = z.object({
   $type: z.string(),
-  blocks: z.array(linearBlockSchema).optional(),
+  blocks: z.array(z.object({ block: blockSchema })).optional(),
 });
 
 export const leafletContentSchema = z.object({
@@ -79,58 +74,69 @@ export type LeafletContent = z.infer<typeof leafletContentSchema>;
 
 const LINEAR_DOCUMENT_TYPE = "pub.leaflet.pages.linearDocument";
 
-function renderListItem(
+function renderListItemContent(
   item: LeafletListItem,
   context: ConversionContext,
-): string {
-  const contentType = typeName(item.content) ?? "";
-  let inner: string;
-  if (contentType === `${PREFIX}image`) {
-    inner = renderImage(item.content, context, false);
-  } else {
-    const text = richTextSchema.safeParse(item.content);
-    inner = text.success ? renderRichText(text.data, context) : "";
-    if (text.success && contentType === `${PREFIX}header`) {
-      inner = element("strong", undefined, inner);
-    }
-  }
+) {
+  const contentType = blockName(item.content, PREFIX);
+  if (contentType === "image") return renderImage(item.content, context, false);
+  const text = richTextSchema.safeParse(item.content);
+  if (!text.success) return "";
+  const inner = renderRichText(text.data, context);
+  return contentType === "header" ? element("strong", undefined, inner) : inner;
+}
 
-  let nested = "";
+function renderNestedList(
+  item: LeafletListItem,
+  ordered: boolean,
+  context: ConversionContext,
+) {
+  // Same-kind nesting through `children` takes precedence over the cross-kind
+  // fields when both are present.
   if (item.children && item.children.length > 0) {
-    nested = renderList(item.children, false, undefined, context);
-  } else if (item.orderedListChildren) {
-    nested = renderList(
+    return renderList(item.children, ordered, undefined, context);
+  }
+  if (item.orderedListChildren) {
+    return renderList(
       item.orderedListChildren.children,
       true,
       item.orderedListChildren.startIndex,
       context,
     );
-  } else if (item.unorderedListChildren) {
-    nested = renderList(
+  }
+  if (item.unorderedListChildren) {
+    return renderList(
       item.unorderedListChildren.children,
       false,
       undefined,
       context,
     );
   }
-
-  if (item.checked !== undefined)
-    return taskListItem(item.checked, inner + nested);
-  return element("li", undefined, inner + nested);
+  return "";
 }
 
 function renderList(
-  items: LeafletListItem[],
+  items: unknown[],
   ordered: boolean,
   start: number | undefined,
   context: ConversionContext,
 ): string {
-  const task = items.some((item) => item.checked !== undefined);
-  return list(
-    ordered,
-    items.map((item) => renderListItem(item, context)),
-    { start, task },
-  );
+  return context.nested(() => {
+    const parsed = items
+      .map((item) => listItemSchema.safeParse(item))
+      .filter((result) => result.success)
+      .map((result) => result.data);
+    const task = parsed.some((item) => item.checked !== undefined);
+    const rendered = parsed.map((item) => {
+      const inner =
+        renderListItemContent(item, context) +
+        renderNestedList(item, ordered, context);
+      return item.checked !== undefined
+        ? taskListItem(item.checked, inner)
+        : element("li", undefined, inner);
+    });
+    return list(ordered, rendered, { start, task });
+  });
 }
 
 function renderImage(
@@ -146,29 +152,18 @@ function renderImage(
   return wrap ? figure(img, undefined) : img;
 }
 
+/** Inline HTML keeps only what the article schema permits; nothing left means a placeholder. */
 function renderHtmlBlock(html: string) {
   const sanitized = sanitizeArticleHtml(html).trim();
   return sanitized || interactivePlaceholder(null);
 }
 
-function renderBlock(
-  block: Record<string, unknown> & { $type: string },
-  context: ConversionContext,
-): string {
-  const type = block.$type.startsWith(PREFIX)
-    ? block.$type.slice(PREFIX.length)
-    : block.$type;
-  switch (type) {
-    case "text": {
-      const text = richTextSchema.safeParse(block);
-      return text.success ? textParagraph(text.data, context) : "";
-    }
-    case "header": {
-      const text = richTextSchema.safeParse(block);
-      if (!text.success) return "";
-      const level = typeof block.level === "number" ? block.level : 2;
-      return heading(level, renderRichText(text.data, context));
-    }
+function renderBlock(block: Block, context: ConversionContext): string {
+  switch (blockName(block, PREFIX)) {
+    case "text":
+      return richTextParagraph(block, context);
+    case "header":
+      return richTextHeading(block, context);
     case "blockquote": {
       const text = richTextSchema.safeParse(block);
       if (!text.success) return "";
@@ -193,29 +188,29 @@ function renderBlock(
       if (!parsed.success) return "";
       return renderList(
         parsed.data.children,
-        type === "orderedList",
+        blockName(block, PREFIX) === "orderedList",
         parsed.data.startIndex,
         context,
       );
     }
-    case "code":
-      return typeof block.plaintext === "string"
-        ? codeBlock(
-            block.plaintext,
-            typeof block.language === "string" ? block.language : undefined,
-          )
-        : "";
-    case "math":
-      return typeof block.tex === "string" ? codeBlock(block.tex, "tex") : "";
+    case "code": {
+      const code = stringProperty(block, "plaintext");
+      return code === undefined
+        ? ""
+        : codeBlock(code, stringProperty(block, "language"));
+    }
+    case "math": {
+      const tex = stringProperty(block, "tex");
+      return tex === undefined ? "" : codeBlock(tex, "tex");
+    }
     case "horizontalRule":
       return voidElement("hr");
     case "website": {
       const preview = blobRefSchema.safeParse(block.previewImage);
       return linkCard({
-        href: typeof block.src === "string" ? block.src : "",
-        title: typeof block.title === "string" ? block.title : undefined,
-        description:
-          typeof block.description === "string" ? block.description : undefined,
+        href: stringProperty(block, "src") ?? "",
+        title: stringProperty(block, "title"),
+        description: stringProperty(block, "description"),
         imageUrl: preview.success
           ? context.imageUrl(preview.data.ref.$link)
           : undefined,
@@ -223,35 +218,35 @@ function renderBlock(
     }
     case "button":
       return linkCard({
-        href: typeof block.url === "string" ? block.url : "",
-        title: typeof block.text === "string" ? block.text : undefined,
+        href: stringProperty(block, "url") ?? "",
+        title: stringProperty(block, "text"),
       });
-    case "bskyPost": {
-      const ref = strongRefSchema.safeParse(block.postRef);
-      const href = ref.success ? buildBlueskyPostUrl(ref.data.uri) : null;
-      return href ? linkCard({ href, title: "View post on Bluesky" }) : "";
-    }
+    case "bskyPost":
+      return blueskyPostCard(block.postRef);
     case "standardSitePost":
     case "standardSitePublication": {
-      if (typeof block.uri !== "string") return "";
+      const uri = stringProperty(block, "uri");
+      if (!uri) return "";
       return linkCard({
-        href: buildPdslsUrl(block.uri),
+        href: buildPdslsUrl(uri),
         title:
-          type === "standardSitePost"
+          blockName(block, PREFIX) === "standardSitePost"
             ? "Embedded document"
             : "Embedded publication",
-        description: block.uri,
+        description: uri,
       });
     }
     case "iframe": {
-      if (typeof block.html === "string" && block.html.trim()) {
-        return renderHtmlBlock(block.html);
-      }
-      const url = typeof block.url === "string" ? block.url : undefined;
-      return url ? embedPlaceholder(url, url) : "";
+      // The deprecated inline `html` takes precedence over `url`.
+      const html = stringProperty(block, "html");
+      if (html?.trim()) return renderHtmlBlock(html);
+      const url = stringProperty(block, "url");
+      return url ? embedPlaceholder(url, url) : interactivePlaceholder(null);
     }
-    case "html":
-      return typeof block.html === "string" ? renderHtmlBlock(block.html) : "";
+    case "html": {
+      const html = stringProperty(block, "html");
+      return html === undefined ? "" : renderHtmlBlock(html);
+    }
     case "page":
     case "poll":
     case "postsList":

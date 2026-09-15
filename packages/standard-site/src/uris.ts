@@ -6,8 +6,13 @@ export type AtUriParts = {
   rkey: string;
 };
 
+const DID_PATTERN = /^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$/;
 const AT_URI_PATTERN =
   /^at:\/\/(did:[a-z0-9]+:[A-Za-z0-9._:%-]+)\/([^/]+)\/([^/?#]+)$/;
+
+export function isDid(value: string) {
+  return DID_PATTERN.test(value);
+}
 
 export function parseAtUri(uri: string): AtUriParts | null {
   const match = AT_URI_PATTERN.exec(uri);
@@ -59,11 +64,15 @@ function trimTrailingSlashes(value: string) {
   return value.replace(/\/+$/, "");
 }
 
-export function normalizePublicationUrl(url: string) {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`Unsupported publication URL protocol: ${parsed.protocol}`);
+/** Null when the publication URL is not an absolute http(s) URL. */
+export function normalizePublicationUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
   }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
   parsed.hash = "";
   parsed.search = "";
   return trimTrailingSlashes(parsed.toString());
@@ -71,7 +80,8 @@ export function normalizePublicationUrl(url: string) {
 
 /**
  * The canonical document URL is the publication URL plus the document path. A
- * document without a path has no canonical URL; callers store it under its at-uri.
+ * document without a path, or a publication without a usable URL, has no
+ * canonical URL; callers fall back to the RSS link or the at-uri.
  */
 export function buildCanonicalDocumentUrl(
   publicationUrl: string,
@@ -79,6 +89,7 @@ export function buildCanonicalDocumentUrl(
 ): string | null {
   if (!documentPath) return null;
   const base = normalizePublicationUrl(publicationUrl);
+  if (!base) return null;
   const path = documentPath.startsWith("/") ? documentPath : `/${documentPath}`;
   return `${base}${path}`;
 }

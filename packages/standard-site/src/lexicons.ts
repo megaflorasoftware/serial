@@ -48,62 +48,60 @@ const contributorSchema = z.object({
   displayName: z.string().optional(),
 });
 
-const selfLabelsSchema = z
-  .object({ values: z.array(z.object({ val: z.string() })).optional() })
-  .passthrough();
+const selfLabelsSchema = z.looseObject({
+  values: z.array(z.object({ val: z.string() })).optional(),
+});
 
-export const publicationRecordSchema = z
-  .object({
-    $type: z.literal(STANDARD_SITE_COLLECTIONS.publication).optional(),
-    url: z.string(),
-    name: z.string(),
-    description: z.string().optional(),
-    icon: blobRefSchema.optional(),
-    labels: selfLabelsSchema.optional(),
-    preferences: z
-      .object({ showInDiscover: z.boolean().optional() })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
+export const publicationRecordSchema = z.looseObject({
+  $type: z.literal(STANDARD_SITE_COLLECTIONS.publication).optional(),
+  url: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  icon: blobRefSchema.optional(),
+  labels: selfLabelsSchema.optional(),
+  preferences: z
+    .looseObject({ showInDiscover: z.boolean().optional() })
+    .optional(),
+});
 
 export type PublicationRecord = z.infer<typeof publicationRecordSchema>;
 
 // The content union is open; the converters narrow it by $type.
-const documentContentSchema = z.object({ $type: z.string() }).passthrough();
+const documentContentSchema = z.looseObject({ $type: z.string() });
 
-export const documentRecordSchema = z
-  .object({
-    $type: z.literal(STANDARD_SITE_COLLECTIONS.document).optional(),
-    site: z.string(),
-    title: z.string(),
-    publishedAt: z.string(),
-    path: z.string().optional(),
-    description: z.string().optional(),
-    content: documentContentSchema.optional(),
-    textContent: z.string().optional(),
-    coverImage: blobRefSchema.optional(),
-    bskyPostRef: strongRefSchema.optional(),
-    tags: z.array(z.string()).optional(),
-    contributors: z.array(contributorSchema).optional(),
-    updatedAt: z.string().optional(),
-    labels: selfLabelsSchema.optional(),
-  })
-  .passthrough();
+export const documentRecordSchema = z.looseObject({
+  $type: z.literal(STANDARD_SITE_COLLECTIONS.document).optional(),
+  site: z.string(),
+  title: z.string(),
+  publishedAt: z.string(),
+  path: z.string().optional(),
+  description: z.string().optional(),
+  content: documentContentSchema.optional(),
+  textContent: z.string().optional(),
+  coverImage: blobRefSchema.optional(),
+  bskyPostRef: strongRefSchema.optional(),
+  tags: z.array(z.string()).optional(),
+  contributors: z.array(contributorSchema).optional(),
+  updatedAt: z.string().optional(),
+  labels: selfLabelsSchema.optional(),
+});
 
 export type DocumentRecord = z.infer<typeof documentRecordSchema>;
 export type DocumentContributor = z.infer<typeof contributorSchema>;
 
-export const subscriptionRecordSchema = z
-  .object({
-    $type: z.literal(STANDARD_SITE_COLLECTIONS.subscription).optional(),
-    publication: z.string(),
-    createdAt: z.string().optional(),
-  })
-  .passthrough();
+export const subscriptionRecordSchema = z.looseObject({
+  $type: z.literal(STANDARD_SITE_COLLECTIONS.subscription).optional(),
+  publication: z.string(),
+  createdAt: z.string().optional(),
+});
 
 export type SubscriptionRecord = z.infer<typeof subscriptionRecordSchema>;
 
+/**
+ * One entry of a `com.atproto.repo.listRecords` page (or a `getRecord` response
+ * that carries its `cid`). The cid is required because the Subscription mirror
+ * and edit detection both key on it.
+ */
 export const listedRecordSchema = z.object({
   uri: z.string(),
   cid: z.string(),

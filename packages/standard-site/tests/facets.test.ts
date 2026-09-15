@@ -84,8 +84,109 @@ describe("renderRichText", () => {
         ],
       }),
     ).toBe(
-      '<a href="https://a.test/?q=1&r=2">link</a> <a href="https://b.test/">web</a> <a href="https://bsky.app/profile/did:plc:abc">did</a> <a href="https://c.test/">at</a> <u>u</u> <mark>m</mark> <del>s</del> <code>c</code> h',
+      '<a href="https://a.test/?q=1&#x26;r=2">link</a> <a href="https://b.test/">web</a> <a href="https://bsky.app/profile/did:plc:abc">did</a> <a href="https://c.test/">at</a> <u>u</u> <mark>m</mark> <del>s</del> <code>c</code> h',
     );
+  });
+
+  it("keeps mailto links", () => {
+    expect(
+      renderRichText({
+        plaintext: "write",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 5 },
+            features: [{ $type: "x#link", uri: "mailto:a@b.test" }],
+          },
+        ],
+      }),
+    ).toBe('<a href="mailto:a@b.test">write</a>');
+  });
+
+  it("escapes attribute values and rejects malformed dids", () => {
+    const plaintext = "one two";
+    expect(
+      renderRichText({
+        plaintext,
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 3 },
+            features: [{ $type: "x#link", uri: "https://a.test/?q=\"'<" }],
+          },
+          {
+            index: { byteStart: 4, byteEnd: 7 },
+            features: [{ $type: "x#mention", did: 'did:plc:x" onclick="x()' }],
+          },
+        ],
+      }),
+    ).toBe('<a href="https://a.test/?q=%22%27%3C">one</a> two');
+  });
+
+  it("keeps only the outermost link when link facets overlap", () => {
+    expect(
+      renderRichText({
+        plaintext: "abcdef",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 4 },
+            features: [{ $type: "x#link", uri: "https://a.test" }],
+          },
+          {
+            index: { byteStart: 2, byteEnd: 6 },
+            features: [{ $type: "x#link", uri: "https://b.test" }],
+          },
+        ],
+      }),
+    ).toBe(
+      '<a href="https://a.test/">ab</a><a href="https://a.test/">cd</a><a href="https://b.test/">ef</a>',
+    );
+  });
+
+  it("emits a footnote marker once at the end of the facet", () => {
+    const context = { footnotes: [] };
+    expect(
+      renderRichText(
+        {
+          plaintext: "abcdef",
+          facets: [
+            {
+              index: { byteStart: 0, byteEnd: 6 },
+              features: [
+                {
+                  $type: "x#footnote",
+                  footnoteId: "n1",
+                  contentPlaintext: "note",
+                },
+              ],
+            },
+            {
+              index: { byteStart: 2, byteEnd: 4 },
+              features: [{ $type: "x#bold" }],
+            },
+          ],
+        },
+        context,
+      ),
+    ).toBe("ab<strong>cd</strong>ef<sup>[1]</sup>");
+    expect(context.footnotes).toHaveLength(1);
+  });
+
+  it("snaps byte offsets that split a code point forward to the next one", () => {
+    // "é" occupies bytes 1 and 2, so an offset of 2 moves forward to 3.
+    expect(
+      renderRichText({
+        plaintext: "héllo",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 2 },
+            features: [{ $type: "x#bold" }],
+          },
+          {
+            index: { byteStart: 2, byteEnd: 4 },
+            features: [{ $type: "x#italic" }],
+          },
+        ],
+      }),
+    ).toBe("<strong>hé</strong><em>l</em>lo");
   });
 
   it("drops unsafe links and out-of-range facets", () => {

@@ -6,7 +6,6 @@ import {
   embedPlaceholder,
   escapeText,
   figure,
-  heading,
   image,
   linkCard,
   list,
@@ -14,28 +13,32 @@ import {
   taskListItem,
   voidElement,
 } from "./html";
-import { ConversionContext, textParagraph, unknownBlock } from "./shared";
-import { blobRefSchema, strongRefSchema } from "../lexicons";
-import { buildBlueskyPostUrl } from "../uris";
+import {
+  blockName,
+  blueskyPostCard,
+  ConversionContext,
+  richTextHeading,
+  richTextParagraph,
+  stringProperty,
+  unknownBlock,
+  type Block,
+} from "./shared";
+import { blobRefSchema } from "../lexicons";
 
 const PREFIX = "app.offprint.block.";
 
-const listItemSchema: z.ZodType<OffprintListItem> = z.lazy(() =>
-  z.object({
-    content: richTextSchema.optional(),
-    checked: z.boolean().optional(),
-    children: z.array(listItemSchema).optional(),
-  }),
-);
+const blockSchema = z.looseObject({ $type: z.string() });
 
-type OffprintListItem = {
-  content?: z.infer<typeof richTextSchema>;
-  checked?: boolean;
-  children?: OffprintListItem[];
-};
+// List items are parsed one level at a time so nesting depth is bounded by the
+// context rather than by the schema.
+const listItemSchema = z.object({
+  content: richTextSchema.optional(),
+  checked: z.boolean().optional(),
+  children: z.array(z.unknown()).optional(),
+});
 
 const listSchema = z.object({
-  children: z.array(listItemSchema),
+  children: z.array(z.unknown()),
   start: z.number().optional(),
 });
 
@@ -53,29 +56,40 @@ const gridImageSchema = z.object({
   alt: z.string().optional(),
 });
 
+const imageSetSchema = z.object({
+  images: z.array(gridImageSchema),
+  caption: z.string().optional(),
+});
+
 export const offprintContentSchema = z.object({
   $type: z.literal("app.offprint.content"),
-  items: z.array(z.object({ $type: z.string() }).passthrough()),
+  items: z.array(blockSchema),
 });
 
 export type OffprintContent = z.infer<typeof offprintContentSchema>;
 
 function renderListItems(
-  items: OffprintListItem[],
+  items: unknown[],
   ordered: boolean,
   start: number | undefined,
   context: ConversionContext,
   task: boolean,
 ): string {
-  const rendered = items.map((item) => {
-    const inner = item.content ? renderRichText(item.content, context) : "";
-    const nested = item.children?.length
-      ? renderListItems(item.children, ordered, undefined, context, task)
-      : "";
-    if (task) return taskListItem(item.checked === true, inner + nested);
-    return element("li", undefined, inner + nested);
+  return context.nested(() => {
+    const rendered = items
+      .map((item) => listItemSchema.safeParse(item))
+      .filter((result) => result.success)
+      .map(({ data: item }) => {
+        const inner = item.content ? renderRichText(item.content, context) : "";
+        const nested = item.children?.length
+          ? renderListItems(item.children, ordered, undefined, context, task)
+          : "";
+        return task
+          ? taskListItem(item.checked === true, inner + nested)
+          : element("li", undefined, inner + nested);
+      });
+    return list(ordered, rendered, { start, task });
   });
-  return list(ordered, rendered, { start, task });
 }
 
 function renderImage(value: unknown, context: ConversionContext) {
@@ -92,16 +106,11 @@ function renderImage(value: unknown, context: ConversionContext) {
   return figure(image(url, parsed.data.alt), caption);
 }
 
+/** Grids, carousels, and diffs all become one figure holding a run of images. */
 function renderImageSet(value: unknown, context: ConversionContext) {
-  const images = z
-    .array(gridImageSchema)
-    .safeParse((value as { images?: unknown }).images);
-  if (!images.success) return "";
-  const caption =
-    typeof (value as { caption?: unknown }).caption === "string"
-      ? escapeText((value as { caption: string }).caption)
-      : undefined;
-  const rendered = images.data
+  const parsed = imageSetSchema.safeParse(value);
+  if (!parsed.success) return "";
+  const rendered = parsed.data.images
     .map((entry) => {
       const blob = entry.blob ?? entry.image;
       if (!blob) return "";
@@ -110,49 +119,35 @@ function renderImageSet(value: unknown, context: ConversionContext) {
       return image(url, entry.alt);
     })
     .join("");
-  return rendered ? figure(rendered, caption) : "";
+  if (!rendered) return "";
+  const caption = parsed.data.caption?.trim();
+  return figure(rendered, caption ? escapeText(caption) : undefined);
 }
 
-function renderBlock(
-  block: Record<string, unknown> & { $type: string },
-  context: ConversionContext,
-): string {
-  const type = block.$type.startsWith(PREFIX)
-    ? block.$type.slice(PREFIX.length)
-    : block.$type;
-  switch (type) {
-    case "text": {
-      const text = richTextSchema.safeParse(block);
-      return text.success ? textParagraph(text.data, context) : "";
-    }
-    case "heading": {
-      const text = richTextSchema.safeParse(block);
-      if (!text.success) return "";
-      const level = typeof block.level === "number" ? block.level : 2;
-      return heading(level, renderRichText(text.data, context));
-    }
+function renderBlock(block: Block, context: ConversionContext): string {
+  switch (blockName(block, PREFIX)) {
+    case "text":
+      return richTextParagraph(block, context);
+    case "heading":
+      return richTextHeading(block, context);
     case "blockquote": {
-      const items = z
-        .array(z.object({ $type: z.string() }).passthrough())
-        .safeParse(block.content);
+      const items = z.array(blockSchema).safeParse(block.content);
       if (!items.success) return "";
-      const inner = items.data
-        .map((item) => renderBlock(item, context))
-        .join("");
+      const inner = context.nested(() =>
+        items.data.map((item) => renderBlock(item, context)).join(""),
+      );
       return inner ? element("blockquote", undefined, inner) : "";
     }
     case "callout": {
       const text = richTextSchema.safeParse(block);
       if (!text.success) return "";
-      const emoji =
-        typeof block.emoji === "string" && block.emoji
-          ? `${escapeText(block.emoji)} `
-          : "";
+      const emoji = stringProperty(block, "emoji");
+      const prefix = emoji ? `${escapeText(emoji)} ` : "";
       context.noteParagraph(text.data.plaintext);
       return element(
         "blockquote",
         undefined,
-        paragraph(emoji + renderRichText(text.data, context)),
+        paragraph(prefix + renderRichText(text.data, context)),
       );
     }
     case "bulletList":
@@ -161,7 +156,7 @@ function renderBlock(
       if (!parsed.success) return "";
       return renderListItems(
         parsed.data.children,
-        type === "orderedList",
+        blockName(block, PREFIX) === "orderedList",
         parsed.data.start,
         context,
         false,
@@ -178,15 +173,16 @@ function renderBlock(
         true,
       );
     }
-    case "codeBlock":
-      return typeof block.code === "string"
-        ? codeBlock(
-            block.code,
-            typeof block.language === "string" ? block.language : undefined,
-          )
-        : "";
-    case "mathBlock":
-      return typeof block.tex === "string" ? codeBlock(block.tex, "tex") : "";
+    case "codeBlock": {
+      const code = stringProperty(block, "code");
+      return code === undefined
+        ? ""
+        : codeBlock(code, stringProperty(block, "language"));
+    }
+    case "mathBlock": {
+      const tex = stringProperty(block, "tex");
+      return tex === undefined ? "" : codeBlock(tex, "tex");
+    }
     case "horizontalRule":
       return voidElement("hr");
     case "image":
@@ -198,10 +194,9 @@ function renderBlock(
     case "webBookmark": {
       const preview = blobRefSchema.safeParse(block.preview);
       return linkCard({
-        href: typeof block.href === "string" ? block.href : "",
-        title: typeof block.title === "string" ? block.title : undefined,
-        description:
-          typeof block.description === "string" ? block.description : undefined,
+        href: stringProperty(block, "href") ?? "",
+        title: stringProperty(block, "title"),
+        description: stringProperty(block, "description"),
         imageUrl: preview.success
           ? context.imageUrl(preview.data.ref.$link)
           : undefined,
@@ -209,21 +204,17 @@ function renderBlock(
     }
     case "webEmbed":
       return embedPlaceholder(
-        typeof block.embedUrl === "string" ? block.embedUrl : undefined,
-        typeof block.href === "string" ? block.href : undefined,
+        stringProperty(block, "embedUrl"),
+        stringProperty(block, "href"),
       );
     case "button":
       return linkCard({
-        href: typeof block.href === "string" ? block.href : "",
-        title: typeof block.text === "string" ? block.text : undefined,
-        description:
-          typeof block.caption === "string" ? block.caption : undefined,
+        href: stringProperty(block, "href") ?? "",
+        title: stringProperty(block, "text"),
+        description: stringProperty(block, "caption"),
       });
-    case "blueskyPost": {
-      const ref = strongRefSchema.safeParse(block.post);
-      const href = ref.success ? buildBlueskyPostUrl(ref.data.uri) : null;
-      return href ? linkCard({ href, title: "View post on Bluesky" }) : "";
-    }
+    case "blueskyPost":
+      return blueskyPostCard(block.post);
     case "component":
       return "";
     default:

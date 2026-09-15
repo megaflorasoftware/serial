@@ -111,6 +111,20 @@ describe("uris", () => {
     ).toBeNull();
   });
 
+  it("matches a real legacy leaflet document to its publication", () => {
+    const { record } = loadDocumentFixture("leaflet-legacy-site");
+    const publications = readFixture("publications") as Array<{ uri: string }>;
+    const conferenceNews = publications.find((entry) =>
+      entry.uri.endsWith("/3m367bemk3c2i"),
+    );
+    expect(record.value.site).toBe(
+      "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/pub.leaflet.publication/3m367bemk3c2i",
+    );
+    expect(
+      documentBelongsToPublication(record.value.site, conferenceNews!.uri),
+    ).toBe(true);
+  });
+
   it("accepts legacy leaflet publication sites for the same rkey", () => {
     const publication =
       "at://did:plc:abc/site.standard.publication/3m367bemk3c2i";
@@ -139,6 +153,11 @@ describe("uris", () => {
     expect(normalizePublicationUrl("https://news.atmosphereconf.org/")).toBe(
       "https://news.atmosphereconf.org",
     );
+    expect(normalizePublicationUrl("news.atmosphereconf.org")).toBeNull();
+    expect(normalizePublicationUrl("ftp://news.atmosphereconf.org")).toBeNull();
+    expect(
+      buildCanonicalDocumentUrl("news.atmosphereconf.org", "/post"),
+    ).toBeNull();
     expect(
       buildCanonicalDocumentUrl(
         "https://news.atmosphereconf.org/",

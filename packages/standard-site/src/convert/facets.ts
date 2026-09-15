@@ -1,6 +1,13 @@
 import { z } from "zod";
-import { anchor, element, escapeText, safeLinkUrl } from "./html";
-import { buildBlueskyProfileUrl } from "../uris";
+import {
+  closeTag,
+  element,
+  escapeText,
+  openTag,
+  safeLinkUrl,
+  type Attributes,
+} from "./html";
+import { buildBlueskyProfileUrl, isDid } from "../uris";
 
 /**
  * The three platforms share one rich-text model: plaintext plus byte-indexed facets
@@ -8,8 +15,8 @@ import { buildBlueskyProfileUrl } from "../uris";
  * in their NSID prefix, so features are matched on the fragment after `#`.
  */
 export const facetSchema = z.object({
-  index: z.object({ byteStart: z.number(), byteEnd: z.number() }),
-  features: z.array(z.object({ $type: z.string() }).passthrough()),
+  index: z.object({ byteStart: z.int(), byteEnd: z.int() }),
+  features: z.array(z.looseObject({ $type: z.string() })),
 });
 
 export type Facet = z.infer<typeof facetSchema>;
@@ -39,52 +46,58 @@ function stringField(feature: Feature, name: string) {
   return typeof value === "string" ? value : undefined;
 }
 
-type Wrapper = { open: string; close: string };
+/**
+ * How one feature renders: an inline element wrapping the facet's text, a marker
+ * appended once where the facet ends, or both.
+ */
+type Wrapper = {
+  tag?: string;
+  attributes?: Attributes;
+  marker?: string;
+};
+
+function inlineTag(tag: string): Wrapper {
+  return { tag };
+}
+
+function link(href: string | null): Wrapper | null {
+  return href ? { tag: "a", attributes: { href } } : null;
+}
 
 function wrapperFor(
   feature: Feature,
   context: FacetRenderContext,
 ): Wrapper | null {
-  const name = featureName(feature);
-  switch (name) {
+  switch (featureName(feature)) {
     case "bold":
-      return { open: "<strong>", close: "</strong>" };
+      return inlineTag("strong");
     case "italic":
-      return { open: "<em>", close: "</em>" };
+      return inlineTag("em");
     case "code":
-      return { open: "<code>", close: "</code>" };
+      return inlineTag("code");
     case "strikethrough":
-      return { open: "<del>", close: "</del>" };
+      return inlineTag("del");
     case "underline":
-      return { open: "<u>", close: "</u>" };
+      return inlineTag("u");
     case "highlight":
-      return { open: "<mark>", close: "</mark>" };
+      return inlineTag("mark");
     case "link":
-    case "webMention": {
-      const href = safeLinkUrl(stringField(feature, "uri"));
-      return href ? { open: `<a href="${href}">`, close: "</a>" } : null;
-    }
+    case "webMention":
+      return link(safeLinkUrl(stringField(feature, "uri")));
     case "mention":
     case "didMention": {
       const did = stringField(feature, "did");
-      if (!did) return null;
-      return {
-        open: `<a href="${buildBlueskyProfileUrl(did)}">`,
-        close: "</a>",
-      };
+      return did && isDid(did) ? link(buildBlueskyProfileUrl(did)) : null;
     }
-    case "atMention": {
-      const href = safeLinkUrl(stringField(feature, "href"));
-      return href ? { open: `<a href="${href}">`, close: "</a>" } : null;
-    }
+    case "atMention":
+      return link(safeLinkUrl(stringField(feature, "href")));
     case "footnote": {
       const text = stringField(feature, "contentPlaintext");
       if (text === undefined) return null;
       const id =
         stringField(feature, "footnoteId") ??
         String(context.footnotes.length + 1);
-      const contentFacets = feature.contentFacets;
-      const facets = z.array(facetSchema).safeParse(contentFacets);
+      const facets = z.array(facetSchema).safeParse(feature.contentFacets);
       context.footnotes.push({
         id,
         text: {
@@ -92,15 +105,63 @@ function wrapperFor(
           facets: facets.success ? facets.data : undefined,
         },
       });
-      const marker = element("sup", undefined, `[${context.footnotes.length}]`);
-      return { open: "", close: marker };
+      return {
+        marker: element("sup", undefined, `[${context.footnotes.length}]`),
+      };
     }
     default:
       return null;
   }
 }
 
-type Boundary = { offset: number; open: Wrapper[]; close: Wrapper[] };
+function isContinuationByte(byte: number | undefined) {
+  return byte !== undefined && (byte & 0xc0) === 0x80;
+}
+
+/** Moves a byte offset forward to the start of the next UTF-8 code point. */
+function snapToCodePoint(bytes: Uint8Array, offset: number) {
+  let snapped = Math.min(Math.max(offset, 0), bytes.length);
+  while (snapped < bytes.length && isContinuationByte(bytes[snapped])) {
+    snapped += 1;
+  }
+  return snapped;
+}
+
+type ResolvedFacet = { start: number; end: number; wrappers: Wrapper[] };
+
+function resolveFacets(
+  facets: Facet[],
+  bytes: Uint8Array,
+  context: FacetRenderContext,
+): ResolvedFacet[] {
+  return facets
+    .map((facet) => ({
+      start: snapToCodePoint(bytes, facet.index.byteStart),
+      end: snapToCodePoint(bytes, facet.index.byteEnd),
+      features: facet.features,
+    }))
+    .filter((facet) => facet.end > facet.start)
+    .map(({ start, end, features }) => ({
+      start,
+      end,
+      wrappers: features
+        .map((feature) => wrapperFor(feature, context))
+        .filter((wrapper): wrapper is Wrapper => wrapper !== null),
+    }))
+    .filter((facet) => facet.wrappers.length > 0)
+    .sort((left, right) => left.start - right.start || right.end - left.end);
+}
+
+/** Nested anchors are invalid HTML, so only the outermost link wraps a segment. */
+function withoutNestedAnchors(wrappers: Wrapper[]) {
+  let seenAnchor = false;
+  return wrappers.filter((wrapper) => {
+    if (wrapper.tag !== "a") return true;
+    if (seenAnchor) return false;
+    seenAnchor = true;
+    return true;
+  });
+}
 
 /**
  * Renders facets as nested inline elements. Facets are byte-indexed, so the
@@ -112,24 +173,7 @@ export function renderRichText(
   context: FacetRenderContext = { footnotes: [] },
 ) {
   const bytes = new TextEncoder().encode(text.plaintext);
-  const decoder = new TextDecoder();
-  const facets = (text.facets ?? [])
-    .filter(
-      (facet) =>
-        facet.index.byteStart >= 0 &&
-        facet.index.byteEnd > facet.index.byteStart &&
-        facet.index.byteStart < bytes.length,
-    )
-    .map((facet) => ({
-      start: facet.index.byteStart,
-      end: Math.min(facet.index.byteEnd, bytes.length),
-      wrappers: facet.features
-        .map((feature) => wrapperFor(feature, context))
-        .filter((wrapper): wrapper is Wrapper => wrapper !== null),
-    }))
-    .filter((facet) => facet.wrappers.length > 0)
-    .sort((left, right) => left.start - right.start || right.end - left.end);
-
+  const facets = resolveFacets(text.facets ?? [], bytes, context);
   if (facets.length === 0) return escapeText(text.plaintext);
 
   const boundaries = new Set<number>([0, bytes.length]);
@@ -138,6 +182,7 @@ export function renderRichText(
     boundaries.add(facet.end);
   }
   const offsets = [...boundaries].sort((left, right) => left - right);
+  const decoder = new TextDecoder();
 
   let html = "";
   for (let index = 0; index < offsets.length - 1; index += 1) {
@@ -146,15 +191,28 @@ export function renderRichText(
     const active = facets.filter(
       (facet) => facet.start <= from && facet.end >= to,
     );
-    const segment = escapeText(decoder.decode(bytes.subarray(from, to)));
-    const wrappers = active.flatMap((facet) => facet.wrappers);
+    const wrappers = withoutNestedAnchors(
+      active.flatMap((facet) => facet.wrappers),
+    );
+    const tagged = wrappers.filter(
+      (wrapper): wrapper is Wrapper & { tag: string } => !!wrapper.tag,
+    );
+    const markers = active
+      .filter((facet) => facet.end === to)
+      .flatMap((facet) => facet.wrappers)
+      .map((wrapper) => wrapper.marker ?? "")
+      .join("");
+
     html +=
-      wrappers.map((wrapper) => wrapper.open).join("") +
-      segment +
-      [...wrappers]
+      tagged
+        .map((wrapper) => openTag(wrapper.tag, wrapper.attributes))
+        .join("") +
+      escapeText(decoder.decode(bytes.subarray(from, to))) +
+      [...tagged]
         .reverse()
-        .map((wrapper) => wrapper.close)
-        .join("");
+        .map((wrapper) => closeTag(wrapper.tag))
+        .join("") +
+      markers;
   }
   return html;
 }
@@ -170,5 +228,3 @@ export function renderFootnotes(footnotes: Footnote[]) {
     element("ol", undefined, items.join("")),
   );
 }
-
-export { anchor };

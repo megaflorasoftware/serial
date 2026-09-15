@@ -6,6 +6,7 @@ import { parseDocumentRecord } from "../src/lexicons";
 import type { BlobLoader } from "../src/convert";
 
 export const FIXTURE_DOCUMENTS = [
+  "leaflet-legacy-site",
   "leaflet-montreal-recap",
   "leaflet-network-punk",
   "offprint-bluesky-and-did-plc",

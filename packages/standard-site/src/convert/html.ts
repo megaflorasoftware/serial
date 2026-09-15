@@ -1,7 +1,7 @@
 /**
  * Minimal HTML emission helpers. Output must round-trip through
  * `sanitizeArticleHtml` unchanged, so text is escaped the way hast-util-to-html
- * serialises it: `&`, `<` in text; `&`, `"` in attribute values; nothing else.
+ * serialises it: `&`, `<` in text; `&`, `"`, `'` in attribute values; nothing else.
  */
 
 export function escapeText(value: string) {
@@ -9,7 +9,10 @@ export function escapeText(value: string) {
 }
 
 export function escapeAttribute(value: string) {
-  return value.replace(/&/g, "&#x26;").replace(/"/g, "&#x22;");
+  return value
+    .replace(/&/g, "&#x26;")
+    .replace(/"/g, "&#x22;")
+    .replace(/'/g, "&#x27;");
 }
 
 export type Attributes = Record<string, string | true | undefined>;
@@ -25,16 +28,24 @@ function renderAttributes(attributes: Attributes | undefined) {
   return rendered;
 }
 
+export function openTag(tag: string, attributes?: Attributes) {
+  return `<${tag}${renderAttributes(attributes)}>`;
+}
+
+export function closeTag(tag: string) {
+  return `</${tag}>`;
+}
+
 export function element(
   tag: string,
   attributes: Attributes | undefined,
   children: string,
 ) {
-  return `<${tag}${renderAttributes(attributes)}>${children}</${tag}>`;
+  return openTag(tag, attributes) + children + closeTag(tag);
 }
 
 export function voidElement(tag: string, attributes?: Attributes) {
-  return `<${tag}${renderAttributes(attributes)}>`;
+  return openTag(tag, attributes);
 }
 
 const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
@@ -213,6 +224,10 @@ export function parseYouTubeReference(
   return { videoId, start: validStart };
 }
 
+/**
+ * Every iframe or web embed becomes an inert placeholder: the YouTube one when
+ * either URL names a video, otherwise the interactive one linking to the source.
+ */
 export function embedPlaceholder(
   embedUrl: string | undefined,
   href: string | undefined,
