@@ -11,7 +11,13 @@ import {
   sanitizeArticleHtml,
   sanitizeEmbeddedHtml,
 } from "../src/sanitize";
-import { codeBlock, image } from "../src/convert/html";
+import {
+  codeBlock,
+  escapeText,
+  image,
+  list,
+  paragraph,
+} from "../src/convert/html";
 import {
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
@@ -122,6 +128,16 @@ describe("record parsers", () => {
 });
 
 describe("uris", () => {
+  it.each([
+    "https://user@example.com",
+    "https://:password@example.com",
+    "https://user:password@example.com",
+    "https://%75ser@example.com",
+  ])("rejects credentials in publication URL %s", (url) => {
+    expect(normalizePublicationUrl(url)).toBeNull();
+    expect(buildCanonicalDocumentUrl(url, "/post")).toBeNull();
+  });
+
   it("parses at-uris", () => {
     expect(
       parseAtUri("at://did:plc:abc/site.standard.publication/3mjnpilwnrp2v"),
@@ -300,6 +316,30 @@ describe("subscription record key", () => {
 });
 
 describe("article sanitizer", () => {
+  it.each(["\r", "\r\n"])("normalizes %j in text and attributes", (newline) => {
+    const text = `a${newline}b`;
+    const html =
+      paragraph(escapeText(text)) +
+      codeBlock(text, undefined) +
+      image("https://x.test/a.png", text);
+    expect(html).not.toContain("\r");
+    expect(html).toContain("<p>a\nb</p><pre><code>a\nb</code></pre>");
+    expect(html).toContain('alt="a\nb"');
+    expect(sanitizeArticleHtml(html)).toBe(html);
+  });
+
+  it("drops unsafe list starts instead of emitting exponential integers", () => {
+    expect(list(true, ["<li>x</li>"], { start: 1e21 })).toBe(
+      "<ol><li>x</li></ol>",
+    );
+    expect(
+      list(true, ["<li>x</li>"], { start: Number.MAX_SAFE_INTEGER + 1 }),
+    ).toBe("<ol><li>x</li></ol>");
+    expect(list(true, ["<li>x</li>"], { start: -3 })).toBe(
+      '<ol start="-3"><li>x</li></ol>',
+    );
+  });
+
   it("keeps underline, highlight, figures, and known placeholders only", () => {
     const html =
       '<p><u>u</u><mark>m</mark></p><figure><img src="https://x/y.jpg" alt="a"><figcaption>c</figcaption></figure>' +

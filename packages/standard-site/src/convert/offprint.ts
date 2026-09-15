@@ -55,7 +55,7 @@ const gridImageSchema = z.object({
 });
 
 const imageSetSchema = z.object({
-  images: z.array(gridImageSchema),
+  images: z.array(z.unknown()),
   caption: z.string().optional(),
 });
 
@@ -118,7 +118,9 @@ function renderImageSet(value: unknown, context: ConversionContext) {
   const parsed = imageSetSchema.safeParse(value);
   if (!parsed.success) return "";
   const rendered = parsed.data.images
-    .map((entry) => {
+    .map((entry) => gridImageSchema.safeParse(entry))
+    .filter((result) => result.success)
+    .map(({ data: entry }) => {
       const blob = entry.blob ?? entry.image;
       return blob ? context.blobImage(blob.ref.$link, entry.alt) : "";
     })

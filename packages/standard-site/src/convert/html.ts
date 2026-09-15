@@ -3,21 +3,21 @@
  * `sanitizeArticleHtml` unchanged, so text is escaped the way hast-util-to-html
  * serialises it: `&` and `<` in text; `&`, `"`, `'`, and a backtick in attribute
  * values; nothing else. The parser drops U+0000 from text and turns it into
- * U+FFFD in attributes, so it is removed before either.
+ * U+FFFD in attributes, so it is removed before either. CR and CRLF become LF.
  */
 
-function withoutControlCharacters(value: string) {
-  return value.replace(/\u0000/g, "");
+function normalizeHtmlText(value: string) {
+  return value.replace(/\u0000/g, "").replace(/\r\n?/g, "\n");
 }
 
 export function escapeText(value: string) {
-  return withoutControlCharacters(value)
+  return normalizeHtmlText(value)
     .replace(/&/g, "&#x26;")
     .replace(/</g, "&#x3C;");
 }
 
 export function escapeAttribute(value: string) {
-  return withoutControlCharacters(value)
+  return normalizeHtmlText(value)
     .replace(/&/g, "&#x26;")
     .replace(/"/g, "&#x22;")
     .replace(/'/g, "&#x27;")
@@ -137,7 +137,7 @@ export function list(
   if (
     ordered &&
     start !== undefined &&
-    Number.isInteger(start) &&
+    Number.isSafeInteger(start) &&
     start !== 1
   ) {
     attributes.start = String(start);

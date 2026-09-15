@@ -97,7 +97,7 @@ function trimTrailingSlashes(value: string) {
   return value.replace(/\/+$/, "");
 }
 
-/** Null when the publication URL is not an absolute http(s) URL. */
+/** Null unless the publication URL is absolute http(s) without credentials. */
 export function normalizePublicationUrl(url: string): string | null {
   let parsed: URL;
   try {
@@ -105,7 +105,12 @@ export function normalizePublicationUrl(url: string): string | null {
   } catch {
     return null;
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password
+  )
+    return null;
   parsed.hash = "";
   parsed.search = "";
   return trimTrailingSlashes(parsed.toString());

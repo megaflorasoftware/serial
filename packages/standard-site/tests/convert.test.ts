@@ -984,6 +984,36 @@ describe("offprint blocks", () => {
     expectFixedPoint(html);
   });
 
+  it.each(["imageGrid", "imageCarousel", "imageDiff"])(
+    "keeps valid %s images beside malformed entries",
+    (kind) => {
+      const html = convertRaw(
+        offprint([
+          {
+            $type: `app.offprint.block.${kind}`,
+            images: [
+              {
+                blob: { ref: { $link: "bafyone" }, mimeType: "image/png" },
+                alt: "first",
+              },
+              null,
+              { blob: "invalid" },
+              {
+                image: { ref: { $link: "bafytwo" }, mimeType: "image/png" },
+                alt: "second",
+              },
+            ],
+            caption: "Both images",
+          },
+        ]),
+      );
+      expect(html).toBe(
+        `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyone")}" alt="first"><img src="${buildBlueskyCdnImageUrl(did, "bafytwo")}" alt="second"><figcaption>Both images</figcaption></figure>`,
+      );
+      expectFixedPoint(html);
+    },
+  );
+
   it("keeps an image whose caption facets are malformed and drops empty list items", () => {
     const html = convertRaw(
       offprint([

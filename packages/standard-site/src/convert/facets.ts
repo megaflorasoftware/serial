@@ -41,7 +41,22 @@ export type Footnote = { id: string; text: RichText };
 
 export type FacetRenderContext = {
   footnotes: Footnote[];
+  /** Index of the append-only footnotes collected during this conversion. */
+  footnoteNumbers?: Map<string, number>;
 };
+
+function footnoteNumbers(context: FacetRenderContext) {
+  if (!context.footnoteNumbers) {
+    const numbers = new Map<string, number>();
+    context.footnotes.forEach((footnote, index) => {
+      if (footnote.id && !numbers.has(footnote.id)) {
+        numbers.set(footnote.id, index + 1);
+      }
+    });
+    context.footnoteNumbers = numbers;
+  }
+  return context.footnoteNumbers;
+}
 
 function featureName(feature: Feature) {
   const hash = feature.$type.indexOf("#");
@@ -102,10 +117,9 @@ function wrapperFor(
       const text = stringField(feature, "contentPlaintext");
       if (text === undefined) return null;
       const id = stringField(feature, "footnoteId");
-      const existing = id
-        ? context.footnotes.findIndex((footnote) => footnote.id === id)
-        : -1;
-      if (existing === -1) {
+      const numbers = footnoteNumbers(context);
+      let number = id ? numbers.get(id) : undefined;
+      if (number === undefined) {
         const facets = z.array(facetSchema).safeParse(feature.contentFacets);
         context.footnotes.push({
           id: id ?? "",
@@ -114,8 +128,9 @@ function wrapperFor(
             facets: facets.success ? facets.data : undefined,
           },
         });
+        number = context.footnotes.length;
+        if (id) numbers.set(id, number);
       }
-      const number = existing === -1 ? context.footnotes.length : existing + 1;
       return { marker: element("sup", undefined, `[${number}]`) };
     }
     default:
@@ -186,20 +201,31 @@ export function renderRichText(
   if (facets.length === 0) return escapeText(text.plaintext);
 
   const boundaries = new Set<number>([0, bytes.length]);
+  const endings = new Map<number, ResolvedFacet[]>();
   for (const facet of facets) {
     boundaries.add(facet.start);
     boundaries.add(facet.end);
+    const ending = endings.get(facet.end) ?? [];
+    ending.push(facet);
+    endings.set(facet.end, ending);
   }
   const offsets = [...boundaries].sort((left, right) => left - right);
   const decoder = new TextDecoder();
+  // Insertion order matches the sorted facets, preserving outermost-link
+  // precedence while visiting only active ranges at each boundary.
+  const activeFacets = new Set<ResolvedFacet>();
+  let nextFacet = 0;
 
   let html = "";
   for (let index = 0; index < offsets.length - 1; index += 1) {
     const from = offsets[index]!;
     const to = offsets[index + 1]!;
-    const active = facets.filter(
-      (facet) => facet.start <= from && facet.end >= to,
-    );
+    for (const facet of endings.get(from) ?? []) activeFacets.delete(facet);
+    while (nextFacet < facets.length && facets[nextFacet]!.start === from) {
+      activeFacets.add(facets[nextFacet]!);
+      nextFacet += 1;
+    }
+    const active = [...activeFacets];
     const wrappers = withoutNestedAnchors(
       active.flatMap((facet) => facet.wrappers),
     );

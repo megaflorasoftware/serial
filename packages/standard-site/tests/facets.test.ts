@@ -2,6 +2,75 @@ import { describe, expect, it } from "vitest";
 import { renderFootnotes, renderRichText } from "../src/convert/facets";
 
 describe("renderRichText", () => {
+  it("preserves link precedence when ranges start together and end separately", () => {
+    expect(
+      renderRichText({
+        plaintext: "abcdef",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 2 },
+            features: [{ $type: "x#link", uri: "https://inner.test" }],
+          },
+          {
+            index: { byteStart: 2, byteEnd: 6 },
+            features: [{ $type: "x#italic" }],
+          },
+          {
+            index: { byteStart: 0, byteEnd: 4 },
+            features: [{ $type: "x#link", uri: "https://outer.test" }],
+          },
+        ],
+      }),
+    ).toBe(
+      '<a href="https://outer.test/">ab</a><a href="https://outer.test/"><em>cd</em></a><em>ef</em>',
+    );
+  });
+
+  it("renders a dense document with disjoint facet ranges", () => {
+    const count = 10000;
+    expect(
+      renderRichText({
+        plaintext: "x".repeat(count),
+        facets: Array.from({ length: count }, (_, index) => ({
+          index: { byteStart: index, byteEnd: index + 1 },
+          features: [{ $type: "x#bold" }],
+        })),
+      }),
+    ).toBe("<strong>x</strong>".repeat(count));
+  });
+
+  it("keeps footnote numbers stable across paragraphs and preexisting notes", () => {
+    const context = {
+      footnotes: [{ id: "first", text: { plaintext: "one" } }],
+    };
+    const reference = (id: string, content: string) =>
+      renderRichText(
+        {
+          plaintext: "x",
+          facets: [
+            {
+              index: { byteStart: 0, byteEnd: 1 },
+              features: [
+                {
+                  $type: "x#footnote",
+                  footnoteId: id,
+                  contentPlaintext: content,
+                },
+              ],
+            },
+          ],
+        },
+        context,
+      );
+    expect(reference("first", "duplicate")).toBe("x<sup>[1]</sup>");
+    expect(reference("second", "two")).toBe("x<sup>[2]</sup>");
+    expect(reference("first", "duplicate")).toBe("x<sup>[1]</sup>");
+    expect(reference("second", "duplicate")).toBe("x<sup>[2]</sup>");
+    expect(renderFootnotes(context)).toBe(
+      "<section><ol><li>one</li><li>two</li></ol></section>",
+    );
+  });
+
   it("escapes plaintext without facets", () => {
     expect(renderRichText({ plaintext: "a < b & c" })).toBe(
       "a &#x3C; b &#x26; c",
