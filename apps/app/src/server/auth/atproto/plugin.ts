@@ -6,6 +6,7 @@ import {
 } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
+import { OAuthCallbackError } from "@atproto/oauth-client-node";
 import {
   ATPROTO_PROVIDER_ID,
   ATPROTO_ROUTE_PREFIX,
@@ -78,13 +79,18 @@ const consentResultRedirect = (result: AtprotoConsentResult) =>
   `/?${ATPROTO_CONSENT_RESULT_PARAM}=${result}`;
 
 /**
- * The SDK surfaces a user's refusal at the authorization server as a
- * callback error carrying the `error` query param (`access_denied`); every
- * other failure (replayed state, exchange failure, chain mismatch) has no
- * such param.
+ * Whether a failed callback is the user's refusal at the authorization
+ * server. The SDK only reads the `error` query param after it has matched
+ * the request to a stored authorization attempt, so the check rides on the
+ * SDK's own error rather than the raw params: a replayed or forged request
+ * carrying `error=access_denied` fails state validation first and stays an
+ * error.
  */
-function isConsentDenied(err: unknown, params: URLSearchParams): boolean {
-  return err instanceof Error && params.get("error") === "access_denied";
+export function isConsentDenied(err: unknown): boolean {
+  return (
+    err instanceof OAuthCallbackError &&
+    err.params.get("error") === "access_denied"
+  );
 }
 
 export const atprotoPlugin = () => {
@@ -362,7 +368,7 @@ export const atprotoPlugin = () => {
               deferHandleResolution: true,
             });
           } catch (err) {
-            if (isConsentDenied(err, url.searchParams)) {
+            if (isConsentDenied(err)) {
               throw ctx.redirect(consentResultRedirect("denied"));
             }
             logError("[atproto] upgrade callback failed:", err);
@@ -377,6 +383,12 @@ export const atprotoPlugin = () => {
               pendingSyncPreferences: result.pendingSyncPreferences,
             });
           } catch (err) {
+            // The code exchange already replaced the stored grant for the
+            // connection's own DID (the service pinned the subject), so a
+            // mismatch here leaves a bound row holding a broader grant than
+            // its unsaved settings use. Deliberately left in place: the row
+            // is bound to its owner, and revoking would sever their working
+            // connection with no older session to fall back on.
             logError("[atproto] upgrade failed:", err);
             const consentResult: AtprotoConsentResult =
               err instanceof AtprotoUpgradeError ? err.code : "error";
@@ -403,8 +415,9 @@ export const atprotoPlugin = () => {
         max: 60,
       },
       {
-        // Consent upgrades are rarer than sign-ins and must not be starved
-        // by a burst of them from the same address.
+        // Consent upgrades get their own, tighter budget: they are rare
+        // per user, and a burst of sign-in callbacks from the same address
+        // must not consume the returns of legitimate consent round trips.
         pathMatcher: (path: string) => path === ATPROTO_ROUTES.upgradeCallback,
         window: 60,
         max: 30,

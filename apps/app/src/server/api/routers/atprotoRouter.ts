@@ -1,6 +1,8 @@
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import type { DatabaseAtprotoConnection } from "~/server/db/schema";
+import type { ORPCContext } from "~/server/orpc/base";
 import {
   ATPROTO_PROVIDER_ID,
   getAdminSigninMethods,
@@ -34,26 +36,48 @@ import { env } from "~/env";
  * the plugin's dedicated endpoints.
  */
 
+type AtprotoDatabase = ORPCContext["db"];
+
+/**
+ * A user's Atmosphere attachment: the connection row (credentials and
+ * settings) and the sign-in account row. Either can exist without the
+ * other for a while (a bound row whose blob was destroyed, a connection
+ * lost mid-unlink), so every surface reads both.
+ */
+async function findAtprotoAttachment(db: AtprotoDatabase, userId: string) {
+  const [connection, accountRow] = await Promise.all([
+    db.query.atprotoConnections.findFirst({
+      where: eq(atprotoConnections.userId, userId),
+    }),
+    db
+      .select({ accountId: account.accountId, scope: account.scope })
+      .from(account)
+      .where(
+        and(
+          eq(account.userId, userId),
+          eq(account.providerId, ATPROTO_PROVIDER_ID),
+        ),
+      )
+      .get(),
+  ]);
+  return { connection, accountRow };
+}
+
+/** Whether a connection row holds working credentials. */
+function isConnectionActive(
+  connection: DatabaseAtprotoConnection | undefined,
+): boolean {
+  return !!connection && connection.status === "active" && !!connection.session;
+}
+
 export const getConnectionStatus = protectedProcedure.handler(
   async ({ context }) => {
-    const [connection, accountRow] = await Promise.all([
-      context.db.query.atprotoConnections.findFirst({
-        where: eq(atprotoConnections.userId, context.user.id),
-      }),
-      context.db
-        .select({ accountId: account.accountId })
-        .from(account)
-        .where(
-          and(
-            eq(account.userId, context.user.id),
-            eq(account.providerId, ATPROTO_PROVIDER_ID),
-          ),
-        )
-        .get(),
-    ]);
+    const { connection, accountRow } = await findAtprotoAttachment(
+      context.db,
+      context.user.id,
+    );
 
-    const isConnected =
-      !!connection && connection.status === "active" && !!connection.session;
+    const isConnected = isConnectionActive(connection);
     // The sign-in method (the account row) can outlive its working
     // credentials: a bound row whose blob was destroyed (failed refresh,
     // grant revoked at the PDS, rotated store key) or a connection lost
@@ -68,7 +92,7 @@ export const getConnectionStatus = protectedProcedure.handler(
         connection?.handle ?? connection?.did ?? accountRow?.accountId ?? null,
       isConfigured: isAtprotoConfigured(),
       /** Whether the stored grant lets a write method save without consent. */
-      hasWriteScope: isConnected && hasAtprotoWriteScope(connection.scopes),
+      hasWriteScope: isConnected && hasAtprotoWriteScope(connection?.scopes),
       syncPreferences: syncPreferencesFromSettings(
         connection ?? DEFAULT_ATPROTO_SYNC_SETTINGS,
       ),
@@ -88,7 +112,7 @@ export const saveSyncSettings = protectedProcedure
     const connection = await context.db.query.atprotoConnections.findFirst({
       where: eq(atprotoConnections.userId, context.user.id),
     });
-    if (!connection || connection.status !== "active" || !connection.session) {
+    if (!connection || !isConnectionActive(connection)) {
       throw new ORPCError("PRECONDITION_FAILED", {
         message:
           "Connect your Atmosphere account before changing sync settings.",
@@ -183,10 +207,11 @@ export const linkAccount = protectedProcedure
     }
     await enforceLinkRateLimit(context.user.id);
 
-    const connection = await context.db.query.atprotoConnections.findFirst({
-      where: eq(atprotoConnections.userId, context.user.id),
-    });
-    if (connection && connection.status === "active" && !!connection.session) {
+    const { connection, accountRow } = await findAtprotoAttachment(
+      context.db,
+      context.user.id,
+    );
+    if (isConnectionActive(connection)) {
       throw new ORPCError("CONFLICT", {
         message:
           "You already have an Atmosphere account connected. Disconnect it first.",
@@ -198,21 +223,11 @@ export const linkAccount = protectedProcedure
     // real grant at the PDS. A typed handle can't be compared to the
     // stored DID before resolution, so this blocks only the clear case;
     // the callback stays the authoritative enforcement either way.
-    const existingAccount = await context.db
-      .select({ accountId: account.accountId })
-      .from(account)
-      .where(
-        and(
-          eq(account.userId, context.user.id),
-          eq(account.providerId, ATPROTO_PROVIDER_ID),
-        ),
-      )
-      .get();
     const resolutionTarget = input.did ?? input.identifier;
     if (
-      existingAccount &&
+      accountRow &&
       resolutionTarget.startsWith("did:") &&
-      existingAccount.accountId !== resolutionTarget
+      accountRow.accountId !== resolutionTarget
     ) {
       throw new ORPCError("CONFLICT", {
         message:
@@ -243,7 +258,9 @@ export const linkAccount = protectedProcedure
  * Restore a connection whose credentials were lost: a link of the DID the
  * account already holds, so no handle is asked for and the round trip
  * lands on the same row. Re-requests the grant the connection held so a
- * reconnect never narrows what the user consented to.
+ * reconnect never narrows what the user consented to; when the connection
+ * row itself is gone, the account row remembers the grant it was created
+ * with.
  */
 export const reconnectAccount = protectedProcedure.handler(
   async ({ context }) => {
@@ -252,34 +269,24 @@ export const reconnectAccount = protectedProcedure.handler(
         message: "Atmosphere is not available on this instance.",
       });
     }
-    await enforceLinkRateLimit(context.user.id);
 
-    const [connection, accountRow] = await Promise.all([
-      context.db.query.atprotoConnections.findFirst({
-        where: eq(atprotoConnections.userId, context.user.id),
-      }),
-      context.db
-        .select({ accountId: account.accountId })
-        .from(account)
-        .where(
-          and(
-            eq(account.userId, context.user.id),
-            eq(account.providerId, ATPROTO_PROVIDER_ID),
-          ),
-        )
-        .get(),
-    ]);
+    const { connection, accountRow } = await findAtprotoAttachment(
+      context.db,
+      context.user.id,
+    );
     const did = connection?.did ?? accountRow?.accountId;
     if (!did) {
       throw new ORPCError("PRECONDITION_FAILED", {
         message: "There is no Atmosphere account to reconnect.",
       });
     }
-    if (connection && connection.status === "active" && !!connection.session) {
+    if (isConnectionActive(connection)) {
       throw new ORPCError("CONFLICT", {
         message: "Your Atmosphere account is already connected.",
       });
     }
+    // Budgeted only once the request can actually start a round trip.
+    await enforceLinkRateLimit(context.user.id);
 
     try {
       const { startAtprotoLink } =
@@ -287,7 +294,7 @@ export const reconnectAccount = protectedProcedure.handler(
       const url = await startAtprotoLink({
         identifier: did,
         userId: context.user.id,
-        previousScope: connection?.scopes,
+        previousScope: connection?.scopes ?? accountRow?.scope,
       });
       return { url: url.toString() };
     } catch (err) {

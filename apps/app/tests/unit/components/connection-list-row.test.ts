@@ -118,17 +118,18 @@ describe("ConnectedAccountRow", () => {
     expect(onReconnect).toHaveBeenCalledTimes(1);
   });
 
-  it("holds Reconnect while the round trip starts", () => {
+  it("holds both actions while a round trip starts", () => {
     const { buttons } = render(
       createElement(ConnectedAccountRow, {
         label: "alice.example",
-        disconnecting: false,
+        disconnecting: true,
         onDisconnect: vi.fn(),
         onReconnect: vi.fn(),
         reconnecting: true,
       }),
     );
 
-    expect(buttons[1]?.disabled).toBe(true);
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((button) => button.disabled)).toEqual([true, true]);
   });
 });

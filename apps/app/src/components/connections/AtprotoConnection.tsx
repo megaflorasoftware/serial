@@ -117,22 +117,21 @@ function useAtprotoReconnect() {
  * the credentials are back.
  */
 export function AtprotoConnectionPane() {
-  const {
-    data: status,
-    isLoading,
-    isError,
-    refetch,
-  } = useAtprotoConnectionStatus();
+  const { data: status, isError, refetch } = useAtprotoConnectionStatus();
   const unlinkMutation = useAtprotoUnlink();
   const reconnectMutation = useAtprotoReconnect();
+  // Either round trip leaves the page; neither action may start while the
+  // other is under way.
+  const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
 
-  if (isLoading) {
-    return (
+  // A later poll that fails keeps whatever status already rendered; only
+  // a pane with nothing to show falls back to the retry card.
+  if (!status) {
+    return isError ? (
+      <AtprotoStatusUnavailable onRetry={() => void refetch()} />
+    ) : (
       <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
     );
-  }
-  if (isError || !status) {
-    return <AtprotoStatusUnavailable onRetry={() => void refetch()} />;
   }
 
   const attached = status.isConnected || status.needsReconnect;
@@ -144,14 +143,14 @@ export function AtprotoConnectionPane() {
     <div className="grid gap-6">
       <ConnectedAccountRow
         label={status.handle ?? "Connected"}
-        disconnecting={unlinkMutation.isPending}
+        disconnecting={accountBusy}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
           status.needsReconnect
             ? () => reconnectMutation.mutate(undefined)
             : undefined
         }
-        reconnecting={reconnectMutation.isPending}
+        reconnecting={accountBusy}
       />
       <AtprotoSyncSettingsForm
         key={JSON.stringify(status.syncPreferences)}

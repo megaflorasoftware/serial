@@ -101,20 +101,25 @@ test.describe("atproto connection management", () => {
     // The persisted-cache restore can serve the stale "not connected"
     // status first; the on-mount refetch replaces it (slowly under
     // parallel-worker load).
-    await expect(page.getByText(handle).first()).toBeVisible({
+    const accountRow = page
+      .locator("div")
+      .filter({ has: page.getByRole("button", { name: /disconnect/i }) })
+      .last();
+    await expect(accountRow.getByText(handle)).toBeVisible({
       timeout: 15000,
     });
     // Connected: the sync settings sit beneath the account, saved
-    // explicitly, so Save stays disabled until something changes.
-    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    // explicitly, so Save stays disabled until something changes and
+    // enables once it does.
+    const saveButton = page.getByRole("button", { name: "Save" });
+    await expect(saveButton).toBeDisabled();
+    await page.getByRole("radio", { name: "Import to Serial" }).click();
+    await expect(saveButton).toBeEnabled();
 
     // Disconnect: removes the sign-in method and destroys the credential
     // material even though the seeded blob is unreadable ciphertext.
     // Allowed here because the credential method remains.
-    await page
-      .getByRole("button", { name: /disconnect/i })
-      .first()
-      .click();
+    await accountRow.getByRole("button", { name: /disconnect/i }).click();
     await expect(page.getByText("Atmosphere account disconnected")).toBeVisible(
       { timeout: 10000 },
     );
