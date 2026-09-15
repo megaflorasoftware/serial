@@ -43,6 +43,24 @@ describe("ConnectionListRow", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
+  it("stays inert while the status is still loading", () => {
+    const onSelect = vi.fn();
+    const { row } = render(
+      createElement(ConnectionListRow, {
+        name: "Atmosphere",
+        isLoading: true,
+        isConfigured: true,
+        statusText: "alice.example",
+        onSelect,
+      }),
+    );
+
+    expect(row.getAttribute("role")).toBeNull();
+    expect(row.textContent).toContain("Loading...");
+    act(() => row.click());
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("stays inert and reads Not available on an unconfigured instance", () => {
     const onSelect = vi.fn();
     const { row } = render(

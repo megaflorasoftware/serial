@@ -559,13 +559,13 @@ export async function upgradeAtprotoAuth(input: {
 }
 
 /**
- * A Consent upgrade failed for a reason the user can act on: "denied" when
- * they refused at the authorization server, "state" when the callback did
- * not match the session and connection that started the flow.
+ * A Consent upgrade callback did not match the session and connection that
+ * started the flow. A refusal at the authorization server never reaches
+ * here: the SDK rejects the code exchange first, and the plugin maps it.
  */
 export class AtprotoUpgradeError extends Error {
   constructor(
-    public readonly code: "denied" | "state",
+    public readonly code: "state",
     message: string,
   ) {
     super(message);

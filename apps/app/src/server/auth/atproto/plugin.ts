@@ -398,10 +398,16 @@ export const atprotoPlugin = () => {
       {
         pathMatcher: (path: string) =>
           path === ATPROTO_ROUTES.callback ||
-          path === ATPROTO_ROUTES.linkCallback ||
-          path === ATPROTO_ROUTES.upgradeCallback,
+          path === ATPROTO_ROUTES.linkCallback,
         window: 60,
         max: 60,
+      },
+      {
+        // Consent upgrades are rarer than sign-ins and must not be starved
+        // by a burst of them from the same address.
+        pathMatcher: (path: string) => path === ATPROTO_ROUTES.upgradeCallback,
+        window: 60,
+        max: 30,
       },
       {
         // Debounced keystrokes fire roughly once per typing pause, so a
