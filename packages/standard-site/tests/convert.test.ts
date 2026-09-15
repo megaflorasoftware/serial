@@ -151,20 +151,6 @@ describe("convertDocumentContent fixtures", () => {
     expect(converted.html).not.toContain('data-serial-embed="youtube"');
   });
 
-  it("reads YouTube start offsets from share and embed links", () => {
-    expect(parseYouTubeReference("https://youtu.be/abcdefghijk?t=30s")).toEqual(
-      { videoId: "abcdefghijk", start: "30" },
-    );
-    expect(
-      parseYouTubeReference(
-        "https://www.youtube.com/embed/abcdefghijk?start=5",
-      ),
-    ).toEqual({ videoId: "abcdefghijk", start: "5" });
-    expect(
-      parseYouTubeReference("https://www.youtube.com/watch?v=abcdefghijk&t=1m"),
-    ).toEqual({ videoId: "abcdefghijk", start: null });
-  });
-
   it("renders offprint callouts, mentions, highlights, lists, and images", async () => {
     const { converted, did: fixtureDid } = await convertFixture(
       "offprint-interactive-transcripts",
@@ -185,7 +171,7 @@ describe("convertDocumentContent fixtures", () => {
     expect(converted.html).not.toContain("<p></p>");
   });
 
-  it("renders offprint web embeds, bookmarks, posts, and buttons", async () => {
+  it("renders an offprint web embed as a youtube placeholder", async () => {
     const embed = await convertFixture("offprint-bluesky-and-did-plc");
     expect(embed.converted.html).toContain(
       '<div data-serial-embed="youtube" data-video-id="m9AVUAUDC2A"><p><a href="https://www.youtube.com/watch?v=m9AVUAUDC2A">Watch on YouTube</a></p></div>',
@@ -193,7 +179,9 @@ describe("convertDocumentContent fixtures", () => {
     expect(embed.converted.html).toContain(
       "<blockquote><p>💡 Figure out how to upload",
     );
+  });
 
+  it("renders offprint bookmarks, posts, and buttons as link cards", async () => {
     const awards = await convertFixture("offprint-open-social-awards");
     expect(awards.converted.html).toContain(
       '<p><a href="https://bsky.app/profile/did:plc:hheutzl4mxedshsz4yqek5tt/post/3mk3up2q3ac2s"><strong>View post on Bluesky</strong></a></p>',
@@ -219,7 +207,7 @@ describe("convertDocumentContent fixtures", () => {
     );
   });
 
-  it("renders pckt text, blob images, blockquotes, and lists", async () => {
+  it("renders pckt text, blob images, and blockquotes", async () => {
     const { converted, did: fixtureDid } = await convertFixture(
       "pckt-science-vs-vegetable-faces",
     );
@@ -377,7 +365,58 @@ describe("convertDocumentContent content resolution", () => {
   });
 });
 
+describe("youtube references", () => {
+  it("reads start offsets from share and embed links", () => {
+    expect(parseYouTubeReference("https://youtu.be/abcdefghijk?t=30s")).toEqual(
+      {
+        videoId: "abcdefghijk",
+        start: "30",
+      },
+    );
+    expect(
+      parseYouTubeReference(
+        "https://www.youtube.com/embed/abcdefghijk?start=5",
+      ),
+    ).toEqual({ videoId: "abcdefghijk", start: "5" });
+    expect(
+      parseYouTubeReference("https://www.youtube.com/watch?v=abcdefghijk&t=1m"),
+    ).toEqual({ videoId: "abcdefghijk", start: null });
+  });
+});
+
 describe("leaflet blocks", () => {
+  it("drops only the bad entries of a gallery and empty list items", () => {
+    const html = convertRaw(
+      leaflet([
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          images: [
+            "junk",
+            {
+              image: { ref: { $link: "bafyok" }, mimeType: "image/png" },
+              alt: "ok",
+            },
+            { image: { ref: { $link: "bafybad" } } },
+          ],
+        },
+        {
+          $type: "pub.leaflet.blocks.unorderedList",
+          children: [
+            { content: { $type: "pub.leaflet.blocks.horizontalRule" } },
+            {
+              content: { $type: "pub.leaflet.blocks.text", plaintext: "kept" },
+            },
+          ],
+        },
+      ]),
+    );
+    expect(html).toBe(
+      `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyok")}" alt="ok"></figure>` +
+        "<ul><li>kept</li></ul>",
+    );
+    expectFixedPoint(html);
+  });
+
   it("sanitizes html blocks and falls back to the interactive placeholder", () => {
     const html = convertRaw(
       leaflet([

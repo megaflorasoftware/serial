@@ -11,6 +11,7 @@ import {
   sanitizeArticleHtml,
   sanitizeEmbeddedHtml,
 } from "../src/sanitize";
+import { codeBlock, image } from "../src/convert/html";
 import {
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
@@ -18,6 +19,9 @@ import {
   buildCanonicalDocumentUrl,
   buildPdslsUrl,
   documentBelongsToPublication,
+  isDid,
+  isNsid,
+  isRecordKey,
   normalizePublicationUrl,
   parseAtUri,
   parsePublicationUri,
@@ -29,18 +33,33 @@ import {
 } from "./fixtures";
 
 describe("record parsers", () => {
-  it("parses the three sample publications", () => {
-    const listed = readFixture("publications") as unknown[];
-    const parsed = listed.map(parsePublicationRecord);
+  it("parses the sample publications", () => {
+    const parsed = (readFixture("publications") as unknown[]).map(
+      parsePublicationRecord,
+    );
     expect(parsed.every((record) => record !== null)).toBe(true);
     expect(parsed.map((record) => record!.value.name)).toEqual([
+      "ATProto Community",
       "Atmosphere Conference News",
       "Atmosphere Community",
       "jenn's little art blog",
     ]);
-    expect(parsed[2]!.value.icon?.ref.$link).toBe(
+    expect(parsed[3]!.value.icon?.ref.$link).toBe(
       "bafkreigkcfkuvhf7wlwqgv4iachbwwkcxpmglf2fov6gf76jj6ub2vot2m",
     );
+  });
+
+  it("covers every document fixture with a publication fixture", () => {
+    const publications = (readFixture("publications") as unknown[]).map(
+      (entry) => parsePublicationRecord(entry)!,
+    );
+    for (const name of FIXTURE_DOCUMENTS) {
+      const { record } = loadDocumentFixture(name);
+      const owner = publications.find((publication) =>
+        documentBelongsToPublication(record.value.site, publication.uri),
+      );
+      expect(owner, `${name} has no publication fixture`).toBeDefined();
+    }
   });
 
   it.each(FIXTURE_DOCUMENTS)("parses %s as a block-native document", (name) => {
@@ -193,6 +212,38 @@ describe("uris", () => {
     ).toBeNull();
   });
 
+  it("normalises the canonical url the way the rss side does", () => {
+    const base = "https://a.test/blog";
+    // Dot segments collapse, spaces and unicode percent-encode, the fragment goes.
+    expect(buildCanonicalDocumentUrl(base, "/a/../b")).toBe(
+      "https://a.test/blog/b",
+    );
+    // A path may climb out of the base directory but never off the origin.
+    expect(buildCanonicalDocumentUrl(base, "/../../etc")).toBe(
+      "https://a.test/etc",
+    );
+    expect(buildCanonicalDocumentUrl(base, "/a b")).toBe(
+      "https://a.test/blog/a%20b",
+    );
+    expect(buildCanonicalDocumentUrl(base, "/héllo")).toBe(
+      "https://a.test/blog/h%C3%A9llo",
+    );
+    expect(buildCanonicalDocumentUrl(base, "/p#f")).toBe(
+      "https://a.test/blog/p",
+    );
+    // A document path may carry a query, and the rss side keeps one too.
+    expect(buildCanonicalDocumentUrl(base, "/p?x=1")).toBe(
+      "https://a.test/blog/p?x=1",
+    );
+    // Both sides keep trailing slashes and path case significant.
+    expect(buildCanonicalDocumentUrl(base, "/post/")).toBe(
+      "https://a.test/blog/post/",
+    );
+    expect(buildCanonicalDocumentUrl(base, "/Post")).toBe(
+      "https://a.test/blog/Post",
+    );
+  });
+
   it("builds bluesky urls", () => {
     expect(buildBlueskyCdnImageUrl("did:plc:a", "bafy")).toBe(
       "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:a/bafy@jpeg",
@@ -220,6 +271,21 @@ describe("uris", () => {
     expect(buildPdslsUrl("at://did:plc:a/site.standard.document/b")).toBe(
       "https://pdsls.dev/at://did:plc:a/site.standard.document/b",
     );
+  });
+
+  it("follows the at protocol identifier grammars", () => {
+    expect(isDid("did:plc:lehcqqkwzcwvjvw66uthu5oq")).toBe(true);
+    expect(isDid("did:web:example.com%3A3000")).toBe(true);
+    expect(isDid("did:plc9:abc")).toBe(false);
+    expect(isDid("did:PLC:abc")).toBe(false);
+    expect(isDid("did:plc:")).toBe(false);
+    expect(isNsid("site.standard.graph.subscription")).toBe(true);
+    expect(isNsid("app.offprint.document.article")).toBe(true);
+    expect(isNsid("a.b")).toBe(false);
+    expect(isNsid("a.b.c-")).toBe(false);
+    expect(isNsid(`a.b.${"c".repeat(64)}`)).toBe(false);
+    expect(isRecordKey("3mjnpilwnrp2v")).toBe(true);
+    expect(isRecordKey("..")).toBe(false);
   });
 });
 
@@ -251,6 +317,19 @@ describe("article sanitizer", () => {
       '<p id="user-content-x">t</p>',
     );
     expect(ARTICLE_SANITIZE_SCHEMA.clobberPrefix).toBe("user-content-");
+  });
+
+  it("escapes backticks and drops nulls so emissions stay fixed points", () => {
+    const withBacktick = image("https://x.test/a.png", "a`b");
+    expect(withBacktick).toBe(
+      '<img src="https://x.test/a.png" alt="a&#x60;b">',
+    );
+    expect(sanitizeArticleHtml(withBacktick)).toBe(withBacktick);
+
+    const withNulls =
+      codeBlock("a\u0000b", "js") + image("https://x.test/a.png", "c\u0000d");
+    expect(withNulls).not.toContain("\u0000");
+    expect(sanitizeArticleHtml(withNulls)).toBe(withNulls);
   });
 
   it("strips clobbered attributes from embedded html so the result stays a fixed point", () => {

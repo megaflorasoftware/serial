@@ -1,5 +1,27 @@
 [
   {
+    "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3lxv5nk6jik2k",
+    "cid": "bafyreifvqv7e6ah5eaeghta2ktwufxp7n5eljbyi257s24gqf43zfjla4m",
+    "value": {
+      "$type": "site.standard.publication",
+      "description": "Interviews, news, and other updates from the Community Fund, Tech Talks, and other social & community content.",
+      "icon": {
+        "$type": "blob",
+        "mimeType": "image/png",
+        "ref": {
+          "$link": "bafkreiapqrr6xkm4axqfrl2o52ww5o2nq5uludwls4f7v6qvupiu2kkkui"
+        },
+        "size": 105427
+      },
+      "name": "ATProto Community",
+      "preferences": {
+        "showComments": true,
+        "showInDiscover": true
+      },
+      "url": "https://atprotocommunity.leaflet.pub"
+    }
+  },
+  {
     "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3m367bemk3c2i",
     "cid": "bafyreifmryq5hk2roydzffoewyxmxpcmjxgmfwjfl7zpntap7o4kw3bnhi",
     "value": {

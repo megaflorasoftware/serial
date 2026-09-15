@@ -10,19 +10,28 @@ export type AtUriParts = {
 // path is checked against one of these so a crafted record cannot escape the
 // segment it is interpolated into.
 const DID_PATTERN =
-  /^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$/;
-const NSID_PATTERN =
-  /^[a-zA-Z](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+\.[a-zA-Z][a-zA-Z0-9]*$/;
+  /^did:[a-z]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$/;
+const NSID_SEGMENT = "[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?";
+const NSID_PATTERN = new RegExp(
+  `^${NSID_SEGMENT}(?:\\.${NSID_SEGMENT})+\\.[a-zA-Z][a-zA-Z0-9]{0,62}$`,
+);
+const NSID_MAX_LENGTH = 317;
 const RECORD_KEY_PATTERN = /^[A-Za-z0-9._:~-]{1,512}$/;
 const CID_PATTERN = /^[A-Za-z0-9]{1,256}$/;
 const AT_URI_PATTERN = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
+/** `.` and `..` would traverse the path they are interpolated into. */
 function isPathSegment(value: string) {
   return value !== "." && value !== "..";
 }
 
+// A DID always starts with `did:`, so it can never be a traversal segment.
 export function isDid(value: string) {
-  return DID_PATTERN.test(value) && isPathSegment(value);
+  return DID_PATTERN.test(value);
+}
+
+export function isNsid(value: string) {
+  return value.length <= NSID_MAX_LENGTH && NSID_PATTERN.test(value);
 }
 
 export function isRecordKey(value: string) {
@@ -37,7 +46,7 @@ export function parseAtUri(uri: string): AtUriParts | null {
   const match = AT_URI_PATTERN.exec(uri);
   if (!match?.[1] || !match[2] || !match[3]) return null;
   const [, did, collection, rkey] = match;
-  if (!isDid(did) || !NSID_PATTERN.test(collection) || !isRecordKey(rkey)) {
+  if (!isDid(did) || !isNsid(collection) || !isRecordKey(rkey)) {
     return null;
   }
   return { did, collection, rkey };
@@ -103,8 +112,13 @@ export function normalizePublicationUrl(url: string): string | null {
 }
 
 /**
- * The canonical document URL is the publication URL plus the document path. A
- * document without a path, or a publication without a usable URL, has no
+ * The canonical document URL is the publication URL plus the document path,
+ * normalised so both origins of a Feed land on one item key: parsed as a URL
+ * (collapsing dot segments and percent-encoding the path) with the fragment
+ * dropped, matching the RSS side's `normalizeBookmarkUrl`. Query strings and
+ * path case survive on both sides, so they stay significant here too.
+ *
+ * A document without a path, or a publication without a usable URL, has no
  * canonical URL; callers fall back to the RSS link or the at-uri.
  */
 export function buildCanonicalDocumentUrl(
@@ -115,7 +129,14 @@ export function buildCanonicalDocumentUrl(
   const base = normalizePublicationUrl(publicationUrl);
   if (!base) return null;
   const path = documentPath.startsWith("/") ? documentPath : `/${documentPath}`;
-  return `${base}${path}`;
+  let joined: URL;
+  try {
+    joined = new URL(`${base}${path}`);
+  } catch {
+    return null;
+  }
+  joined.hash = "";
+  return joined.toString();
 }
 
 export const BLUESKY_CDN_ORIGIN = "https://cdn.bsky.app";

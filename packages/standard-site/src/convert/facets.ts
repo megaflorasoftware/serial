@@ -32,9 +32,10 @@ export type RichText = z.infer<typeof richTextSchema>;
 type Feature = Facet["features"][number];
 
 /**
- * One collected footnote. The id comes from the record so repeated references to
- * the same note share one entry; markers are positional because the sanitizer
- * rewrites ids, so in-page anchors are not possible.
+ * One collected footnote. References that carry the same `footnoteId` share one
+ * entry; a note published without an id is listed once per reference, because
+ * nothing else identifies it. Markers are positional, since the sanitizer
+ * rewrites element ids and in-page anchors are therefore not possible.
  */
 export type Footnote = { id: string; text: RichText };
 

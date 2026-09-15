@@ -1,18 +1,27 @@
 /**
  * Minimal HTML emission helpers. Output must round-trip through
  * `sanitizeArticleHtml` unchanged, so text is escaped the way hast-util-to-html
- * serialises it: `&`, `<` in text; `&`, `"`, `'` in attribute values; nothing else.
+ * serialises it: `&` and `<` in text; `&`, `"`, `'`, and a backtick in attribute
+ * values; nothing else. The parser drops U+0000 from text and turns it into
+ * U+FFFD in attributes, so it is removed before either.
  */
 
+function withoutControlCharacters(value: string) {
+  return value.replace(/\u0000/g, "");
+}
+
 export function escapeText(value: string) {
-  return value.replace(/&/g, "&#x26;").replace(/</g, "&#x3C;");
+  return withoutControlCharacters(value)
+    .replace(/&/g, "&#x26;")
+    .replace(/</g, "&#x3C;");
 }
 
 export function escapeAttribute(value: string) {
-  return value
+  return withoutControlCharacters(value)
     .replace(/&/g, "&#x26;")
     .replace(/"/g, "&#x22;")
-    .replace(/'/g, "&#x27;");
+    .replace(/'/g, "&#x27;")
+    .replace(/`/g, "&#x60;");
 }
 
 export type Attributes = Record<string, string | true | undefined>;

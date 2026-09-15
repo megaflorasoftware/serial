@@ -143,19 +143,25 @@ function renderTable(block: Block, context: ConversionContext) {
   const span = (value: number | undefined) =>
     value && value > 1 ? String(value) : undefined;
   return context.nested(() => {
+    let hasContent = false;
     const rows = parsed.data.content.map((row) => {
-      const cells = row.content.map((cell) =>
-        element(
+      const cells = row.content.map((cell) => {
+        const inner = renderInline(cell.content, context);
+        if (inner) hasContent = true;
+        return element(
           blockName(cell, PREFIX) === "tableHeader" ? "th" : "td",
           { colspan: span(cell.colspan), rowspan: span(cell.rowspan) },
-          renderInline(cell.content, context),
-        ),
-      );
+          inner,
+        );
+      });
       return element("tr", undefined, cells.join(""));
     });
-    const body = rows.join("");
-    if (!body.replace(/<\/?(?:tr|td|th)[^>]*>/g, "")) return "";
-    return element("table", undefined, element("tbody", undefined, body));
+    if (!hasContent) return "";
+    return element(
+      "table",
+      undefined,
+      element("tbody", undefined, rows.join("")),
+    );
   });
 }
 

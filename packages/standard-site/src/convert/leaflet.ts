@@ -127,14 +127,17 @@ function renderList(
       .filter((result) => result.success)
       .map((result) => result.data);
     const task = parsed.some((item) => item.checked !== undefined);
-    const rendered = parsed.map((item) => {
-      const inner =
-        renderListItemContent(item, context) +
-        renderNestedList(item, ordered, context);
-      return item.checked !== undefined
-        ? taskListItem(item.checked, inner)
-        : element("li", undefined, inner);
-    });
+    const rendered = parsed
+      .map((item) => {
+        const inner =
+          renderListItemContent(item, context) +
+          renderNestedList(item, ordered, context);
+        if (!inner) return "";
+        return item.checked !== undefined
+          ? taskListItem(item.checked, inner)
+          : element("li", undefined, inner);
+      })
+      .filter((item) => item !== "");
     return list(ordered, rendered, { start, task });
   });
 }
@@ -175,7 +178,8 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "image":
       return renderImage(block, context, true);
     case "imageGallery": {
-      const images = z.array(imageSchema).safeParse(block.images);
+      // Entries parse one at a time so a malformed image drops itself, not the gallery.
+      const images = z.array(z.unknown()).safeParse(block.images);
       if (!images.success) return "";
       return images.data
         .map((entry) => renderImage(entry, context, true))
