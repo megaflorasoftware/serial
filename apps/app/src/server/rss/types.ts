@@ -1,12 +1,58 @@
 import { z } from "zod";
-import type { feeds } from "~/server/db/schema";
+import type {
+  DatabaseFeed,
+  DatabaseFeedOrigin,
+  feedOrigins,
+  feeds,
+} from "~/server/db/schema";
 import type { ContentPlatform } from "~/lib/content/descriptor";
+import { FEED_ORIGIN_KIND } from "~/server/db/schema";
 
+/** Origin values a parser can supply when a Feed is created. */
+export type NewFeedOriginDetails = Omit<
+  typeof feedOrigins.$inferInsert,
+  "id" | "feedId" | "userId" | "createdAt" | "updatedAt"
+>;
+
+/** Feed values plus the origins it starts with, as produced by feed detection. */
 export type NewFeedDetails = Omit<
   typeof feeds.$inferInsert,
   "id" | "createdAt" | "updatedAt" | "userId"
 > & {
   platform: ContentPlatform;
+  origins: NewFeedOriginDetails[];
+};
+
+/** Build the Feed plus single-RSS-origin shape parsers return on detection. */
+export function newRssFeedDetails(input: {
+  url: string;
+  platform: ContentPlatform;
+  name: string;
+  imageUrl?: string;
+  siteUrl?: string;
+  description?: string;
+}): NewFeedDetails {
+  return {
+    name: input.name,
+    imageUrl: input.imageUrl,
+    platform: input.platform,
+    siteUrl: input.siteUrl ?? null,
+    origins: [
+      {
+        kind: FEED_ORIGIN_KIND.RSS,
+        locator: input.url,
+        sourceName: input.name,
+        sourceImageUrl: input.imageUrl ?? null,
+        sourceDescription: input.description ?? null,
+      },
+    ],
+  };
+}
+
+/** One origin paired with the Feed it belongs to: the unit the fetch pipeline works on. */
+export type FetchableOrigin = {
+  origin: DatabaseFeedOrigin;
+  feed: DatabaseFeed;
 };
 
 export type RSSContent = {

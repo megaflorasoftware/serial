@@ -4,7 +4,7 @@ import type { PublishedChunk } from "~/server/api/publisher";
 import { publisher } from "~/server/api/publisher";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
 import { emptyRefreshStats } from "~/server/rss/stats";
-import { feeds, user } from "~/server/db/schema";
+import { feedOrigins, feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 
@@ -33,13 +33,20 @@ describe("background refresh delivery", () => {
       id: 7,
       userId: "watching-user",
       name: "Feed",
-      url: "https://example.com/watching.xml",
       imageUrl: "",
       platform: "website",
       openLocation: "serial",
       createdAt: now,
       updatedAt: now,
       isActive: true,
+    });
+    await testDatabase.database.insert(feedOrigins).values({
+      feedId: 7,
+      userId: "watching-user",
+      kind: "rss",
+      locator: "https://example.com/watching.xml",
+      createdAt: now,
+      updatedAt: now,
     });
 
     const controller = new AbortController();

@@ -7,6 +7,11 @@ import type { ApplicationFeed } from "~/server/db/schema";
 import * as schema from "~/server/db/schema";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
+import {
+  findFeedByRssUrl,
+  insertFeedWithOrigins,
+} from "~/server/feeds/origins";
 
 type SerialSchema = typeof schema;
 
@@ -16,21 +21,6 @@ type Transaction = SQLiteTransaction<
   SerialSchema,
   ExtractTablesWithRelations<SerialSchema>
 >;
-
-export async function findExistingFeedThatMatches(
-  tx: Transaction,
-  data: {
-    feedUrl: string;
-    userId: string;
-  },
-) {
-  return await tx.query.feeds.findFirst({
-    where: and(
-      eq(schema.feeds.url, data.feedUrl),
-      eq(schema.feeds.userId, data.userId),
-    ),
-  });
-}
 
 export async function verifyFeedsOwnedByUser({
   feedIds,
@@ -220,16 +210,17 @@ export async function insertFeedWithCategories(
 ): Promise<InsertFeedWithCategoriesResult> {
   const newFeedDetails = await fetchNewFeedDetails(feedInput.feedUrl);
   const newFeed = newFeedDetails[0];
+  const newFeedUrl = newFeed ? getFeedRssUrl(newFeed) : "";
 
-  if (!newFeed?.url) {
+  if (!newFeed || !newFeedUrl) {
     return {
       success: false,
       error: "Unsupported feed URL",
     };
   }
 
-  const existingFeed = await findExistingFeedThatMatches(db, {
-    feedUrl: newFeed.url,
+  const existingFeed = await findFeedByRssUrl(db, {
+    feedUrl: newFeedUrl,
     userId,
   });
 
@@ -251,23 +242,11 @@ export async function insertFeedWithCategories(
     };
   }
 
-  const newFeeds = await db
-    .insert(schema.feeds)
-    .values({
-      userId,
-      ...newFeed,
-      isActive,
-      openLocation: schema.PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
-    })
-    .returning();
-  const newFeedRow = newFeeds[0];
-
-  if (!newFeedRow) {
-    return {
-      success: false,
-      error: "Couldn't find new feed",
-    };
-  }
+  const newFeedRow = await insertFeedWithOrigins(db, {
+    userId,
+    details: newFeed,
+    isActive,
+  });
 
   await applyFeedCategories(db, userId, [
     { feedId: newFeedRow.id, categories: feedInput.categories },

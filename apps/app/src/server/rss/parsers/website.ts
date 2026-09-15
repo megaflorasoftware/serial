@@ -8,14 +8,15 @@ import {
   BASE_FEED_CUSTOM_FIELDS,
   baseFeedSchema,
   extractRssMetadata,
+  newRssFeedDetails,
 } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
   FeedFetchResult,
+  FetchableOrigin,
   NewFeedDetails,
   RSSContent,
 } from "../types";
@@ -177,12 +178,14 @@ export async function getWebsiteFeedIfMatches(
   } = websiteSchema.safeParse(rssData);
 
   if (websiteSuccess) {
-    return {
-      url: url,
+    return newRssFeedDetails({
+      url,
       platform: "website",
       name: websiteData.title,
       imageUrl: websiteData.image?.url,
-    };
+      siteUrl: websiteData.link,
+      description: websiteData.description,
+    });
   } else {
     logError(error);
   }
@@ -191,11 +194,11 @@ export async function getWebsiteFeedIfMatches(
 }
 
 export async function fetchWebsiteFeedData(
-  feed: DatabaseFeed,
+  { origin, feed }: FetchableOrigin,
   cached?: ConditionalHeaders,
 ): Promise<FeedFetchResult | null> {
   try {
-    const feedResponse = await readFeedHttp(feed.url, {
+    const feedResponse = await readFeedHttp(origin.locator, {
       headers: cached ? buildConditionalHeaders(cached) : undefined,
     });
 
@@ -268,7 +271,7 @@ export async function fetchWebsiteFeedData(
     return {
       id: feed.id,
       title: data.title,
-      url: data.link ?? new URL(feed.url).origin,
+      url: data.link ?? new URL(origin.locator).origin,
       items,
       fetchMetadata,
     };
@@ -276,9 +279,9 @@ export async function fetchWebsiteFeedData(
     captureException(e, {
       context: "website-feed-fetch",
       feedId: feed.id,
-      url: feed.url,
+      url: origin.locator,
     });
-    logError("Error fetching website feed data for URL =", feed.url);
+    logError("Error fetching website feed data for URL =", origin.locator);
     logError(e);
     return null;
   }

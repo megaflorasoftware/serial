@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { makeFetchableOrigin } from "./fetchable-origin";
+import type { FetchableOriginOverrides } from "./fetchable-origin";
 import type { Server } from "node:http";
 
-import type { DatabaseFeed } from "~/server/db/schema";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
@@ -125,24 +126,11 @@ afterAll(() => {
   server?.close();
 });
 
-function makeFeed(overrides?: Partial<DatabaseFeed>): DatabaseFeed {
-  return {
-    id: 1,
-    userId: "user-1",
-    name: "Fireship",
-    url: `${baseUrl}/feed`,
-    imageUrl: "",
-    platform: "youtube",
-    openLocation: "serial",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    isActive: true,
-    etag: null,
-    lastModifiedHeader: null,
-    ...overrides,
-  };
+function makeFeed(overrides: FetchableOriginOverrides = {}) {
+  return makeFetchableOrigin(
+    { name: "Fireship", platform: "youtube", url: `${baseUrl}/feed` },
+    overrides,
+  );
 }
 
 function createMockDb(existingItems: unknown[] = []) {
@@ -528,7 +516,7 @@ describe("fetchAndInsertFeedData resource bounds", () => {
     const feeds = Array.from({ length: 10 }, (_, index) =>
       makeFeed({
         id: index + 1,
-        url: `${baseUrl}/slow/${index + 1}`,
+        locator: `${baseUrl}/slow/${index + 1}`,
       }),
     );
 

@@ -1,10 +1,16 @@
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  findExistingFeedThatMatches,
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
 } from "./utils";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
+import {
+  findFeedByRssUrl,
+  insertFeedWithOrigins,
+  loadUserFeedsWithOrigins,
+  withOrigins,
+} from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
@@ -16,7 +22,6 @@ import {
   feeds,
   feedsSchema,
   openLocationSchema,
-  PLATFORM_DEFAULT_OPEN_LOCATION,
   viewFeeds,
   views,
   viewSections,
@@ -119,17 +124,17 @@ export const createFromSubscriptionImport = protectedProcedure
             context.db.transaction(async (tx) => {
               const newFeedDetails = await fetchNewFeedDetails(feed.feedUrl);
               const newFeed = newFeedDetails[0];
+              const newFeedUrl = newFeed ? getFeedRssUrl(newFeed) : "";
 
-              if (!newFeed?.url) {
+              if (!newFeed || !newFeedUrl) {
                 return {
                   feedUrl: feed.feedUrl,
                   success: false as const,
                   error: "Unsupported feed URL",
                 };
               }
-              const newFeedUrl = newFeed.url;
 
-              const existingFeed = await findExistingFeedThatMatches(tx, {
+              const existingFeed = await findFeedByRssUrl(tx, {
                 feedUrl: newFeedUrl,
                 userId,
               });
@@ -142,25 +147,11 @@ export const createFromSubscriptionImport = protectedProcedure
                 };
               }
 
-              const newFeeds = await tx
-                .insert(feeds)
-                .values({
-                  userId,
-                  ...newFeed,
-                  isActive: feed.shouldBeActive,
-                  openLocation:
-                    PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
-                })
-                .returning();
-              const newFeedRow = newFeeds[0];
-
-              if (!newFeedRow) {
-                return {
-                  feedUrl: newFeed.url,
-                  success: false as const,
-                  error: "Couldn't find new feed",
-                };
-              }
+              const newFeedRow = await insertFeedWithOrigins(tx, {
+                userId,
+                details: newFeed,
+                isActive: feed.shouldBeActive,
+              });
 
               const matchingCategories = await tx
                 .select()
@@ -218,7 +209,7 @@ export const createFromSubscriptionImport = protectedProcedure
               ]);
 
               return {
-                feedUrl: newFeed.url,
+                feedUrl: newFeedUrl,
                 feedId: newFeedRow.id,
                 success: true as const,
               };
@@ -296,9 +287,7 @@ const deleteFeed = protectedProcedure
 export { deleteFeed as delete };
 
 export const getAll = protectedProcedure.handler(async function* ({ context }) {
-  const feedsList = await context.db.query.feeds.findMany({
-    where: sql`user_id = ${context.user.id}`,
-  });
+  const feedsList = await loadUserFeedsWithOrigins(context.db, context.user.id);
 
   const parsed = parseArrayOfSchema(feedsList, feedsSchema);
 
@@ -407,7 +396,8 @@ export const update = protectedProcedure
         }
       }
 
-      return feedsSchema.parse(updatedFeed);
+      const [updatedFeedWithOrigins] = await withOrigins(tx, [updatedFeed]);
+      return feedsSchema.parse(updatedFeedWithOrigins);
     });
     if (result) {
       await publishReconciliationInvalidation(
@@ -494,7 +484,10 @@ export const setActive = protectedProcedure
     const updatedFeed = updatedFeeds[0];
     if (!updatedFeed) return null;
 
-    const parsed = feedsSchema.parse(updatedFeed);
+    const [updatedFeedWithOrigins] = await withOrigins(context.db, [
+      updatedFeed,
+    ]);
+    const parsed = feedsSchema.parse(updatedFeedWithOrigins);
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),

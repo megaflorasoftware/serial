@@ -2,7 +2,7 @@ import { publisher } from "../api/publisher";
 import { captureException } from "../logger";
 import { fetchAndInsertFeedData } from "./fetchFeeds";
 import { affectedFeedFromItems, emptyRefreshStats } from "./stats";
-import type { DatabaseFeed } from "../db/schema";
+import type { FetchableOrigin } from "./types";
 import type { db as Database } from "../db";
 import type { RefreshStats } from "./stats";
 import type { RssPublishedChunk } from "~/lib/rss";
@@ -11,9 +11,11 @@ export type { RefreshStats } from "./stats";
 
 /**
  * Shared feed refresh logic used by both background-refresh tasks and
- * interactive user-triggered refreshes. Fetches RSS content for the
- * given feeds and publishes feed-status / feed-items chunks via the
- * SSE publisher for any active subscribers.
+ * interactive user-triggered refreshes. Fetches content for the given
+ * origins and publishes feed-status / feed-items chunks via the SSE
+ * publisher for any active subscribers. Each origin result yields one
+ * chunk and one stats increment, addressed by the owning Feed's id; a Feed
+ * with two origins therefore reports twice, which ticket 07 revisits.
  *
  * Callers are responsible for publishing `refresh-start` before and
  * `refresh-complete` after calling this function.
@@ -27,14 +29,14 @@ export async function refreshUserFeeds({
   channel,
 }: {
   db: typeof Database;
-  feedsList: DatabaseFeed[];
+  feedsList: FetchableOrigin[];
   channel?: string;
 }): Promise<RefreshStats> {
-  const activeFeedsList = feedsList.filter((feed) => feed.isActive);
+  const activeOrigins = feedsList.filter(({ feed }) => feed.isActive);
 
   const stats = emptyRefreshStats();
 
-  if (activeFeedsList.length === 0) {
+  if (activeOrigins.length === 0) {
     return stats;
   }
 
@@ -50,13 +52,13 @@ export async function refreshUserFeeds({
 
   // Build feed name map for error logging
   const feedNameMap = new Map<number, string>();
-  for (const feed of activeFeedsList) {
+  for (const { feed } of activeOrigins) {
     feedNameMap.set(feed.id, feed.name);
   }
 
   for await (const feedResult of fetchAndInsertFeedData(
     { db },
-    activeFeedsList,
+    activeOrigins,
   )) {
     // Skip publishing status for cached feeds (they complete instantly)
     if (feedResult.status === "skipped") {
@@ -105,7 +107,7 @@ export async function refreshUserFeeds({
         "error" in feedResult && feedResult.error instanceof Error
           ? feedResult.error
           : new Error(errMsg),
-        { feedId: feedResult.id, feedName },
+        { feedId: feedResult.id, originId: feedResult.originId, feedName },
       );
     }
   }

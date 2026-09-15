@@ -36,6 +36,8 @@ import {
   viewSections,
 } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
+import { fetchableOriginsOf, findFeedsByRssUrls } from "~/server/feeds/origins";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import {
@@ -376,17 +378,10 @@ export const streamingImport = protectedProcedure
     const inputFeedUrls = getUniqueNames(
       input.feeds.map((feed) => feed.feedUrl),
     );
-    const ownedFeeds = await runInChunks(inputFeedUrls, (urlChunk) =>
-      context.db
-        .select()
-        .from(feeds)
-        .where(
-          and(eq(feeds.userId, context.user.id), inArray(feeds.url, urlChunk)),
-        ),
-    );
-    const ownedFeedByUrl = new Map(
-      ownedFeeds.flat().map((feed) => [feed.url, feed]),
-    );
+    const ownedFeedByUrl = await findFeedsByRssUrls(context.db, {
+      userId: context.user.id,
+      feedUrls: inputFeedUrls,
+    });
 
     // OPML sections always become views; only explicit Serial tag metadata
     // becomes feed tags.
@@ -885,13 +880,13 @@ export const streamingImport = protectedProcedure
           itemId: number;
         }> = [];
         const linkableFeedsByCanonicalUrl = new Map(
-          orderedLinkableFeeds.map((feed) => [feed.feed.url, feed]),
+          orderedLinkableFeeds.map((feed) => [getFeedRssUrl(feed.feed), feed]),
         );
         // First feed wins for a display name, matching the previous
         // first-match scan.
         const linkableFeedsByDisplayName = new Map<string, LinkableFeed>();
         for (const feed of orderedLinkableFeeds) {
-          const displayName = feed.feed.name || feed.feed.url;
+          const displayName = feed.feed.name || getFeedRssUrl(feed.feed);
           if (!linkableFeedsByDisplayName.has(displayName)) {
             linkableFeedsByDisplayName.set(displayName, feed);
           }
@@ -981,9 +976,10 @@ export const streamingImport = protectedProcedure
       });
 
       const fetchPromise = (async () => {
-        for await (const feedResult of fetchAndInsertFeedData(context, [
-          insertedFeed.feed,
-        ])) {
+        for await (const feedResult of fetchAndInsertFeedData(
+          context,
+          fetchableOriginsOf([insertedFeed.feed]),
+        )) {
           chunks.push({
             type: "feed-status",
             feedId: feedResult.id,

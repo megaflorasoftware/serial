@@ -1,17 +1,15 @@
 import type { db as defaultDatabase } from "~/server/db";
 import {
-  findExistingFeedThatMatches,
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
 } from "~/server/api/routers/feed-router/utils";
-import {
-  feedCategories,
-  feeds,
-  feedsSchema,
-  PLATFORM_DEFAULT_OPEN_LOCATION,
-  viewFeeds,
-} from "~/server/db/schema";
+import { feedCategories, feedsSchema, viewFeeds } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
+import {
+  findFeedByRssUrl,
+  insertFeedWithOrigins,
+} from "~/server/feeds/origins";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
 
@@ -54,9 +52,10 @@ export async function createFeedsForUser(input: {
 
     return Promise.all(
       newFeedDetails.map(async (newFeed, index) => {
-        if (!newFeed.url) return { error: "No feed url found." };
-        const existingFeed = await findExistingFeedThatMatches(transaction, {
-          feedUrl: newFeed.url,
+        const feedUrl = getFeedRssUrl(newFeed);
+        if (!feedUrl) return { error: "No feed url found." };
+        const existingFeed = await findFeedByRssUrl(transaction, {
+          feedUrl,
           userId: input.userId,
         });
         if (existingFeed) {
@@ -65,17 +64,12 @@ export async function createFeedsForUser(input: {
             : { error: "Feed already exists" };
         }
 
-        const insertedFeeds = await transaction
-          .insert(feeds)
-          .values({
-            userId: input.userId,
-            ...newFeed,
-            isActive: index < remainingSlots,
-            openLocation: PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
-          })
-          .returning();
-        const insertedFeed = insertedFeeds[0];
-        if (input.categoryIds.length > 0 && insertedFeed) {
+        const insertedFeed = await insertFeedWithOrigins(transaction, {
+          userId: input.userId,
+          details: newFeed,
+          isActive: index < remainingSlots,
+        });
+        if (input.categoryIds.length > 0) {
           await transaction.insert(feedCategories).values(
             input.categoryIds.map((categoryId) => ({
               feedId: Number(insertedFeed.id),
@@ -83,7 +77,7 @@ export async function createFeedsForUser(input: {
             })),
           );
         }
-        if (input.viewIds?.length && insertedFeed) {
+        if (input.viewIds?.length) {
           await transaction.insert(viewFeeds).values(
             input.viewIds.map((viewId) => ({
               viewId,
@@ -103,7 +97,7 @@ export async function createFeedsForUser(input: {
     throw new Error(errors[0]?.error ?? "Failed to create feed");
   }
   const returnedFeeds = results.flatMap((result) =>
-    "feed" in result && result.feed ? [result.feed] : [],
+    "feed" in result ? [result.feed] : [],
   );
   const createdCount = results.filter(
     (result) => "created" in result && result.created,

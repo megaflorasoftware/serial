@@ -32,7 +32,7 @@ describe("extension Feed HTTP contract", () => {
     vi.mocked(fetchAndInsertFeedData).mockReset();
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
-      yield { status: "success", id: 1, feedItems: [] };
+      yield { status: "success", id: 1, originId: 10, feedItems: [] };
     });
   });
 
@@ -51,13 +51,13 @@ describe("extension Feed HTTP contract", () => {
       id: "user-one",
     } as never);
     vi.mocked(createFeedsForUser).mockResolvedValue({
-      feeds: [{ id: 1 }],
+      feeds: [{ id: 1, origins: [{ id: 10, feedId: 1 }] }],
       deactivatedCount: 0,
       maxActiveFeeds: 100,
     } as never);
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
-      yield { status: "success", id: 1, feedItems: [] };
+      yield { status: "success", id: 1, originId: 10, feedItems: [] };
       ingestionCompleted = true;
     });
     const response = await addExtensionFeed(
@@ -76,7 +76,12 @@ describe("extension Feed HTTP contract", () => {
     );
     expect(fetchAndInsertFeedData).toHaveBeenCalledWith(
       expect.objectContaining({ db: expect.anything() }),
-      [expect.objectContaining({ id: 1 })],
+      [
+        expect.objectContaining({
+          feed: expect.objectContaining({ id: 1 }),
+          origin: expect.objectContaining({ id: 10 }),
+        }),
+      ],
     );
     expect(ingestionCompleted).toBe(true);
   });
@@ -86,7 +91,7 @@ describe("extension Feed HTTP contract", () => {
       id: "user-one",
     } as never);
     vi.mocked(createFeedsForUser).mockResolvedValue({
-      feeds: [{ id: 1 }],
+      feeds: [{ id: 1, origins: [{ id: 10, feedId: 1 }] }],
       createdCount: 0,
       deactivatedCount: 0,
       maxActiveFeeds: 100,
@@ -98,7 +103,10 @@ describe("extension Feed HTTP contract", () => {
 
     expect(response.status).toBe(200);
     expect(fetchAndInsertFeedData).toHaveBeenCalledWith(expect.anything(), [
-      expect.objectContaining({ id: 1 }),
+      expect.objectContaining({
+        feed: expect.objectContaining({ id: 1 }),
+        origin: expect.objectContaining({ id: 10 }),
+      }),
     ]);
   });
 
@@ -108,14 +116,14 @@ describe("extension Feed HTTP contract", () => {
       id: "user-one",
     } as never);
     vi.mocked(createFeedsForUser).mockResolvedValue({
-      feeds: [{ id: 1 }],
+      feeds: [{ id: 1, origins: [{ id: 10, feedId: 1 }] }],
       deactivatedCount: 0,
       maxActiveFeeds: 100,
     } as never);
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
       if (ingestionError) throw ingestionError;
-      yield { status: "success", id: 1, feedItems: [] };
+      yield { status: "success", id: 1, originId: 10, feedItems: [] };
     });
 
     const response = await addExtensionFeed(

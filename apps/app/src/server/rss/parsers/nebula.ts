@@ -8,14 +8,15 @@ import {
   BASE_FEED_CUSTOM_FIELDS,
   baseFeedSchema,
   extractRssMetadata,
+  newRssFeedDetails,
 } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
   FeedFetchResult,
+  FetchableOrigin,
   NewFeedDetails,
   RSSContent,
 } from "../types";
@@ -87,11 +88,13 @@ export async function fetchNebulaFeedDetails(
     const { data: nebulaData, success } = nebulaSchema.safeParse(rssData);
 
     if (success) {
-      return {
+      return newRssFeedDetails({
         name: nebulaData.title,
         url: rssUrl,
         platform: "nebula",
-      };
+        siteUrl: nebulaData.link,
+        description: nebulaData.description,
+      });
     }
   } catch (e) {
     captureException(e, { context: "nebula-feed-details", url });
@@ -102,11 +105,11 @@ export async function fetchNebulaFeedDetails(
 }
 
 export async function fetchNebulaFeedData(
-  feed: DatabaseFeed,
+  { origin, feed }: FetchableOrigin,
   cached?: ConditionalHeaders,
 ): Promise<FeedFetchResult | null> {
   try {
-    const feedResponse = await readFeedHttp(feed.url, {
+    const feedResponse = await readFeedHttp(origin.locator, {
       headers: cached ? buildConditionalHeaders(cached) : undefined,
     });
 
@@ -159,9 +162,9 @@ export async function fetchNebulaFeedData(
     captureException(e, {
       context: "nebula-feed-fetch",
       feedId: feed.id,
-      url: feed.url,
+      url: origin.locator,
     });
-    logError("Error fetching Nebula feed data for URL =", feed.url);
+    logError("Error fetching Nebula feed data for URL =", origin.locator);
     logError(e);
     return null;
   }

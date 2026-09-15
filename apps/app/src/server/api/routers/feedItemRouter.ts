@@ -6,6 +6,7 @@ import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import { prepareArrayChunks } from "~/lib/iterators";
 import { feedItems, feeds } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
+import { fetchableOriginsOf, withOrigins } from "~/server/feeds/origins";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import {
   deduplicateByLastValue,
@@ -379,7 +380,10 @@ export const getByFeedId = protectedProcedure
       return;
     }
 
-    for await (const feedResult of fetchAndInsertFeedData(context, [feed])) {
+    for await (const feedResult of fetchAndInsertFeedData(
+      context,
+      fetchableOriginsOf(await withOrigins(context.db, [feed])),
+    )) {
       yield {
         type: "feed-status",
         status: feedResult.status,
