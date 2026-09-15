@@ -5,7 +5,6 @@ import {
   element,
   embedPlaceholder,
   figure,
-  image,
   interactivePlaceholder,
   linkCard,
   list,
@@ -24,7 +23,7 @@ import {
   type Block,
 } from "./shared";
 import { blobRefSchema } from "../lexicons";
-import { sanitizeArticleHtml } from "../sanitize";
+import { sanitizeEmbeddedHtml } from "../sanitize";
 import { buildPdslsUrl } from "../uris";
 
 const PREFIX = "pub.leaflet.blocks.";
@@ -146,15 +145,14 @@ function renderImage(
 ) {
   const parsed = imageSchema.safeParse(value);
   if (!parsed.success) return "";
-  const url = context.imageUrl(parsed.data.image.ref.$link);
-  context.noteImage(url);
-  const img = image(url, parsed.data.alt);
+  const img = context.blobImage(parsed.data.image.ref.$link, parsed.data.alt);
+  if (!img) return "";
   return wrap ? figure(img, undefined) : img;
 }
 
 /** Inline HTML keeps only what the article schema permits; nothing left means a placeholder. */
 function renderHtmlBlock(html: string) {
-  const sanitized = sanitizeArticleHtml(html).trim();
+  const sanitized = sanitizeEmbeddedHtml(html).trim();
   return sanitized || interactivePlaceholder(null);
 }
 
@@ -166,11 +164,11 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return richTextHeading(block, context);
     case "blockquote": {
       const text = richTextSchema.safeParse(block);
-      if (!text.success) return "";
+      if (!text.success || !text.data.plaintext.trim()) return "";
       return element(
         "blockquote",
         undefined,
-        paragraph(renderRichText(text.data, context)),
+        paragraph(context.aside(() => renderRichText(text.data, context))),
       );
     }
     case "image":

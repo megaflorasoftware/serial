@@ -6,7 +6,6 @@ import {
   embedPlaceholder,
   escapeText,
   figure,
-  image,
   interactivePlaceholder,
   linkCard,
   list,
@@ -26,7 +25,7 @@ import {
   type Block,
 } from "./shared";
 import { blobRefSchema } from "../lexicons";
-import { buildBlueskyProfileUrl, isDid } from "../uris";
+import { buildBlueskyProfileUrl } from "../uris";
 
 const PREFIX = "blog.pckt.block.";
 
@@ -91,19 +90,16 @@ function renderBlocks(blocks: Block[], context: ConversionContext) {
 function renderImageAttrs(value: unknown, context: ConversionContext) {
   const attrs = imageAttrsSchema.safeParse(value);
   if (!attrs.success) return "";
-  let url: string | null = null;
-  if (attrs.data.blob) {
-    url = context.imageUrl(attrs.data.blob.ref.$link);
-  } else if (attrs.data.src.startsWith("blob:")) {
-    url = context.imageUrl(attrs.data.src.slice("blob:".length));
-  } else {
-    url = safeSourceUrl(attrs.data.src);
-  }
+  const { src, blob, alt, title } = attrs.data;
+  const cid =
+    blob?.ref.$link ?? (src.startsWith("blob:") ? src.slice(5) : null);
+  const url = cid ? context.imageUrl(cid) : safeSourceUrl(src);
   if (!url) return "";
   context.noteImage(url);
+  // `title` is hover text per the lexicon, not a caption.
   return figure(
-    image(url, attrs.data.alt),
-    attrs.data.title ? escapeText(attrs.data.title) : undefined,
+    voidElement("img", { src: url, alt: alt ?? "", title }),
+    undefined,
   );
 }
 
@@ -113,15 +109,29 @@ function renderListItems(
   start: number | undefined,
   context: ConversionContext,
 ) {
-  const items = blocks.map((item) => {
-    const parsed = containerSchema.safeParse(item);
-    return element(
-      "li",
-      undefined,
-      parsed.success ? renderInline(parsed.data.content, context) : "",
-    );
+  return context.nested(() => {
+    const items = blocks
+      .map((item) => {
+        const parsed = containerSchema.safeParse(item);
+        return parsed.success ? renderInline(parsed.data.content, context) : "";
+      })
+      .filter((inner) => inner !== "")
+      .map((inner) => element("li", undefined, inner));
+    return list(ordered, items, { start });
   });
-  return list(ordered, items, { start });
+}
+
+function renderTaskItems(blocks: Block[], context: ConversionContext) {
+  return context.nested(() => {
+    const items = blocks.map((item) => {
+      const inner = containerSchema.safeParse(item);
+      return taskListItem(
+        item.checked === true,
+        inner.success ? renderInline(inner.data.content, context) : "",
+      );
+    });
+    return list(false, items, { task: true });
+  });
 }
 
 function renderTable(block: Block, context: ConversionContext) {
@@ -132,7 +142,7 @@ function renderTable(block: Block, context: ConversionContext) {
   const rows = parsed.data.content.map((row) => {
     const cells = row.content.map((cell) =>
       element(
-        cell.$type === `${PREFIX}tableHeader` ? "th" : "td",
+        blockName(cell, PREFIX) === "tableHeader" ? "th" : "td",
         { colspan: span(cell.colspan), rowspan: span(cell.rowspan) },
         renderInline(cell.content, context),
       ),
@@ -155,7 +165,9 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "blockquote": {
       const parsed = containerSchema.safeParse(block);
       if (!parsed.success) return "";
-      const inner = renderBlocks(parsed.data.content, context);
+      const inner = context.aside(() =>
+        renderBlocks(parsed.data.content, context),
+      );
       return inner ? element("blockquote", undefined, inner) : "";
     }
     case "bulletList":
@@ -173,14 +185,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "taskList": {
       const parsed = containerSchema.safeParse(block);
       if (!parsed.success) return "";
-      const items = parsed.data.content.map((item) => {
-        const inner = containerSchema.safeParse(item);
-        return taskListItem(
-          item.checked === true,
-          inner.success ? renderInline(inner.data.content, context) : "",
-        );
-      });
-      return list(false, items, { task: true });
+      return renderTaskItems(parsed.data.content, context);
     }
     case "table":
       return renderTable(block, context);
@@ -212,15 +217,10 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return blueskyPostCard(block.postRef);
     case "mention": {
       const did = stringProperty(block, "did");
-      if (!did || !isDid(did)) return "";
+      const href = did ? buildBlueskyProfileUrl(did) : null;
+      if (!did || !href) return "";
       const handle = stringProperty(block, "handle") ?? did;
-      return paragraph(
-        element(
-          "a",
-          { href: buildBlueskyProfileUrl(did) },
-          escapeText(`@${handle}`),
-        ),
-      );
+      return paragraph(element("a", { href }, escapeText(`@${handle}`)));
     }
     case "gallery":
     case "noteEmbed":

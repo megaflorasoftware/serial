@@ -122,6 +122,7 @@ export function list(
   items: string[],
   options: { start?: number; task?: boolean } = {},
 ) {
+  if (items.length === 0) return "";
   const attributes: Attributes = {};
   if (ordered && options.start !== undefined && options.start !== 1) {
     attributes.start = String(options.start);
@@ -220,8 +221,9 @@ export function parseYouTubeReference(
 
   const start =
     parsed.searchParams.get("start") ?? parsed.searchParams.get("t");
-  const validStart = start && /^\d+$/.test(start) ? start : null;
-  return { videoId, start: validStart };
+  // Share links write the offset as `t=30s`; embeds write `start=30`.
+  const validStart = start ? /^(\d+)s?$/.exec(start)?.[1] : undefined;
+  return { videoId, start: validStart ?? null };
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   safeLinkUrl,
   type Attributes,
 } from "./html";
-import { buildBlueskyProfileUrl, isDid } from "../uris";
+import { buildBlueskyProfileUrl } from "../uris";
 
 /**
  * The three platforms share one rich-text model: plaintext plus byte-indexed facets
@@ -87,7 +87,7 @@ function wrapperFor(
     case "mention":
     case "didMention": {
       const did = stringField(feature, "did");
-      return did && isDid(did) ? link(buildBlueskyProfileUrl(did)) : null;
+      return did ? link(buildBlueskyProfileUrl(did)) : null;
     }
     case "atMention":
       return link(safeLinkUrl(stringField(feature, "href")));
@@ -217,11 +217,19 @@ export function renderRichText(
   return html;
 }
 
-export function renderFootnotes(footnotes: Footnote[]) {
-  if (footnotes.length === 0) return "";
-  const items = footnotes.map((footnote) =>
-    element("li", undefined, renderRichText(footnote.text)),
-  );
+/**
+ * Renders the collected footnotes. Rendering with the same context lets a
+ * footnote inside footnote text register and be listed after it.
+ */
+export function renderFootnotes(context: FacetRenderContext) {
+  const items: string[] = [];
+  for (let index = 0; index < context.footnotes.length; index += 1) {
+    const footnote = context.footnotes[index]!;
+    items.push(
+      element("li", undefined, renderRichText(footnote.text, context)),
+    );
+  }
+  if (items.length === 0) return "";
   return element(
     "section",
     undefined,

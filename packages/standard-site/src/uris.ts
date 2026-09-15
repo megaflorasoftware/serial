@@ -6,18 +6,39 @@ export type AtUriParts = {
   rkey: string;
 };
 
-const DID_PATTERN = /^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$/;
-const AT_URI_PATTERN =
-  /^at:\/\/(did:[a-z0-9]+:[A-Za-z0-9._:%-]+)\/([^/]+)\/([^/?#]+)$/;
+// Identifier syntaxes from the AT Protocol specs. Every value that reaches a URL
+// path is checked against one of these so a crafted record cannot escape the
+// segment it is interpolated into.
+const DID_PATTERN = /^did:[a-z0-9]+:[A-Za-z0-9._:%-]*[A-Za-z0-9._%-]$/;
+const NSID_PATTERN = /^[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)+$/;
+const RECORD_KEY_PATTERN = /^[A-Za-z0-9._:~-]{1,512}$/;
+const CID_PATTERN = /^[A-Za-z0-9]{1,256}$/;
+const AT_URI_PATTERN = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/;
+
+function isPathSegment(value: string) {
+  return value !== "." && value !== "..";
+}
 
 export function isDid(value: string) {
-  return DID_PATTERN.test(value);
+  return DID_PATTERN.test(value) && isPathSegment(value);
+}
+
+export function isRecordKey(value: string) {
+  return RECORD_KEY_PATTERN.test(value) && isPathSegment(value);
+}
+
+export function isCid(value: string) {
+  return CID_PATTERN.test(value);
 }
 
 export function parseAtUri(uri: string): AtUriParts | null {
   const match = AT_URI_PATTERN.exec(uri);
   if (!match?.[1] || !match[2] || !match[3]) return null;
-  return { did: match[1], collection: match[2], rkey: match[3] };
+  const [, did, collection, rkey] = match;
+  if (!isDid(did) || !NSID_PATTERN.test(collection) || !isRecordKey(rkey)) {
+    return null;
+  }
+  return { did, collection, rkey };
 }
 
 export function buildAtUri(parts: AtUriParts) {
@@ -49,10 +70,11 @@ export function documentBelongsToPublication(
   documentSite: string,
   publicationUri: string,
 ) {
+  const publication = parsePublicationUri(publicationUri);
+  if (!publication) return false;
   if (documentSite === publicationUri) return true;
   const site = parseAtUri(documentSite);
-  const publication = parsePublicationUri(publicationUri);
-  if (!site || !publication) return false;
+  if (!site) return false;
   return (
     site.collection === LEGACY_LEAFLET_PUBLICATION_COLLECTION &&
     site.did === publication.did &&
@@ -98,16 +120,18 @@ export const BLUESKY_CDN_ORIGIN = "https://cdn.bsky.app";
 
 export type BlueskyCdnPreset = "feed_fullsize" | "feed_thumbnail" | "avatar";
 
+/** Null when the DID or CID could not sit safely in a URL path segment. */
 export function buildBlueskyCdnImageUrl(
   did: string,
   cid: string,
   preset: BlueskyCdnPreset = "feed_fullsize",
-) {
+): string | null {
+  if (!isDid(did) || !isCid(cid)) return null;
   return `${BLUESKY_CDN_ORIGIN}/img/${preset}/plain/${did}/${cid}@jpeg`;
 }
 
-export function buildBlueskyProfileUrl(didOrHandle: string) {
-  return `https://bsky.app/profile/${didOrHandle}`;
+export function buildBlueskyProfileUrl(did: string): string | null {
+  return isDid(did) ? `https://bsky.app/profile/${did}` : null;
 }
 
 export function buildBlueskyPostUrl(postUri: string): string | null {

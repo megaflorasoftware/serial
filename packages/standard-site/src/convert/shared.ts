@@ -1,6 +1,6 @@
 import type { FacetRenderContext } from "./facets";
 import { renderFootnotes, renderRichText, richTextSchema } from "./facets";
-import { heading, linkCard, paragraph } from "./html";
+import { heading, image, linkCard, paragraph } from "./html";
 import { strongRefSchema } from "../lexicons";
 import { buildBlueskyCdnImageUrl, buildBlueskyPostUrl } from "../uris";
 
@@ -25,16 +25,38 @@ export class ConversionContext implements FacetRenderContext {
   firstParagraph: string | null = null;
   firstImageUrl: string | null = null;
   private depth = 0;
+  private asideDepth = 0;
 
   constructor(readonly did: string) {}
 
+  /** CDN URL for a blob in this repo, or undefined when the cid is malformed. */
   imageUrl(cid: string) {
-    return buildBlueskyCdnImageUrl(this.did, cid);
+    return buildBlueskyCdnImageUrl(this.did, cid) ?? undefined;
   }
 
+  /** Renders one blob image, recording it as the thumbnail fallback. */
+  blobImage(cid: string, alt: string | undefined) {
+    const url = this.imageUrl(cid);
+    if (!url) return "";
+    this.noteImage(url);
+    return image(url, alt);
+  }
+
+  /** Quoted or aside text never becomes the description fallback. */
   noteParagraph(plaintext: string) {
+    if (this.asideDepth > 0) return;
     const trimmed = plaintext.trim();
     if (this.firstParagraph === null && trimmed) this.firstParagraph = trimmed;
+  }
+
+  /** Renders quoted or aside content whose paragraphs are not the description. */
+  aside(render: () => string) {
+    this.asideDepth += 1;
+    try {
+      return render();
+    } finally {
+      this.asideDepth -= 1;
+    }
   }
 
   noteImage(url: string) {
@@ -54,7 +76,7 @@ export class ConversionContext implements FacetRenderContext {
 
   finish(bodyHtml: string): ConvertedDocument {
     return {
-      html: bodyHtml + renderFootnotes(this.footnotes),
+      html: bodyHtml + renderFootnotes(this),
       firstParagraph: this.firstParagraph,
       firstImageUrl: this.firstImageUrl,
     };
@@ -63,11 +85,14 @@ export class ConversionContext implements FacetRenderContext {
 
 export type Block = { $type: string } & Record<string, unknown>;
 
-/** Strips the platform's block NSID prefix so each converter can switch on the short name. */
+/**
+ * Strips the platform's block NSID prefix and any `#def` suffix (a `$type` may name
+ * its main def explicitly) so each converter can switch on the short name.
+ */
 export function blockName(block: Block, prefix: string) {
-  return block.$type.startsWith(prefix)
-    ? block.$type.slice(prefix.length)
-    : block.$type;
+  const hash = block.$type.indexOf("#");
+  const type = hash === -1 ? block.$type : block.$type.slice(0, hash);
+  return type.startsWith(prefix) ? type.slice(prefix.length) : type;
 }
 
 export function richTextParagraph(block: unknown, context: ConversionContext) {

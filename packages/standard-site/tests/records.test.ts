@@ -6,10 +6,15 @@ import {
   parseSubscriptionRecord,
 } from "../src/lexicons";
 import { buildSubscriptionRecordKey } from "../src/subscription-key";
-import { ARTICLE_SANITIZE_SCHEMA, sanitizeArticleHtml } from "../src/sanitize";
+import {
+  ARTICLE_SANITIZE_SCHEMA,
+  sanitizeArticleHtml,
+  sanitizeEmbeddedHtml,
+} from "../src/sanitize";
 import {
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
+  buildBlueskyProfileUrl,
   buildCanonicalDocumentUrl,
   documentBelongsToPublication,
   normalizePublicationUrl,
@@ -106,6 +111,10 @@ describe("uris", () => {
       rkey: "3mjnpilwnrp2v",
     });
     expect(parseAtUri("https://example.com")).toBeNull();
+    expect(parseAtUri("at://did:plc:a/app.bsky.feed.post#frag/rk")).toBeNull();
+    expect(parseAtUri("at://did:plc:a/app.bsky.feed.post/..")).toBeNull();
+    expect(parseAtUri("at://did:plc:a/app.bsky.feed.post/a b")).toBeNull();
+    expect(parseAtUri("at://jenn.pckt.blog/app.bsky.feed.post/3k")).toBeNull();
     expect(
       parsePublicationUri("at://did:plc:abc/site.standard.document/x"),
     ).toBeNull();
@@ -129,6 +138,7 @@ describe("uris", () => {
     const publication =
       "at://did:plc:abc/site.standard.publication/3m367bemk3c2i";
     expect(documentBelongsToPublication(publication, publication)).toBe(true);
+    expect(documentBelongsToPublication("garbage", "garbage")).toBe(false);
     expect(
       documentBelongsToPublication(
         "at://did:plc:abc/pub.leaflet.publication/3m367bemk3c2i",
@@ -183,6 +193,18 @@ describe("uris", () => {
       buildBlueskyPostUrl("at://did:plc:a/site.standard.document/3k"),
     ).toBeNull();
   });
+
+  it("refuses identifiers that cannot sit in a url path segment", () => {
+    expect(buildBlueskyCdnImageUrl("did:plc:a", "../../evil")).toBeNull();
+    expect(buildBlueskyCdnImageUrl("did:plc:a/..", "bafy")).toBeNull();
+    expect(buildBlueskyCdnImageUrl("did:plc:a", "bafy@png")).toBeNull();
+    expect(buildBlueskyProfileUrl("did:plc:abc")).toBe(
+      "https://bsky.app/profile/did:plc:abc",
+    );
+    expect(buildBlueskyProfileUrl('did:plc:x" onclick="x()')).toBeNull();
+    expect(buildBlueskyProfileUrl("did:plc:a/b")).toBeNull();
+    expect(buildBlueskyProfileUrl("..")).toBeNull();
+  });
 });
 
 describe("subscription record key", () => {
@@ -213,5 +235,13 @@ describe("article sanitizer", () => {
       '<p id="user-content-x">t</p>',
     );
     expect(ARTICLE_SANITIZE_SCHEMA.clobberPrefix).toBe("user-content-");
+  });
+
+  it("strips clobbered attributes from embedded html so the result stays a fixed point", () => {
+    const embedded = sanitizeEmbeddedHtml(
+      '<p id="x" name="n" aria-label="l" title="t">t</p><a href="#x">j</a>',
+    );
+    expect(embedded).toBe('<p title="t">t</p><a href="#x">j</a>');
+    expect(sanitizeArticleHtml(embedded)).toBe(embedded);
   });
 });

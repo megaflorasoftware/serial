@@ -3,6 +3,7 @@ import {
   convertDocumentContent,
   convertResolvedContent,
   INTERACTIVE_PLACEHOLDER_TEXT,
+  parseYouTubeReference,
 } from "../src/convert";
 import { MAX_BLOCK_NESTING_DEPTH } from "../src/convert/shared";
 import { sanitizeArticleHtml } from "../src/sanitize";
@@ -148,6 +149,20 @@ describe("convertDocumentContent fixtures", () => {
       `<div data-serial-embed="interactive" data-href="https://tally.so/embed/zxNLd1?alignLeft=1&#x26;hideTitle=1&#x26;transparentBackground=1&#x26;dynamicHeight=1"><p><a href="https://tally.so/embed/zxNLd1?alignLeft=1&#x26;hideTitle=1&#x26;transparentBackground=1&#x26;dynamicHeight=1">${INTERACTIVE_PLACEHOLDER_TEXT}</a></p></div>`,
     );
     expect(converted.html).not.toContain('data-serial-embed="youtube"');
+  });
+
+  it("reads YouTube start offsets from share and embed links", () => {
+    expect(parseYouTubeReference("https://youtu.be/abcdefghijk?t=30s")).toEqual(
+      { videoId: "abcdefghijk", start: "30" },
+    );
+    expect(
+      parseYouTubeReference(
+        "https://www.youtube.com/embed/abcdefghijk?start=5",
+      ),
+    ).toEqual({ videoId: "abcdefghijk", start: "5" });
+    expect(
+      parseYouTubeReference("https://www.youtube.com/watch?v=abcdefghijk&t=1m"),
+    ).toEqual({ videoId: "abcdefghijk", start: null });
   });
 
   it("renders offprint callouts, mentions, highlights, lists, and images", async () => {
@@ -368,7 +383,7 @@ describe("leaflet blocks", () => {
       leaflet([
         {
           $type: "pub.leaflet.blocks.html",
-          html: '<p onclick="x()">kept</p><script>bad()</script>',
+          html: '<p onclick="x()" id="x">kept</p><script>bad()</script>',
         },
         { $type: "pub.leaflet.blocks.html", html: "<script>only()</script>" },
         {
@@ -494,14 +509,42 @@ describe("leaflet blocks", () => {
           ],
         },
         { $type: "pub.leaflet.blocks.header", plaintext: "   " },
+        { $type: "pub.leaflet.blocks.blockquote", plaintext: " " },
+        { $type: "pub.leaflet.blocks.unorderedList", children: [] },
+        {
+          $type: "pub.leaflet.blocks.header#main",
+          plaintext: "Suffixed",
+          level: 3,
+        },
       ]),
     );
     expect(html).toBe(
       '<p><a href="https://pdsls.dev/at://did:plc:a/site.standard.document/b"><strong>Embedded document</strong></a><br>at://did:plc:a/site.standard.document/b</p>' +
         '<p><a href="https://pdsls.dev/at://did:plc:a/site.standard.publication/c"><strong>Embedded publication</strong></a><br>at://did:plc:a/site.standard.publication/c</p>' +
-        `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyimg")}" alt="g"></figure>`,
+        `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyimg")}" alt="g"></figure>` +
+        "<h3>Suffixed</h3>",
     );
     expectFixedPoint(html);
+  });
+
+  it("keeps quoted text out of the description fallback and drops unsafe blob cids", () => {
+    const converted = convertResolvedContent(
+      leaflet([
+        { $type: "pub.leaflet.blocks.blockquote", plaintext: "quoted" },
+        {
+          $type: "pub.leaflet.blocks.image",
+          image: { ref: { $link: "../../evil" }, mimeType: "image/png" },
+          aspectRatio: { width: 1, height: 1 },
+        },
+        { $type: "pub.leaflet.blocks.text", plaintext: "body" },
+      ]),
+      did,
+    );
+    expect(converted?.html).toBe(
+      "<blockquote><p>quoted</p></blockquote><p>body</p>",
+    );
+    expect(converted?.firstParagraph).toBe("body");
+    expect(converted?.firstImageUrl).toBeNull();
   });
 
   it("stops rendering past the nesting depth limit", () => {
@@ -610,6 +653,11 @@ describe("pckt blocks", () => {
           $type: "blog.pckt.block.noteEmbed",
           noteRef: { uri: "at://x/y/z", cid: "c" },
         },
+        {
+          $type: "blog.pckt.block.blueskyEmbed",
+          postRef: { uri: "at://did:plc:p/app.bsky.feed.post/3k", cid: "c" },
+        },
+        { $type: "blog.pckt.block.bulletList", content: [] },
       ]),
     );
     expect(html).toBe(
@@ -617,26 +665,59 @@ describe("pckt blocks", () => {
         '<ul class="contains-task-list"><li class="task-list-item"><input type="checkbox" disabled> todo</li></ul>' +
         "<br>" +
         '<p><a href="https://bsky.app/profile/did:plc:abc">@alice.test</a></p>' +
-        `<figure><img src="https://example.com/a.png" alt="it&#x27;s"><figcaption>Cap</figcaption></figure>` +
+        `<figure><img src="https://example.com/a.png" alt="it&#x27;s" title="Cap"></figure>` +
         '<a href="https://example.com/"><img src="https://example.com/p.png" alt="Example"></a><p><a href="https://example.com/"><strong>Example</strong></a></p>' +
-        `<div data-serial-embed="interactive"><p>${INTERACTIVE_PLACEHOLDER_TEXT}</p></div>`,
+        `<div data-serial-embed="interactive"><p>${INTERACTIVE_PLACEHOLDER_TEXT}</p></div>` +
+        '<p><a href="https://bsky.app/profile/did:plc:p/post/3k"><strong>View post on Bluesky</strong></a></p>',
     );
     expectFixedPoint(html);
   });
 
-  it("caps nesting depth on blockquotes", () => {
-    let block: Record<string, unknown> = {
+  it("treats a def-suffixed table header cell as a header", () => {
+    const html = convertRaw(
+      pckt([
+        {
+          $type: "blog.pckt.block.table",
+          content: [
+            {
+              $type: "blog.pckt.block.tableRow#main",
+              content: [
+                {
+                  $type: "blog.pckt.block.tableHeader#main",
+                  content: [{ $type: "blog.pckt.block.text", plaintext: "H" }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(html).toBe("<table><tbody><tr><th>H</th></tr></tbody></table>");
+  });
+
+  it("caps nesting depth without breaking the rest of the document", () => {
+    const after = { $type: "blog.pckt.block.text", plaintext: "after" };
+    let quote: Record<string, unknown> = {
       $type: "blog.pckt.block.text",
       plaintext: "leaf",
     };
     for (let depth = 0; depth < MAX_BLOCK_NESTING_DEPTH * 4; depth += 1) {
-      block = { $type: "blog.pckt.block.blockquote", content: [block] };
+      quote = { $type: "blog.pckt.block.blockquote", content: [quote] };
     }
-    const html = convertRaw(pckt([block]));
-    expect(count(html, /<blockquote>/g)).toBeLessThanOrEqual(
-      MAX_BLOCK_NESTING_DEPTH,
-    );
-    expect(html).not.toContain("leaf");
+    // Every quote past the cap renders nothing, so the whole chain collapses.
+    expect(convertRaw(pckt([quote, after]))).toBe("<p>after</p>");
+
+    let item: Record<string, unknown> = {
+      $type: "blog.pckt.block.text",
+      plaintext: "leaf",
+    };
+    for (let depth = 0; depth < MAX_BLOCK_NESTING_DEPTH * 4; depth += 1) {
+      item = {
+        $type: "blog.pckt.block.bulletList",
+        content: [{ $type: "blog.pckt.block.listItem", content: [item] }],
+      };
+    }
+    expect(convertRaw(pckt([item, after]))).toBe("<p>after</p>");
   });
 });
 
@@ -705,6 +786,19 @@ describe("offprint blocks", () => {
           ],
         },
         {
+          $type: "app.offprint.block.imageDiff",
+          images: [
+            {
+              blob: { ref: { $link: "bafybefore" }, mimeType: "image/png" },
+              alt: "before",
+            },
+            {
+              blob: { ref: { $link: "bafyafter" }, mimeType: "image/png" },
+              alt: "after",
+            },
+          ],
+        },
+        {
           $type: "app.offprint.block.component",
           component: "at://did:plc:x/app.offprint.component/y",
         },
@@ -721,8 +815,24 @@ describe("offprint blocks", () => {
         `<div data-serial-embed="interactive" data-href="https://vimeo.com/1"><p><a href="https://vimeo.com/1">${INTERACTIVE_PLACEHOLDER_TEXT}</a></p></div>` +
         `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyone")}" alt="one"><figcaption><strong>Bold</strong> cap</figcaption></figure>` +
         `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafytwo")}" alt="two"><img src="${buildBlueskyCdnImageUrl(did, "bafythree")}" alt=""><figcaption>Two &#x26; three</figcaption></figure>` +
+        `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafybefore")}" alt="before"><img src="${buildBlueskyCdnImageUrl(did, "bafyafter")}" alt="after"></figure>` +
         "<p>unknown but textual</p>",
     );
     expectFixedPoint(html);
+  });
+
+  it("keeps callouts and blockquotes out of the description fallback", () => {
+    const converted = convertResolvedContent(
+      offprint([
+        { $type: "app.offprint.block.callout", plaintext: "aside" },
+        {
+          $type: "app.offprint.block.blockquote",
+          content: [{ $type: "app.offprint.block.text", plaintext: "quoted" }],
+        },
+        { $type: "app.offprint.block.text", plaintext: "body" },
+      ]),
+      did,
+    );
+    expect(converted?.firstParagraph).toBe("body");
   });
 });

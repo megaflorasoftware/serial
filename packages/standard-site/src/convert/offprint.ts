@@ -6,7 +6,6 @@ import {
   embedPlaceholder,
   escapeText,
   figure,
-  image,
   linkCard,
   list,
   paragraph,
@@ -95,15 +94,15 @@ function renderListItems(
 function renderImage(value: unknown, context: ConversionContext) {
   const parsed = imageSchema.safeParse(value);
   if (!parsed.success || !parsed.data.image) return "";
-  const url = context.imageUrl(parsed.data.image.ref.$link);
-  context.noteImage(url);
+  const img = context.blobImage(parsed.data.image.ref.$link, parsed.data.alt);
+  if (!img) return "";
   const caption = parsed.data.caption
     ? renderRichText(
         { plaintext: parsed.data.caption, facets: parsed.data.captionFacets },
         context,
       )
     : undefined;
-  return figure(image(url, parsed.data.alt), caption);
+  return figure(img, caption);
 }
 
 /** Grids, carousels, and diffs all become one figure holding a run of images. */
@@ -113,10 +112,7 @@ function renderImageSet(value: unknown, context: ConversionContext) {
   const rendered = parsed.data.images
     .map((entry) => {
       const blob = entry.blob ?? entry.image;
-      if (!blob) return "";
-      const url = context.imageUrl(blob.ref.$link);
-      context.noteImage(url);
-      return image(url, entry.alt);
+      return blob ? context.blobImage(blob.ref.$link, entry.alt) : "";
     })
     .join("");
   if (!rendered) return "";
@@ -133,21 +129,25 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "blockquote": {
       const items = z.array(blockSchema).safeParse(block.content);
       if (!items.success) return "";
-      const inner = context.nested(() =>
-        items.data.map((item) => renderBlock(item, context)).join(""),
+      const inner = context.aside(() =>
+        context.nested(() =>
+          items.data.map((item) => renderBlock(item, context)).join(""),
+        ),
       );
       return inner ? element("blockquote", undefined, inner) : "";
     }
     case "callout": {
       const text = richTextSchema.safeParse(block);
       if (!text.success) return "";
+      if (!text.data.plaintext.trim()) return "";
       const emoji = stringProperty(block, "emoji");
       const prefix = emoji ? `${escapeText(emoji)} ` : "";
-      context.noteParagraph(text.data.plaintext);
       return element(
         "blockquote",
         undefined,
-        paragraph(prefix + renderRichText(text.data, context)),
+        paragraph(
+          prefix + context.aside(() => renderRichText(text.data, context)),
+        ),
       );
     }
     case "bulletList":

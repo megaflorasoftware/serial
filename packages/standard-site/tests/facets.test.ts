@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderRichText } from "../src/convert/facets";
+import { renderFootnotes, renderRichText } from "../src/convert/facets";
 
 describe("renderRichText", () => {
   it("escapes plaintext without facets", () => {
@@ -168,6 +168,44 @@ describe("renderRichText", () => {
       ),
     ).toBe("ab<strong>cd</strong>ef<sup>[1]</sup>");
     expect(context.footnotes).toHaveLength(1);
+  });
+
+  it("lists a footnote nested inside footnote text after its parent", () => {
+    const context = { footnotes: [] };
+    const body = renderRichText(
+      {
+        plaintext: "claim",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 5 },
+            features: [
+              {
+                $type: "x#footnote",
+                footnoteId: "outer",
+                contentPlaintext: "outer note",
+                contentFacets: [
+                  {
+                    index: { byteStart: 0, byteEnd: 5 },
+                    features: [
+                      {
+                        $type: "x#footnote",
+                        footnoteId: "inner",
+                        contentPlaintext: "inner note",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      context,
+    );
+    expect(body).toBe("claim<sup>[1]</sup>");
+    expect(renderFootnotes(context)).toBe(
+      "<section><ol><li>outer<sup>[2]</sup> note</li><li>inner note</li></ol></section>",
+    );
   });
 
   it("snaps byte offsets that split a code point forward to the next one", () => {
