@@ -502,6 +502,32 @@ describe("atproto consent upgrade", () => {
     expect(accountRow?.scope).toBe("atproto include:site.standard.authSocial");
   });
 
+  it.each(["export", "bidirectional"] as const)(
+    "preserves saved settings when consent for %s returns a narrowed grant",
+    async (method) => {
+      await saveAtprotoSyncSettings({
+        userId: "user-1",
+        did: DID,
+        preferences: { method: "import", importAsInactive: false },
+      });
+
+      await expect(
+        completeAtprotoUpgrade({
+          did: DID,
+          grantedScope: "atproto",
+          sessionUserId: "user-1",
+          upgradeUserId: "user-1",
+          pendingSyncPreferences: { method, importAsInactive: true },
+        }),
+      ).rejects.toMatchObject({ code: "denied" });
+      expect(await connectionRow()).toMatchObject({
+        importSubscriptions: true,
+        exportSubscriptions: false,
+        importAsInactive: false,
+      });
+    },
+  );
+
   it("rejects a callback whose state names a different user and saves nothing", async () => {
     await expect(
       completeAtprotoUpgrade({

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type {
   AtprotoSyncMethod,
@@ -42,9 +42,16 @@ export function AtprotoSyncSettingsForm({
   const [importAsInactive, setImportAsInactive] = useState(
     savedPreferences.importAsInactive,
   );
-  // Stays busy through the navigation to the consent screen; a completed
-  // save clears through the refetch and the caller's remount.
+  // Keep controls locked until navigation, but let Back restore the form
+  // if the user abandons consent and the browser retains this page.
   const [redirecting, setRedirecting] = useState(false);
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setRedirecting(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
   const queryClient = useQueryClient();
 
   const saveMutation = useMutation(

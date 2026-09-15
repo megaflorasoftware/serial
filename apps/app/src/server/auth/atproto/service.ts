@@ -7,6 +7,7 @@ import {
   AUTH_STATE_TTL_MS,
   getAtprotoLinkRedirectUri,
   getAtprotoUpgradeRedirectUri,
+  hasAtprotoWriteScope,
   retainAllowedAtprotoScope,
 } from "./config";
 import {
@@ -24,6 +25,7 @@ import { captureException, logError } from "~/server/logger";
 import {
   atprotoSyncPreferencesSchema,
   DEFAULT_ATPROTO_SYNC_SETTINGS,
+  syncMethodNeedsWriteScope,
   syncSettingsFromPreferences,
 } from "~/lib/auth/atproto-sync-settings";
 import { parseExtensionConnectCallback } from "~/lib/extension-auth";
@@ -559,13 +561,12 @@ export async function upgradeAtprotoAuth(input: {
 }
 
 /**
- * A Consent upgrade callback did not match the session and connection that
- * started the flow. A refusal at the authorization server never reaches
- * here: the SDK rejects the code exchange first, and the plugin maps it.
+ * A Consent upgrade callback did not match its initiating session and
+ * connection, or the returned grant did not cover the pending settings.
  */
 export class AtprotoUpgradeError extends Error {
   constructor(
-    public readonly code: "state",
+    public readonly code: "state" | "denied",
     message: string,
   ) {
     super(message);
@@ -600,6 +601,15 @@ export async function completeAtprotoUpgrade(input: {
     throw new AtprotoUpgradeError(
       "state",
       `Upgrade callback for ${did} carried no pending settings`,
+    );
+  }
+  if (
+    syncMethodNeedsWriteScope(input.pendingSyncPreferences.method) &&
+    !hasAtprotoWriteScope(input.grantedScope)
+  ) {
+    throw new AtprotoUpgradeError(
+      "denied",
+      `Upgrade callback for ${did} did not grant subscription write access`,
     );
   }
   const saved = await saveAtprotoSyncSettings({
