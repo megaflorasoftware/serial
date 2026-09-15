@@ -97,7 +97,7 @@ export async function createFeedsForUser(input: {
     throw new Error(errors[0]?.error ?? "Failed to create feed");
   }
   const returnedFeeds = results.flatMap((result) =>
-    "feed" in result && result.feed ? [result.feed] : [],
+    "feed" in result ? [result.feed] : [],
   );
   const createdCount = results.filter(
     (result) => "created" in result && result.created,

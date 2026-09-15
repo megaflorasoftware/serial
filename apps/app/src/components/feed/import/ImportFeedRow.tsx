@@ -14,7 +14,7 @@ import {
 } from "~/components/ui/tooltip";
 import { Badge } from "~/components/ui/badge";
 import { FeedAvatar, FeedListItem } from "~/components/feed/FeedListItem";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
+import { findFeedWithRssUrl } from "~/lib/feeds/origins";
 
 function ImportFeedRowMedia({
   displayTitle,
@@ -64,9 +64,7 @@ export function ImportFeedRow({
 }) {
   const displayTitle = channel.title ?? channel.feedUrl;
   // Check if feed already exists in the feeds store
-  const isAlreadyAdded = feeds.some(
-    (feed) => getFeedRssUrl(feed) === channel.feedUrl,
-  );
+  const isAlreadyAdded = !!findFeedWithRssUrl(feeds, channel.feedUrl);
   // Check if feed was imported by looking in the feeds store
   const wasImported = isPostImportScreen && isAlreadyAdded;
   const websiteUrl = getFeedWebsiteUrl(channel);

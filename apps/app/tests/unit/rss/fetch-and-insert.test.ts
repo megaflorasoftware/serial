@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { makeFetchableOrigin } from "./fetchable-origin";
+import type { FetchableOriginOverrides } from "./fetchable-origin";
 import type { Server } from "node:http";
 
-import type { DatabaseFeed, DatabaseFeedOrigin } from "~/server/db/schema";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
-import type { FetchableOrigin } from "~/server/rss/types";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
 vi.mock("~/server/rss/feedHttp", async (importOriginal) => {
@@ -126,55 +126,11 @@ afterAll(() => {
   server?.close();
 });
 
-function makeFeed(
-  overrides: Partial<DatabaseFeedOrigin> & {
-    id?: number;
-    platform?: DatabaseFeed["platform"];
-    isActive?: boolean;
-  } = {},
-): FetchableOrigin {
-  const {
-    id = 1,
-    platform = "youtube",
-    isActive = true,
-    ...origin
-  } = overrides;
-  return {
-    feed: {
-      id,
-      userId: "user-1",
-      name: "Fireship",
-      imageUrl: "",
-      platform,
-      openLocation: "serial",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      isActive,
-      siteUrl: null,
-      nameEditedAt: null,
-    },
-    origin: {
-      id: id * 100,
-      feedId: id,
-      userId: "user-1",
-      kind: "rss",
-      locator: `${baseUrl}/feed`,
-      etag: null,
-      lastModifiedHeader: null,
-      lastFetchedAt: null,
-      nextFetchAt: null,
-      repoRev: null,
-      publicationDid: null,
-      publicationRkey: null,
-      pdsUrl: null,
-      sourceName: null,
-      sourceImageUrl: null,
-      sourceDescription: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...origin,
-    },
-  };
+function makeFeed(overrides: FetchableOriginOverrides = {}) {
+  return makeFetchableOrigin(
+    { name: "Fireship", platform: "youtube", url: `${baseUrl}/feed` },
+    overrides,
+  );
 }
 
 function createMockDb(existingItems: unknown[] = []) {

@@ -325,7 +325,6 @@ export const feedOrigins = sqliteTable(
       table.userId,
       table.nextFetchAt,
     ),
-    index("feed_origin_feed_id_idx").on(table.feedId),
   ],
 );
 export const feedOriginSchema = createSelectSchema(feedOrigins).merge(

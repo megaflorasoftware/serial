@@ -1331,13 +1331,6 @@
           ],
           "isUnique": false
         },
-        "feed_origin_feed_id_idx": {
-          "name": "feed_origin_feed_id_idx",
-          "columns": [
-            "feed_id"
-          ],
-          "isUnique": false
-        },
         "feed_origin_feed_id_kind_unique": {
           "name": "feed_origin_feed_id_kind_unique",
           "columns": [

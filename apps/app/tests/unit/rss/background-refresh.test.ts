@@ -6,12 +6,18 @@ import { feedOrigins, feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 
+let testDatabase: TestDatabase;
+
 type SeedFeedRow = Omit<typeof feeds.$inferInsert, "id"> & {
   url: string;
   nextFetchAt?: Date | null;
 };
 
-/** Insert Feeds each with one RSS origin carrying the URL and schedule. */
+/**
+ * Insert Feeds each with one RSS origin carrying the URL and schedule.
+ * Feeds are batched; origins pair with them by the returned ids, which a
+ * single VALUES insert returns in input order.
+ */
 async function seedFeedsWithRssOrigins(
   database: TestDatabase["database"],
   rows: SeedFeedRow[],
@@ -21,14 +27,16 @@ async function seedFeedsWithRssOrigins(
     const inserted = await database
       .insert(feeds)
       .values(
-        chunk.map((row) => {
-          const { url, nextFetchAt, ...feed } = row;
+        chunk.map(({ url, nextFetchAt, ...feed }) => {
           void url;
           void nextFetchAt;
           return feed;
         }),
       )
       .returning({ id: feeds.id, userId: feeds.userId });
+    if (inserted.length !== chunk.length) {
+      throw new Error("Feed insert returned an unexpected row count");
+    }
     await database.insert(feedOrigins).values(
       inserted.map((feed, position) => ({
         feedId: feed.id,
@@ -42,8 +50,6 @@ async function seedFeedsWithRssOrigins(
     );
   }
 }
-
-let testDatabase: TestDatabase;
 
 beforeEach(async () => {
   testDatabase = await createBookmarkTestDatabase();

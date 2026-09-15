@@ -172,10 +172,7 @@ export async function deactivateExcessFeeds(
   // Never-fetched Feeds go first, then the least recently fetched, judged by
   // the earliest fetch across a Feed's origins.
   const activeFeeds = await db
-    .select({
-      id: feeds.id,
-      lastFetchedAt: sql<number | null>`min(${feedOrigins.lastFetchedAt})`,
-    })
+    .select({ id: feeds.id })
     .from(feeds)
     .leftJoin(feedOrigins, eq(feedOrigins.feedId, feeds.id))
     .where(and(eq(feeds.userId, userId), eq(feeds.isActive, true)))

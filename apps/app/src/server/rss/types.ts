@@ -6,6 +6,7 @@ import type {
   feeds,
 } from "~/server/db/schema";
 import type { ContentPlatform } from "~/lib/content/descriptor";
+import { FEED_ORIGIN_KIND } from "~/server/db/schema";
 
 /** Origin values a parser can supply when a Feed is created. */
 export type NewFeedOriginDetails = Omit<
@@ -38,7 +39,7 @@ export function newRssFeedDetails(input: {
     siteUrl: input.siteUrl ?? null,
     origins: [
       {
-        kind: "rss",
+        kind: FEED_ORIGIN_KIND.RSS,
         locator: input.url,
         sourceName: input.name,
         sourceImageUrl: input.imageUrl ?? null,

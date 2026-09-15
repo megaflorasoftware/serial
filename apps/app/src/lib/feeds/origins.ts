@@ -2,6 +2,7 @@ import type {
   ApplicationFeedOrigin,
   DatabaseFeedOrigin,
 } from "~/server/db/schema";
+import { FEED_ORIGIN_KIND } from "~/server/db/schema";
 
 type OriginLike = Pick<DatabaseFeedOrigin, "kind" | "locator">;
 
@@ -10,7 +11,7 @@ type FeedWithOrigins<TOrigin extends OriginLike> = { origins: TOrigin[] };
 export function getRssOrigin<TOrigin extends OriginLike>(
   feed: FeedWithOrigins<TOrigin>,
 ): TOrigin | undefined {
-  return feed.origins.find((origin) => origin.kind === "rss");
+  return feed.origins.find((origin) => origin.kind === FEED_ORIGIN_KIND.RSS);
 }
 
 /**
@@ -28,11 +29,19 @@ export function getFeedRssUrl<TOrigin extends OriginLike>(
 export function getFeedNextFetchAt(feed: {
   origins: Array<Pick<ApplicationFeedOrigin, "nextFetchAt">>;
 }): Date | null {
-  let earliest: Date | null = null;
-  for (const origin of feed.origins) {
-    if (!origin.nextFetchAt) continue;
-    if (!earliest || origin.nextFetchAt < earliest)
-      earliest = origin.nextFetchAt;
-  }
-  return earliest;
+  return feed.origins.reduce<Date | null>(
+    (earliest, origin) =>
+      origin.nextFetchAt && (!earliest || origin.nextFetchAt < earliest)
+        ? origin.nextFetchAt
+        : earliest,
+    null,
+  );
+}
+
+/** The Feed in the list whose RSS origin is the given URL, if any. */
+export function findFeedWithRssUrl<TFeed extends FeedWithOrigins<OriginLike>>(
+  feeds: TFeed[],
+  url: string,
+): TFeed | undefined {
+  return feeds.find((feed) => getFeedRssUrl(feed) === url);
 }

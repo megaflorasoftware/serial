@@ -8,6 +8,7 @@ import type {
 import type { FetchableOrigin, NewFeedDetails } from "~/server/rss/types";
 import { runInChunks } from "~/server/api/routers/feed-router/utils";
 import {
+  FEED_ORIGIN_KIND,
   feedOrigins,
   feeds,
   feedsSchema,
@@ -107,74 +108,67 @@ export async function loadApplicationFeeds(
 
 /**
  * Find the user's Feed that already carries the given RSS locator. Dedupe is
- * a code-level lookup because legacy rows may share a URL.
+ * a code-level lookup because legacy rows may share a URL; the lowest Feed id
+ * wins, as the previous unordered `findFirst` on `feeds.url` did.
  */
 export async function findFeedByRssUrl(
   database: FeedDatabase,
   input: { userId: string; feedUrl: string },
 ): Promise<DatabaseFeedWithOrigins | undefined> {
-  const [origin] = await database
-    .select({ feedId: feedOrigins.feedId })
+  const [match] = await database
+    .select({ feed: feeds })
     .from(feedOrigins)
+    .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
     .where(
       and(
         eq(feedOrigins.userId, input.userId),
-        eq(feedOrigins.kind, "rss"),
+        eq(feedOrigins.kind, FEED_ORIGIN_KIND.RSS),
         eq(feedOrigins.locator, input.feedUrl),
       ),
     )
     .orderBy(asc(feedOrigins.feedId))
     .limit(1);
-  if (!origin) return undefined;
-  const [feed] = await database
-    .select()
-    .from(feeds)
-    .where(and(eq(feeds.id, origin.feedId), eq(feeds.userId, input.userId)));
-  if (!feed) return undefined;
-  const [withNested] = await withOrigins(database, [feed]);
+  if (!match) return undefined;
+  const [withNested] = await withOrigins(database, [match.feed]);
   return withNested;
 }
 
-/** Feeds owned by the user whose RSS locator is in the given list, keyed by locator. */
+/**
+ * Feeds owned by the user whose RSS locator is in the given list, keyed by
+ * locator. When legacy rows share a locator the highest Feed id wins, as the
+ * previous map built from an unordered select did.
+ */
 export async function findFeedsByRssUrls(
   database: FeedDatabase,
   input: { userId: string; feedUrls: string[] },
 ): Promise<Map<string, DatabaseFeedWithOrigins>> {
   const result = new Map<string, DatabaseFeedWithOrigins>();
   if (input.feedUrls.length === 0) return result;
-  const matchingOrigins = (
+  const matches = (
     await runInChunks(input.feedUrls, (urlChunk) =>
       database
-        .select({ feedId: feedOrigins.feedId, locator: feedOrigins.locator })
+        .select({ feed: feeds, locator: feedOrigins.locator })
         .from(feedOrigins)
+        .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
         .where(
           and(
             eq(feedOrigins.userId, input.userId),
-            eq(feedOrigins.kind, "rss"),
+            eq(feedOrigins.kind, FEED_ORIGIN_KIND.RSS),
             inArray(feedOrigins.locator, urlChunk),
           ),
         )
         .orderBy(asc(feedOrigins.feedId)),
     )
   ).flat();
-  if (matchingOrigins.length === 0) return result;
-  const feedRows = (
-    await runInChunks(
-      [...new Set(matchingOrigins.map((origin) => origin.feedId))],
-      (feedIdChunk) =>
-        database
-          .select()
-          .from(feeds)
-          .where(
-            and(eq(feeds.userId, input.userId), inArray(feeds.id, feedIdChunk)),
-          ),
-    )
-  ).flat();
-  const nested = await withOrigins(database, feedRows);
+  if (matches.length === 0) return result;
+  const nested = await withOrigins(
+    database,
+    matches.map((match) => match.feed),
+  );
   const feedById = new Map(nested.map((feed) => [feed.id, feed]));
-  for (const origin of matchingOrigins) {
-    const feed = feedById.get(origin.feedId);
-    if (feed && !result.has(origin.locator)) result.set(origin.locator, feed);
+  for (const match of matches) {
+    const feed = feedById.get(match.feed.id);
+    if (feed) result.set(match.locator, feed);
   }
   return result;
 }

@@ -2,7 +2,7 @@ import { CheckIcon, MinusIcon, PauseIcon, PlusIcon, XIcon } from "lucide-react";
 import type { ImportFeedDataItem } from "./utils/shared";
 import type { FailedImportUrls, UserFeeds } from "./importPageShared";
 import { Button } from "~/components/ui/button";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
+import { findFeedWithRssUrl } from "~/lib/feeds/origins";
 import {
   Tooltip,
   TooltipContent,
@@ -16,7 +16,7 @@ function ImportedFeedStatus({
   feedUrl: string;
   feeds: UserFeeds;
 }) {
-  const importedFeed = feeds.find((feed) => getFeedRssUrl(feed) === feedUrl);
+  const importedFeed = findFeedWithRssUrl(feeds, feedUrl);
   const isInactive = importedFeed && !importedFeed.isActive;
 
   return (

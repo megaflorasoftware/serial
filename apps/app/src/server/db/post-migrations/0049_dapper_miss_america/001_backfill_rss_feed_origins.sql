@@ -26,8 +26,7 @@ SELECT
   created_at,
   updated_at
 FROM serial_feed
-WHERE url <> ''
-  AND NOT EXISTS (
+WHERE NOT EXISTS (
     SELECT 1
     FROM serial_feed_origin
     WHERE serial_feed_origin.feed_id = serial_feed.id

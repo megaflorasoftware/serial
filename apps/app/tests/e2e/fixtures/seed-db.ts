@@ -39,28 +39,40 @@ type SeedFeedRow = Omit<typeof schema.feeds.$inferInsert, "id"> & {
 /**
  * Insert Feeds with one RSS origin each. Fetch state lives on the origin,
  * so the URL and schedule move there while the Feed keeps its identity.
+ * Feeds are batched; origins pair with them by the returned ids, which a
+ * single VALUES insert returns in input order.
  */
 async function seedFeedsWithRssOrigins(
   db: ReturnType<typeof getDb>["db"],
   rows: SeedFeedRow[],
 ) {
-  const created: Array<typeof schema.feeds.$inferSelect> = [];
-  for (const row of rows) {
-    const { url, lastFetchedAt, nextFetchAt, ...feedValues } = row;
-    const [feed] = await db.insert(schema.feeds).values(feedValues).returning();
-    if (!feed) throw new Error("Feed insert returned no rows");
-    await db.insert(schema.feedOrigins).values({
+  if (rows.length === 0) return [];
+  const created = await db
+    .insert(schema.feeds)
+    .values(
+      rows.map(({ url, lastFetchedAt, nextFetchAt, ...feedValues }) => {
+        void url;
+        void lastFetchedAt;
+        void nextFetchAt;
+        return feedValues;
+      }),
+    )
+    .returning();
+  if (created.length !== rows.length) {
+    throw new Error("Feed insert returned an unexpected row count");
+  }
+  await db.insert(schema.feedOrigins).values(
+    created.map((feed, index) => ({
       feedId: feed.id,
       userId: feed.userId,
       kind: "rss",
-      locator: url,
-      lastFetchedAt: lastFetchedAt ?? null,
-      nextFetchAt: nextFetchAt ?? null,
+      locator: rows[index]!.url,
+      lastFetchedAt: rows[index]!.lastFetchedAt ?? null,
+      nextFetchAt: rows[index]!.nextFetchAt ?? null,
       createdAt: feed.createdAt,
       updatedAt: feed.updatedAt,
-    });
-    created.push(feed);
-  }
+    })),
+  );
   return created;
 }
 

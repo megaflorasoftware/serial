@@ -13,8 +13,9 @@ export type { RefreshStats } from "./stats";
  * Shared feed refresh logic used by both background-refresh tasks and
  * interactive user-triggered refreshes. Fetches content for the given
  * origins and publishes feed-status / feed-items chunks via the SSE
- * publisher for any active subscribers. Progress is reported per Feed;
- * the origin is an implementation detail of the fetch.
+ * publisher for any active subscribers. Each origin result yields one
+ * chunk and one stats increment, addressed by the owning Feed's id; a Feed
+ * with two origins therefore reports twice, which ticket 07 revisits.
  *
  * Callers are responsible for publishing `refresh-start` before and
  * `refresh-complete` after calling this function.

@@ -9,7 +9,7 @@ import type {
 } from "./importPageShared";
 import type { ImportFeedDataItem } from "./utils/shared";
 import { Button } from "~/components/ui/button";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
+import { findFeedWithRssUrl } from "~/lib/feeds/origins";
 
 function ImportSelectionHeader({
   channelImportCount,
@@ -32,8 +32,9 @@ function ImportSelectionHeader({
               if (!prevChannels) return prevChannels;
               return prevChannels.map((channel) => {
                 // Don't enable import for already-added feeds
-                const isAlreadyAdded = feeds.some(
-                  (feed) => getFeedRssUrl(feed) === channel.feedUrl,
+                const isAlreadyAdded = !!findFeedWithRssUrl(
+                  feeds,
+                  channel.feedUrl,
                 );
                 if (!isAlreadyAdded) {
                   channel.shouldImport = true;
