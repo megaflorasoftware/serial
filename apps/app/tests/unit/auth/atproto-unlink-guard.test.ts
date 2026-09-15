@@ -112,6 +112,7 @@ describe("atproto connection procedures", () => {
       accountId: DID,
       providerId: "atproto",
       userId: "user-1",
+      scope: options?.scopes ?? "atproto",
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -251,14 +252,42 @@ describe("atproto connection procedures", () => {
     ).rejects.toThrow(/already have an Atmosphere account/);
   });
 
-  it("a reconnect re-requests the grant the connection held", async () => {
+  async function loseCredentials() {
+    await session.database
+      .update(atprotoConnections)
+      .set({ session: null, status: "disconnected" })
+      .where(eq(atprotoConnections.did, DID));
+  }
+
+  it.each([
+    ["an identity-only grant", "atproto"],
+    ["the social grant", "atproto include:site.standard.authSocial"],
+  ])(
+    "a reconnect re-requests %s exactly, on the link callback",
+    async (_label, scopes) => {
+      await seedLinked({ extraProviderId: "credential", scopes });
+      await loseCredentials();
+      authorizeMock.mockResolvedValue(new URL("https://pds.example/authorize"));
+
+      await api().atproto.reconnectAccount();
+
+      expect(authorizeMock).toHaveBeenCalledWith(DID, {
+        scope: scopes,
+        state: JSON.stringify({ linkUserId: "user-1" }),
+        redirect_uri: "https://serial.test/api/auth/atproto/link-callback",
+      });
+    },
+  );
+
+  it("a reconnect with only the account row left recovers the grant from it", async () => {
     await seedLinked({
       extraProviderId: "credential",
       scopes: "atproto include:site.standard.authSocial",
     });
+    // The connection row was swept after its credentials were lost; the
+    // sign-in account row still names the DID and its granted scope.
     await session.database
-      .update(atprotoConnections)
-      .set({ session: null, status: "disconnected" })
+      .delete(atprotoConnections)
       .where(eq(atprotoConnections.did, DID));
     authorizeMock.mockResolvedValue(new URL("https://pds.example/authorize"));
 
@@ -280,6 +309,29 @@ describe("atproto connection procedures", () => {
     await expect(api().atproto.reconnectAccount()).rejects.toThrow(
       /already connected/,
     );
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("a downgrade away from a write method saves directly", async () => {
+    await seedLinked({
+      extraProviderId: "credential",
+      scopes: "atproto include:site.standard.authSocial",
+    });
+    await api().atproto.saveSyncSettings({
+      method: "bidirectional",
+      importAsInactive: false,
+    });
+
+    const result = await api().atproto.saveSyncSettings({
+      method: "import",
+      importAsInactive: false,
+    });
+
+    expect(result).toEqual({ saved: true, consentUrl: null });
+    expect(await api().atproto.getConnectionStatus()).toMatchObject({
+      hasWriteScope: true,
+      syncPreferences: { method: "import", importAsInactive: false },
+    });
     expect(authorizeMock).not.toHaveBeenCalled();
   });
 

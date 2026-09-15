@@ -505,6 +505,17 @@ describe("atproto consent upgrade", () => {
     ).rejects.toBeInstanceOf(AtprotoUpgradeError);
   });
 
+  it("saving settings reports no match for a DID the user does not hold", async () => {
+    await expect(
+      saveAtprotoSyncSettings({
+        userId: "user-1",
+        did: OTHER_DID,
+        preferences: { method: "import", importAsInactive: false },
+      }),
+    ).resolves.toBe(false);
+    expect((await connectionRow())?.importSubscriptions).toBe(false);
+  });
+
   it("rejects a callback for a DID that is not the session user's connection", async () => {
     await expect(
       completeAtprotoUpgrade({
