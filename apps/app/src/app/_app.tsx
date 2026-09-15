@@ -32,7 +32,10 @@ import { InitialClientQueries } from "~/lib/data/InitialClientQueries";
 import { loadingActor } from "~/lib/data/loading-machine";
 import { usePlanSuccessStore } from "~/lib/data/plan-success";
 import { useSubscription } from "~/lib/data/subscription";
-import { ATPROTO_LINK_RESULT_PARAM } from "~/lib/auth/atproto";
+import {
+  ATPROTO_CONSENT_RESULT_PARAM,
+  ATPROTO_LINK_RESULT_PARAM,
+} from "~/lib/auth/atproto";
 import { useAltKeyHeld } from "~/lib/hooks/useAltKeyHeld";
 import { authMiddleware } from "~/server/auth";
 import { orpc, orpcRouterClient } from "~/lib/orpc";
@@ -190,12 +193,25 @@ const ATPROTO_LINK_ERROR_MESSAGES: Record<string, string> = {
     "You already have an Atmosphere account connected. Disconnect it first.",
 };
 
+const ATPROTO_CONSENT_ERROR_MESSAGES: Record<string, string> = {
+  denied: "Permissions weren't granted, so your sync settings were not saved.",
+};
+
 /**
- * Detect the ?atproto_link= result param the AT Protocol link callback
- * redirects back with, toast failures, and re-open the connections
- * dialog so the user sees the connection's state.
+ * Detect a result param an AT Protocol callback redirects back with (the
+ * link callback's ?atproto_link=, the Consent upgrade's ?atproto_consent=),
+ * toast the outcome, and re-open the Atmosphere subpane so the user sees
+ * the connection's state. The two params stay distinct so a consent return
+ * can later trigger a subscription sync while a link return never does.
  */
-function useAtprotoLinkReturn() {
+function useAtprotoReturn(
+  param: string,
+  outcome: {
+    successMessage?: string;
+    errorMessages: Record<string, string>;
+    fallbackErrorMessage: string;
+  },
+) {
   const launchDialog = useDialogStore((s) => s.launchDialog);
   const queryClient = useQueryClient();
   const isRestoring = useIsRestoring();
@@ -206,11 +222,11 @@ function useAtprotoLinkReturn() {
     if (isRestoring) return;
 
     const params = new URLSearchParams(window.location.search);
-    const result = params.get(ATPROTO_LINK_RESULT_PARAM);
+    const result = params.get(param);
     if (!result) return;
 
     // Clean the query param from the URL
-    params.delete(ATPROTO_LINK_RESULT_PARAM);
+    params.delete(param);
     const newUrl =
       window.location.pathname +
       (params.size > 0 ? `?${params.toString()}` : "");
@@ -218,24 +234,47 @@ function useAtprotoLinkReturn() {
 
     // The persisted cache restores the pre-flight connection status as
     // fresh (the OAuth round trip usually beats staleTime), so the reopened
-    // dialog would render "Not connected" and never refetch. Drop the entry
-    // outright: the row shows its loading state, then the live result.
+    // dialog would render stale state and never refetch. Drop the entry
+    // outright: the pane shows its loading state, then the live result.
     queryClient.removeQueries({
       queryKey: orpc.atproto.getConnectionStatus.queryKey(),
     });
 
-    // Success needs no toast — the reopened dialog's connected row says it.
-    if (result !== "success") {
+    if (result === "success") {
+      if (outcome.successMessage) toast.success(outcome.successMessage);
+    } else {
       // Own-property lookup only: `result` is an unvalidated query param, so
       // a plain `map[result]` would resolve inherited keys ("toString") to a
       // function and defeat the `??` fallback.
-      const message = Object.hasOwn(ATPROTO_LINK_ERROR_MESSAGES, result)
-        ? ATPROTO_LINK_ERROR_MESSAGES[result]
-        : "Couldn't connect your Atmosphere account. Please try again.";
+      const message = Object.hasOwn(outcome.errorMessages, result)
+        ? outcome.errorMessages[result]
+        : outcome.fallbackErrorMessage;
       toast.error(message);
     }
-    launchDialog("connections");
-  }, [launchDialog, queryClient, isRestoring]);
+    launchDialog("connections", { connectionsPane: "atproto" });
+  }, [launchDialog, queryClient, isRestoring, param, outcome]);
+}
+
+const ATPROTO_LINK_RETURN = {
+  // Success needs no toast — the reopened pane's connected state says it.
+  errorMessages: ATPROTO_LINK_ERROR_MESSAGES,
+  fallbackErrorMessage:
+    "Couldn't connect your Atmosphere account. Please try again.",
+};
+
+const ATPROTO_CONSENT_RETURN = {
+  successMessage: "Settings saved",
+  errorMessages: ATPROTO_CONSENT_ERROR_MESSAGES,
+  fallbackErrorMessage:
+    "Couldn't update your Atmosphere permissions. Please try again.",
+};
+
+function useAtprotoLinkReturn() {
+  useAtprotoReturn(ATPROTO_LINK_RESULT_PARAM, ATPROTO_LINK_RETURN);
+}
+
+function useAtprotoConsentReturn() {
+  useAtprotoReturn(ATPROTO_CONSENT_RESULT_PARAM, ATPROTO_CONSENT_RETURN);
 }
 
 /**
@@ -305,6 +344,7 @@ function RootLayout() {
   useAltKeyHeld();
   usePortalReturn();
   useAtprotoLinkReturn();
+  useAtprotoConsentReturn();
   const { pathname } = useLocation();
   // The location changes before the rendered matches swap, so a reset keyed
   // on the pathname would re-render the failed page once more; the leaf

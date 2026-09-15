@@ -6,7 +6,14 @@ import {
   getAdminSigninMethods,
   getEnabledAuthProviders,
 } from "~/lib/constants";
+import { hasAtprotoWriteScope } from "~/server/auth/atproto/config";
 import { didSchema, identifierSchema } from "~/server/auth/atproto/schemas";
+import {
+  atprotoSyncPreferencesSchema,
+  DEFAULT_ATPROTO_SYNC_SETTINGS,
+  syncMethodNeedsWriteScope,
+  syncPreferencesFromSettings,
+} from "~/lib/auth/atproto-sync-settings";
 import { getKV } from "~/server/kv";
 import {
   isAtprotoConfigured,
@@ -20,10 +27,11 @@ import { env } from "~/env";
 
 /**
  * The ConnectionsDialog surface for the AT Protocol connection: status,
- * link start, and unlink. The OAuth round trip itself lives on the Better
- * Auth plugin (server/auth/atproto/plugin.ts); linking starts here because
- * it requires the caller's session, and the callback lands on the plugin's
- * dedicated link-callback endpoint.
+ * link start, unlink, and the Atmosphere subscription sync settings. The
+ * OAuth round trips themselves live on the Better Auth plugin
+ * (server/auth/atproto/plugin.ts); linking and Consent upgrades start here
+ * because they require the caller's session, and their callbacks land on
+ * the plugin's dedicated endpoints.
  */
 
 export const getConnectionStatus = protectedProcedure.handler(
@@ -59,9 +67,69 @@ export const getConnectionStatus = protectedProcedure.handler(
       handle:
         connection?.handle ?? connection?.did ?? accountRow?.accountId ?? null,
       isConfigured: isAtprotoConfigured(),
+      /** Whether the stored grant lets a write method save without consent. */
+      hasWriteScope: isConnected && hasAtprotoWriteScope(connection.scopes),
+      syncPreferences: syncPreferencesFromSettings(
+        connection ?? DEFAULT_ATPROTO_SYNC_SETTINGS,
+      ),
     };
   },
 );
+
+/**
+ * Save the Atmosphere subscription sync settings. A write method the
+ * stored grant does not cover saves nothing: the caller gets a consent URL
+ * instead, the pending preferences ride in the OAuth state, and the
+ * plugin's upgrade callback saves them once consent succeeds.
+ */
+export const saveSyncSettings = protectedProcedure
+  .input(atprotoSyncPreferencesSchema)
+  .handler(async ({ context, input }) => {
+    const connection = await context.db.query.atprotoConnections.findFirst({
+      where: eq(atprotoConnections.userId, context.user.id),
+    });
+    if (!connection || connection.status !== "active" || !connection.session) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message:
+          "Connect your Atmosphere account before changing sync settings.",
+      });
+    }
+
+    const { saveAtprotoSyncSettings, upgradeAtprotoAuth } =
+      await import("~/server/auth/atproto/service");
+    const { ATPROTO_FULL_SCOPE } = await import("~/server/auth/atproto/config");
+
+    if (
+      syncMethodNeedsWriteScope(input.method) &&
+      !hasAtprotoWriteScope(connection.scopes)
+    ) {
+      // A Consent upgrade starts an authorize round trip like a link, so
+      // it shares the link budget.
+      await enforceLinkRateLimit(context.user.id);
+      try {
+        const url = await upgradeAtprotoAuth({
+          did: connection.did,
+          scope: ATPROTO_FULL_SCOPE,
+          userId: context.user.id,
+          pendingSyncPreferences: input,
+        });
+        return { saved: false as const, consentUrl: url.toString() };
+      } catch (err) {
+        logError("[atproto] upgrade authorize failed:", err);
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "Could not request Atmosphere permissions. Please try again.",
+        });
+      }
+    }
+
+    await saveAtprotoSyncSettings({
+      userId: context.user.id,
+      did: connection.did,
+      preferences: input,
+    });
+    return { saved: true as const, consentUrl: null };
+  });
 
 /**
  * Each link start fans out to identity resolution and writes an auth-state
@@ -153,6 +221,9 @@ export const linkAccount = protectedProcedure
       const url = await startAtprotoLink({
         identifier: resolutionTarget,
         userId: context.user.id,
+        // A reconnect restores the grant the connection held; a fresh link
+        // has no row and stays identity-only.
+        previousScope: connection?.scopes,
       });
       return { url: url.toString() };
     } catch (err) {

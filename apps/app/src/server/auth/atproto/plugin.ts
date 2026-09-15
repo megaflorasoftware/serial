@@ -11,6 +11,7 @@ import {
   ATPROTO_ROUTE_PREFIX,
   ATPROTO_ROUTES,
   getAtprotoLinkRedirectUri,
+  getAtprotoUpgradeRedirectUri,
   placeholderEmailForDid,
   validateAtprotoConfigAtStartup,
 } from "./config";
@@ -18,8 +19,10 @@ import { getAtprotoClient } from "./client";
 import { didSchema, identifierSchema } from "./schemas";
 import {
   AtprotoLinkError,
+  AtprotoUpgradeError,
   bindAtprotoConnection,
   completeAtprotoLink,
+  completeAtprotoUpgrade,
   finishAtprotoAuth,
   resolveAndStoreAtprotoHandle,
   resolveAtprotoDid,
@@ -28,9 +31,15 @@ import {
 } from "./service";
 import { searchAtprotoActorsTypeahead } from "./typeahead";
 import type { BetterAuthPlugin } from "better-auth";
-import type { AtprotoLinkResult } from "~/lib/auth/atproto";
+import type {
+  AtprotoConsentResult,
+  AtprotoLinkResult,
+} from "~/lib/auth/atproto";
 import { enforceResolvedSignupPolicy } from "~/server/auth/policy";
-import { ATPROTO_LINK_RESULT_PARAM } from "~/lib/auth/atproto";
+import {
+  ATPROTO_CONSENT_RESULT_PARAM,
+  ATPROTO_LINK_RESULT_PARAM,
+} from "~/lib/auth/atproto";
 import { extensionConnectCallbackSchema } from "~/lib/extension-auth";
 import { logError } from "~/server/logger";
 
@@ -63,6 +72,20 @@ const AUTHORIZE_FAILED_MESSAGE =
  */
 const linkResultRedirect = (result: AtprotoLinkResult) =>
   `/?${ATPROTO_LINK_RESULT_PARAM}=${result}`;
+
+/** Same convention for a Consent upgrade, on its own param. */
+const consentResultRedirect = (result: AtprotoConsentResult) =>
+  `/?${ATPROTO_CONSENT_RESULT_PARAM}=${result}`;
+
+/**
+ * The SDK surfaces a user's refusal at the authorization server as a
+ * callback error carrying the `error` query param (`access_denied`); every
+ * other failure (replayed state, exchange failure, chain mismatch) has no
+ * such param.
+ */
+function isConsentDenied(err: unknown, params: URLSearchParams): boolean {
+  return err instanceof Error && params.get("error") === "access_denied";
+}
 
 export const atprotoPlugin = () => {
   // Fail closed at startup on malformed config: the store key throws
@@ -312,6 +335,57 @@ export const atprotoPlugin = () => {
           throw ctx.redirect(linkResultRedirect("success"));
         },
       ),
+
+      /**
+       * Complete a Consent upgrade: the code exchange replaced the stored
+       * grant for the connection's own DID (the service pins the subject),
+       * and the sync preferences the user pressed Save on ride in the
+       * server-stored state. Like the link callback, unclassified by the
+       * policy hooks: no user is created and no session is issued.
+       */
+      atprotoUpgradeCallback: createAuthEndpoint(
+        ATPROTO_ROUTES.upgradeCallback,
+        { method: "GET" },
+        async (ctx) => {
+          const session = await getSessionFromCtx(ctx);
+          if (!session) {
+            throw ctx.redirect(consentResultRedirect("state"));
+          }
+
+          const url = new URL(ctx.request?.url ?? "http://invalid");
+          let result;
+          try {
+            result = await finishAtprotoAuth(url.searchParams, {
+              redirectUri: getAtprotoUpgradeRedirectUri(),
+              // The connection already has its display data; nothing here
+              // should wait on handle resolution.
+              deferHandleResolution: true,
+            });
+          } catch (err) {
+            if (isConsentDenied(err, url.searchParams)) {
+              throw ctx.redirect(consentResultRedirect("denied"));
+            }
+            logError("[atproto] upgrade callback failed:", err);
+            throw ctx.redirect(consentResultRedirect("error"));
+          }
+
+          try {
+            await completeAtprotoUpgrade({
+              did: result.did,
+              sessionUserId: session.user.id,
+              upgradeUserId: result.upgradeUserId,
+              pendingSyncPreferences: result.pendingSyncPreferences,
+            });
+          } catch (err) {
+            logError("[atproto] upgrade failed:", err);
+            const consentResult: AtprotoConsentResult =
+              err instanceof AtprotoUpgradeError ? err.code : "error";
+            throw ctx.redirect(consentResultRedirect(consentResult));
+          }
+
+          throw ctx.redirect(consentResultRedirect("success"));
+        },
+      ),
     },
     rateLimit: [
       // Buckets are keyed per client IP and path. Authorize stays the
@@ -324,7 +398,8 @@ export const atprotoPlugin = () => {
       {
         pathMatcher: (path: string) =>
           path === ATPROTO_ROUTES.callback ||
-          path === ATPROTO_ROUTES.linkCallback,
+          path === ATPROTO_ROUTES.linkCallback ||
+          path === ATPROTO_ROUTES.upgradeCallback,
         window: 60,
         max: 60,
       },

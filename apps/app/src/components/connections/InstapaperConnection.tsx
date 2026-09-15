@@ -1,17 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRightIcon, Loader2Icon, UnplugIcon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { ConnectionListRow } from "./ConnectionListRow";
+import { ConnectedAccountRow } from "./ConnectedAccountRow";
 import { orpc } from "~/lib/orpc";
 
-export function InstapaperConnectionForm({
-  onSuccess,
-}: {
-  onSuccess: () => void;
-}) {
+function InstapaperConnectionForm({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -78,24 +76,13 @@ export function InstapaperConnectionForm({
   );
 }
 
-export function InstapaperConnectionListItem({
-  onSelect,
-}: {
-  onSelect: () => void;
-}) {
+function useInstapaperConnectionStatus() {
+  return useQuery(orpc.instapaper.getConnectionStatus.queryOptions());
+}
+
+function useInstapaperUnlink() {
   const queryClient = useQueryClient();
-
-  const { data: status, isLoading } = useQuery(
-    orpc.instapaper.getConnectionStatus.queryOptions(),
-  );
-
-  const computedStatus = status ?? {
-    isConnected: false,
-    username: null,
-    isConfigured: false,
-  };
-
-  const unlinkMutation = useMutation(
+  return useMutation(
     orpc.instapaper.unlinkAccount.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
@@ -108,67 +95,55 @@ export function InstapaperConnectionListItem({
       },
     }),
   );
+}
 
-  const isClickable =
-    !isLoading && !status?.isConnected && status?.isConfigured;
+export function InstapaperConnectionListItem({
+  onSelect,
+}: {
+  onSelect: () => void;
+}) {
+  const { data: status, isLoading } = useInstapaperConnectionStatus();
 
   return (
-    <div
-      role={isClickable ? "button" : undefined}
-      tabIndex={isClickable ? 0 : undefined}
-      onClick={isClickable ? onSelect : undefined}
-      onKeyDown={
-        isClickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelect();
-              }
-            }
-          : undefined
+    <ConnectionListRow
+      name="Instapaper"
+      isLoading={isLoading}
+      isConfigured={status?.isConfigured ?? false}
+      statusText={
+        status?.isConnected && status.username
+          ? status.username
+          : "Not connected"
       }
-      className={`flex items-center justify-between rounded-lg border p-4 ${
-        isClickable ? "hover:bg-muted cursor-pointer transition-colors" : ""
-      }`}
-    >
-      <div className="flex flex-col">
-        <span className="font-medium">Instapaper</span>
-        {isLoading ? (
-          <span className="text-muted-foreground text-sm">Loading...</span>
-        ) : !computedStatus.isConfigured ? (
-          <span className="text-muted-foreground text-sm">Not available</span>
-        ) : computedStatus.isConnected ? (
-          <span className="text-muted-foreground text-sm">
-            {computedStatus.username}
-          </span>
-        ) : (
-          <span className="text-muted-foreground text-sm">Not connected</span>
-        )}
-      </div>
-      {isLoading ? (
-        <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
-      ) : !computedStatus.isConfigured ? null : computedStatus.isConnected ? (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            unlinkMutation.mutate(undefined);
-          }}
-          disabled={unlinkMutation.isPending}
-        >
-          {unlinkMutation.isPending ? (
-            <Loader2Icon className="animate-spin" size={16} />
-          ) : (
-            <>
-              <UnplugIcon size={16} />
-              <span className="ml-1.5">Disconnect</span>
-            </>
-          )}
-        </Button>
-      ) : (
-        <ChevronRightIcon className="text-muted-foreground" size={20} />
-      )}
-    </div>
+      onSelect={onSelect}
+    />
   );
+}
+
+/**
+ * The Instapaper subpane: the credentials form while not connected, the
+ * connected username with its disconnect action once connected.
+ */
+export function InstapaperConnectionPane({
+  onConnected,
+}: {
+  onConnected: () => void;
+}) {
+  const { data: status, isLoading } = useInstapaperConnectionStatus();
+  const unlinkMutation = useInstapaperUnlink();
+
+  if (isLoading) {
+    return (
+      <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
+    );
+  }
+  if (status?.isConnected) {
+    return (
+      <ConnectedAccountRow
+        label={status.username ?? "Connected"}
+        disconnecting={unlinkMutation.isPending}
+        onDisconnect={() => unlinkMutation.mutate(undefined)}
+      />
+    );
+  }
+  return <InstapaperConnectionForm onSuccess={onConnected} />;
 }

@@ -273,6 +273,50 @@ describe("finishAtprotoAuth", () => {
     expect(oauth.signOut).not.toHaveBeenCalled();
   });
 
+  it("surfaces the upgrade state's user and pending settings", async () => {
+    const oauth = oauthSession(DID);
+    clientHolder.current = fakeClient({
+      callback: vi.fn().mockResolvedValue({
+        session: oauth,
+        state: JSON.stringify({
+          expectedDid: DID,
+          upgradeUserId: "user-1",
+          pendingSyncPreferences: { method: "export", importAsInactive: true },
+        }),
+      }),
+    });
+
+    const result = await finishAtprotoAuth(new URLSearchParams("code=abc"), {
+      deferHandleResolution: true,
+    });
+
+    expect(result.upgradeUserId).toBe("user-1");
+    expect(result.pendingSyncPreferences).toEqual({
+      method: "export",
+      importAsInactive: true,
+    });
+  });
+
+  it("drops malformed pending settings carried by the state", async () => {
+    const oauth = oauthSession(DID);
+    clientHolder.current = fakeClient({
+      callback: vi.fn().mockResolvedValue({
+        session: oauth,
+        state: JSON.stringify({
+          expectedDid: DID,
+          upgradeUserId: "user-1",
+          pendingSyncPreferences: { method: "everything" },
+        }),
+      }),
+    });
+
+    const result = await finishAtprotoAuth(new URLSearchParams("code=abc"), {
+      deferHandleResolution: true,
+    });
+
+    expect(result.pendingSyncPreferences).toBeNull();
+  });
+
   it("treats an unresolvable handle as display data, not a failure", async () => {
     const oauth = oauthSession(DID);
     clientHolder.current = fakeClient({
@@ -334,8 +378,10 @@ describe("startAtprotoAuth", () => {
       identifier: "user.example.com",
       returnTo: EXTENSION_CONNECT_RETURN_TO,
     });
+    // Sign-in always requests the full grant: every sign-in replaces the
+    // stored scopes, so a narrower one would strip write scope.
     expect(authorize).toHaveBeenLastCalledWith("user.example.com", {
-      scope: "atproto",
+      scope: "atproto include:site.standard.authSocial",
       state: JSON.stringify({ returnTo: EXTENSION_CONNECT_RETURN_TO }),
     });
   });
