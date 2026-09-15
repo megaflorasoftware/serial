@@ -5,6 +5,7 @@ import { Cell, Pie, PieChart } from "recharts";
 import type { ChartConfig } from "~/components/ui/chart";
 import type { ApplicationFeed } from "~/server/db/schema";
 import { useFeeds } from "~/lib/data/feeds";
+import { getFeedNextFetchAt } from "~/lib/feeds/origins";
 import {
   ChartContainer,
   ChartTooltip,
@@ -59,11 +60,12 @@ function computeFeedRefreshStats(feeds: ApplicationFeed[], now: number) {
   };
 
   for (const feed of feeds) {
-    if (!feed.nextFetchAt) {
+    const nextFetchAt = getFeedNextFetchAt(feed);
+    if (!nextFetchAt) {
       counts.other++;
       continue;
     }
-    const diff = feed.nextFetchAt.getTime() - now;
+    const diff = nextFetchAt.getTime() - now;
     if (diff <= FIVE_MIN) counts["5min"]++;
     else if (diff <= FIFTEEN_MIN) counts["15min"]++;
     else if (diff <= ONE_HOUR) counts["1hour"]++;

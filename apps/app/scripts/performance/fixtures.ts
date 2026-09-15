@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { BENCHMARK_PROFILES } from "./model";
 import type { BenchmarkProfileName } from "./model";
 import type { db as applicationDatabase } from "~/server/db";
@@ -9,6 +9,7 @@ import {
   contentCategories,
   feedCategories,
   feedItems,
+  feedOrigins,
   feeds,
   pageCaptures,
   user,
@@ -60,14 +61,11 @@ export async function seedBenchmarkFixture(input: {
     Array.from({ length: feedCount }, (_, index) => ({
       userId,
       name: `Fixture feed ${index}`,
-      url: `https://feeds.serial.test/${index}.xml`,
       imageUrl: "",
       platform: index % 3 === 0 ? "youtube" : "website",
       openLocation: "serial" as const,
       createdAt: BASE_TIME,
       updatedAt: BASE_TIME,
-      lastFetchedAt: BASE_TIME,
-      nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
       isActive: true,
     })),
     (chunk) => database.insert(feeds).values(chunk),
@@ -75,7 +73,21 @@ export async function seedBenchmarkFixture(input: {
   const feedRows = await database
     .select({ id: feeds.id })
     .from(feeds)
-    .where(eq(feeds.userId, userId));
+    .where(eq(feeds.userId, userId))
+    .orderBy(asc(feeds.id));
+  await insertInChunks(
+    feedRows.map((feed, index) => ({
+      feedId: feed.id,
+      userId,
+      kind: "rss",
+      locator: `https://feeds.serial.test/${index}.xml`,
+      createdAt: BASE_TIME,
+      updatedAt: BASE_TIME,
+      lastFetchedAt: BASE_TIME,
+      nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
+    })),
+    (chunk) => database.insert(feedOrigins).values(chunk),
+  );
 
   await insertInChunks(
     Array.from({ length: tagCount }, (_, index) => ({

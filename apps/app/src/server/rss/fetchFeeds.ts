@@ -4,7 +4,7 @@ import {
   FEED_INGESTION_CONCURRENCY,
 } from "@serial/bookmark-capture";
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
-import { feedItems, feeds } from "../db/schema";
+import { feedItems, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { logMessage } from "../logger";
 import { calculateNextFetch } from "./calculateNextFetch";
@@ -25,7 +25,9 @@ import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
 import type { db as Database } from "../db";
 import type {
   ConditionalHeaders,
+  FeedFetchMetadata,
   FeedFetchResult,
+  FetchableOrigin,
   NewFeedDetails,
   RSSContent,
   RSSFeedWithMetadata,
@@ -144,19 +146,62 @@ type FeedResult =
       status: "success";
       feedItems: ApplicationFeedItem[];
       id: number;
+      originId: number;
       fromCache?: boolean;
     }
   | {
       status: "empty" | "skipped";
       id: number;
+      originId: number;
       fromCache?: boolean;
     }
   | {
       status: "error";
       id: number;
+      originId: number;
       error: unknown;
       fromCache?: boolean;
     };
+
+type FetchStateUpdate = Pick<
+  typeof feedOrigins.$inferInsert,
+  "lastFetchedAt" | "nextFetchAt" | "etag" | "lastModifiedHeader"
+>;
+
+/** Every fetch-state write lands on the origin row, never on the Feed. */
+async function writeOriginFetchState(
+  context: { db: typeof Database },
+  originId: number,
+  update: FetchStateUpdate,
+) {
+  await dbSemaphore.run(() =>
+    context.db
+      .update(feedOrigins)
+      .set(update)
+      .where(eq(feedOrigins.id, originId)),
+  );
+}
+
+function fetchedState(
+  now: Date,
+  fetchMetadata: FeedFetchMetadata,
+): FetchStateUpdate {
+  return {
+    lastFetchedAt: now,
+    nextFetchAt: calculateNextFetch(fetchMetadata, now),
+    etag: fetchMetadata.etag ?? null,
+    lastModifiedHeader: fetchMetadata.lastModified ?? null,
+  };
+}
+
+/** Distinct Feed rows behind a page of origins, in first-seen order. */
+function uniqueFeeds(fetchableOrigins: FetchableOrigin[]): DatabaseFeed[] {
+  const byId = new Map<number, DatabaseFeed>();
+  for (const { feed } of fetchableOrigins) {
+    if (!byId.has(feed.id)) byId.set(feed.id, feed);
+  }
+  return [...byId.values()];
+}
 
 async function insertFeedItems(
   context: { db: typeof Database },
@@ -276,87 +321,56 @@ async function insertFeedItems(
 
 export async function* fetchAndInsertFeedData(
   context: { db: typeof Database },
-  databaseFeeds: DatabaseFeed[],
+  fetchableOrigins: FetchableOrigin[],
 ) {
   const now = new Date();
+  const databaseFeeds = uniqueFeeds(fetchableOrigins);
 
-  const processFeed = async (feed: DatabaseFeed): Promise<FeedResult> => {
+  const processOrigin = async (
+    fetchable: FetchableOrigin,
+  ): Promise<FeedResult> => {
+    const { origin, feed } = fetchable;
+    const ids = { id: feed.id, originId: origin.id };
     try {
-      // Check if we should skip this feed based on nextFetchAt
-      if (feed.nextFetchAt && feed.nextFetchAt > now) {
-        return {
-          status: "skipped",
-          id: feed.id,
-        };
+      // Check if we should skip this origin based on nextFetchAt
+      if (origin.nextFetchAt && origin.nextFetchAt > now) {
+        return { status: "skipped", ...ids };
       }
 
       if (!feed.isActive) {
-        return {
-          status: "skipped",
-          id: feed.id,
-        };
+        return { status: "skipped", ...ids };
       }
 
       // Check cross-user cache
-      const cachedResult = await getCachedFeedResult(feed.url);
+      const cachedResult = await getCachedFeedResult(origin.locator);
 
       if (cachedResult) {
         if (cachedResult.status === "error") {
-          const errorBackoffAt = new Date(now.getTime() + ERROR_BACKOFF_MS);
-          await dbSemaphore.run(() =>
-            context.db
-              .update(feeds)
-              .set({ nextFetchAt: errorBackoffAt })
-              .where(eq(feeds.id, feed.id)),
-          );
+          await writeOriginFetchState(context, origin.id, {
+            nextFetchAt: new Date(now.getTime() + ERROR_BACKOFF_MS),
+          });
           return {
             status: "error",
-            id: feed.id,
+            ...ids,
             error: new Error(cachedResult.message),
             fromCache: true,
           };
         }
 
         if (cachedResult.status === "empty") {
-          const nextFetchAt = calculateNextFetch(
-            cachedResult.fetchMetadata,
-            now,
+          await writeOriginFetchState(
+            context,
+            origin.id,
+            fetchedState(now, cachedResult.fetchMetadata),
           );
-          await dbSemaphore.run(() =>
-            context.db
-              .update(feeds)
-              .set({
-                lastFetchedAt: now,
-                nextFetchAt,
-                etag: cachedResult.fetchMetadata.etag ?? null,
-                lastModifiedHeader:
-                  cachedResult.fetchMetadata.lastModified ?? null,
-              })
-              .where(eq(feeds.id, feed.id)),
-          );
-          return {
-            status: "empty",
-            id: feed.id,
-            fromCache: true,
-          };
+          return { status: "empty", ...ids, fromCache: true };
         }
 
         // cached success
-        const nextFetchAt = calculateNextFetch(
-          cachedResult.data.fetchMetadata,
-          now,
-        );
-        await dbSemaphore.run(() =>
-          context.db
-            .update(feeds)
-            .set({
-              lastFetchedAt: now,
-              nextFetchAt,
-              etag: cachedResult.data.fetchMetadata.etag ?? null,
-              lastModifiedHeader:
-                cachedResult.data.fetchMetadata.lastModified ?? null,
-            })
-            .where(eq(feeds.id, feed.id)),
+        await writeOriginFetchState(
+          context,
+          origin.id,
+          fetchedState(now, cachedResult.data.fetchMetadata),
         );
 
         const applicationFeedItems = await insertFeedItems(
@@ -369,100 +383,69 @@ export async function* fetchAndInsertFeedData(
         return {
           status: "success",
           feedItems: applicationFeedItems,
-          id: feed.id,
+          ...ids,
           fromCache: true,
         };
       }
 
       // Cache miss — proceed with HTTP fetch
       const cached: ConditionalHeaders = {
-        etag: feed.etag,
-        lastModifiedHeader: feed.lastModifiedHeader,
+        etag: origin.etag,
+        lastModifiedHeader: origin.lastModifiedHeader,
       };
 
       let feedData: FeedFetchResult | null = null;
 
       if (feed.platform === "youtube") {
-        feedData = await fetchYouTubeFeedData(feed, cached);
+        feedData = await fetchYouTubeFeedData(fetchable, cached);
       } else if (feed.platform === "peertube") {
-        feedData = await fetchPeerTubeFeedData(feed, cached);
+        feedData = await fetchPeerTubeFeedData(fetchable, cached);
       } else if (feed.platform === "nebula") {
-        feedData = await fetchNebulaFeedData(feed, cached);
+        feedData = await fetchNebulaFeedData(fetchable, cached);
       } else if (feed.platform === "website") {
-        feedData = await fetchWebsiteFeedData(feed, cached);
+        feedData = await fetchWebsiteFeedData(fetchable, cached);
       }
 
       if (!feedData) {
-        const errorBackoffAt = new Date(now.getTime() + ERROR_BACKOFF_MS);
-        await dbSemaphore.run(() =>
-          context.db
-            .update(feeds)
-            .set({ nextFetchAt: errorBackoffAt })
-            .where(eq(feeds.id, feed.id)),
-        );
+        await writeOriginFetchState(context, origin.id, {
+          nextFetchAt: new Date(now.getTime() + ERROR_BACKOFF_MS),
+        });
         const error = new Error(
           `No feed data returned for platform: ${feed.platform}`,
         );
-        await setCachedFeedResult(feed.url, {
+        await setCachedFeedResult(origin.locator, {
           status: "error",
           message: error.message,
         });
-        return {
-          status: "error",
-          id: feed.id,
-          error,
-        };
+        return { status: "error", ...ids, error };
       }
 
       // Handle 304 Not Modified — skip insert, just update timestamps
       if ("notModified" in feedData && feedData.notModified) {
-        const nextFetchAt = calculateNextFetch(feedData.fetchMetadata, now);
-        await dbSemaphore.run(() =>
-          context.db
-            .update(feeds)
-            .set({
-              lastFetchedAt: now,
-              nextFetchAt: nextFetchAt,
-            })
-            .where(eq(feeds.id, feed.id)),
-        );
-        return {
-          status: "skipped",
-          id: feed.id,
-        };
+        await writeOriginFetchState(context, origin.id, {
+          lastFetchedAt: now,
+          nextFetchAt: calculateNextFetch(feedData.fetchMetadata, now),
+        });
+        return { status: "skipped", ...ids };
       }
 
       // At this point feedData is a full RSSFeedWithMetadata (not notModified)
       const completedFeed = feedData as RSSFeedWithMetadata;
 
       if (!completedFeed.items.length) {
-        await setCachedFeedResult(feed.url, {
+        await setCachedFeedResult(origin.locator, {
           status: "empty",
           fetchMetadata: completedFeed.fetchMetadata,
         });
-        const nextFetchAt = calculateNextFetch(
-          completedFeed.fetchMetadata,
-          now,
+        await writeOriginFetchState(
+          context,
+          origin.id,
+          fetchedState(now, completedFeed.fetchMetadata),
         );
-        await dbSemaphore.run(() =>
-          context.db
-            .update(feeds)
-            .set({
-              lastFetchedAt: now,
-              nextFetchAt: nextFetchAt,
-              etag: completedFeed.fetchMetadata.etag ?? null,
-              lastModifiedHeader:
-                completedFeed.fetchMetadata.lastModified ?? null,
-            })
-            .where(eq(feeds.id, feed.id)),
-        );
-        return {
-          status: "empty",
-          id: feed.id,
-        };
+        return { status: "empty", ...ids };
       }
 
-      await setCachedFeedResult(feed.url, {
+      await setCachedFeedResult(origin.locator, {
         status: "success",
         data: {
           title: completedFeed.title,
@@ -472,18 +455,10 @@ export async function* fetchAndInsertFeedData(
         },
       });
 
-      const nextFetchAt = calculateNextFetch(completedFeed.fetchMetadata, now);
-      await dbSemaphore.run(() =>
-        context.db
-          .update(feeds)
-          .set({
-            lastFetchedAt: now,
-            nextFetchAt,
-            etag: completedFeed.fetchMetadata.etag ?? null,
-            lastModifiedHeader:
-              completedFeed.fetchMetadata.lastModified ?? null,
-          })
-          .where(eq(feeds.id, feed.id)),
+      await writeOriginFetchState(
+        context,
+        origin.id,
+        fetchedState(now, completedFeed.fetchMetadata),
       );
 
       const applicationFeedItems = await insertFeedItems(
@@ -493,49 +468,37 @@ export async function* fetchAndInsertFeedData(
         databaseFeeds,
       );
 
-      return {
-        status: "success",
-        feedItems: applicationFeedItems,
-        id: feed.id,
-      };
+      return { status: "success", feedItems: applicationFeedItems, ...ids };
     } catch (e) {
-      // Push back nextFetchAt so a broken feed isn't retried every minute
-      const errorBackoffAt = new Date(now.getTime() + ERROR_BACKOFF_MS);
+      // Push back nextFetchAt so a broken origin isn't retried every minute
       try {
-        await dbSemaphore.run(() =>
-          context.db
-            .update(feeds)
-            .set({ nextFetchAt: errorBackoffAt })
-            .where(eq(feeds.id, feed.id)),
-        );
+        await writeOriginFetchState(context, origin.id, {
+          nextFetchAt: new Date(now.getTime() + ERROR_BACKOFF_MS),
+        });
       } catch {
         // Best-effort — don't let the backoff update mask the original error
       }
-      await setCachedFeedResult(feed.url, {
+      await setCachedFeedResult(origin.locator, {
         status: "error",
         message: e instanceof Error ? e.message : String(e),
       });
-      return {
-        status: "error",
-        id: feed.id,
-        error: e,
-      };
+      return { status: "error", ...ids, error: e };
     }
   };
 
   let skippedCount = 0;
   let crossUserCacheCount = 0;
   let fetchedCount = 0;
-  const totalFeeds = databaseFeeds.length;
+  const totalFeeds = fetchableOrigins.length;
   const fetchedFeedNames: string[] = [];
   const feedNameById = new Map(
     databaseFeeds.map((feed) => [feed.id, feed.name]),
   );
 
   for await (const result of workerPool(
-    databaseFeeds,
+    fetchableOrigins,
     FEED_INGESTION_CONCURRENCY,
-    processFeed,
+    processOrigin,
   )) {
     if (result.status === "skipped") {
       skippedCount++;
@@ -558,7 +521,7 @@ export async function* fetchAndInsertFeedData(
       1,
     );
     logMessage(
-      `[Feed Fetch] ${skippedCount} skipped, ${crossUserCacheCount} cross-user cached (${cacheHitPercent}%), ${fetchedCount} fetched out of ${totalFeeds} feeds; workers=${Math.min(FEED_INGESTION_CONCURRENCY, totalFeeds)}, queued=${Math.max(0, totalFeeds - FEED_INGESTION_CONCURRENCY)}`,
+      `[Feed Fetch] ${skippedCount} skipped, ${crossUserCacheCount} cross-user cached (${cacheHitPercent}%), ${fetchedCount} fetched out of ${totalFeeds} origins; workers=${Math.min(FEED_INGESTION_CONCURRENCY, totalFeeds)}, queued=${Math.max(0, totalFeeds - FEED_INGESTION_CONCURRENCY)}`,
     );
   }
 

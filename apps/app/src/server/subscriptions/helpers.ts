@@ -4,7 +4,7 @@ import { IS_BILLING_ENABLED } from "./polar";
 import { getSubscriptionFromKV, syncPolarDataToKV } from "./kv";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
-import { feeds, user } from "~/server/db/schema";
+import { feedOrigins, feeds, user } from "~/server/db/schema";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { logError } from "~/server/logger";
 
@@ -169,11 +169,18 @@ export async function deactivateExcessFeeds(
   userId: string,
   maxActive: number,
 ) {
+  // Never-fetched Feeds go first, then the least recently fetched, judged by
+  // the earliest fetch across a Feed's origins.
   const activeFeeds = await db
-    .select({ id: feeds.id })
+    .select({
+      id: feeds.id,
+      lastFetchedAt: sql<number | null>`min(${feedOrigins.lastFetchedAt})`,
+    })
     .from(feeds)
+    .leftJoin(feedOrigins, eq(feedOrigins.feedId, feeds.id))
     .where(and(eq(feeds.userId, userId), eq(feeds.isActive, true)))
-    .orderBy(asc(feeds.lastFetchedAt))
+    .groupBy(feeds.id)
+    .orderBy(sql`min(${feedOrigins.lastFetchedAt})`, asc(feeds.id))
     .all();
 
   if (activeFeeds.length <= maxActive) return;

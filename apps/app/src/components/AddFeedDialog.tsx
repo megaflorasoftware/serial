@@ -51,6 +51,7 @@ import { getAssumedFeedPlatform } from "~/server/rss/validateFeedUrl";
 import { useSaveBookmarkMutation } from "~/lib/data/bookmarks/mutations";
 import { BookmarkOrganizationEditor } from "~/components/bookmarks/BookmarkOrganizationEditor";
 import { useCanMutate } from "~/lib/data/offline-mutations";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
 
 function useViewOptions() {
   const { views } = useViews();
@@ -310,9 +311,11 @@ function getPrioritizedTagIds(
 }
 
 function getFeedWebsiteUrl(feed: ApplicationFeed | undefined) {
-  if (!feed?.url) return "#";
+  if (!feed) return "#";
+  const feedUrl = getFeedRssUrl(feed);
+  if (!feedUrl) return "#";
   try {
-    const url = new URL(feed.url);
+    const url = new URL(feedUrl);
     if (feed.platform === "youtube") {
       const channelId = url.searchParams.get("channel_id");
       if (channelId) return `https://www.youtube.com/channel/${channelId}`;
@@ -722,7 +725,7 @@ export function EditFeedDialog({
     selectedCategories,
     selectedViewIds,
     selectedOpenLocation,
-    feedUrl: feed?.url,
+    feedUrl: feed ? getFeedRssUrl(feed) : undefined,
     onClose,
   });
 

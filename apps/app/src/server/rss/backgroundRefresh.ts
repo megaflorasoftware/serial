@@ -4,9 +4,9 @@ import { addRefreshStats, emptyRefreshStats, rssAttemptSummary } from "./stats";
 import { countDueFeeds, getDueFeedPage, RSS_FEED_PAGE_SIZE } from "./dueFeeds";
 import { automaticRssOwnerForPlan } from "./automaticOwnership";
 import type { PlanId } from "~/server/subscriptions/plans";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type { db as Database } from "~/server/db";
 import type { RefreshStats } from "./stats";
+import type { FetchableOrigin } from "./types";
 import type { RssAttemptOutcome, RssPublishedChunk } from "~/lib/rss";
 import {
   checkUserRefreshEligibilityForPlan,
@@ -42,7 +42,7 @@ type BackgroundRefreshDependencies = {
   publish: (channel: string, chunk: RssPublishedChunk) => Promise<void>;
   refreshFeedPage?: (input: {
     db: typeof Database;
-    feedsList: DatabaseFeed[];
+    feedsList: FetchableOrigin[];
     channel: string;
   }) => Promise<RefreshStats>;
   onUserError?: (error: unknown, userId: string) => void;
@@ -190,11 +190,11 @@ export async function runBackgroundFeedRefresh(
         });
         refreshStarted = true;
 
-        let afterFeedId: number | undefined;
+        let afterOriginId: number | undefined;
         while (true) {
           const feedPage = await getDueFeedPage(dependencies.db, {
             userId: candidate.id,
-            afterFeedId,
+            afterOriginId,
             now: dependencies.now,
           });
           if (feedPage.length === 0) break;
@@ -204,7 +204,7 @@ export async function runBackgroundFeedRefresh(
             metrics.maximumFeedPageSize,
             feedPage.length,
           );
-          afterFeedId = feedPage.at(-1)?.id;
+          afterOriginId = feedPage.at(-1)?.origin.id;
           const pageStats = await refreshFeedPage({
             db: dependencies.db,
             feedsList: feedPage,

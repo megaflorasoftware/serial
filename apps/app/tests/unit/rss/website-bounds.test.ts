@@ -2,7 +2,8 @@ import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
-import type { DatabaseFeed } from "~/server/db/schema";
+import type { DatabaseFeed, DatabaseFeedOrigin } from "~/server/db/schema";
+import type { FetchableOrigin } from "~/server/rss/types";
 import { fetchWebsiteFeedData } from "~/server/rss/parsers/website";
 
 vi.mock("~/server/rss/feedHttp", async (importOriginal) => {
@@ -95,23 +96,54 @@ afterAll(() => {
   server.close();
 });
 
-function makeFeed(overrides: Partial<DatabaseFeed> = {}): DatabaseFeed {
+function makeFeed(
+  overrides: Partial<DatabaseFeedOrigin> & {
+    id?: number;
+    platform?: DatabaseFeed["platform"];
+    isActive?: boolean;
+  } = {},
+): FetchableOrigin {
+  const {
+    id = 1,
+    platform = "website",
+    isActive = true,
+    ...origin
+  } = overrides;
   return {
-    id: 1,
-    userId: "user-1",
-    name: "Bounded feed",
-    url: `${baseUrl}/feed`,
-    imageUrl: "",
-    platform: "website",
-    openLocation: "serial",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    isActive: true,
-    etag: null,
-    lastModifiedHeader: null,
-    ...overrides,
+    feed: {
+      id,
+      userId: "user-1",
+      name: "Bounded feed",
+      imageUrl: "",
+      platform,
+      openLocation: "serial",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isActive,
+      siteUrl: null,
+      nameEditedAt: null,
+    },
+    origin: {
+      id: id * 100,
+      feedId: id,
+      userId: "user-1",
+      kind: "rss",
+      locator: `${baseUrl}/feed`,
+      etag: null,
+      lastModifiedHeader: null,
+      lastFetchedAt: null,
+      nextFetchAt: null,
+      repoRev: null,
+      publicationDid: null,
+      publicationRkey: null,
+      pdsUrl: null,
+      sourceName: null,
+      sourceImageUrl: null,
+      sourceDescription: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...origin,
+    },
   };
 }
 
@@ -132,7 +164,7 @@ describe("fetchWebsiteFeedData resource bounds", () => {
     maximumActiveMetadataRequests = 0;
 
     const result = await fetchWebsiteFeedData(
-      makeFeed({ url: `${baseUrl}/feed-no-images` }),
+      makeFeed({ locator: `${baseUrl}/feed-no-images` }),
     );
     expect(result).not.toBeNull();
     expect(result).not.toHaveProperty("notModified");

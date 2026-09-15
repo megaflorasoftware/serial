@@ -242,7 +242,6 @@ export const feeds = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name", { length: 256 }).notNull().default(""),
-    url: text("url", { length: 512 }).notNull().default(""),
     imageUrl: text("image_url", { length: 512 }).notNull().default(""),
     platform: text("platform", { length: 256 }).notNull().default("youtube"),
     openLocation: text("open_location", { length: 64 })
@@ -254,27 +253,86 @@ export const feeds = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
-    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
-    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-    etag: text("etag"),
-    lastModifiedHeader: text("last_modified_header"),
+    // Canonical site the Feed subscribes to; null until an origin reports one.
+    siteUrl: text("site_url", { length: 512 }),
+    // Set when the user renames the Feed so derived names never overwrite it.
+    nameEditedAt: integer("name_edited_at", { mode: "timestamp" }),
   },
   (example) => [
     index("feed_user_id_idx").on(example.userId),
-    index("feed_user_id_url_idx").on(example.userId, example.url),
-    index("feed_user_id_is_active_idx").on(
-      example.userId,
-      example.isActive,
-      example.lastFetchedAt,
-    ),
-    index("feed_user_id_is_active_next_fetch_at_idx").on(
-      example.userId,
-      example.isActive,
-      example.nextFetchAt,
-    ),
+    index("feed_user_id_is_active_idx").on(example.userId, example.isActive),
   ],
 );
+
+export const FEED_ORIGIN_KIND = {
+  RSS: "rss",
+  ATPROTO: "atproto",
+} as const;
+export const feedOriginKindSchema = z.enum([
+  FEED_ORIGIN_KIND.RSS,
+  FEED_ORIGIN_KIND.ATPROTO,
+]);
+export type FeedOriginKind = z.infer<typeof feedOriginKindSchema>;
+
+/**
+ * One data source of a Feed. An RSS origin is located by its feed URL; an
+ * Atmosphere origin by a publication at-uri. Fetch state, conditional
+ * headers, and observed source metadata live here so each origin keeps its
+ * own clock. `userId` is denormalised so the due-origin pager never joins
+ * before filtering.
+ */
+export const feedOrigins = sqliteTable(
+  "feed_origin",
+  {
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { length: 16 }).notNull(),
+    locator: text("locator", { length: 1024 }).notNull(),
+    etag: text("etag"),
+    lastModifiedHeader: text("last_modified_header"),
+    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
+    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
+    // Atmosphere only: last seen repository commit rev and cached resolution.
+    repoRev: text("repo_rev"),
+    publicationDid: text("publication_did"),
+    publicationRkey: text("publication_rkey"),
+    pdsUrl: text("pds_url", { length: 512 }),
+    // Metadata as observed from the source on the last successful read.
+    sourceName: text("source_name", { length: 256 }),
+    sourceImageUrl: text("source_image_url", { length: 512 }),
+    sourceDescription: text("source_description"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("feed_origin_feed_id_kind_unique").on(table.feedId, table.kind),
+    index("feed_origin_user_id_kind_locator_idx").on(
+      table.userId,
+      table.kind,
+      table.locator,
+    ),
+    index("feed_origin_user_id_next_fetch_at_idx").on(
+      table.userId,
+      table.nextFetchAt,
+    ),
+    index("feed_origin_feed_id_idx").on(table.feedId),
+  ],
+);
+export const feedOriginSchema = createSelectSchema(feedOrigins).merge(
+  z.object({ kind: feedOriginKindSchema }),
+);
+export type DatabaseFeedOrigin = typeof feedOrigins.$inferSelect;
+export type ApplicationFeedOrigin = z.infer<typeof feedOriginSchema>;
 export const openLocationSchema = z.enum(["serial", "origin"]);
 export type FeedOpenLocation = z.infer<typeof openLocationSchema>;
 
@@ -288,9 +346,14 @@ export const feedsSchema = createSelectSchema(feeds).merge(
   z.object({
     platform: contentPlatformSchema,
     openLocation: openLocationSchema,
+    origins: feedOriginSchema.array(),
   }),
 );
 export type DatabaseFeed = typeof feeds.$inferSelect;
+/** A Feed row with its origin rows attached, the shape every Feed read returns. */
+export type DatabaseFeedWithOrigins = DatabaseFeed & {
+  origins: DatabaseFeedOrigin[];
+};
 export type ApplicationFeed = z.infer<typeof feedsSchema>;
 
 export const feedItems = sqliteTable(

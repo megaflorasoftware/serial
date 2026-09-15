@@ -5,8 +5,9 @@ import { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
 
-import type { DatabaseFeed } from "~/server/db/schema";
+import type { DatabaseFeed, DatabaseFeedOrigin } from "~/server/db/schema";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
+import type { FetchableOrigin } from "~/server/rss/types";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
 vi.mock("~/server/rss/feedHttp", async (importOriginal) => {
@@ -125,23 +126,54 @@ afterAll(() => {
   server?.close();
 });
 
-function makeFeed(overrides?: Partial<DatabaseFeed>): DatabaseFeed {
+function makeFeed(
+  overrides: Partial<DatabaseFeedOrigin> & {
+    id?: number;
+    platform?: DatabaseFeed["platform"];
+    isActive?: boolean;
+  } = {},
+): FetchableOrigin {
+  const {
+    id = 1,
+    platform = "youtube",
+    isActive = true,
+    ...origin
+  } = overrides;
   return {
-    id: 1,
-    userId: "user-1",
-    name: "Fireship",
-    url: `${baseUrl}/feed`,
-    imageUrl: "",
-    platform: "youtube",
-    openLocation: "serial",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    isActive: true,
-    etag: null,
-    lastModifiedHeader: null,
-    ...overrides,
+    feed: {
+      id,
+      userId: "user-1",
+      name: "Fireship",
+      imageUrl: "",
+      platform,
+      openLocation: "serial",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isActive,
+      siteUrl: null,
+      nameEditedAt: null,
+    },
+    origin: {
+      id: id * 100,
+      feedId: id,
+      userId: "user-1",
+      kind: "rss",
+      locator: `${baseUrl}/feed`,
+      etag: null,
+      lastModifiedHeader: null,
+      lastFetchedAt: null,
+      nextFetchAt: null,
+      repoRev: null,
+      publicationDid: null,
+      publicationRkey: null,
+      pdsUrl: null,
+      sourceName: null,
+      sourceImageUrl: null,
+      sourceDescription: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...origin,
+    },
   };
 }
 
@@ -528,7 +560,7 @@ describe("fetchAndInsertFeedData resource bounds", () => {
     const feeds = Array.from({ length: 10 }, (_, index) =>
       makeFeed({
         id: index + 1,
-        url: `${baseUrl}/slow/${index + 1}`,
+        locator: `${baseUrl}/slow/${index + 1}`,
       }),
     );
 

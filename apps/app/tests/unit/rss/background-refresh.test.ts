@@ -2,9 +2,46 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { RefreshStats } from "~/server/rss/refreshUserFeeds";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
-import { feeds, user } from "~/server/db/schema";
+import { feedOrigins, feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
+
+type SeedFeedRow = Omit<typeof feeds.$inferInsert, "id"> & {
+  url: string;
+  nextFetchAt?: Date | null;
+};
+
+/** Insert Feeds each with one RSS origin carrying the URL and schedule. */
+async function seedFeedsWithRssOrigins(
+  database: TestDatabase["database"],
+  rows: SeedFeedRow[],
+) {
+  for (let index = 0; index < rows.length; index += 200) {
+    const chunk = rows.slice(index, index + 200);
+    const inserted = await database
+      .insert(feeds)
+      .values(
+        chunk.map((row) => {
+          const { url, nextFetchAt, ...feed } = row;
+          void url;
+          void nextFetchAt;
+          return feed;
+        }),
+      )
+      .returning({ id: feeds.id, userId: feeds.userId });
+    await database.insert(feedOrigins).values(
+      inserted.map((feed, position) => ({
+        feedId: feed.id,
+        userId: feed.userId,
+        kind: "rss",
+        locator: chunk[position]!.url,
+        nextFetchAt: chunk[position]!.nextFetchAt ?? null,
+        createdAt: chunk[position]!.createdAt ?? new Date(),
+        updatedAt: chunk[position]!.updatedAt ?? new Date(),
+      })),
+    );
+  }
+}
 
 let testDatabase: TestDatabase;
 
@@ -52,11 +89,7 @@ describe("runBackgroundFeedRefresh", () => {
         isActive: true,
       })),
     );
-    for (let index = 0; index < dueFeeds.length; index += 200) {
-      await testDatabase.database
-        .insert(feeds)
-        .values(dueFeeds.slice(index, index + 200));
-    }
+    await seedFeedsWithRssOrigins(testDatabase.database, dueFeeds);
 
     const feedPageSizes: number[] = [];
     const publishedChunkTypes: string[] = [];
@@ -112,7 +145,8 @@ describe("runBackgroundFeedRefresh", () => {
       })),
     );
 
-    await testDatabase.database.insert(feeds).values(
+    await seedFeedsWithRssOrigins(
+      testDatabase.database,
       Array.from({ length: 10 }, (_, index) => ({
         userId: `paid-${index.toString().padStart(2, "0")}`,
         name: "Feed",
@@ -165,7 +199,8 @@ describe("runBackgroundFeedRefresh", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await testDatabase.database.insert(feeds).values(
+    await seedFeedsWithRssOrigins(
+      testDatabase.database,
       Array.from({ length: 3 }, (_, index) => ({
         userId: "away-user",
         name: `Feed ${index}`,
@@ -220,18 +255,20 @@ describe("runBackgroundFeedRefresh", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await testDatabase.database.insert(feeds).values({
-      userId: "idle-user",
-      name: "Fresh feed",
-      url: "https://example.com/idle/fresh.xml",
-      imageUrl: "",
-      platform: "website",
-      openLocation: "serial",
-      createdAt: now,
-      updatedAt: now,
-      isActive: true,
-      nextFetchAt: new Date(now.getTime() + 10 * 60_000),
-    });
+    await seedFeedsWithRssOrigins(testDatabase.database, [
+      {
+        userId: "idle-user",
+        name: "Fresh feed",
+        url: "https://example.com/idle/fresh.xml",
+        imageUrl: "",
+        platform: "website",
+        openLocation: "serial",
+        createdAt: now,
+        updatedAt: now,
+        isActive: true,
+        nextFetchAt: new Date(now.getTime() + 10 * 60_000),
+      },
+    ]);
 
     const claimUser = vi.fn(() =>
       Promise.resolve({

@@ -9,6 +9,7 @@ import type {
   DatabaseViewFeed,
 } from "~/server/db/schema";
 import { isFeedCompatibleWithContentFilter } from "~/lib/data/feed-items/filters";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
 import { UNCATEGORIZED_VIEW_ID } from "~/lib/data/views/constants";
 import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 
@@ -24,9 +25,10 @@ function feedToOPMLItem(
   feed: ApplicationFeed,
   tagNames: string[] = [],
 ): OPMLFeedItem {
+  const feedUrl = getFeedRssUrl(feed);
   return {
-    title: feed.name || feed.url,
-    xmlUrl: feed.url,
+    title: feed.name || feedUrl,
+    xmlUrl: feedUrl,
     tags: tagNames,
   };
 }
@@ -140,8 +142,8 @@ function getSectionGroups({
           feeds: sortOPMLFeedItems(sectionItems),
           outlineType,
           feedXmlUrl:
-            section.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED
-              ? sectionFeed?.url
+            section.itemType === VIEW_LAYOUT_ITEM_TYPE.FEED && sectionFeed
+              ? getFeedRssUrl(sectionFeed)
               : undefined,
         },
       ];
