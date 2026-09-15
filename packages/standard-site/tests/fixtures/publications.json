@@ -1,0 +1,383 @@
+[
+  {
+    "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3lxv5nk6jik2k",
+    "cid": "bafyreifvqv7e6ah5eaeghta2ktwufxp7n5eljbyi257s24gqf43zfjla4m",
+    "value": {
+      "$type": "site.standard.publication",
+      "description": "Interviews, news, and other updates from the Community Fund, Tech Talks, and other social & community content.",
+      "icon": {
+        "$type": "blob",
+        "mimeType": "image/png",
+        "ref": {
+          "$link": "bafkreiapqrr6xkm4axqfrl2o52ww5o2nq5uludwls4f7v6qvupiu2kkkui"
+        },
+        "size": 105427
+      },
+      "name": "ATProto Community",
+      "preferences": {
+        "showComments": true,
+        "showInDiscover": true
+      },
+      "url": "https://atprotocommunity.leaflet.pub"
+    }
+  },
+  {
+    "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3m367bemk3c2i",
+    "cid": "bafyreifmryq5hk2roydzffoewyxmxpcmjxgmfwjfl7zpntap7o4kw3bnhi",
+    "value": {
+      "$type": "site.standard.publication",
+      "basicTheme": {
+        "$type": "site.standard.theme.basic",
+        "accent": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 232,
+          "g": 171,
+          "r": 107
+        },
+        "accentForeground": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "background": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 250,
+          "g": 252,
+          "r": 253
+        },
+        "foreground": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 0,
+          "g": 0,
+          "r": 0
+        }
+      },
+      "description": "News from the Atmosphere Community Conference, aka AtmosphereConf\n\n2027 dates and location to be announced soon!",
+      "icon": {
+        "$type": "blob",
+        "mimeType": "image/jpeg",
+        "ref": {
+          "$link": "bafkreieveglbzdow2k3fexhkxcouso4m6oneprbzdmrqjzhwvmxbrplxcu"
+        },
+        "size": 439389
+      },
+      "name": "Atmosphere Conference News",
+      "preferences": {
+        "prevNextDirection": "ltr",
+        "showComments": true,
+        "showFirstLast": false,
+        "showInDiscover": true,
+        "showMentions": true,
+        "showPrevNext": true,
+        "showRecommends": true
+      },
+      "theme": {
+        "$type": "pub.leaflet.publication#theme",
+        "accentBackground": {
+          "$type": "pub.leaflet.theme.color#rgb",
+          "b": 232,
+          "g": 171,
+          "r": 107
+        },
+        "accentText": {
+          "$type": "pub.leaflet.theme.color#rgb",
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "backgroundColor": {
+          "$type": "pub.leaflet.theme.color#rgba",
+          "a": 100,
+          "b": 250,
+          "g": 252,
+          "r": 253
+        },
+        "pageBackground": {
+          "$type": "pub.leaflet.theme.color#rgba",
+          "a": 100,
+          "b": 250,
+          "g": 252,
+          "r": 253
+        },
+        "pageWidth": 624,
+        "primary": {
+          "$type": "pub.leaflet.theme.color#rgb",
+          "b": 39,
+          "g": 39,
+          "r": 39
+        },
+        "showPageBackground": false
+      },
+      "url": "https://news.atmosphereconf.org"
+    }
+  },
+  {
+    "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3mjnpilwnrp2v",
+    "cid": "bafyreidzeosprmzp57khdwpiz3badj3ffddi32lke4yqcnddparwurzfxu",
+    "value": {
+      "$type": "site.standard.publication",
+      "basicTheme": {
+        "$type": "site.standard.theme.basic",
+        "accent": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 13,
+          "g": 13,
+          "r": 13
+        },
+        "accentForeground": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 169,
+          "g": 240,
+          "r": 128
+        },
+        "background": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "foreground": {
+          "$type": "site.standard.theme.color#rgb",
+          "b": 0,
+          "g": 0,
+          "r": 0
+        }
+      },
+      "description": "News from the Atmosphere, the global atproto community",
+      "icon": {
+        "$type": "blob",
+        "mimeType": "image/png",
+        "ref": {
+          "$link": "bafkreid5tdew5kpxki3dzyrqwoszfybzdtfdyy2u5vzktjyzqwa2cm6umm"
+        },
+        "size": 307107
+      },
+      "name": "Atmosphere Community",
+      "preferences": {
+        "$type": "site.standard.publication#preferences",
+        "locale": "en-US",
+        "showByline": false,
+        "showInDiscover": true,
+        "timezone": "America/Los_Angeles"
+      },
+      "theme": {
+        "$type": "app.offprint.theme",
+        "colorScheme": "light",
+        "colors": {
+          "$type": "app.offprint.theme#colors",
+          "accent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 13,
+            "g": 13,
+            "r": 13
+          },
+          "accentContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 132,
+            "g": 228,
+            "r": 253
+          },
+          "base100": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 255,
+            "g": 255,
+            "r": 255
+          },
+          "base200": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 250,
+            "g": 250,
+            "r": 250
+          },
+          "base300": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 229,
+            "g": 229,
+            "r": 229
+          },
+          "baseContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
+          "error": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 129,
+            "g": 145,
+            "r": 255
+          },
+          "errorContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 6,
+            "g": 7,
+            "r": 24
+          },
+          "info": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 221,
+            "g": 207,
+            "r": 95
+          },
+          "infoContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 17,
+            "g": 16,
+            "r": 3
+          },
+          "neutral": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 13,
+            "g": 13,
+            "r": 13
+          },
+          "neutralContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 212,
+            "g": 212,
+            "r": 212
+          },
+          "primary": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 13,
+            "g": 13,
+            "r": 13
+          },
+          "primaryContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 169,
+            "g": 240,
+            "r": 128
+          },
+          "secondary": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 13,
+            "g": 13,
+            "r": 13
+          },
+          "secondaryContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 252,
+            "g": 243,
+            "r": 164
+          },
+          "success": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 169,
+            "g": 240,
+            "r": 128
+          },
+          "successContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 14,
+            "g": 22,
+            "r": 4
+          },
+          "warning": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 105,
+            "g": 206,
+            "r": 255
+          },
+          "warningContent": {
+            "$type": "site.standard.theme.color#rgb",
+            "b": 4,
+            "g": 15,
+            "r": 23
+          }
+        },
+        "effects": {
+          "$type": "app.offprint.theme#effects",
+          "depth": true,
+          "noise": false
+        },
+        "sizing": {
+          "$type": "app.offprint.theme#sizing",
+          "border": "1px",
+          "radiusBox": "0.75rem",
+          "radiusField": "0.5rem",
+          "radiusSelector": "2rem",
+          "sizeField": "0.25rem",
+          "sizeSelector": "0.25rem"
+        },
+        "typography": {
+          "$type": "app.offprint.theme#typography",
+          "bodyFont": "inter",
+          "headingFont": "inter"
+        }
+      },
+      "url": "https://blog.atmosphere.community"
+    }
+  },
+  {
+    "uri": "at://did:plc:x5leeami62gbmjekf7ro6sqo/site.standard.publication/3mhwig6bcm2aw",
+    "cid": "bafyreifzwnqf7mtclrytiuzx5yi6fjkwsq2fssrqhtqfqledgpv7nx4mim",
+    "value": {
+      "url": "https://jenn.pckt.blog",
+      "icon": {
+        "ref": {
+          "$link": "bafkreigkcfkuvhf7wlwqgv4iachbwwkcxpmglf2fov6gf76jj6ub2vot2m"
+        },
+        "size": 795680,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "name": "jenn's little art blog",
+      "$type": "site.standard.publication",
+      "theme": {
+        "dark": {
+          "link": "#808080",
+          "text": "#d4d4d8",
+          "accent": "#bebebe",
+          "background": "#18181b",
+          "surfaceHover": "#303034"
+        },
+        "font": "cactusserif",
+        "$type": "blog.pckt.theme",
+        "light": {
+          "link": "#747474",
+          "text": "#1f2937",
+          "accent": "#6c6c6c",
+          "background": "#ffffff",
+          "surfaceHover": "#f3f4f6"
+        },
+        "transparency": 100,
+        "highlightShape": "square",
+        "tileBackground": false,
+        "backgroundTileSize": 30
+      },
+      "basicTheme": {
+        "$type": "site.standard.theme.basic",
+        "accent": {
+          "b": 108,
+          "g": 108,
+          "r": 108,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "background": {
+          "b": 255,
+          "g": 255,
+          "r": 255,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "foreground": {
+          "b": 55,
+          "g": 41,
+          "r": 31,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "accentForeground": {
+          "b": 246,
+          "g": 244,
+          "r": 243,
+          "$type": "site.standard.theme.color#rgb"
+        }
+      },
+      "description": "welcome to my world fellow art dirtbags",
+      "preferences": {
+        "showInDiscover": true
+      }
+    }
+  }
+]
