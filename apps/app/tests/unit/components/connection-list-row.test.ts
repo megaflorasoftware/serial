@@ -117,4 +117,18 @@ describe("ConnectedAccountRow", () => {
     act(() => buttons[1]?.click());
     expect(onReconnect).toHaveBeenCalledTimes(1);
   });
+
+  it("holds Reconnect while the round trip starts", () => {
+    const { buttons } = render(
+      createElement(ConnectedAccountRow, {
+        label: "alice.example",
+        disconnecting: false,
+        onDisconnect: vi.fn(),
+        onReconnect: vi.fn(),
+        reconnecting: true,
+      }),
+    );
+
+    expect(buttons[1]?.disabled).toBe(true);
+  });
 });

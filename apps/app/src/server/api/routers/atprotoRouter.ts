@@ -228,9 +228,6 @@ export const linkAccount = protectedProcedure
       const url = await startAtprotoLink({
         identifier: resolutionTarget,
         userId: context.user.id,
-        // A reconnect restores the grant the connection held; a fresh link
-        // has no row and stays identity-only.
-        previousScope: connection?.scopes,
       });
       return { url: url.toString() };
     } catch (err) {
@@ -241,6 +238,67 @@ export const linkAccount = protectedProcedure
       });
     }
   });
+
+/**
+ * Restore a connection whose credentials were lost: a link of the DID the
+ * account already holds, so no handle is asked for and the round trip
+ * lands on the same row. Re-requests the grant the connection held so a
+ * reconnect never narrows what the user consented to.
+ */
+export const reconnectAccount = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!isAtprotoConfigured()) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: "Atmosphere is not available on this instance.",
+      });
+    }
+    await enforceLinkRateLimit(context.user.id);
+
+    const [connection, accountRow] = await Promise.all([
+      context.db.query.atprotoConnections.findFirst({
+        where: eq(atprotoConnections.userId, context.user.id),
+      }),
+      context.db
+        .select({ accountId: account.accountId })
+        .from(account)
+        .where(
+          and(
+            eq(account.userId, context.user.id),
+            eq(account.providerId, ATPROTO_PROVIDER_ID),
+          ),
+        )
+        .get(),
+    ]);
+    const did = connection?.did ?? accountRow?.accountId;
+    if (!did) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: "There is no Atmosphere account to reconnect.",
+      });
+    }
+    if (connection && connection.status === "active" && !!connection.session) {
+      throw new ORPCError("CONFLICT", {
+        message: "Your Atmosphere account is already connected.",
+      });
+    }
+
+    try {
+      const { startAtprotoLink } =
+        await import("~/server/auth/atproto/service");
+      const url = await startAtprotoLink({
+        identifier: did,
+        userId: context.user.id,
+        previousScope: connection?.scopes,
+      });
+      return { url: url.toString() };
+    } catch (err) {
+      logError("[atproto] reconnect authorize failed:", err);
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Could not reconnect your Atmosphere account. Please try again.",
+      });
+    }
+  },
+);
 
 export const unlinkAccount = protectedProcedure.handler(async ({ context }) => {
   const accountRows = await context.db

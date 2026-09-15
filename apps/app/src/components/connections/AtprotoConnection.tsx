@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon } from "lucide-react";
-import { useState } from "react";
+import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AtprotoSyncSettingsForm } from "./AtprotoSyncSettingsForm";
 import { ConnectedAccountRow } from "./ConnectedAccountRow";
 import { ConnectionListRow } from "./ConnectionListRow";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
+import { Button } from "~/components/ui/button";
 import { orpc } from "~/lib/orpc";
 
 function AtprotoConnectionForm() {
@@ -92,25 +92,51 @@ export function AtprotoConnectionListItem({
 }
 
 /**
- * The Atmosphere subpane: the handle field while nothing is attached (or
- * once Reconnect is pressed), otherwise the connected account with its
- * disconnect action and reconnect banner, and the subscription sync
- * settings beneath it. Settings are disabled behind the banner: reconnect
- * is the single call to action until the credentials are back.
+ * A reconnect is a link of the DID the connection already holds, so it
+ * starts the authorize round trip directly instead of asking for a handle
+ * again; the link callback rebinds the same row.
+ */
+function useAtprotoReconnect() {
+  return useMutation(
+    orpc.atproto.reconnectAccount.mutationOptions({
+      onSuccess: (data) => {
+        window.location.assign(data.url);
+      },
+      onError: (error) => {
+        toast.error(error.message || "Failed to reconnect Atmosphere account");
+      },
+    }),
+  );
+}
+
+/**
+ * The Atmosphere subpane: the handle field while nothing is attached,
+ * otherwise the connected account with its disconnect action and reconnect
+ * banner, and the subscription sync settings beneath it. Settings are
+ * disabled behind the banner: reconnect is the single call to action until
+ * the credentials are back.
  */
 export function AtprotoConnectionPane() {
-  const { data: status, isLoading } = useAtprotoConnectionStatus();
+  const {
+    data: status,
+    isLoading,
+    isError,
+    refetch,
+  } = useAtprotoConnectionStatus();
   const unlinkMutation = useAtprotoUnlink();
-  const [reconnecting, setReconnecting] = useState(false);
+  const reconnectMutation = useAtprotoReconnect();
 
-  if (isLoading || !status) {
+  if (isLoading) {
     return (
       <Loader2Icon className="text-muted-foreground animate-spin" size={20} />
     );
   }
+  if (isError || !status) {
+    return <AtprotoStatusUnavailable onRetry={() => void refetch()} />;
+  }
 
   const attached = status.isConnected || status.needsReconnect;
-  if (!attached || reconnecting) {
+  if (!attached) {
     return <AtprotoConnectionForm />;
   }
 
@@ -121,8 +147,11 @@ export function AtprotoConnectionPane() {
         disconnecting={unlinkMutation.isPending}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
-          status.needsReconnect ? () => setReconnecting(true) : undefined
+          status.needsReconnect
+            ? () => reconnectMutation.mutate(undefined)
+            : undefined
         }
+        reconnecting={reconnectMutation.isPending}
       />
       <AtprotoSyncSettingsForm
         key={JSON.stringify(status.syncPreferences)}
@@ -130,6 +159,21 @@ export function AtprotoConnectionPane() {
         hasWriteScope={status.hasWriteScope}
         disabled={status.needsReconnect}
       />
+    </div>
+  );
+}
+
+/** The status request failed: say so and offer a retry, never a bare spinner. */
+function AtprotoStatusUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
+      <span className="text-muted-foreground text-sm">
+        Couldn&apos;t load your Atmosphere connection.
+      </span>
+      <Button variant="outline" size="sm" onClick={onRetry}>
+        <RefreshCwIcon size={16} />
+        <span className="ml-1.5">Retry</span>
+      </Button>
     </div>
   );
 }
