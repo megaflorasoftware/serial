@@ -2,10 +2,13 @@ import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getAtprotoClient } from "./client";
 import {
   assertAllowedAtprotoScope,
+  ATPROTO_FULL_SCOPE,
   ATPROTO_PROVIDER_ID,
-  ATPROTO_SCOPE,
   AUTH_STATE_TTL_MS,
   getAtprotoLinkRedirectUri,
+  getAtprotoUpgradeRedirectUri,
+  hasAtprotoWriteScope,
+  retainAllowedAtprotoScope,
 } from "./config";
 import {
   claimStaleAtprotoOrphan,
@@ -14,10 +17,17 @@ import {
 } from "./stores";
 import type { AtprotoRedirectUri } from "./config";
 import type { OAuthSession } from "@atproto/oauth-client-node";
+import type { AtprotoSyncPreferences } from "~/lib/auth/atproto-sync-settings";
 import { db } from "~/server/db";
 import { account, atprotoConnections } from "~/server/db/schema";
 import { getKV } from "~/server/kv";
-import { captureException } from "~/server/logger";
+import { captureException, logError } from "~/server/logger";
+import {
+  atprotoSyncPreferencesSchema,
+  DEFAULT_ATPROTO_SYNC_SETTINGS,
+  syncMethodNeedsWriteScope,
+  syncSettingsFromPreferences,
+} from "~/lib/auth/atproto-sync-settings";
 import { parseExtensionConnectCallback } from "~/lib/extension-auth";
 
 /**
@@ -43,6 +53,17 @@ export interface AtprotoCallbackResult {
    */
   linkUserId: string | null;
   /**
+   * The user a Consent upgrade was started for, null otherwise. The upgrade
+   * callback verifies it against the current session the same way.
+   */
+  upgradeUserId: string | null;
+  /**
+   * The sync preferences the user pressed Save on before consent, carried
+   * through the server-stored app state so they are saved only once the
+   * broader grant exists. Null outside upgrade flows.
+   */
+  pendingSyncPreferences: AtprotoSyncPreferences | null;
+  /**
    * Where a sign-in flow returns the user once the session exists, null
    * when the flow started without a destination. Only the extension
    * connect page is ever accepted (see `parseExtensionConnectCallback`).
@@ -65,7 +86,7 @@ export async function startAtprotoAuth(input: {
   // Opportunistic cleanup of expired attempts; never blocks the flow.
   sweepStaleAtprotoConnections().catch(captureException);
   return client.authorize(input.identifier, {
-    scope: input.scope ?? ATPROTO_SCOPE,
+    scope: input.scope ?? ATPROTO_FULL_SCOPE,
     ...(input.returnTo
       ? { state: JSON.stringify({ returnTo: input.returnTo }) }
       : {}),
@@ -200,6 +221,8 @@ export async function finishAtprotoAuth(
     handle,
     grantedScope,
     linkUserId: appState.linkUserId ?? null,
+    upgradeUserId: appState.upgradeUserId ?? null,
+    pendingSyncPreferences: appState.pendingSyncPreferences ?? null,
     returnTo: appState.returnTo ?? null,
   };
 }
@@ -232,15 +255,19 @@ export async function resolveAndStoreAtprotoHandle(
 /**
  * The app state Serial threads through authorize(): `expectedDid` pins an
  * upgrade's subject, `linkUserId` records who a link flow was started for,
- * `returnTo` carries a sign-in's post-session destination. Stored
- * server-side by the SDK's state store, so none is forgeable from the
- * callback URL. `returnTo` is still re-validated on the way out so a value
- * that reached the store without passing the authorize schema cannot
- * redirect anywhere but the extension connect page.
+ * `upgradeUserId` and `pendingSyncPreferences` carry who started a Consent
+ * upgrade and what they pressed Save on, `returnTo` carries a sign-in's
+ * post-session destination. Stored server-side by the SDK's state store,
+ * so none is forgeable from the callback URL. `returnTo` is still
+ * re-validated on the way out so a value that reached the store without
+ * passing the authorize schema cannot redirect anywhere but the extension
+ * connect page; the preferences are re-parsed for the same reason.
  */
 function parseAppState(state: string | null): {
   expectedDid?: string;
   linkUserId?: string;
+  upgradeUserId?: string;
+  pendingSyncPreferences?: AtprotoSyncPreferences;
   returnTo?: string;
 } {
   if (!state) return {};
@@ -248,13 +275,25 @@ function parseAppState(state: string | null): {
     const parsed = JSON.parse(state) as {
       expectedDid?: unknown;
       linkUserId?: unknown;
+      upgradeUserId?: unknown;
+      pendingSyncPreferences?: unknown;
       returnTo?: unknown;
     };
+    const preferences = atprotoSyncPreferencesSchema.safeParse(
+      parsed.pendingSyncPreferences,
+    );
     return {
       expectedDid:
         typeof parsed.expectedDid === "string" ? parsed.expectedDid : undefined,
       linkUserId:
         typeof parsed.linkUserId === "string" ? parsed.linkUserId : undefined,
+      upgradeUserId:
+        typeof parsed.upgradeUserId === "string"
+          ? parsed.upgradeUserId
+          : undefined,
+      pendingSyncPreferences: preferences.success
+        ? preferences.data
+        : undefined,
       returnTo:
         typeof parsed.returnTo === "string"
           ? (parseExtensionConnectCallback(parsed.returnTo) ?? undefined)
@@ -297,16 +336,21 @@ export async function bindAtprotoConnection(
  * Begin a link flow for a signed-in user: same authorize round trip as
  * sign-in, but the server-stored app state pins who it was started for and
  * the redirect lands on the link callback, which the policy classifiers
- * deliberately do not gate as a sign-in.
+ * deliberately do not gate as a sign-in. A fresh link is identity-only; a
+ * reconnect of a connection that already held a broader grant requests
+ * that grant again so reconnecting never narrows what the user consented
+ * to (the session store replaces the stored scopes on every callback).
  */
 export async function startAtprotoLink(input: {
   identifier: string;
   userId: string;
+  /** The scope the connection held before its credentials were lost. */
+  previousScope?: string | null;
 }): Promise<URL> {
   const client = await getAtprotoClient();
   sweepStaleAtprotoConnections().catch(captureException);
   return client.authorize(input.identifier, {
-    scope: ATPROTO_SCOPE,
+    scope: retainAllowedAtprotoScope(input.previousScope),
     state: JSON.stringify({ linkUserId: input.userId }),
     redirect_uri: getAtprotoLinkRedirectUri(),
   });
@@ -462,9 +506,15 @@ export async function unlinkAtprotoConnection(userId: string): Promise<void> {
     .get();
   if (!row) return;
   await revokeAtprotoConnection(row.did);
+  // The row survives to be rebound later, so the sync settings go back to
+  // the None default here rather than leaking into the next link.
   await db
     .update(atprotoConnections)
-    .set({ userId: null, updatedAt: new Date() })
+    .set({
+      userId: null,
+      ...DEFAULT_ATPROTO_SYNC_SETTINGS,
+      updatedAt: new Date(),
+    })
     .where(eq(atprotoConnections.id, row.id));
 }
 
@@ -482,25 +532,141 @@ export async function restoreAtprotoSession(
 
 /**
  * Request a broader grant for an existing connection: a fresh consent flow
- * against the same DID. On callback the stored session and scopes are
- * replaced atomically by the session store upsert. Expected authorization
- * behavior for future capability growth (e.g. publication subscriptions),
- * not a migration.
+ * against the same DID (a Consent upgrade). On callback the stored session
+ * and scopes are replaced atomically by the session store upsert; the
+ * upgrade callback then saves the sync preferences carried in the state,
+ * so nothing is saved if the user abandons consent.
  */
-export async function upgradeAtprotoAuth(
-  did: string,
-  scope: string,
-): Promise<URL> {
+export async function upgradeAtprotoAuth(input: {
+  did: string;
+  scope: string;
+  userId: string;
+  pendingSyncPreferences: AtprotoSyncPreferences;
+}): Promise<URL> {
   // Never hand an unbounded caller-supplied scope to the authorization
   // server; a broader grant must be added to the allowlist deliberately.
-  assertAllowedAtprotoScope(scope);
+  assertAllowedAtprotoScope(input.scope);
   const client = await getAtprotoClient();
-  return client.authorize(did, {
-    scope,
+  return client.authorize(input.did, {
+    scope: input.scope,
     prompt: "consent",
-    // Verified at the callback: an upgrade must come back for this DID.
-    state: JSON.stringify({ expectedDid: did }),
+    state: JSON.stringify({
+      // Verified at the callback: an upgrade must come back for this DID.
+      expectedDid: input.did,
+      upgradeUserId: input.userId,
+      pendingSyncPreferences: input.pendingSyncPreferences,
+    }),
+    redirect_uri: getAtprotoUpgradeRedirectUri(),
   });
+}
+
+/**
+ * A Consent upgrade callback did not match its initiating session and
+ * connection, or the returned grant did not cover the pending settings.
+ */
+export class AtprotoUpgradeError extends Error {
+  constructor(
+    public readonly code: "state" | "denied",
+    message: string,
+  ) {
+    super(message);
+    this.name = "AtprotoUpgradeError";
+  }
+}
+
+/**
+ * Complete a Consent upgrade: the code exchange already replaced the
+ * stored grant, so what remains is to verify the flow belongs to the
+ * signed-in user's own connection, record the broader grant on the
+ * sign-in account row too (a reconnect falls back to it when the
+ * connection row is gone), and save the preferences the user pressed Save
+ * on before consent. Returns those preferences so the caller can act on
+ * them (a sync, once the engine exists).
+ */
+export async function completeAtprotoUpgrade(input: {
+  did: string;
+  grantedScope: string;
+  sessionUserId: string;
+  upgradeUserId: string | null;
+  pendingSyncPreferences: AtprotoSyncPreferences | null;
+}): Promise<AtprotoSyncPreferences> {
+  const { did, sessionUserId } = input;
+  if (!input.upgradeUserId || input.upgradeUserId !== sessionUserId) {
+    throw new AtprotoUpgradeError(
+      "state",
+      `Upgrade callback for ${did} did not match the session that started it`,
+    );
+  }
+  if (!input.pendingSyncPreferences) {
+    throw new AtprotoUpgradeError(
+      "state",
+      `Upgrade callback for ${did} carried no pending settings`,
+    );
+  }
+  if (
+    syncMethodNeedsWriteScope(input.pendingSyncPreferences.method) &&
+    !hasAtprotoWriteScope(input.grantedScope)
+  ) {
+    throw new AtprotoUpgradeError(
+      "denied",
+      `Upgrade callback for ${did} did not grant subscription write access`,
+    );
+  }
+  const saved = await saveAtprotoSyncSettings({
+    userId: sessionUserId,
+    did,
+    preferences: input.pendingSyncPreferences,
+  });
+  if (!saved) {
+    throw new AtprotoUpgradeError(
+      "state",
+      `${did} is not the connection bound to ${sessionUserId}`,
+    );
+  }
+  const scopeRecorded = await db
+    .update(account)
+    .set({ scope: input.grantedScope, updatedAt: new Date() })
+    .where(
+      and(
+        eq(account.userId, sessionUserId),
+        eq(account.providerId, ATPROTO_PROVIDER_ID),
+        eq(account.accountId, did),
+      ),
+    );
+  if (scopeRecorded.rowsAffected === 0) {
+    // The settings are saved either way; say so loudly, because a
+    // reconnect that later finds only the account row would fall back to
+    // a scope that never learned about this upgrade.
+    logError(
+      `[atproto] no account row to record the upgraded scope for ${did}`,
+    );
+  }
+  return input.pendingSyncPreferences;
+}
+
+/**
+ * Persist sync preferences on the user's bound connection. Guarded on both
+ * the user and the DID so a callback can never write another user's row.
+ * Returns whether a row matched.
+ */
+export async function saveAtprotoSyncSettings(input: {
+  userId: string;
+  did: string;
+  preferences: AtprotoSyncPreferences;
+}): Promise<boolean> {
+  const result = await db
+    .update(atprotoConnections)
+    .set({
+      ...syncSettingsFromPreferences(input.preferences),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(atprotoConnections.userId, input.userId),
+        eq(atprotoConnections.did, input.did),
+      ),
+    );
+  return result.rowsAffected > 0;
 }
 
 /**

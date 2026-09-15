@@ -39,8 +39,12 @@ vi.mock("~/env", () => ({
 }));
 
 const { getAtprotoClientMode } = await import("~/server/auth/atproto/mode");
-const { getAtprotoClientMetadata, assertAllowedAtprotoScope } =
-  await import("~/server/auth/atproto/config");
+const {
+  getAtprotoClientMetadata,
+  assertAllowedAtprotoScope,
+  hasAtprotoWriteScope,
+  retainAllowedAtprotoScope,
+} = await import("~/server/auth/atproto/config");
 const { isAtprotoConfigured } = await import("~/server/auth/constants");
 
 function setEnv(overrides: Partial<MockEnv>) {
@@ -104,8 +108,11 @@ describe("getAtprotoClientMetadata in loopback mode", () => {
     expect(metadata.redirect_uris).toEqual([
       "http://127.0.0.1:3000/api/auth/atproto/callback",
       "http://127.0.0.1:3000/api/auth/atproto/link-callback",
+      "http://127.0.0.1:3000/api/auth/atproto/upgrade-callback",
     ]);
-    expect(metadata.scope).toBe("atproto");
+    // The metadata bounds every grant the client may request, so it
+    // carries the social set beside identity.
+    expect(metadata.scope).toBe("atproto include:site.standard.authSocial");
     expect(metadata.jwks_uri).toBeUndefined();
   });
 
@@ -120,6 +127,7 @@ describe("getAtprotoClientMetadata in loopback mode", () => {
     expect(metadata.redirect_uris).toEqual([
       "https://serial.tube/api/auth/atproto/callback",
       "https://serial.tube/api/auth/atproto/link-callback",
+      "https://serial.tube/api/auth/atproto/upgrade-callback",
     ]);
   });
 });
@@ -171,6 +179,12 @@ describe("assertAllowedAtprotoScope", () => {
     expect(() => assertAllowedAtprotoScope("atproto")).not.toThrow();
   });
 
+  it("accepts the social permission set beside identity", () => {
+    expect(() =>
+      assertAllowedAtprotoScope("atproto include:site.standard.authSocial"),
+    ).not.toThrow();
+  });
+
   it("rejects an empty scope", () => {
     expect(() => assertAllowedAtprotoScope("   ")).toThrow(/scope is required/);
   });
@@ -180,5 +194,26 @@ describe("assertAllowedAtprotoScope", () => {
     expect(() => assertAllowedAtprotoScope("atproto repo:*")).toThrow(
       /Disallowed/,
     );
+  });
+});
+
+describe("stored scope helpers", () => {
+  it("detects write scope only when the social set was granted", () => {
+    expect(hasAtprotoWriteScope("atproto")).toBe(false);
+    expect(hasAtprotoWriteScope(null)).toBe(false);
+    expect(
+      hasAtprotoWriteScope("atproto include:site.standard.authSocial"),
+    ).toBe(true);
+  });
+
+  it("re-requests only the allowed tokens of a previous grant on reconnect", () => {
+    expect(retainAllowedAtprotoScope(null)).toBe("atproto");
+    expect(retainAllowedAtprotoScope("atproto")).toBe("atproto");
+    expect(
+      retainAllowedAtprotoScope("atproto include:site.standard.authSocial"),
+    ).toBe("atproto include:site.standard.authSocial");
+    // A token this instance never allowlisted is never forwarded, even if
+    // an older grant carried it.
+    expect(retainAllowedAtprotoScope("atproto repo:*")).toBe("atproto");
   });
 });

@@ -959,6 +959,20 @@ export const atprotoConnections = sqliteTable("atproto_connections", {
     .$type<"active" | "disconnected">()
     .notNull()
     .default("active"),
+  /**
+   * Atmosphere subscription sync settings. Both directions default off (the
+   * None method) on sign-up and link; unlink resets them because the row
+   * outlives the link and is reused when the DID is linked again.
+   */
+  importSubscriptions: integer("import_subscriptions", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  exportSubscriptions: integer("export_subscriptions", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  importAsInactive: integer("import_as_inactive", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: integer("created_at", { mode: "timestamp" })
     .$default(() => new Date())
     .notNull(),
