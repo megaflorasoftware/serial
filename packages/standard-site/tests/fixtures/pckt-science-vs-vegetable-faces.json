@@ -1,0 +1,453 @@
+{
+  "uri": "at://did:plc:x5leeami62gbmjekf7ro6sqo/site.standard.document/3mt5tkpc5i62n",
+  "cid": "bafyreigtocnpevo4yubzhjvmmoghhhl2n2qjiirn7heqiwcwt4buq2yx3i",
+  "value": {
+    "path": "/science-vs-vegetable-faces-t265qge",
+    "site": "at://did:plc:x5leeami62gbmjekf7ro6sqo/site.standard.publication/3mhwig6bcm2aw",
+    "tags": ["art", "art history", "science"],
+    "$type": "site.standard.document",
+    "langs": ["en"],
+    "title": "science vs. vegetable faces",
+    "content": {
+      "$type": "blog.pckt.content",
+      "items": [
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 323,
+                "byteStart": 308
+              },
+              "features": [
+                {
+                  "uri": "https://plus.maths.org/earth-moves",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 359,
+                "byteStart": 355
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/Douglas_Hofstadter",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 582,
+                "byteStart": 567
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/Pope_Urban_VIII",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            }
+          ],
+          "plaintext": "i like to dilly dally on my way home from therapy because it's often the one day i go to manhattan and there's always some bullshit going on, especially between madison park and herald square. there were a bunch of boxes of books on one corner and one of the two that caught my eye and went home with me was the earth moves by dan hofstadter, relation to doug unknown. this was one of those history books where i can tell that dan da man knew what he was talking about but HOLY CROW did he use a lot of words in such a short book. also, the way he kept interchanging pope urban viii with his birth name had me confused."
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 72,
+                "byteStart": 58
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/Galileo_affair",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 175,
+                "byteStart": 156
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/Giuseppe_Arcimboldo",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            }
+          ],
+          "plaintext": "but this blog post is not primarily about the book or the galileo affair, this blog post is about that guy who painted portraits of people with vegetables, giuseppe arcimboldo - an artist the author noted was \"loathed\" by galileo."
+        },
+        {
+          "$type": "blog.pckt.block.blockquote",
+          "content": [
+            {
+              "$type": "blog.pckt.block.text",
+              "facets": [
+                {
+                  "index": {
+                    "byteEnd": 689,
+                    "byteStart": 0
+                  },
+                  "features": [
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                },
+                {
+                  "index": {
+                    "byteEnd": 804,
+                    "byteStart": 689
+                  },
+                  "features": [
+                    {
+                      "$type": "blog.pckt.richtext.facet#bold"
+                    },
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                },
+                {
+                  "index": {
+                    "byteEnd": 974,
+                    "byteStart": 804
+                  },
+                  "features": [
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                },
+                {
+                  "index": {
+                    "byteEnd": 1000,
+                    "byteStart": 974
+                  },
+                  "features": [
+                    {
+                      "uri": "https://plus.maths.org/earth-moves",
+                      "$type": "blog.pckt.richtext.facet#link"
+                    },
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                }
+              ],
+              "plaintext": "\"It has been noted that Galileo's critical meditations on poetry, painting, and sculpture pertain to his views on the scientific method: it might even be said that they are a sort of highly colored expression of it. To a degree, this unity reflects not only his own temperament but also the mutual proximity of the arts and sciences at the end of the Renaissance. Most interestingly, Galileo did not hesitate to ventilate his fierce contempt for all composite imagery. This included pictorial intarsia, or the inlaying of wood veneers to create a picture; the Aztec featherwork then common in cabinets of curiosities; and any paintings in which some parts were not in keeping with others. He loathed Giuseppe Arcimboldo, the painter of fanciful heads assembled from vegetables, books, and other oddments. [...] What Galileo looks for in art is breadth: some form of treatment that can encompass an entire picture or story or statue with one generalizing vision and manner. -the earth moves, chapter 1"
+            }
+          ]
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "i thought about this paragraph, unfortunately just 32 pages in, throughout the entirety of the book. it's not that i expected to relate to galileo in any way and was upset to find that he hated an artist i enjoyed, i was just jarred by the brief, casual mention of his loathing and then the author just moving on. i wanted to know more about why this loathing existed."
+        },
+        {
+          "$type": "blog.pckt.block.image",
+          "attrs": {
+            "alt": "arcimboldo's portrait of rudolf ii composed of vegetables, fruit and flowers",
+            "src": "blob:bafkreidfex4cfyjmuk26c3zzw7hshzj5er4aisvzhn2qqdtrh6pu2kltuq",
+            "blob": {
+              "ref": {
+                "$link": "bafkreidfex4cfyjmuk26c3zzw7hshzj5er4aisvzhn2qqdtrh6pu2kltuq"
+              },
+              "size": 690062,
+              "$type": "blob",
+              "mimeType": "image/jpeg"
+            },
+            "align": "center",
+            "width": "700",
+            "placeholder": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD//gA7Q1JFQVRPUjogZ2QtanBlZyB2MS4wICh1c2luZyBJSkcgSlBFRyB2ODApLCBxdWFsaXR5ID0gNDAK/9sAQwAUDg8SDw0UEhASFxUUGB4yIR4cHB49LC4kMklATEtHQEZFUFpzYlBVbVZFRmSIZW13e4GCgU5gjZeMfZZzfoF8/9sAQwEVFxceGh47ISE7fFNGU3x8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8/8AAEQgADwAMAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8AybWf/R5F3YOOPrVOSXLkiul8rCmMRqFxgAADH+NYNxGwmYELn6Vmmrjb0P/Z",
+            "naturalWidth": 1280,
+            "naturalHeight": 1587
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 67,
+                "byteStart": 0
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#italic"
+                }
+              ]
+            }
+          ],
+          "plaintext": "a vegetable portrait of rudolf ii by arcimboldo, titled \"vertumnus\""
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 208,
+                "byteStart": 188
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/Age_of_Enlightenment",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            }
+          ],
+          "plaintext": "i'm not very well versed in history, but i know about some of the cultural movements and their order because of them being responses to the prior one - like the romantic era following the age of enlightenment and that the scientific revolution during which galileo lived. ok, fine, it's not hard to accept that a scientist would be turned off by an artwork depicting a neck a made of gourds."
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 246,
+                "byteStart": 200
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#italic"
+                }
+              ]
+            }
+          ],
+          "plaintext": "during what i call the post-modern javascript era of the 2010s, \"real developers\" quite openly took me as an unserious developer because of how i merged my art practices with my software disciplines. who is using your jquery plugins now, bitches! my peers who \"got it\" would often console me by saying those who \"did not get it\" were simply not interested in art but i don't think that was the case. i think that literally everyone practices the enjoyment of art in some way, agnostic aesthetic or personal style. galileo was actually quite fond of art, poetry, and writing alongside science - i guess so long as he was challenged just enough to not have to approach his own ego."
+        },
+        {
+          "$type": "blog.pckt.block.blockquote",
+          "content": [
+            {
+              "$type": "blog.pckt.block.text",
+              "facets": [
+                {
+                  "index": {
+                    "byteEnd": 560,
+                    "byteStart": 0
+                  },
+                  "features": [
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                },
+                {
+                  "index": {
+                    "byteEnd": 562,
+                    "byteStart": 561
+                  },
+                  "features": [
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                },
+                {
+                  "index": {
+                    "byteEnd": 596,
+                    "byteStart": 562
+                  },
+                  "features": [
+                    {
+                      "uri": "https://harpers.org/2009/07/galileo-reading-the-book-of-nature/",
+                      "$type": "blog.pckt.richtext.facet#link"
+                    },
+                    {
+                      "$type": "blog.pckt.richtext.facet#italic"
+                    }
+                  ]
+                }
+              ],
+              "plaintext": "Galileo agrees with Arcimboldo that the artist must not be obsessed with superficial verisimilitude—with an approach that moves inevitably towards the modern photorealism. The real focus of graphic art must be to reveal an internal truth that cannot be captured on the surface. That truth can flow from the selection of the subject, the use of light, line and color, the composition or from other factors. But Arcimboldo falls short on this point, at least in Galileo’s judgment. He does not reach for the internal truths, he is “cute” and superficial. -galileo reading the book of nature"
+            }
+          ]
+        },
+        {
+          "$type": "blog.pckt.block.image",
+          "attrs": {
+            "alt": "arcimboldo's portrait \"the librarian\" which is a portrait of a man mad of books and cloth",
+            "src": "blob:bafkreicxsyvtnnnmglqhn7ic6tz2kvydslyefsnt5rq2ucrsgxkpfwopei",
+            "blob": {
+              "ref": {
+                "$link": "bafkreicxsyvtnnnmglqhn7ic6tz2kvydslyefsnt5rq2ucrsgxkpfwopei"
+              },
+              "size": 180309,
+              "$type": "blob",
+              "mimeType": "image/jpeg"
+            },
+            "align": "center",
+            "placeholder": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD//gA7Q1JFQVRPUjogZ2QtanBlZyB2MS4wICh1c2luZyBJSkcgSlBFRyB2ODApLCBxdWFsaXR5ID0gNDAK/9sAQwAUDg8SDw0UEhASFxUUGB4yIR4cHB49LC4kMklATEtHQEZFUFpzYlBVbVZFRmSIZW13e4GCgU5gjZeMfZZzfoF8/9sAQwEVFxceGh47ISE7fFNGU3x8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8/8AAEQgAEAAMAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8Aw7WOGTzBKrZAyCMAVA6qG4PFb1qtrHbIsrxMRg8SDOfzrJuti3DiP7mcis4yuzScUtj/2Q==",
+            "naturalWidth": 1000,
+            "naturalHeight": 1361
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 49,
+                "byteStart": 0
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#italic"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 62,
+                "byteStart": 49
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/The_Librarian_(Arcimboldo)",
+                  "$type": "blog.pckt.richtext.facet#link"
+                },
+                {
+                  "$type": "blog.pckt.richtext.facet#italic"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 63,
+                "byteStart": 62
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#italic"
+                }
+              ]
+            }
+          ],
+          "plaintext": "portrait by arcimboldo composed of books titled \"the librarian\""
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "galileo also seemed quite fond of loyalty and so it seemed that he also disliked acrimboldo's work because he was aligned with a different king or whatever. guys were dudes even back in the 1600s. are dudes' kings in the 21st century tech ceos? what could we fairly identify as our modern day inquisition? what so-called heresy would lead galileo into a physically and emotional taxing end of his life? what is today's version of persecution for daring to pose that the earth is not the center of the universe? want to see some birds?"
+        },
+        {
+          "$type": "blog.pckt.block.image",
+          "attrs": {
+            "alt": "arcimboldo's painting \"air\" that's a side portrait of a person composed of all different kinds of birds",
+            "src": "blob:bafkreicc3kg3qbdyzpxc4zocrlj5ojz57gm4p4t6mifvqworujjuah3him",
+            "blob": {
+              "ref": {
+                "$link": "bafkreicc3kg3qbdyzpxc4zocrlj5ojz57gm4p4t6mifvqworujjuah3him"
+              },
+              "size": 344137,
+              "$type": "blob",
+              "mimeType": "image/jpeg"
+            },
+            "align": "center",
+            "placeholder": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD//gA7Q1JFQVRPUjogZ2QtanBlZyB2MS4wICh1c2luZyBJSkcgSlBFRyB2ODApLCBxdWFsaXR5ID0gNDAK/9sAQwAUDg8SDw0UEhASFxUUGB4yIR4cHB49LC4kMklATEtHQEZFUFpzYlBVbVZFRmSIZW13e4GCgU5gjZeMfZZzfoF8/9sAQwEVFxceGh47ISE7fFNGU3x8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8/8AAEQgAEAAMAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8Ayo8SzmPdg4JHucVMEeP5JOHHUVHEyKjEMAW4J7+v8xTlkBzznnqaw1ubPY//2Q==",
+            "naturalWidth": 960,
+            "naturalHeight": 1293
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": ""
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 53,
+                "byteStart": 0
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#italic"
+                }
+              ]
+            }
+          ],
+          "plaintext": "portrait composed of birds by arcimboldo titled \"air\""
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 138,
+                "byteStart": 119
+              },
+              "features": [
+                {
+                  "uri": "https://en.wikipedia.org/wiki/Surrealism",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            }
+          ],
+          "plaintext": "it would be 400 or so years after arcimboldo's whimsical paintings and galileo's so-called loathing of them before the surrealism movement would come to fruition after the first world war. my takeaway from all of this is probably obvious to anyone who pays attention to art and media: people make wacky, cool shit in response to dark times and those who loathe to see it are perhaps just working out their own frustrations at authority onto those who dare to find a bit of joy and whimsy in the dark we're all under. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 65,
+                "byteStart": 51
+              },
+              "features": [
+                {
+                  "uri": "https://livelaugh.blog/",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 244,
+                "byteStart": 198
+              },
+              "features": [
+                {
+                  "uri": "https://ko-fi.com/jennschiffer",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 327,
+                "byteStart": 311
+              },
+              "features": [
+                {
+                  "uri": "https://jennschiffer.com/",
+                  "$type": "blog.pckt.richtext.facet#link"
+                }
+              ]
+            }
+          ],
+          "plaintext": "thank you for reading my little art blog. i have a lifestyle blog too which i write in weekly. if you hated or loved these words, or maybe feel something in between, perhaps you'd like to add to my pretentious art and science history ebook fund. and you can find all of my writing, and even my art and code, at jennschiffer.com."
+        }
+      ]
+    },
+    "updatedAt": "2026-08-16T00:04:01.000Z",
+    "coverImage": {
+      "ref": {
+        "$link": "bafkreicc3kg3qbdyzpxc4zocrlj5ojz57gm4p4t6mifvqworujjuah3him"
+      },
+      "size": 344137,
+      "$type": "blob",
+      "mimeType": "image/jpeg"
+    },
+    "description": "i like to dilly dally on my way home from therapy because it's often the one day i go to manhattan and there's always some bullshit going on, especially between madison park and herald square. there were a bunch of boxes of books on one corner and one of the two that caught my eye and went home with me was the earth moves by dan hofstadter, relation to doug unknown. this was one of those history books where i can tell that dan da man knew what he was talking about but HOLY CROW did he use a lot ...",
+    "publishedAt": "2026-08-16T00:04:01.000Z",
+    "textContent": "i like to dilly dally on my way home from therapy because it's often the one day i go to manhattan and there's always some bullshit going on, especially between madison park and herald square. there were a bunch of boxes of books on one corner and one of the two that caught my eye and went home with me was the earth moves by dan hofstadter, relation to doug unknown. this was one of those history books where i can tell that dan da man knew what he was talking about but HOLY CROW did he use a lot of words in such a short book. also, the way he kept interchanging pope urban viii with his birth name had me confused.\nbut this blog post is not primarily about the book or the galileo affair, this blog post is about that guy who painted portraits of people with vegetables, giuseppe arcimboldo - an artist the author noted was \"loathed\" by galileo.\n\"It has been noted that Galileo's critical meditations on poetry, painting, and sculpture pertain to his views on the scientific method: it might even be said that they are a sort of highly colored expression of it. To a degree, this unity reflects not only his own temperament but also the mutual proximity of the arts and sciences at the end of the Renaissance. Most interestingly, Galileo did not hesitate to ventilate his fierce contempt for all composite imagery. This included pictorial intarsia, or the inlaying of wood veneers to create a picture; the Aztec featherwork then common in cabinets of curiosities; and any paintings in which some parts were not in keeping with others. He loathed Giuseppe Arcimboldo, the painter of fanciful heads assembled from vegetables, books, and other oddments. [...] What Galileo looks for in art is breadth: some form of treatment that can encompass an entire picture or story or statue with one generalizing vision and manner. -the earth moves, chapter 1\ni thought about this paragraph, unfortunately just 32 pages in, throughout the entirety of the book. it's not that i expected to relate to galileo in any way and was upset to find that he hated an artist i enjoyed, i was just jarred by the brief, casual mention of his loathing and then the author just moving on. i wanted to know more about why this loathing existed.\na vegetable portrait of rudolf ii by arcimboldo, titled \"vertumnus\"\ni'm not very well versed in history, but i know about some of the cultural movements and their order because of them being responses to the prior one - like the romantic era following the age of enlightenment and that the scientific revolution during which galileo lived. ok, fine, it's not hard to accept that a scientist would be turned off by an artwork depicting a neck a made of gourds.\nduring what i call the post-modern javascript era of the 2010s, \"real developers\" quite openly took me as an unserious developer because of how i merged my art practices with my software disciplines. who is using your jquery plugins now, bitches! my peers who \"got it\" would often console me by saying those who \"did not get it\" were simply not interested in art but i don't think that was the case. i think that literally everyone practices the enjoyment of art in some way, agnostic aesthetic or personal style. galileo was actually quite fond of art, poetry, and writing alongside science - i guess so long as he was challenged just enough to not have to approach his own ego.\nGalileo agrees with Arcimboldo that the artist must not be obsessed with superficial verisimilitude—with an approach that moves inevitably towards the modern photorealism. The real focus of graphic art must be to reveal an internal truth that cannot be captured on the surface. That truth can flow from the selection of the subject, the use of light, line and color, the composition or from other factors. But Arcimboldo falls short on this point, at least in Galileo’s judgment. He does not reach for the internal truths, he is “cute” and superficial. -galileo reading the book of nature\nportrait by arcimboldo composed of books titled \"the librarian\"\ngalileo also seemed quite fond of loyalty and so it seemed that he also disliked acrimboldo's work because he was aligned with a different king or whatever. guys were dudes even back in the 1600s. are dudes' kings in the 21st century tech ceos? what could we fairly identify as our modern day inquisition? what so-called heresy would lead galileo into a physically and emotional taxing end of his life? what is today's version of persecution for daring to pose that the earth is not the center of the universe? want to see some birds?\nportrait composed of birds by arcimboldo titled \"air\"\nit would be 400 or so years after arcimboldo's whimsical paintings and galileo's so-called loathing of them before the surrealism movement would come to fruition after the first world war. my takeaway from all of this is probably obvious to anyone who pays attention to art and media: people make wacky, cool shit in response to dark times and those who loathe to see it are perhaps just working out their own frustrations at authority onto those who dare to find a bit of joy and whimsy in the dark we're all under. \nthank you for reading my little art blog. i have a lifestyle blog too which i write in weekly. if you hated or loved these words, or maybe feel something in between, perhaps you'd like to add to my pretentious art and science history ebook fund. and you can find all of my writing, and even my art and code, at jennschiffer.com."
+  }
+}
