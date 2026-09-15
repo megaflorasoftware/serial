@@ -8,16 +8,21 @@ import { Button } from "../ui/button";
  */
 export function ConnectedAccountRow({
   label,
+  disabled = false,
   disconnecting,
   onDisconnect,
   onReconnect,
   reconnecting = false,
 }: {
   label: string;
+  /** Holds both actions, for instance while the other one is under way. */
+  disabled?: boolean;
+  /** The disconnect itself is in flight; shows on its own button only. */
   disconnecting: boolean;
   onDisconnect: () => void;
   /** Present only while the connection needs reconnecting. */
   onReconnect?: () => void;
+  /** The reconnect itself is in flight; shows on its own button only. */
   reconnecting?: boolean;
 }) {
   return (
@@ -25,12 +30,14 @@ export function ConnectedAccountRow({
       <div className="flex items-center justify-between p-4">
         <span className="font-medium">{label}</span>
         <DisconnectButton
+          disabled={disabled || disconnecting}
           disconnecting={disconnecting}
           onDisconnect={onDisconnect}
         />
       </div>
       {onReconnect && (
         <ReconnectBanner
+          disabled={disabled || reconnecting}
           onReconnect={onReconnect}
           reconnecting={reconnecting}
         />
@@ -45,9 +52,11 @@ export function ConnectedAccountRow({
  * strip, state on the left, the one action on the right.
  */
 function ReconnectBanner({
+  disabled,
   onReconnect,
   reconnecting,
 }: {
+  disabled: boolean;
   onReconnect: () => void;
   reconnecting: boolean;
 }) {
@@ -58,7 +67,7 @@ function ReconnectBanner({
         size="sm"
         className="flex items-center gap-1.5"
         onClick={onReconnect}
-        disabled={reconnecting}
+        disabled={disabled}
       >
         {reconnecting ? (
           <Loader2Icon className="animate-spin" size={14} />
@@ -72,9 +81,11 @@ function ReconnectBanner({
 }
 
 function DisconnectButton({
+  disabled,
   disconnecting,
   onDisconnect,
 }: {
+  disabled: boolean;
   disconnecting: boolean;
   onDisconnect: () => void;
 }) {
@@ -83,7 +94,7 @@ function DisconnectButton({
       variant="outline"
       size="sm"
       onClick={onDisconnect}
-      disabled={disconnecting}
+      disabled={disabled}
     >
       {disconnecting ? (
         <Loader2Icon className="animate-spin" size={16} />

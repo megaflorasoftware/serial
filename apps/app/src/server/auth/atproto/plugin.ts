@@ -6,7 +6,6 @@ import {
 } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
-import { OAuthCallbackError } from "@atproto/oauth-client-node";
 import {
   ATPROTO_PROVIDER_ID,
   ATPROTO_ROUTE_PREFIX,
@@ -17,6 +16,7 @@ import {
   validateAtprotoConfigAtStartup,
 } from "./config";
 import { getAtprotoClient } from "./client";
+import { isConsentDenied } from "./consent";
 import { didSchema, identifierSchema } from "./schemas";
 import {
   AtprotoLinkError,
@@ -77,21 +77,6 @@ const linkResultRedirect = (result: AtprotoLinkResult) =>
 /** Same convention for a Consent upgrade, on its own param. */
 const consentResultRedirect = (result: AtprotoConsentResult) =>
   `/?${ATPROTO_CONSENT_RESULT_PARAM}=${result}`;
-
-/**
- * Whether a failed callback is the user's refusal at the authorization
- * server. The SDK only reads the `error` query param after it has matched
- * the request to a stored authorization attempt, so the check rides on the
- * SDK's own error rather than the raw params: a replayed or forged request
- * carrying `error=access_denied` fails state validation first and stays an
- * error.
- */
-export function isConsentDenied(err: unknown): boolean {
-  return (
-    err instanceof OAuthCallbackError &&
-    err.params.get("error") === "access_denied"
-  );
-}
 
 export const atprotoPlugin = () => {
   // Fail closed at startup on malformed config: the store key throws
@@ -378,6 +363,7 @@ export const atprotoPlugin = () => {
           try {
             await completeAtprotoUpgrade({
               did: result.did,
+              grantedScope: result.grantedScope,
               sessionUserId: session.user.id,
               upgradeUserId: result.upgradeUserId,
               pendingSyncPreferences: result.pendingSyncPreferences,

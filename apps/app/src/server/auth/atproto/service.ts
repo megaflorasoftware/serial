@@ -576,12 +576,15 @@ export class AtprotoUpgradeError extends Error {
 /**
  * Complete a Consent upgrade: the code exchange already replaced the
  * stored grant, so what remains is to verify the flow belongs to the
- * signed-in user's own connection and save the preferences the user
- * pressed Save on before consent. Returns those preferences so the
- * caller can act on them (a sync, once the engine exists).
+ * signed-in user's own connection, record the broader grant on the
+ * sign-in account row too (a reconnect falls back to it when the
+ * connection row is gone), and save the preferences the user pressed Save
+ * on before consent. Returns those preferences so the caller can act on
+ * them (a sync, once the engine exists).
  */
 export async function completeAtprotoUpgrade(input: {
   did: string;
+  grantedScope: string;
   sessionUserId: string;
   upgradeUserId: string | null;
   pendingSyncPreferences: AtprotoSyncPreferences | null;
@@ -610,6 +613,16 @@ export async function completeAtprotoUpgrade(input: {
       `${did} is not the connection bound to ${sessionUserId}`,
     );
   }
+  await db
+    .update(account)
+    .set({ scope: input.grantedScope, updatedAt: new Date() })
+    .where(
+      and(
+        eq(account.userId, sessionUserId),
+        eq(account.providerId, ATPROTO_PROVIDER_ID),
+        eq(account.accountId, did),
+      ),
+    );
   return input.pendingSyncPreferences;
 }
 
