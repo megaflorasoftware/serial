@@ -72,19 +72,22 @@ export function AtprotoConnectionListItem({
 }: {
   onSelect: () => void;
 }) {
-  const { data: status, isLoading } = useAtprotoConnectionStatus();
+  const { data: status, isLoading, isError } = useAtprotoConnectionStatus();
+  // Keep cached status after a failed poll, but let an initial failure
+  // reach the pane's Retry action instead of treating it as unconfigured.
+  const statusUnavailable = !status && isError;
 
   return (
     <ConnectionListRow
       name="Atmosphere"
       isLoading={isLoading}
-      isConfigured={status?.isConfigured ?? false}
+      isConfigured={status?.isConfigured ?? statusUnavailable}
       statusText={
-        // A connection that needs reconnecting still identifies itself by
-        // its handle; the subpane's banner carries the expired state.
-        (status?.isConnected || status?.needsReconnect) && status.handle
-          ? status.handle
-          : "Not connected"
+        statusUnavailable
+          ? "Couldn't load connection"
+          : (status?.isConnected || status?.needsReconnect) && status.handle
+            ? status.handle
+            : "Not connected"
       }
       onSelect={onSelect}
     />

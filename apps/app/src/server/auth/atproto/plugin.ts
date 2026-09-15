@@ -376,10 +376,10 @@ export const atprotoPlugin = () => {
           } catch (err) {
             // The code exchange already replaced the stored grant for the
             // connection's own DID (the service pinned the subject), so a
-            // mismatch here leaves a bound row holding a broader grant than
-            // its unsaved settings use. Deliberately left in place: the row
-            // is bound to its owner, and revoking would sever their working
-            // connection with no older session to fall back on.
+            // failure here leaves the previous settings unchanged. Keep
+            // the returned grant, even if narrower than requested: revoking
+            // would sever the owner's working connection with no older
+            // session to fall back on.
             logError("[atproto] upgrade failed:", err);
             const consentResult: AtprotoConsentResult =
               err instanceof AtprotoUpgradeError ? err.code : "error";
