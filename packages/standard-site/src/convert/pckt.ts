@@ -66,19 +66,20 @@ export const pcktBlobSchema = z.union([
   z.object({ items: z.array(blockSchema) }).transform((value) => value.items),
 ]);
 
-/** Text blocks inside cells and items render inline; anything else keeps its block markup. */
+/**
+ * Text blocks inside cells and items render inline; anything else keeps its block
+ * markup. Callers run this inside `context.nested`.
+ */
 function renderInline(blocks: Block[], context: ConversionContext) {
-  return context.nested(() =>
-    blocks
-      .map((block) => {
-        const text = richTextSchema.safeParse(block);
-        if (text.success && blockName(block, PREFIX) === "text") {
-          return renderRichText(text.data, context);
-        }
-        return renderBlock(block, context);
-      })
-      .join(""),
-  );
+  return blocks
+    .map((block) => {
+      const text = richTextSchema.safeParse(block);
+      if (text.success && blockName(block, PREFIX) === "text") {
+        return renderRichText(text.data, context);
+      }
+      return renderBlock(block, context);
+    })
+    .join("");
 }
 
 function renderBlocks(blocks: Block[], context: ConversionContext) {
@@ -123,13 +124,15 @@ function renderListItems(
 
 function renderTaskItems(blocks: Block[], context: ConversionContext) {
   return context.nested(() => {
-    const items = blocks.map((item) => {
-      const inner = containerSchema.safeParse(item);
-      return taskListItem(
-        item.checked === true,
-        inner.success ? renderInline(inner.data.content, context) : "",
-      );
-    });
+    const items = blocks
+      .map((item) => {
+        const inner = containerSchema.safeParse(item);
+        const content = inner.success
+          ? renderInline(inner.data.content, context)
+          : "";
+        return content ? taskListItem(item.checked === true, content) : "";
+      })
+      .filter((item) => item !== "");
     return list(false, items, { task: true });
   });
 }
@@ -139,21 +142,21 @@ function renderTable(block: Block, context: ConversionContext) {
   if (!parsed.success) return "";
   const span = (value: number | undefined) =>
     value && value > 1 ? String(value) : undefined;
-  const rows = parsed.data.content.map((row) => {
-    const cells = row.content.map((cell) =>
-      element(
-        blockName(cell, PREFIX) === "tableHeader" ? "th" : "td",
-        { colspan: span(cell.colspan), rowspan: span(cell.rowspan) },
-        renderInline(cell.content, context),
-      ),
-    );
-    return element("tr", undefined, cells.join(""));
+  return context.nested(() => {
+    const rows = parsed.data.content.map((row) => {
+      const cells = row.content.map((cell) =>
+        element(
+          blockName(cell, PREFIX) === "tableHeader" ? "th" : "td",
+          { colspan: span(cell.colspan), rowspan: span(cell.rowspan) },
+          renderInline(cell.content, context),
+        ),
+      );
+      return element("tr", undefined, cells.join(""));
+    });
+    const body = rows.join("");
+    if (!body.replace(/<\/?(?:tr|td|th)[^>]*>/g, "")) return "";
+    return element("table", undefined, element("tbody", undefined, body));
   });
-  return element(
-    "table",
-    undefined,
-    element("tbody", undefined, rows.join("")),
-  );
 }
 
 function renderBlock(block: Block, context: ConversionContext): string {

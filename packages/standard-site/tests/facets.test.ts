@@ -170,6 +170,49 @@ describe("renderRichText", () => {
     expect(context.footnotes).toHaveLength(1);
   });
 
+  it("shares one entry between references to the same footnote id", () => {
+    const context = { footnotes: [] };
+    const note = {
+      $type: "x#footnote",
+      footnoteId: "same",
+      contentPlaintext: "note",
+    };
+    expect(
+      renderRichText(
+        {
+          plaintext: "ab cd",
+          facets: [
+            { index: { byteStart: 0, byteEnd: 2 }, features: [note] },
+            { index: { byteStart: 3, byteEnd: 5 }, features: [note] },
+          ],
+        },
+        context,
+      ),
+    ).toBe("ab<sup>[1]</sup> cd<sup>[1]</sup>");
+    expect(renderFootnotes(context)).toBe(
+      "<section><ol><li>note</li></ol></section>",
+    );
+  });
+
+  it("maps didMention to a profile link", () => {
+    expect(
+      renderRichText({
+        plaintext: "hi",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 2 },
+            features: [
+              {
+                $type: "pub.leaflet.richtext.facet#didMention",
+                did: "did:plc:zz",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('<a href="https://bsky.app/profile/did:plc:zz">hi</a>');
+  });
+
   it("lists a footnote nested inside footnote text after its parent", () => {
     const context = { footnotes: [] };
     const body = renderRichText(

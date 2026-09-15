@@ -16,6 +16,7 @@ import {
   buildBlueskyPostUrl,
   buildBlueskyProfileUrl,
   buildCanonicalDocumentUrl,
+  buildPdslsUrl,
   documentBelongsToPublication,
   normalizePublicationUrl,
   parseAtUri,
@@ -115,6 +116,16 @@ describe("uris", () => {
     expect(parseAtUri("at://did:plc:a/app.bsky.feed.post/..")).toBeNull();
     expect(parseAtUri("at://did:plc:a/app.bsky.feed.post/a b")).toBeNull();
     expect(parseAtUri("at://jenn.pckt.blog/app.bsky.feed.post/3k")).toBeNull();
+    expect(parseAtUri("at://did:plc:abc/com.foo/rk")).toBeNull();
+    expect(parseAtUri("at://did:plc:abc/a.b.9x/rk")).toBeNull();
+    expect(parseAtUri("at://did:plc:ab%zz/app.bsky.feed.post/rk")).toBeNull();
+    expect(
+      parseAtUri("at://did:web:example.com%3A3000/app.bsky.feed.post/rk"),
+    ).toEqual({
+      did: "did:web:example.com%3A3000",
+      collection: "app.bsky.feed.post",
+      rkey: "rk",
+    });
     expect(
       parsePublicationUri("at://did:plc:abc/site.standard.document/x"),
     ).toBeNull();
@@ -204,6 +215,11 @@ describe("uris", () => {
     expect(buildBlueskyProfileUrl('did:plc:x" onclick="x()')).toBeNull();
     expect(buildBlueskyProfileUrl("did:plc:a/b")).toBeNull();
     expect(buildBlueskyProfileUrl("..")).toBeNull();
+    expect(buildBlueskyProfileUrl("did:plc:abc%")).toBeNull();
+    expect(buildPdslsUrl("../../evil")).toBeNull();
+    expect(buildPdslsUrl("at://did:plc:a/site.standard.document/b")).toBe(
+      "https://pdsls.dev/at://did:plc:a/site.standard.document/b",
+    );
   });
 });
 

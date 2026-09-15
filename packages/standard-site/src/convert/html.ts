@@ -98,9 +98,9 @@ export function figure(imageHtml: string, caption: string | undefined) {
 }
 
 export function codeBlock(code: string, language: string | undefined) {
-  const className = language
-    ? `language-${language.replace(/[^\w+#.-]/g, "")}`
-    : undefined;
+  // The sanitizer keeps `class` on code only when it names a language.
+  const slug = language?.replace(/[^\w+#.-]/g, "") ?? "";
+  const className = slug ? `language-${slug}` : undefined;
   return element(
     "pre",
     undefined,
@@ -124,8 +124,14 @@ export function list(
 ) {
   if (items.length === 0) return "";
   const attributes: Attributes = {};
-  if (ordered && options.start !== undefined && options.start !== 1) {
-    attributes.start = String(options.start);
+  const start = options.start;
+  if (
+    ordered &&
+    start !== undefined &&
+    Number.isInteger(start) &&
+    start !== 1
+  ) {
+    attributes.start = String(start);
   }
   if (options.task) attributes.class = "contains-task-list";
   return element(ordered ? "ol" : "ul", attributes, items.join(""));

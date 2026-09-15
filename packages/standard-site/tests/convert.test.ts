@@ -508,6 +508,7 @@ describe("leaflet blocks", () => {
             },
           ],
         },
+        { $type: "pub.leaflet.blocks.standardSitePost", uri: "../../evil" },
         { $type: "pub.leaflet.blocks.header", plaintext: "   " },
         { $type: "pub.leaflet.blocks.blockquote", plaintext: " " },
         { $type: "pub.leaflet.blocks.unorderedList", children: [] },
@@ -525,6 +526,80 @@ describe("leaflet blocks", () => {
         "<h3>Suffixed</h3>",
     );
     expectFixedPoint(html);
+  });
+
+  it("renders buttons, math, youtube offsets, and code without a usable language", () => {
+    const html = convertRaw(
+      leaflet([
+        {
+          $type: "pub.leaflet.blocks.button",
+          text: "Sign up",
+          url: "https://a.test/go",
+        },
+        { $type: "pub.leaflet.blocks.math", tex: "a < b" },
+        { $type: "pub.leaflet.blocks.code", plaintext: "x", language: "!!!" },
+        {
+          $type: "pub.leaflet.blocks.iframe",
+          url: "https://youtu.be/abcdefghijk?t=30s",
+        },
+        {
+          $type: "pub.leaflet.blocks.orderedList",
+          startIndex: 1.5,
+          children: [
+            { content: { $type: "pub.leaflet.blocks.text", plaintext: "one" } },
+          ],
+        },
+      ]),
+    );
+    expect(html).toBe(
+      '<p><a href="https://a.test/go"><strong>Sign up</strong></a></p>' +
+        '<pre><code class="language-tex">a &#x3C; b</code></pre>' +
+        "<pre><code>x</code></pre>" +
+        '<div data-serial-embed="youtube" data-video-id="abcdefghijk" data-start="30"><p><a href="https://www.youtube.com/watch?v=abcdefghijk">Watch on YouTube</a></p></div>' +
+        "<ol><li>one</li></ol>",
+    );
+    expectFixedPoint(html);
+  });
+
+  it("drops a malformed page but keeps the rest of the document", () => {
+    const content = {
+      $type: "pub.leaflet.content",
+      pages: [
+        "junk",
+        {
+          $type: "pub.leaflet.pages.linearDocument",
+          blocks: [
+            { block: { $type: "pub.leaflet.blocks.text", plaintext: "kept" } },
+          ],
+        },
+        { $type: "pub.leaflet.pages.linearDocument", blocks: "not an array" },
+      ],
+    };
+    expect(convertResolvedContent(content, did)?.html).toBe("<p>kept</p>");
+  });
+
+  it("renders a multi-image leaflet gallery as one figure per image", () => {
+    const html = convertRaw(
+      leaflet([
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          images: [
+            {
+              image: { ref: { $link: "bafyone" }, mimeType: "image/png" },
+              alt: "1",
+            },
+            {
+              image: { ref: { $link: "bafytwo" }, mimeType: "image/png" },
+              alt: "2",
+            },
+          ],
+        },
+      ]),
+    );
+    expect(html).toBe(
+      `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyone")}" alt="1"></figure>` +
+        `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafytwo")}" alt="2"></figure>`,
+    );
   });
 
   it("keeps quoted text out of the description fallback and drops unsafe blob cids", () => {
@@ -718,6 +793,55 @@ describe("pckt blocks", () => {
       };
     }
     expect(convertRaw(pckt([item, after]))).toBe("<p>after</p>");
+
+    let table: Record<string, unknown> = {
+      $type: "blog.pckt.block.text",
+      plaintext: "leaf",
+    };
+    for (let depth = 0; depth < MAX_BLOCK_NESTING_DEPTH * 4; depth += 1) {
+      table = {
+        $type: "blog.pckt.block.table",
+        content: [
+          {
+            $type: "blog.pckt.block.tableRow",
+            content: [{ $type: "blog.pckt.block.tableCell", content: [table] }],
+          },
+        ],
+      };
+    }
+    expect(convertRaw(pckt([table, after]))).toBe("<p>after</p>");
+  });
+
+  it("drops task items and list items with nothing to show", () => {
+    const html = convertRaw(
+      pckt([
+        {
+          $type: "blog.pckt.block.taskList",
+          content: [
+            { $type: "blog.pckt.block.taskItem", checked: true, content: [] },
+            {
+              $type: "blog.pckt.block.taskItem",
+              checked: false,
+              content: [{ $type: "blog.pckt.block.text", plaintext: "real" }],
+            },
+          ],
+        },
+        {
+          $type: "blog.pckt.block.orderedList",
+          start: 4,
+          content: [
+            {
+              $type: "blog.pckt.block.listItem",
+              content: [{ $type: "blog.pckt.block.text", plaintext: "four" }],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(html).toBe(
+      '<ul class="contains-task-list"><li class="task-list-item"><input type="checkbox" disabled> real</li></ul>' +
+        '<ol start="4"><li>four</li></ol>',
+    );
   });
 });
 
@@ -817,6 +941,45 @@ describe("offprint blocks", () => {
         `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafytwo")}" alt="two"><img src="${buildBlueskyCdnImageUrl(did, "bafythree")}" alt=""><figcaption>Two &#x26; three</figcaption></figure>` +
         `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafybefore")}" alt="before"><img src="${buildBlueskyCdnImageUrl(did, "bafyafter")}" alt="after"></figure>` +
         "<p>unknown but textual</p>",
+    );
+    expectFixedPoint(html);
+  });
+
+  it("keeps an image whose caption facets are malformed and drops empty list items", () => {
+    const html = convertRaw(
+      offprint([
+        {
+          $type: "app.offprint.block.image",
+          image: { ref: { $link: "bafyimg" }, mimeType: "image/png" },
+          caption: "Cap",
+          captionFacets: ["garbage"],
+        },
+        {
+          $type: "app.offprint.block.bulletList",
+          children: [
+            {},
+            {
+              content: { $type: "app.offprint.block.text", plaintext: "kept" },
+            },
+          ],
+        },
+        {
+          $type: "app.offprint.block.orderedList",
+          start: 7,
+          children: [
+            {
+              content: { $type: "app.offprint.block.text", plaintext: "seven" },
+            },
+          ],
+        },
+        { $type: "app.offprint.block.mathBlock", tex: "e=mc^2" },
+      ]),
+    );
+    expect(html).toBe(
+      `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyimg")}" alt=""><figcaption>Cap</figcaption></figure>` +
+        "<ul><li>kept</li></ul>" +
+        '<ol start="7"><li>seven</li></ol>' +
+        '<pre><code class="language-tex">e=mc^2</code></pre>',
     );
     expectFixedPoint(html);
   });

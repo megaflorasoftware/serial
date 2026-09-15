@@ -9,8 +9,10 @@ export type AtUriParts = {
 // Identifier syntaxes from the AT Protocol specs. Every value that reaches a URL
 // path is checked against one of these so a crafted record cannot escape the
 // segment it is interpolated into.
-const DID_PATTERN = /^did:[a-z0-9]+:[A-Za-z0-9._:%-]*[A-Za-z0-9._%-]$/;
-const NSID_PATTERN = /^[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)+$/;
+const DID_PATTERN =
+  /^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$/;
+const NSID_PATTERN =
+  /^[a-zA-Z](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+\.[a-zA-Z][a-zA-Z0-9]*$/;
 const RECORD_KEY_PATTERN = /^[A-Za-z0-9._:~-]{1,512}$/;
 const CID_PATTERN = /^[A-Za-z0-9]{1,256}$/;
 const AT_URI_PATTERN = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/;
@@ -140,6 +142,7 @@ export function buildBlueskyPostUrl(postUri: string): string | null {
   return `https://bsky.app/profile/${parts.did}/post/${parts.rkey}`;
 }
 
-export function buildPdslsUrl(atUri: string) {
-  return `https://pdsls.dev/${atUri}`;
+/** Null unless the value is a well-formed at-uri, so nothing else reaches the path. */
+export function buildPdslsUrl(atUri: string): string | null {
+  return parseAtUri(atUri) ? `https://pdsls.dev/${atUri}` : null;
 }

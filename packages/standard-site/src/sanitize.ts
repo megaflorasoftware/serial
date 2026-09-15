@@ -12,6 +12,12 @@ export type SerialEmbedKind = (typeof SERIAL_EMBED_KINDS)[number];
  * rehype-sanitize default (which the reader's simplified mode already applies) with
  * underline, highlight, figures, and the inert placeholder attributes that stand in
  * for embedded content.
+ *
+ * Contract for callers: converted bodies are already fixed points, so
+ * `sanitizeArticleHtml` is a no-op guard on them. Bodies from any other source
+ * (RSS, author HTML) must go through `sanitizeEmbeddedHtml` once at ingest; the
+ * article schema prefixes `id` and `name` on every pass and is therefore not
+ * idempotent on markup that carries them.
  */
 export const ARTICLE_SANITIZE_SCHEMA: SanitizeSchema = {
   ...defaultSchema,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { renderRichText, richTextSchema } from "./facets";
+import { facetSchema, renderRichText, richTextSchema } from "./facets";
 import {
   codeBlock,
   element,
@@ -45,7 +45,6 @@ const imageSchema = z.object({
   image: blobRefSchema.optional(),
   alt: z.string().optional(),
   caption: z.string().optional(),
-  captionFacets: richTextSchema.shape.facets,
 });
 
 // The lexicon names the grid image blob `blob`; published records use `image`.
@@ -83,10 +82,12 @@ function renderListItems(
         const nested = item.children?.length
           ? renderListItems(item.children, ordered, undefined, context, task)
           : "";
+        if (!inner && !nested) return "";
         return task
           ? taskListItem(item.checked === true, inner + nested)
           : element("li", undefined, inner + nested);
-      });
+      })
+      .filter((item) => item !== "");
     return list(ordered, rendered, { start, task });
   });
 }
@@ -96,9 +97,16 @@ function renderImage(value: unknown, context: ConversionContext) {
   if (!parsed.success || !parsed.data.image) return "";
   const img = context.blobImage(parsed.data.image.ref.$link, parsed.data.alt);
   if (!img) return "";
+  // Malformed caption facets lose the formatting, not the image.
+  const captionFacets = z
+    .array(facetSchema)
+    .safeParse((value as { captionFacets?: unknown }).captionFacets);
   const caption = parsed.data.caption
     ? renderRichText(
-        { plaintext: parsed.data.caption, facets: parsed.data.captionFacets },
+        {
+          plaintext: parsed.data.caption,
+          facets: captionFacets.success ? captionFacets.data : undefined,
+        },
         context,
       )
     : undefined;
@@ -145,9 +153,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return element(
         "blockquote",
         undefined,
-        paragraph(
-          prefix + context.aside(() => renderRichText(text.data, context)),
-        ),
+        paragraph(prefix + renderRichText(text.data, context)),
       );
     }
     case "bulletList":

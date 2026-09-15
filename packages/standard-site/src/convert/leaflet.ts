@@ -64,9 +64,10 @@ const pageSchema = z.object({
   blocks: z.array(z.object({ block: blockSchema })).optional(),
 });
 
+// Pages parse one at a time so a malformed page drops itself, not the document.
 export const leafletContentSchema = z.object({
   $type: z.literal("pub.leaflet.content"),
-  pages: z.array(pageSchema),
+  pages: z.array(z.unknown()),
 });
 
 export type LeafletContent = z.infer<typeof leafletContentSchema>;
@@ -168,7 +169,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return element(
         "blockquote",
         undefined,
-        paragraph(context.aside(() => renderRichText(text.data, context))),
+        paragraph(renderRichText(text.data, context)),
       );
     }
     case "image":
@@ -224,9 +225,10 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "standardSitePost":
     case "standardSitePublication": {
       const uri = stringProperty(block, "uri");
-      if (!uri) return "";
+      const href = uri ? buildPdslsUrl(uri) : null;
+      if (!uri || !href) return "";
       return linkCard({
-        href: buildPdslsUrl(uri),
+        href,
         title:
           blockName(block, PREFIX) === "standardSitePost"
             ? "Embedded document"
@@ -263,10 +265,11 @@ function renderBlock(block: Block, context: ConversionContext): string {
 export function convertLeafletContent(content: LeafletContent, did: string) {
   const context = new ConversionContext(did);
   let html = "";
-  for (const page of content.pages) {
-    if (page.$type !== LINEAR_DOCUMENT_TYPE) continue;
-    for (const entry of page.blocks ?? []) {
-      html += renderBlock(entry.block, context);
+  for (const entry of content.pages) {
+    const page = pageSchema.safeParse(entry);
+    if (!page.success || page.data.$type !== LINEAR_DOCUMENT_TYPE) continue;
+    for (const { block } of page.data.blocks ?? []) {
+      html += renderBlock(block, context);
     }
   }
   return context.finish(html);

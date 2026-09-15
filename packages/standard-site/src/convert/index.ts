@@ -21,14 +21,7 @@ export type ConvertDocumentOptions = {
   loadBlob: BlobLoader;
 };
 
-const leafletBlobPagesSchema = z.array(
-  z.object({
-    $type: z.string(),
-    blocks: z
-      .array(z.object({ block: z.looseObject({ $type: z.string() }) }))
-      .optional(),
-  }),
-);
+const leafletBlobPagesSchema = z.array(z.unknown());
 
 const leafletOverflowSchema = z.object({
   blobPages: z.object({ ref: z.object({ $link: z.string() }) }).optional(),

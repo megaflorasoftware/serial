@@ -3,6 +3,7 @@ import {
   closeTag,
   element,
   escapeText,
+  list,
   openTag,
   safeLinkUrl,
   type Attributes,
@@ -30,6 +31,11 @@ export type RichText = z.infer<typeof richTextSchema>;
 
 type Feature = Facet["features"][number];
 
+/**
+ * One collected footnote. The id comes from the record so repeated references to
+ * the same note share one entry; markers are positional because the sanitizer
+ * rewrites ids, so in-page anchors are not possible.
+ */
 export type Footnote = { id: string; text: RichText };
 
 export type FacetRenderContext = {
@@ -94,20 +100,22 @@ function wrapperFor(
     case "footnote": {
       const text = stringField(feature, "contentPlaintext");
       if (text === undefined) return null;
-      const id =
-        stringField(feature, "footnoteId") ??
-        String(context.footnotes.length + 1);
-      const facets = z.array(facetSchema).safeParse(feature.contentFacets);
-      context.footnotes.push({
-        id,
-        text: {
-          plaintext: text,
-          facets: facets.success ? facets.data : undefined,
-        },
-      });
-      return {
-        marker: element("sup", undefined, `[${context.footnotes.length}]`),
-      };
+      const id = stringField(feature, "footnoteId");
+      const existing = id
+        ? context.footnotes.findIndex((footnote) => footnote.id === id)
+        : -1;
+      if (existing === -1) {
+        const facets = z.array(facetSchema).safeParse(feature.contentFacets);
+        context.footnotes.push({
+          id: id ?? "",
+          text: {
+            plaintext: text,
+            facets: facets.success ? facets.data : undefined,
+          },
+        });
+      }
+      const number = existing === -1 ? context.footnotes.length : existing + 1;
+      return { marker: element("sup", undefined, `[${number}]`) };
     }
     default:
       return null;
@@ -229,10 +237,6 @@ export function renderFootnotes(context: FacetRenderContext) {
       element("li", undefined, renderRichText(footnote.text, context)),
     );
   }
-  if (items.length === 0) return "";
-  return element(
-    "section",
-    undefined,
-    element("ol", undefined, items.join("")),
-  );
+  const rendered = list(true, items);
+  return rendered ? element("section", undefined, rendered) : "";
 }
