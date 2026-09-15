@@ -8,7 +8,10 @@ import {
   getAdminSigninMethods,
   getEnabledAuthProviders,
 } from "~/lib/constants";
-import { hasAtprotoWriteScope } from "~/server/auth/atproto/config";
+import {
+  ATPROTO_FULL_SCOPE,
+  hasAtprotoWriteScope,
+} from "~/server/auth/atproto/config";
 import { didSchema, identifierSchema } from "~/server/auth/atproto/schemas";
 import {
   atprotoSyncPreferencesSchema,
@@ -121,7 +124,6 @@ export const saveSyncSettings = protectedProcedure
 
     const { saveAtprotoSyncSettings, upgradeAtprotoAuth } =
       await import("~/server/auth/atproto/service");
-    const { ATPROTO_FULL_SCOPE } = await import("~/server/auth/atproto/config");
 
     if (
       syncMethodNeedsWriteScope(input.method) &&

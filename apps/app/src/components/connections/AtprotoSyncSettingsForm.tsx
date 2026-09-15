@@ -36,9 +36,13 @@ export function AtprotoSyncSettingsForm({
   hasWriteScope: boolean;
   disabled: boolean;
 }) {
+  // Edits stay local until Save; the parent's key resets them after a saved change.
+  // react-doctor-disable-next-line react-doctor/no-derived-useState
   const [method, setMethod] = useState<AtprotoSyncMethod>(
     savedPreferences.method,
   );
+  // This is the other editable preference, reset by the same parent key.
+  // react-doctor-disable-next-line react-doctor/no-derived-useState
   const [importAsInactive, setImportAsInactive] = useState(
     savedPreferences.importAsInactive,
   );
@@ -82,6 +86,8 @@ export function AtprotoSyncSettingsForm({
   const busy = saveMutation.isPending || redirecting;
 
   return (
+    // This client-only settings form submits through the shared oRPC mutation.
+    // react-doctor-disable-next-line react-doctor/no-prevent-default
     <form
       className="grid gap-4"
       onSubmit={(e) => {
