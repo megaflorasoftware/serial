@@ -59,7 +59,14 @@ function scopeTokens(scope: string): string[] {
   return scope.trim().split(/\s+/).filter(Boolean);
 }
 
-/** Whether a stored grant covers subscription writes. */
+/**
+ * Whether a stored grant covers subscription writes. The stored scope is
+ * the authorization server's own claim about what it granted, so it
+ * decides only whether Serial can skip the consent step. An authorization
+ * server that overstates a grant merely skips its own user's consent
+ * screen and fails their later writes; it reaches no other repository,
+ * and no token it names survives `retainAllowedAtprotoScope`.
+ */
 export function hasAtprotoWriteScope(
   scope: string | null | undefined,
 ): boolean {

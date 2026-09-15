@@ -20,7 +20,7 @@ import type { AtprotoSyncPreferences } from "~/lib/auth/atproto-sync-settings";
 import { db } from "~/server/db";
 import { account, atprotoConnections } from "~/server/db/schema";
 import { getKV } from "~/server/kv";
-import { captureException } from "~/server/logger";
+import { captureException, logError } from "~/server/logger";
 import {
   atprotoSyncPreferencesSchema,
   DEFAULT_ATPROTO_SYNC_SETTINGS,
@@ -613,7 +613,7 @@ export async function completeAtprotoUpgrade(input: {
       `${did} is not the connection bound to ${sessionUserId}`,
     );
   }
-  await db
+  const scopeRecorded = await db
     .update(account)
     .set({ scope: input.grantedScope, updatedAt: new Date() })
     .where(
@@ -623,6 +623,14 @@ export async function completeAtprotoUpgrade(input: {
         eq(account.accountId, did),
       ),
     );
+  if (scopeRecorded.rowsAffected === 0) {
+    // The settings are saved either way; say so loudly, because a
+    // reconnect that later finds only the account row would fall back to
+    // a scope that never learned about this upgrade.
+    logError(
+      `[atproto] no account row to record the upgraded scope for ${did}`,
+    );
+  }
   return input.pendingSyncPreferences;
 }
 
