@@ -23,7 +23,7 @@ vi.mock("~/lib/orpc", () => ({
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const roots: Array<ReturnType<typeof createRoot>> = [];
-const clients: Array<QueryClient> = [];
+const clients: QueryClient[] = [];
 
 beforeEach(() => {
   vi.stubGlobal(
