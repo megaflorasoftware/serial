@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import type * as Publications from "~/server/feeds/publications";
 import {
-  readOriginEvidence,
   originsShareArticles,
+  readOriginEvidence,
 } from "~/server/feeds/revalidationEvidence";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import { resolvePublication } from "~/server/feeds/publications";
@@ -12,7 +13,7 @@ vi.mock("~/server/rss/atprotoClient", () => ({
 }));
 vi.mock("~/server/rss/feedHttp", () => ({ readFeedHttp: vi.fn() }));
 vi.mock("~/server/feeds/publications", async (original) => ({
-  ...(await original<typeof import("~/server/feeds/publications")>()),
+  ...(await original<typeof Publications>()),
   resolvePublication: vi.fn(),
 }));
 const did = "did:plc:example";
@@ -114,4 +115,14 @@ it("propagates source failures", async () => {
   await expect(readOriginEvidence(atmosphere)).rejects.toThrow(
     "PDS unavailable",
   );
+});
+
+it("preserves freshly verified alternate RSS locators for conflict checks", async () => {
+  const alternateLocators = ["https://example.com/atom"];
+  const result = await readOriginEvidence({
+    kind: "rss",
+    locator: "https://example.com/feed",
+    alternateLocators,
+  });
+  expect(result.origin.alternateLocators).toEqual(alternateLocators);
 });

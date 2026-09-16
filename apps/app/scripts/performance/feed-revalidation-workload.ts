@@ -1,9 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import type { BenchmarkDatabase } from "./database";
+import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
 import { revalidateFeed } from "~/server/feeds/revalidate";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { feedItems, feedOrigins, user } from "~/server/db/schema";
-import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
 
 /** Fixed source evidence isolates orchestration/database cost from remote host latency. */
 export async function createFeedRevalidationWorkload(
@@ -12,16 +12,14 @@ export async function createFeedRevalidationWorkload(
 ) {
   const userId = "revalidation-benchmark";
   const now = new Date();
-  await database
-    .insert(user)
-    .values({
-      id: userId,
-      name: "Reader",
-      email: "revalidation@example.com",
+  await database.insert(user).values({
+    id: userId,
+    name: "Reader",
+    email: "revalidation@example.com",
     emailVerified: true,
-      createdAt: now,
-      updatedAt: now,
-    });
+    createdAt: now,
+    updatedAt: now,
+  });
   const rss: OriginEvidence = {
     origin: {
       kind: "rss",
@@ -46,19 +44,17 @@ export async function createFeedRevalidationWorkload(
     details: { name: "RSS", platform: "website", origins: [rss.origin] },
   });
   for (let offset = 0; offset < historySize; offset += 100) {
-    await database
-      .insert(feedItems)
-      .values(
-        Array.from({ length: Math.min(100, historySize - offset) }, (_, i) => ({
-          id: `history-${offset + i}`,
-          contentId: `history-${offset + i}`,
-          feedId: feed.id,
-          title: "Article",
-          author: "Author",
-          url: `https://example.com/${offset + i}`,
-          postedAt: now,
-        })),
-      );
+    await database.insert(feedItems).values(
+      Array.from({ length: Math.min(100, historySize - offset) }, (_, i) => ({
+        id: `history-${offset + i}`,
+        contentId: `history-${offset + i}`,
+        feedId: feed.id,
+        title: "Article",
+        author: "Author",
+        url: `https://example.com/${offset + i}`,
+        postedAt: now,
+      })),
+    );
   }
   let reads = 0;
   return {

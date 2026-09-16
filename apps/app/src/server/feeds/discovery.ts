@@ -147,6 +147,7 @@ async function websitePublications(
   url: string,
   read: typeof readFeedHttp,
   signal: AbortSignal,
+  strict = false,
 ) {
   let target = new URL(url);
   const responses = await Promise.allSettled([
@@ -208,7 +209,8 @@ async function websitePublications(
     async (uri) => {
       try {
         return await resolvePublication(uri, signal);
-      } catch {
+      } catch (error) {
+        if (strict) throw error;
         return null;
       }
     },
@@ -231,10 +233,11 @@ async function discoverWebsite(
   url: string,
   read: typeof readFeedHttp,
   signal: AbortSignal,
+  strict = false,
 ) {
   const [feeds, publications] = await Promise.all([
     discoverFeedsWithoutLimits(url, read),
-    websitePublications(url, read, signal),
+    websitePublications(url, read, signal, strict),
   ]);
   const candidates = new Map<string, SyndicationCandidate>();
   for await (const candidate of workerPool(
@@ -346,5 +349,5 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
   const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
   const response = await read(url, undefined);
   if (!response.ok) throw new Error("Unable to read the Feed website");
-  return discoverWebsite(url, read, signal);
+  return discoverWebsite(url, read, signal, true);
 }

@@ -1,5 +1,9 @@
+import { discoverFeeds as scoutFeeds } from "feedscout";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { discoverFeeds } from "~/server/feeds/discovery";
+import {
+  discoverFeedOriginsForRevalidation,
+  discoverFeeds,
+} from "~/server/feeds/discovery";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import {
   resolvePublication,
@@ -122,4 +126,60 @@ describe("publication website discovery", () => {
       1,
     );
   });
+});
+
+it("fails revalidation when an advertised publication cannot be read", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    response(url, url.includes("/.well-known/") ? uri : "<html></html>"),
+  );
+  vi.mocked(resolvePublication).mockRejectedValue(new Error("PDS unavailable"));
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("PDS unavailable");
+});
+it("fails revalidation when the website cannot be read", async () => {
+  vi.mocked(readFeedHttp).mockResolvedValue(
+    response("https://example.com/", "", false),
+  );
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("Unable to read");
+});
+it("succeeds with no candidates when the website has no source links", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    response(url, "<html></html>"),
+  );
+  expect(
+    await discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).toEqual([]);
+});
+
+it("caps discovery transport reads and publication candidates", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    response(
+      url,
+      url === "https://www.example.com/"
+        ? Array.from(
+            { length: 20 },
+            (_, i) =>
+              `<link rel="site.standard.publication" href="${uri}${i}">`,
+          ).join("")
+        : "",
+    ),
+  );
+  vi.mocked(scoutFeeds).mockImplementationOnce(async (_url, options) => {
+    await Promise.allSettled(
+      Array.from({ length: 100 }, (_, i) =>
+        options!.fetchFn!(`https://www.example.com/candidate-${i}`, {}),
+      ),
+    );
+    return [];
+  });
+  await discoverFeedOriginsForRevalidation("https://www.example.com/");
+  expect(readFeedHttp).toHaveBeenCalledTimes(24);
+  expect(resolvePublication).toHaveBeenCalledTimes(4);
+  for (const [, options] of vi.mocked(readFeedHttp).mock.calls) {
+    expect(options?.maxBodyBytes).toBe(1024 * 1024);
+    expect(options?.totalDurationMs).toBeLessThanOrEqual(5000);
+  }
 });

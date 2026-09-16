@@ -65,7 +65,11 @@ export async function revalidateFeed(
       })
       .slice(0, REVALIDATION_MAX_CANDIDATES);
     for (const candidate of candidates) {
-      const observed = await dependencies.readOriginEvidence(candidate);
+      const observed = await dependencies.readOriginEvidence({
+        ...candidate,
+        alternateLocators:
+          candidate.kind === "rss" ? candidate.alternateUrls : undefined,
+      });
       if (originsShareArticles(evidence[0]!, observed)) {
         additions.push(observed);
         break;

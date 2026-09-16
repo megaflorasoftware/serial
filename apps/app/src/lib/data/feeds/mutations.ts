@@ -209,7 +209,7 @@ export function useRevalidateFeedMutation() {
   return useMutation(
     orpc.feed.revalidate.mutationOptions({
       onMutate: ({ feedId }) => feedsStore.getState().feedsDict[feedId],
-      onSuccess: async (feed, _input, baseline) => {
+      onSuccess: (feed, _input, baseline) => {
         const current = feedsStore.getState().feedsDict[feed.id];
         if (current && baseline) {
           updateFeed(feed.id, {
@@ -226,7 +226,6 @@ export function useRevalidateFeedMutation() {
               : {}),
           });
         }
-        await refreshNavigationSnapshotSafely();
         toast.success("Feed revalidated");
       },
       onError: () => toast.error("Couldn't revalidate Feed. Please try again."),

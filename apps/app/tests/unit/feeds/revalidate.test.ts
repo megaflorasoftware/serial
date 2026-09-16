@@ -1,12 +1,13 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
+import type { NewFeedOriginDetails } from "~/server/rss/types";
 import { revalidateFeed } from "~/server/feeds/revalidate";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { feedItems, feedOrigins, feeds, user } from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
-import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
-import type { NewFeedOriginDetails } from "~/server/rss/types";
 
 const rss: OriginEvidence = {
   origin: newRssFeedDetails({
@@ -58,22 +59,28 @@ const seed = (origins = [rss.origin]) =>
   });
 beforeEach(async () => {
   fixture = await createBookmarkTestDatabase();
-  await fixture.database
-    .insert(user)
-    .values({
-      id: "owner",
-      name: "Owner",
-      email: "owner@example.com",
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+  await fixture.database.insert(user).values({
+    id: "owner",
+    name: "Owner",
+    email: "owner@example.com",
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
   read
     .mockReset()
     .mockImplementation(async (origin) =>
       origin.kind === "rss" ? rss : publication,
     );
-  discover.mockClear();
+  discover.mockReset().mockResolvedValue([
+    {
+      url: "https://example.com",
+      origins: [rss.origin, publication.origin].map(({ kind, locator }) => ({
+        kind: kind as "rss" | "atproto",
+        locator,
+      })),
+    },
+  ]);
 });
 afterEach(() => fixture.cleanup());
 
@@ -104,21 +111,19 @@ describe("Feed revalidation", () => {
       .update(feeds)
       .set({ name: "Mine", nameEditedAt: new Date(), openLocation: "origin" })
       .where(eq(feeds.id, feed.id));
-    await fixture.database
-      .insert(feedItems)
-      .values({
-        id: "saved",
-        feedId: feed.id,
-        contentId: "saved",
-        author: "Author",
-        postedAt: new Date(),
-        url: "https://example.com/one",
-        title: "Article",
-        content: "Excerpt",
-        isWatchLater: true,
-        isWatched: true,
-        progress: 42,
-      });
+    await fixture.database.insert(feedItems).values({
+      id: "saved",
+      feedId: feed.id,
+      contentId: "saved",
+      author: "Author",
+      postedAt: new Date(),
+      url: "https://example.com/one",
+      title: "Article",
+      content: "Excerpt",
+      isWatchLater: true,
+      isWatched: true,
+      progress: 42,
+    });
     const items = await fixture.database.select().from(feedItems);
     expect(await run(feed.id)).toMatchObject({
       name: "Mine",
@@ -199,4 +204,68 @@ describe("Feed revalidation", () => {
     await run(feed.id);
     expect(await fixture.database.select().from(feedOrigins)).toHaveLength(2);
   });
+});
+
+it("caps candidate verification even when discovery returns many unrelated origins", async () => {
+  const feed = await seed();
+  discover.mockResolvedValue([
+    {
+      url: "https://example.com",
+      origins: Array.from({ length: 20 }, (_, i) => ({
+        kind: "atproto" as const,
+        locator: `${publication.origin.locator}${i}`,
+      })),
+    },
+  ]);
+  read.mockImplementation(async (origin) =>
+    origin.kind === "rss"
+      ? rss
+      : {
+          ...publication,
+          itemUrls: new Set(["https://example.com/unrelated"]),
+        },
+  );
+  expect((await run(feed.id)).origins).toHaveLength(1);
+  expect(read).toHaveBeenCalledTimes(5);
+});
+
+it("rejects a discovered alternate RSS URL already belonging to another Feed", async () => {
+  const feed = await seed([publication.origin]);
+  await seed([{ ...rss.origin, locator: "https://example.com/atom" }]);
+  read.mockImplementation(async (origin) =>
+    origin.kind === "rss"
+      ? {
+          ...rss,
+          origin: {
+            ...rss.origin,
+            alternateLocators: ["https://example.com/atom"],
+          },
+        }
+      : publication,
+  );
+  await expect(run(feed.id)).rejects.toThrow("different Feeds");
+  expect(await fixture.database.select().from(feedOrigins)).toHaveLength(2);
+});
+
+it("protects uncertain legacy names even when migration copied them into source metadata", async () => {
+  const feed = await seed([{ ...rss.origin, sourceName: "Original" }]);
+  await fixture.client.execute(
+    readFileSync(
+      "src/server/db/migrations/0057_preserve_feed_names.sql",
+      "utf8",
+    ),
+  );
+  expect(await run(feed.id)).toMatchObject({
+    name: "Original",
+    imageUrl: publication.origin.sourceImageUrl,
+  });
+  const [protectedFeed] = await fixture.database
+    .select()
+    .from(feeds)
+    .where(eq(feeds.id, feed.id));
+  expect(protectedFeed?.nameEditedAt).toBeInstanceOf(Date);
+  const future = await seed([
+    { ...rss.origin, locator: "https://example.com/future" },
+  ]);
+  expect(future.nameEditedAt).toBeNull();
 });

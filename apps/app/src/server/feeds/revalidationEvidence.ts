@@ -5,12 +5,12 @@ import {
   parseDocumentUri,
 } from "@serial/standard-site";
 import { publicationOrigin, resolvePublication } from "./publications";
+import type { NewFeedOriginDetails } from "~/server/rss/types";
 import { createPublicationClient } from "~/server/rss/atprotoClient";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import { parseSyndicationFeed } from "~/server/rss/syndication";
 import { itemUrl } from "~/server/rss/itemObservation";
 import { newRssFeedDetails } from "~/server/rss/types";
-import type { NewFeedOriginDetails } from "~/server/rss/types";
 
 export const REVALIDATION_MAX_CANDIDATES = 4;
 export const REVALIDATION_DOCUMENT_PAGES = 2;
@@ -36,7 +36,7 @@ function articleUrls(urls: string[]) {
 
 /** Read identities and source metadata only; never convert or ingest article bodies. */
 export async function readOriginEvidence(
-  origin: Pick<NewFeedOriginDetails, "kind" | "locator">,
+  origin: Pick<NewFeedOriginDetails, "kind" | "locator" | "alternateLocators">,
   includeItems = true,
 ): Promise<OriginEvidence> {
   if (origin.kind === "rss") {
@@ -47,14 +47,17 @@ export async function readOriginEvidence(
     if (!response.ok) throw new Error("Unable to read the RSS Feed");
     const parsed = parseSyndicationFeed(response.text, response.url);
     return {
-      origin: newRssFeedDetails({
-        url: origin.locator,
-        platform: "website",
-        name: parsed.title,
-        imageUrl: parsed.imageUrl,
-        description: parsed.description,
-        siteUrl: parsed.siteUrl,
-      }).origins[0]!,
+      origin: {
+        ...newRssFeedDetails({
+          url: origin.locator,
+          platform: "website",
+          name: parsed.title,
+          imageUrl: parsed.imageUrl,
+          description: parsed.description,
+          siteUrl: parsed.siteUrl,
+        }).origins[0]!,
+        alternateLocators: origin.alternateLocators,
+      },
       siteUrl: parsed.siteUrl,
       itemUrls: articleUrls(
         includeItems

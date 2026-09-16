@@ -42,8 +42,8 @@ import {
   useCreateFeedMutation,
   useDeleteFeedMutation,
   useEditFeedMutation,
-  useSetFeedActiveMutation,
   useRevalidateFeedMutation,
+  useSetFeedActiveMutation,
 } from "~/lib/data/feeds/mutations";
 import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
 import { useShortcut } from "~/lib/hooks/useShortcut";
@@ -815,7 +815,7 @@ export function EditFeedDialog({
             <TooltipContent>Revalidate Feed</TooltipContent>
           </Tooltip>
           <FeedActiveSwitch
-            canMutate={canMutate}
+            canMutate={canMutate && !isRevalidating}
             feed={feed}
             selectedFeedId={selectedFeedId}
           />
@@ -823,7 +823,7 @@ export function EditFeedDialog({
       }
       footer={
         <EditFeedDialogFooter
-          canMutate={canMutate}
+          canMutate={canMutate && !isRevalidating}
           isFormDisabled={isFormDisabled}
           actions={actions}
         />
