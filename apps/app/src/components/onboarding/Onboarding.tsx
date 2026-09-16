@@ -34,7 +34,7 @@ import { useCanMutate } from "~/lib/data/offline-mutations";
 
 const INSTRUCTIONS: Record<
   OnboardingInstruction,
-  { selector: string; text: string; next?: boolean }
+  { selector: string; text: string; next?: boolean; highlightDialog?: boolean }
 > = {
   "open-feed-menu": {
     selector: '[data-onboarding="open-menu"]',
@@ -66,24 +66,29 @@ const INSTRUCTIONS: Record<
     text: "Views bring together the Feeds and Bookmarks you choose.",
   },
   "name-view": {
+    highlightDialog: true,
     selector: '[data-onboarding="name-view"]',
     text: "Give your View a name, then choose Next.",
     next: true,
   },
   "choose-feed": {
+    highlightDialog: true,
     selector: 'button[aria-label="Add feeds"]',
     text: "Click + and select Serial Releases to include it in this View.",
   },
   "open-display": {
+    highlightDialog: true,
     selector: '[data-onboarding="open-display"]',
     text: "Open Display to explore how your View looks.",
   },
   "explore-display": {
+    highlightDialog: true,
     selector: '[data-onboarding="explore-display"]',
     text: "Choose a layout, or add sections organized by Feed or Tag. Try the controls, or keep the defaults.",
     next: true,
   },
   "save-view": {
+    highlightDialog: true,
     selector: '[data-onboarding="save-view"]',
     text: "Save your View when you are ready.",
   },
@@ -459,6 +464,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
               ? '[data-onboarding="open-feed-menu"]'
               : instruction?.selector
           }
+          highlightDialog={instruction?.highlightDialog}
           next={instruction?.next}
           explanation={
             state.instruction === "feed-added" ||

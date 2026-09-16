@@ -30,11 +30,33 @@ function guidanceTarget(selector: string) {
   );
 }
 
+function boundsOf(elements: Array<HTMLElement | null>) {
+  const rects = elements
+    .filter((node): node is HTMLElement => !!node)
+    .map((node) => node.getBoundingClientRect());
+  return rects.length
+    ? {
+        x: Math.min(...rects.map((r) => r.x)),
+        y: Math.min(...rects.map((r) => r.y)),
+        width:
+          Math.max(...rects.map((r) => r.right)) -
+          Math.min(...rects.map((r) => r.x)),
+        height:
+          Math.max(...rects.map((r) => r.bottom)) -
+          Math.min(...rects.map((r) => r.y)),
+      }
+    : null;
+}
+
 type Position = {
   x: number;
   y: number;
   width: number;
   height: number;
+  highlightX: number;
+  highlightY: number;
+  highlightWidth: number;
+  highlightHeight: number;
   viewportWidth: number;
   viewportHeight: number;
   viewportTop: number;
@@ -45,6 +67,10 @@ const EMPTY: Position = {
   y: 0,
   width: 0,
   height: 0,
+  highlightX: 0,
+  highlightY: 0,
+  highlightWidth: 0,
+  highlightHeight: 0,
   viewportWidth: 0,
   viewportHeight: 0,
   viewportTop: 0,
@@ -54,6 +80,7 @@ const EMPTY: Position = {
 function useGuidanceTarget(
   selector: string | undefined,
   instructionKey: string,
+  highlightDialog: boolean,
   confirming: boolean,
   helper: RefObject<HTMLDivElement | null>,
   layer: RefObject<HTMLDivElement | null>,
@@ -75,21 +102,11 @@ function useGuidanceTarget(
       const target = selector ? guidanceTarget(selector) : null;
       targetRef.current = target;
       const popup = guidanceTarget(POPUP_SELECTOR);
-      const rects = [target, popup]
-        .filter((node): node is HTMLElement => !!node)
-        .map((node) => node.getBoundingClientRect());
-      const rect = rects.length
-        ? {
-            x: Math.min(...rects.map((r) => r.x)),
-            y: Math.min(...rects.map((r) => r.y)),
-            width:
-              Math.max(...rects.map((r) => r.right)) -
-              Math.min(...rects.map((r) => r.x)),
-            height:
-              Math.max(...rects.map((r) => r.bottom)) -
-              Math.min(...rects.map((r) => r.y)),
-          }
+      const rect = boundsOf([target, popup]);
+      const dialog = highlightDialog
+        ? target?.closest<HTMLElement>('[role="dialog"][data-state="open"]')
         : null;
+      const highlight = dialog ? boundsOf([dialog, popup]) : rect;
       const viewport = window.visualViewport;
       const focusedInput = target?.matches("input, textarea") ? target : null;
       if (
@@ -106,6 +123,10 @@ function useGuidanceTarget(
         y: Math.max(0, (rect?.y ?? 0) - 5),
         width: rect ? rect.width + 10 : 0,
         height: rect ? rect.height + 10 : 0,
+        highlightX: Math.max(0, (highlight?.x ?? 0) - 5),
+        highlightY: Math.max(0, (highlight?.y ?? 0) - 5),
+        highlightWidth: highlight ? highlight.width + 10 : 0,
+        highlightHeight: highlight ? highlight.height + 10 : 0,
         viewportWidth: viewport?.width ?? innerWidth,
         viewportHeight: viewport?.height ?? innerHeight,
         viewportTop: viewport?.offsetTop ?? 0,
@@ -163,7 +184,7 @@ function useGuidanceTarget(
       window.visualViewport?.removeEventListener("resize", schedule);
       window.visualViewport?.removeEventListener("scroll", schedule);
     };
-  }, [selector, instructionKey, confirming, helper, layer]);
+  }, [selector, instructionKey, highlightDialog, confirming, helper, layer]);
   return { host, position, helperHeight, setHelperHeight, targetRef };
 }
 
@@ -171,6 +192,7 @@ function useGuidanceTarget(
 export function Guidance({
   instructionKey,
   selector,
+  highlightDialog = false,
   children,
   next,
   explanation = false,
@@ -182,6 +204,7 @@ export function Guidance({
 }: {
   instructionKey: string;
   selector?: string;
+  highlightDialog?: boolean;
   children?: ReactNode;
   next?: boolean;
   explanation?: boolean;
@@ -191,16 +214,17 @@ export function Guidance({
   onCancelSkip: () => void;
   onConfirmSkip: () => void;
 }) {
-  useLayoutEffect(() => {
-    document.body.dataset.guidanceActive = "true";
-    return () => {
-      delete document.body.dataset.guidanceActive;
-    };
-  }, []);
   const layer = useRef<HTMLDivElement>(null);
   const helper = useRef<HTMLDivElement>(null);
   const { host, position, helperHeight, setHelperHeight, targetRef } =
-    useGuidanceTarget(selector, instructionKey, confirming, helper, layer);
+    useGuidanceTarget(
+      selector,
+      instructionKey,
+      highlightDialog,
+      confirming,
+      helper,
+      layer,
+    );
   const callbacks = useRef({ onSkip, onCancelSkip });
   useLayoutEffect(() => {
     callbacks.current = { onSkip, onCancelSkip };
@@ -320,7 +344,8 @@ export function Guidance({
   const { x, y, width, height, viewportWidth, viewportHeight, viewportTop } =
     position;
   const helperWidth = Math.min(300, viewportWidth - 32);
-  const radius = Math.min(6, width / 2, height / 2);
+  const { highlightX, highlightY, highlightWidth, highlightHeight } = position;
+  const radius = Math.min(6, highlightWidth / 2, highlightHeight / 2);
 
   const bottom = viewportTop + viewportHeight;
   const beside = x + width + helperWidth + 24 < viewportWidth;
@@ -352,11 +377,11 @@ export function Guidance({
             fillRule="evenodd"
             d={[
               `M0 0H${innerWidth}V${innerHeight}H0Z`,
-              `M${x + radius} ${y}`,
-              `H${x + width - radius}Q${x + width} ${y} ${x + width} ${y + radius}`,
-              `V${y + height - radius}Q${x + width} ${y + height} ${x + width - radius} ${y + height}`,
-              `H${x + radius}Q${x} ${y + height} ${x} ${y + height - radius}`,
-              `V${y + radius}Q${x} ${y} ${x + radius} ${y}Z`,
+              `M${highlightX + radius} ${highlightY}`,
+              `H${highlightX + highlightWidth - radius}Q${highlightX + highlightWidth} ${highlightY} ${highlightX + highlightWidth} ${highlightY + radius}`,
+              `V${highlightY + highlightHeight - radius}Q${highlightX + highlightWidth} ${highlightY + highlightHeight} ${highlightX + highlightWidth - radius} ${highlightY + highlightHeight}`,
+              `H${highlightX + radius}Q${highlightX} ${highlightY + highlightHeight} ${highlightX} ${highlightY + highlightHeight - radius}`,
+              `V${highlightY + radius}Q${highlightX} ${highlightY} ${highlightX + radius} ${highlightY}Z`,
             ].join(" ")}
           />
         </svg>
