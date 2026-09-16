@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { hashPassword, makeSignature } from "better-auth/crypto";
 import { savedOnboardingStep } from "../../../src/lib/onboarding/progress";
 import { getTestClientIp, TEST_CLIENT_IP_HEADER } from "./client-ip";
+import { clearQueryCache } from "./query-cache";
 import type { Locator, Page } from "@playwright/test";
 
 interface SignUpOptions {
@@ -269,6 +270,9 @@ export async function signIn({
   password,
   onboarding = false,
 }: SignInOptions) {
+  // Do this before loading the auth document so its QueryClient cannot
+  // restore data persisted by the account that just signed out.
+  await clearQueryCache(page);
   await page.setExtraHTTPHeaders({
     [TEST_CLIENT_IP_HEADER]: getTestClientIp(email),
   });
