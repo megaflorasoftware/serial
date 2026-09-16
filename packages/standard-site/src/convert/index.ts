@@ -2,7 +2,7 @@ import { z } from "zod";
 import { convertLeafletContent, leafletContentSchema } from "./leaflet";
 import { convertOffprintContent, offprintContentSchema } from "./offprint";
 import { convertPcktItems, pcktBlobSchema, pcktContentSchema } from "./pckt";
-import type { ConvertedDocument } from "./shared";
+import type { ConvertedDocument, ResolvedRecordCard } from "./shared";
 import { BLOCK_NATIVE_CONTENT_TYPES, type DocumentRecord } from "../lexicons";
 import { sanitizeArticleHtml } from "../sanitize";
 
@@ -19,6 +19,7 @@ export type ConvertDocumentOptions = {
   /** DID of the repo the document lives in; every blob reference resolves against it. */
   did: string;
   loadBlob: BlobLoader;
+  resolveRecord?: (uri: string) => Promise<ResolvedRecordCard | null>;
 };
 
 const leafletBlobPagesSchema = z.array(z.unknown());
@@ -85,9 +86,10 @@ async function resolveContent(
 export function convertResolvedContent(
   content: unknown,
   did: string,
+  records?: ReadonlyMap<string, ResolvedRecordCard>,
 ): ConvertedDocument | null {
   const leaflet = leafletContentSchema.safeParse(content);
-  if (leaflet.success) return convertLeafletContent(leaflet.data, did);
+  if (leaflet.success) return convertLeafletContent(leaflet.data, did, records);
   const offprint = offprintContentSchema.safeParse(content);
   if (offprint.success) return convertOffprintContent(offprint.data, did);
   const pckt = pcktContentSchema.safeParse(content);
@@ -110,7 +112,42 @@ export async function convertDocumentContent(
   if (!content) return null;
   const resolved = await resolveContent(content, options);
   if (resolved === null) return null;
-  const converted = convertResolvedContent(resolved, options.did);
+  const records = new Map<string, ResolvedRecordCard>();
+  if (options.resolveRecord) {
+    const uris = embeddedRecordUris(resolved);
+    for (const uri of uris) {
+      const card = await options.resolveRecord(uri);
+      if (card) records.set(uri, card);
+    }
+  }
+  const converted = convertResolvedContent(resolved, options.did, records);
   if (!converted || !converted.html.trim()) return null;
   return { ...converted, html: sanitizeArticleHtml(converted.html) };
+}
+
+/** Only direct content references are visited; resolved records never enter this walk. */
+function embeddedRecordUris(content: unknown) {
+  const uris = new Set<string>();
+  const pending: Array<{ value: unknown; depth: number }> = [
+    { value: content, depth: 0 },
+  ];
+  let visited = 0;
+  while (pending.length && visited++ < 50_000 && uris.size < 16) {
+    const { value, depth } = pending.pop()!;
+    if (!value || typeof value !== "object" || depth > 64) continue;
+    const record = value as Record<string, unknown>;
+    if (
+      typeof record.$type === "string" &&
+      [
+        "pub.leaflet.blocks.standardSitePost",
+        "pub.leaflet.blocks.standardSitePublication",
+      ].includes(record.$type.split("#")[0]!) &&
+      typeof record.uri === "string"
+    )
+      uris.add(record.uri);
+    const children = Array.isArray(value) ? value : Object.values(value);
+    for (let i = children.length - 1; i >= 0; i--)
+      pending.push({ value: children[i], depth: depth + 1 });
+  }
+  return uris;
 }

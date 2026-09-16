@@ -28,6 +28,9 @@ const rssContentSchema = z.object({
   author: z.string(),
   url: z.string(),
   thumbnail: z.string().optional(),
+  mediaThumbnail: z.string().optional(),
+  firstImageUrl: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   content: z.string().optional(),
   contentSnippet: z.string().optional(),
   source: z
@@ -54,6 +57,8 @@ const cachedFeedResultSchema = z.union([
     status: z.literal("success"),
     data: z.object({
       title: z.string(),
+      imageUrl: z.string().optional(),
+      description: z.string().optional(),
       url: z.string(),
       items: z.array(rssContentSchema),
       fetchMetadata: feedFetchMetadataSchema,

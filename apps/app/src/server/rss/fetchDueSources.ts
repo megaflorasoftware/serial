@@ -71,17 +71,17 @@ export async function fetchDueSources(input: {
 
   const stats = emptyRefreshStats();
   try {
-    let afterOriginId: number | undefined;
+    let afterFeedId: number | undefined;
     while (true) {
       // Cursor pages preserve the background worker's bounded Feed loading.
       // oxlint-disable-next-line react-doctor/async-await-in-loop
       const feedPage = await getDuePage(input.database, {
         userId: input.userId,
-        afterOriginId,
+        afterFeedId,
         now,
       });
       if (feedPage.length === 0) break;
-      afterOriginId = feedPage.at(-1)?.origin.id;
+      afterFeedId = feedPage.at(-1)?.feed.id;
       // Each page must finish before its cursor advances.
       // oxlint-disable-next-line react-doctor/async-await-in-loop
       const pageStats = await refreshFeedPage({

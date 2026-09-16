@@ -292,6 +292,10 @@ function makeBookmark(index: number): ApplicationBookmark {
 function makeFeedItem(index: number): ApplicationFeedItem {
   const date = new Date(FIXTURE_TIME.getTime() - index * 1_000);
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: `audit-feed-item-${index}`,
     feedId: (index % 100) + 1,
     contentId: `audit-${index}`,

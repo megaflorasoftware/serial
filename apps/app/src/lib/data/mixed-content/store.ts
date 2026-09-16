@@ -439,10 +439,9 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
       }) => {
         const changedItemIds = [...new Set(itemIds)].filter((itemId) => {
           const item = feedItems[itemId];
-          return (
-            item !== undefined &&
-            hasFeedItemListProjectionChanged(previousFeedItems[itemId], item)
-          );
+          return item === undefined
+            ? previousFeedItems[itemId] !== undefined
+            : hasFeedItemListProjectionChanged(previousFeedItems[itemId], item);
         });
         if (changedItemIds.length === 0) return [];
 
@@ -473,7 +472,7 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
           let pages = scopeState.pages;
 
           for (const itemId of changedItemIds) {
-            const item = feedItems[itemId];
+            const item = feedItems[itemId] ?? previousFeedItems[itemId];
             if (!item) continue;
             const nextReference = feedItemReference({
               item,
@@ -481,7 +480,7 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
               view,
               filterIndex,
             });
-            const belongs = doesItemBelongToScope(item);
+            const belongs = feedItems[itemId] !== undefined && doesItemBelongToScope(item);
 
             references = references.filter(
               (reference) =>

@@ -25,6 +25,7 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
+import type { ItemObservation } from "../rss/itemObservation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
   CONTENT_PLATFORM,
@@ -355,6 +356,36 @@ export type DatabaseFeedWithOrigins = DatabaseFeed & {
 };
 export type ApplicationFeed = z.infer<typeof feedsSchema>;
 
+export const feedIngestState = sqliteTable("feed_ingest_state", {
+  originId: integer("origin_id")
+    .primaryKey()
+    .references(() => feedOrigins.id, { onDelete: "cascade" }),
+  cursor: text("cursor"),
+  boundary: text("boundary"),
+  newestRkey: text("newest_rkey"),
+  pendingRev: text("pending_rev"),
+  initialCount: integer("initial_count").notNull().default(0),
+  initialized: integer("initialized", { mode: "boolean" })
+    .notNull()
+    .default(false),
+});
+
+export const feedDocumentRecords = sqliteTable(
+  "feed_document_record",
+  {
+    originId: integer("origin_id")
+      .notNull()
+      .references(() => feedOrigins.id, { onDelete: "cascade" }),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    status: text("status", { enum: ["ready", "retry", "invalid"] }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.originId, table.uri] }),
+    index("feed_document_retry_idx").on(table.originId, table.status),
+  ],
+);
+
 export const feedItems = sqliteTable(
   "feed_item",
   {
@@ -400,9 +431,24 @@ export const feedItems = sqliteTable(
       mode: "timestamp",
     }),
     contentHash: text("content_hash"),
+    sourceKind: text("source_kind", { enum: ["rss", "atproto", "both"] })
+      .notNull()
+      .default("rss"),
+    atprotoUri: text("atproto_uri"),
+    bodySource: text("body_source", { enum: ["rss", "atproto", "none"] })
+      .notNull()
+      .default("none"),
+    tags: text("tags", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
   },
   (example) => [
     unique().on(example.url, example.feedId),
+    unique("feed_item_feed_atproto_uri_unique").on(
+      example.feedId,
+      example.atprotoUri,
+    ),
     index("feed_item_feed_id_posted_at_idx").on(
       example.feedId,
       example.postedAt,
@@ -433,6 +479,37 @@ export const feedItems = sqliteTable(
     ),
   ],
 );
+/** Internal source snapshots allow edits to restore the other origin's fallback. */
+export const feedItemObservations = sqliteTable(
+  "feed_item_observation",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["rss", "atproto"] }).notNull(),
+    value: text("value", { mode: "json" }).$type<ItemObservation>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.kind] })],
+);
+
+/** Old URLs remain aliases after an edit so stale RSS cannot recreate a duplicate. */
+export const feedItemAliases = sqliteTable(
+  "feed_item_alias",
+  {
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    locator: text("locator").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.feedId, table.locator] }),
+    index("feed_item_alias_item_idx").on(table.itemId),
+  ],
+);
+
 export const feedItemSchema = createSelectSchema(feedItems);
 export type DatabaseFeedItem = typeof feedItems.$inferSelect;
 

@@ -27,6 +27,7 @@ function incomingFeedItemIds(payloads: PublishedChunk[]) {
     const chunk = payload.chunk;
     if (chunk.type === "feed-items") {
       for (const item of chunk.feedItems) ids.add(item.id);
+      for (const id of chunk.removedItemIds ?? []) ids.add(id);
     }
   }
   return [...ids];
@@ -80,6 +81,7 @@ export function applyPublishedChunks(
     feedItemsStore.getState().processChunks(feedPayloads);
     for (const itemId of incomingItemIds) {
       const item = feedItemsStore.getState().feedItemsDict[itemId];
+      if (!item && previousFeedItems[itemId]) navigationSnapshotChanged = true;
       if (item) {
         navigationSnapshotChanged ||= hasFeedItemListProjectionChanged(
           previousFeedItems[itemId],

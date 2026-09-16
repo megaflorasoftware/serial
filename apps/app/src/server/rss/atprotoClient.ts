@@ -1,0 +1,171 @@
+import { z } from "zod";
+import {
+  buildCanonicalDocumentUrl,
+  parseAtUri,
+  parseDocumentRecord,
+  parsePublicationRecord,
+} from "@serial/standard-site";
+import { createHardenedFetch } from "../auth/atproto/hardened-fetch";
+import { resolvePublicPds } from "../auth/atproto/did-resolver";
+
+const pageSchema = z.object({
+  records: z.array(z.unknown()).max(100),
+  cursor: z.string().max(4096).optional(),
+});
+export type PublicationClient = ReturnType<typeof createPublicationClient>;
+
+/** One refresh caches identity and referenced records; it never follows embedded content. */
+export function createPublicationClient(
+  dependencies = {
+    fetch: createHardenedFetch(undefined, {
+      responseMaxSize: 10 * 1024 * 1024,
+    }),
+    resolvePds: resolvePublicPds,
+  },
+) {
+  const pds = new Map<string, Promise<string>>();
+  const records = new Map<string, Promise<unknown>>();
+  let embeddedReads = 0;
+  const resolvePds = (did: string) => {
+    if (!pds.has(did)) pds.set(did, dependencies.resolvePds(did));
+    return pds.get(did)!;
+  };
+  async function request(
+    did: string,
+    method: string,
+    query: Record<string, string>,
+    etag?: string | null,
+  ) {
+    const base = new URL(await resolvePds(did));
+    if (
+      base.username ||
+      base.password ||
+      !["https:", "http:"].includes(base.protocol)
+    )
+      throw new Error("Invalid PDS endpoint");
+    const url = new URL(`/xrpc/${method}`, base);
+    url.search = new URLSearchParams(query).toString();
+    return dependencies.fetch(url, {
+      headers: etag ? { "If-None-Match": etag } : undefined,
+    });
+  }
+  async function getRecord(uri: string): Promise<unknown> {
+    if (!records.has(uri))
+      records.set(
+        uri,
+        (async () => {
+          const parts = parseAtUri(uri);
+          if (!parts) throw new Error("Invalid record URI");
+          const response = await request(
+            parts.did,
+            "com.atproto.repo.getRecord",
+            { repo: parts.did, collection: parts.collection, rkey: parts.rkey },
+          );
+          if (!response.ok)
+            throw new Error(`Record fetch failed: ${response.status}`);
+          const record: unknown = await response.json();
+          if (
+            !record ||
+            typeof record !== "object" ||
+            !("uri" in record) ||
+            record.uri !== uri
+          )
+            throw new Error("Record URI mismatch");
+          return record;
+        })(),
+      );
+    return records.get(uri)!;
+  }
+  return {
+    resolvePds,
+    getRecord,
+    async latestRev(did: string) {
+      try {
+        const response = await request(
+          did,
+          "com.atproto.sync.getLatestCommit",
+          { did },
+        );
+        if (!response.ok) return null;
+        return z
+          .object({ rev: z.string().max(256) })
+          .parse(await response.json()).rev;
+      } catch {
+        return null;
+      }
+    },
+    async list(did: string, cursor?: string | null, etag?: string | null) {
+      const response = await request(
+        did,
+        "com.atproto.repo.listRecords",
+        {
+          repo: did,
+          collection: "site.standard.document",
+          reverse: "true",
+          limit: "100",
+          ...(cursor ? { cursor } : {}),
+        },
+        etag,
+      );
+      if (response.status === 304)
+        return {
+          notModified: true as const,
+          records: [],
+          cursor: undefined,
+          etag: etag ?? null,
+        };
+      if (!response.ok)
+        throw new Error(`Document listing failed: ${response.status}`);
+      return {
+        ...pageSchema.parse(await response.json()),
+        notModified: false as const,
+        etag: response.headers.get("etag"),
+      };
+    },
+    async loadBlob(did: string, cid: string) {
+      if (!/^[a-zA-Z0-9]{1,256}$/.test(cid))
+        throw new Error("Invalid blob CID");
+      const response = await request(did, "com.atproto.sync.getBlob", {
+        did,
+        cid,
+      });
+      if (!response.ok)
+        throw new Error(`Blob fetch failed: ${response.status}`);
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    async resolveRecord(uri: string) {
+      const parts = parseAtUri(uri);
+      if (
+        !parts ||
+        !["site.standard.document", "site.standard.publication"].includes(
+          parts.collection,
+        ) ||
+        embeddedReads >= 32
+      )
+        return null;
+      embeddedReads++;
+      try {
+        const record = await getRecord(uri);
+        const publication = parsePublicationRecord(record);
+        if (publication)
+          return { url: publication.value.url, title: publication.value.name };
+        const document = parseDocumentRecord(record);
+        if (!document) return null;
+        const owner = parsePublicationRecord(
+          await getRecord(
+            document.value.site.replace(
+              "/pub.leaflet.publication/",
+              "/site.standard.publication/",
+            ),
+          ),
+        );
+        const url =
+          owner &&
+          buildCanonicalDocumentUrl(owner.value.url, document.value.path);
+        return url ? { url, title: document.value.title } : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+}

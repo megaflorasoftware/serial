@@ -88,7 +88,9 @@ describe("fetchDueSources", () => {
         getDuePage: () =>
           Promise.resolve(
             page < 2
-              ? ([{ origin: { id: 7 + page++ } }] as FetchableOrigin[])
+              ? ([
+                  { origin: { id: 70 + page }, feed: { id: 7 + page++ } },
+                ] as FetchableOrigin[])
               : [],
           ),
         refreshFeedPage,
@@ -123,7 +125,9 @@ describe("fetchDueSources", () => {
           getDuePage: () =>
             Promise.resolve(
               page++ === 0
-                ? ([{ origin: { id: 7 } }] as FetchableOrigin[])
+                ? ([
+                    { origin: { id: 70 }, feed: { id: 7 } },
+                  ] as FetchableOrigin[])
                 : [],
             ),
           refreshFeedPage: () => Promise.reject(new Error("database failed")),

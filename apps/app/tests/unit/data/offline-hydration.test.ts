@@ -28,6 +28,10 @@ function feedItem(
   overrides: Partial<ApplicationFeedItem> = {},
 ): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: "feed-item-one",
     feedId: 1,
     contentId: "content-one",

@@ -246,13 +246,15 @@ function renderBlock(block: Block, context: ConversionContext): string {
       const uri = stringProperty(block, "uri");
       const href = uri ? buildPdslsUrl(uri) : null;
       if (!uri || !href) return "";
+      const resolved = context.records.get(uri);
       return linkCard({
-        href,
+        href: resolved?.url ?? href,
         title:
-          blockName(block, PREFIX) === "standardSitePost"
+          resolved?.title ??
+          (blockName(block, PREFIX) === "standardSitePost"
             ? "Embedded document"
-            : "Embedded publication",
-        description: uri,
+            : "Embedded publication"),
+        description: resolved?.description ?? uri,
       });
     }
     case "iframe": {
@@ -281,8 +283,12 @@ function renderBlock(block: Block, context: ConversionContext): string {
  * Converts `pub.leaflet.content` to article HTML. Only linear-document pages are
  * rendered; canvas pages carry positioned blocks with no reading order.
  */
-export function convertLeafletContent(content: LeafletContent, did: string) {
-  const context = new ConversionContext(did);
+export function convertLeafletContent(
+  content: LeafletContent,
+  did: string,
+  records?: ConversionContext["records"],
+) {
+  const context = new ConversionContext(did, records);
   let html = "";
   for (const entry of content.pages) {
     const page = pageSchema.safeParse(entry);
