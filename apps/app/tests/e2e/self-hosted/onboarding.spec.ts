@@ -130,17 +130,21 @@ for (const mobile of [false, true]) {
     if (mobile) {
       const drawer = page.locator("[data-vaul-drawer]").last();
       await expect(drawer).toBeInViewport();
+      // Vaul ignores dismiss gestures during its opening animation.
+      await drawer.evaluate(async (element) => {
+        await Promise.all(
+          element.getAnimations().map((animation) => animation.finished),
+        );
+      });
       const bounds = (await drawer.boundingBox())!;
       // The helper can cover the centered handle. Swipe from the exposed edge
       // of the drawer so this tests dismissal rather than dragging the helper.
       const swipeX = bounds.x + bounds.width - 12;
       await page.mouse.move(swipeX, bounds.y + 20);
       await page.mouse.down();
-      await page.mouse.move(
-        swipeX,
-        Math.min(830, bounds.y + 420),
-        { steps: 12 },
-      );
+      await page.mouse.move(swipeX, Math.min(830, bounds.y + 420), {
+        steps: 12,
+      });
       await page.mouse.up();
       await expect(page.getByRole("alertdialog")).toBeVisible();
       await page.getByRole("button", { name: "Keep going" }).click();
