@@ -1133,6 +1133,66 @@ describe("rejected reconciliation recovery", () => {
     }
   });
 
+  it.each([false, true])(
+    "keeps terminal recovery stopped across SSE connections, initially connected: %s",
+    async (initiallyConnected) => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      let rejects = true;
+      const test = harness((request) => {
+        if (rejects) throw invalidInput();
+        return completeEpoch(request.reconciliationId);
+      });
+      test.setSelection(ACTIVE_SCOPE);
+      hydrate(test.runtime);
+      test.runtime.cacheUsable();
+      if (initiallyConnected) test.runtime.sseConnectionChanged(true);
+      try {
+        test.runtime.start();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(test.requests).toHaveLength(2);
+        expect(test.runtime.getState().recoveryFailed).toBe(true);
+
+        test.runtime.sseConnectionChanged(false);
+        test.runtime.sseConnectionChanged(true);
+        await vi.advanceTimersByTimeAsync(60_000);
+        test.runtime.sseConnectionChanged(false);
+        test.runtime.sseConnectionChanged(true);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(test.requests).toHaveLength(2);
+        expect(test.runtime.getState()).toMatchObject({
+          recoveryFailed: true,
+          retryPending: false,
+          inFlight: null,
+          trustedUpToDate: false,
+        });
+
+        rejects = false;
+        test.runtime.requestFull();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(test.requests).toHaveLength(3);
+        expect(test.requests[2]?.intent).toMatchObject({
+          discardManifest: true,
+        });
+        expect(test.runtime.getState().trustedUpToDate).toBe(true);
+
+        test.runtime.sseConnectionChanged(false);
+        test.runtime.sseConnectionChanged(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(test.requests).toHaveLength(4);
+        expect(test.requests[3]?.intent).toEqual({
+          type: "full",
+          selectedScope: ACTIVE_SCOPE,
+        });
+        expect(test.runtime.getState().trustedUpToDate).toBe(true);
+      } finally {
+        test.runtime.stop();
+        log.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("retains empty manifests through a transient recovery failure", async () => {
     vi.useFakeTimers();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});

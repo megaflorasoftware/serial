@@ -572,10 +572,12 @@ export function createReconciliationRuntime<TLiveEvent>(
         reconnectRequired ||
         (!everConnected && completedBeforeFirstConnection)
       ) {
-        clearRetry();
         reconnectRequired = false;
         completedBeforeFirstConnection = false;
-        requestCurrentFull();
+        if (!state.recoveryFailed) {
+          clearRetry();
+          requestCurrentFull();
+        }
       }
       everConnected = true;
     },
