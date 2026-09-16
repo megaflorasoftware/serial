@@ -649,10 +649,11 @@ it("retains a persisted loser's historical aliases when a batch creates the winn
 });
 
 it("continues queued origin writes after a failed transaction", async () => {
+  await fixture.client.execute(`CREATE TRIGGER reject_rss_item
+    BEFORE INSERT ON serial_feed_item WHEN NEW.source_kind = 'rss'
+    BEGIN SELECT RAISE(ABORT, 'test RSS write failure'); END`);
   const results = await Promise.allSettled([
-    writeObservedItems(fixture.database, feed, [
-      rss({ publishedAt: "invalid" }),
-    ]),
+    writeObservedItems(fixture.database, feed, [rss()]),
     writeObservedItems(fixture.database, feed, [document()]),
   ]);
   expect(results.map((result) => result.status)).toEqual([

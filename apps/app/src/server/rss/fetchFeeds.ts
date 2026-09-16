@@ -20,6 +20,7 @@ import {
   fetchYouTubeFeedDetails,
 } from "./parsers/youtube";
 import { computeItemHash } from "./hash";
+import { resolveItemDate } from "./publishedDate";
 import { writeObservedItems } from "./writeItems";
 import { rssObservation } from "./itemObservation";
 import { ingestAtmosphere } from "./ingestAtmosphere";
@@ -274,14 +275,16 @@ async function insertFeedItems(
 
   const existingByUrl = new Map(existingItems.map((item) => [item.url, item]));
 
-  const firstSeenAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+  const firstSeenAt = new Date();
   const feedItemListWithHash = feedItemList.map((item) => {
     // Undated items retain their first-seen time across refreshes and edits.
     const datedItem = {
       ...item,
-      postedAt: Number.isFinite(item.postedAt.getTime())
-        ? item.postedAt
-        : (existingByUrl.get(item.url)?.postedAt ?? firstSeenAt),
+      postedAt: resolveItemDate(
+        item.postedAt,
+        existingByUrl.get(item.url)?.postedAt,
+        firstSeenAt,
+      ),
     };
     return { ...datedItem, contentHash: computeItemHash(datedItem) };
   });

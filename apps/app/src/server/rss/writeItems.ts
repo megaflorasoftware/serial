@@ -5,6 +5,7 @@ import { feedItemAliases, feedItemObservations, feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { composeItem, rssObservation } from "./itemObservation";
 import { computeItemHash } from "./hash";
+import { resolveItemDate } from "./publishedDate";
 import type { ItemObservation } from "./itemObservation";
 import type { db } from "../db";
 import type {
@@ -165,7 +166,20 @@ export async function writeObservedItems(
               rows.delete(otherId);
               sources.delete(otherId);
             }
-            values[observation.kind] = observation;
+            values[observation.kind] =
+              observation.kind === "rss" &&
+              !Number.isFinite(new Date(observation.publishedAt).getTime())
+                ? {
+                    ...observation,
+                    publishedAt: resolveItemDate(
+                      new Date(observation.publishedAt),
+                      values.rss?.publishedAt
+                        ? new Date(values.rss.publishedAt)
+                        : row?.postedAt,
+                      now,
+                    ).toISOString(),
+                  }
+                : observation;
             sources.set(id, values);
             touched.add(id);
             const composed = composeItem(values.rss, values.atproto);

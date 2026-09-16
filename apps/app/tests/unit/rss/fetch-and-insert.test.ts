@@ -3,11 +3,18 @@ import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createBookmarkTestDatabase } from "../bookmarks/database";
 import { makeFetchableOrigin } from "./fetchable-origin";
 import type { FetchableOriginOverrides } from "./fetchable-origin";
 import type { Server } from "node:http";
 
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
+import {
+  feedItems,
+  feedOrigins,
+  feeds as feedTable,
+  user,
+} from "~/server/db/schema";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
 vi.mock("~/server/rss/feedHttp", async (importOriginal) => {
@@ -413,44 +420,43 @@ describe("fetchAndInsertFeedData content diffing", () => {
       });
     currentContent = jsonFeed("Original");
     const feed = makeFeed({ platform: "website" });
-    const first = createMockDb();
-    const startedAt = Math.floor(Date.now() / 1000) * 1000;
-    for await (const result of fetchAndInsertFeedData({ db: first.db as any }, [
-      feed,
-    ])) {
-      expect(result.status).toBe("success");
+    const fixture = await createBookmarkTestDatabase();
+    try {
+      await fixture.database.insert(user).values({
+        id: feed.feed.userId,
+        name: "Reader",
+        email: "undated@example.com",
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await fixture.database.insert(feedTable).values(feed.feed);
+      await fixture.database.insert(feedOrigins).values(feed.origin);
+      const startedAt = Math.floor(Date.now() / 1000) * 1000;
+      const refresh = async () => {
+        const items = [];
+        for await (const result of fetchAndInsertFeedData(
+          { db: fixture.database },
+          [feed],
+        )) {
+          expect(result.status).toBe("success");
+          if (result.status === "success") items.push(...result.feedItems);
+        }
+        return items;
+      };
+      const inserted = await refresh();
+      expect(inserted).toHaveLength(1);
+      expect(inserted[0]!.postedAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+      expect(inserted[0]!.postedAt.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(await refresh()).toHaveLength(0);
+      currentContent = jsonFeed("Edited");
+      expect(await refresh()).toMatchObject([
+        { title: "Edited", postedAt: inserted[0]!.postedAt },
+      ]);
+      expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+    } finally {
+      fixture.cleanup();
     }
-    const inserted = first.insertValuesCalls[0] as Array<{
-      postedAt: Date;
-      title: string;
-    }>;
-    expect(inserted).toHaveLength(1);
-    expect(inserted[0]!.postedAt.getTime()).toBeGreaterThanOrEqual(startedAt);
-    expect(inserted[0]!.postedAt.getTime()).toBeLessThanOrEqual(Date.now());
-
-    const repeat = createMockDb(inserted);
-    for await (const result of fetchAndInsertFeedData(
-      { db: repeat.db as any },
-      [feed],
-    )) {
-      expect(result.status).toBe("success");
-    }
-    expect(repeat.insertValuesCalls).toHaveLength(0);
-
-    currentContent = jsonFeed("Edited");
-    const updated = createMockDb(inserted);
-    for await (const result of fetchAndInsertFeedData(
-      { db: updated.db as any },
-      [feed],
-    )) {
-      expect(result.status).toBe("success");
-    }
-    expect(updated.insertValuesCalls[0]).toMatchObject([
-      {
-        title: "Edited",
-        postedAt: inserted[0]!.postedAt,
-      },
-    ]);
     setServerContent("v1");
   });
   it("skips insert for unchanged items when server returns 200", async () => {

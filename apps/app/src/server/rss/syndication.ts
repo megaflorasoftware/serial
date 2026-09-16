@@ -1,6 +1,7 @@
 import { parseFeed } from "feedsmith";
 import { decodeHTML } from "entities";
 import { httpUrl } from "@serial/feed-discovery";
+import type { Atom, DeepPartial } from "feedsmith/types";
 import type { FeedFetchMetadata, RSSContent } from "./types";
 
 export type SyndicationFeed = {
@@ -49,6 +50,15 @@ function firstImage(content: string | undefined, base: string) {
   );
 }
 
+function mediaImage(media: DeepPartial<Atom.Entry<string>>["media"]) {
+  return (
+    media?.thumbnails?.[0]?.url ??
+    media?.contents?.find(
+      (entry) => entry.medium === "image" || entry.type?.startsWith("image/"),
+    )?.url
+  );
+}
+
 function contentSnippet(content: string | undefined) {
   if (content === undefined) return undefined;
   return decodeHTML(
@@ -86,6 +96,11 @@ export function parseSyndicationFeed(
       const enclosure = item.links?.find(
         (link) => link.rel === "enclosure" && link.type?.startsWith("image/"),
       );
+      const mediaThumbnail = absoluteUrl(
+        mediaImage(item.media) ?? enclosure?.href,
+        link,
+      );
+      const firstImageUrl = firstImage(content, link);
       items.push({
         id: item.id,
         url: link,
@@ -100,8 +115,9 @@ export function parseSyndicationFeed(
         ),
         content,
         contentSnippet: contentSnippet(item.summary ?? content),
-        thumbnail:
-          absoluteUrl(enclosure?.href, link) ?? firstImage(content, link),
+        thumbnail: mediaThumbnail ?? firstImageUrl,
+        mediaThumbnail: mediaThumbnail ?? "",
+        firstImageUrl: firstImageUrl ?? "",
       });
     }
     return {
@@ -128,6 +144,15 @@ export function parseSyndicationFeed(
       if (!item.id || !link) continue;
       const content = item.content_html || plainTextHtml(item.content_text);
       hasFullBody ||= Boolean(content);
+      const mediaThumbnail = absoluteUrl(
+        item.image ??
+          item.banner_image ??
+          item.attachments?.find((attachment) =>
+            attachment.mime_type?.startsWith("image/"),
+          )?.url,
+        link,
+      );
+      const firstImageUrl = firstImage(content, link);
       items.push({
         id: item.id,
         url: link,
@@ -141,15 +166,9 @@ export function parseSyndicationFeed(
         content,
         contentSnippet:
           item.summary ?? item.content_text ?? contentSnippet(content),
-        thumbnail:
-          absoluteUrl(
-            item.image ??
-              item.banner_image ??
-              item.attachments?.find((attachment) =>
-                attachment.mime_type?.startsWith("image/"),
-              )?.url,
-            link,
-          ) ?? firstImage(content, link),
+        thumbnail: mediaThumbnail ?? firstImageUrl,
+        mediaThumbnail: mediaThumbnail ?? "",
+        firstImageUrl: firstImageUrl ?? "",
       });
     }
     return {
@@ -179,6 +198,11 @@ export function parseSyndicationFeed(
       "enclosures" in item
         ? item.enclosures?.find((entry) => entry.type?.startsWith("image/"))
         : undefined;
+    const mediaThumbnail = absoluteUrl(
+      mediaImage(item.media) ?? enclosure?.url,
+      link,
+    );
+    const firstImageUrl = firstImage(content, link);
     items.push({
       id,
       url: link,
@@ -198,16 +222,9 @@ export function parseSyndicationFeed(
           : [],
       content,
       contentSnippet: contentSnippet(item.description ?? content),
-      thumbnail:
-        absoluteUrl(
-          item.media?.thumbnails?.[0]?.url ??
-            item.media?.contents?.find(
-              (entry) =>
-                entry.medium === "image" || entry.type?.startsWith("image/"),
-            )?.url ??
-            enclosure?.url,
-          link,
-        ) ?? firstImage(content, link),
+      thumbnail: mediaThumbnail ?? firstImageUrl,
+      mediaThumbnail: mediaThumbnail ?? "",
+      firstImageUrl: firstImageUrl ?? "",
     });
   }
   return {
