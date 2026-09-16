@@ -618,3 +618,8 @@ dialog:modal {
 body {
   overscroll-behavior-y: contain;
 }
+
+/* Keep guided drawer actions above the persistent Skip Onboarding control. */
+body[data-guidance-active] [data-vaul-drawer] {
+  padding-bottom: 4rem;
+}

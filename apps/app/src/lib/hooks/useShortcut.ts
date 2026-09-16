@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import type { KeyboardEvent } from "react";
+import { useOnboarding } from "~/lib/onboarding/store";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import { doesAnyFormElementHaveFocus } from "~/lib/doesAnyFormElementHaveFocus";
 import { getShortcutEventKey } from "~/lib/getShortcutEventKey";
@@ -49,6 +50,11 @@ export const useShortcut = (
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      if (
+        useOnboarding.getState().step &&
+        useOnboarding.getState().step !== "next-steps"
+      )
+        return;
       // Cancel shortcut if key is being held down
       if (event.repeat && !allowRepeat) {
         return null;

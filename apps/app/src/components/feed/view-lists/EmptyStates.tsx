@@ -55,6 +55,7 @@ export function FeedEmptyState() {
           <CardContent className="flex h-full flex-col justify-end">
             <Button
               disabled={!canMutate}
+              data-onboarding="add-feed"
               onClick={() => launchDialog("add-feed")}
             >
               <PlusIcon size={16} />

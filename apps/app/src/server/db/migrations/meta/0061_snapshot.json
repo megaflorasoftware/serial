@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "15f2c350-7410-4b75-b603-c867085dc961",
-  "prevId": "14e9475f-9a1b-4f1a-b751-f85fba237252",
+  "id": "144d84e5-8509-4b67-ba1d-2377e7b374a2",
+  "prevId": "15f2c350-7410-4b75-b603-c867085dc961",
   "tables": {
     "serial_account": {
       "name": "serial_account",
@@ -2803,6 +2803,21 @@
         "next_refresh_at": {
           "name": "next_refresh_at",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "onboarding_complete": {
+          "name": "onboarding_complete",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "onboarding_step": {
+          "name": "onboarding_step",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

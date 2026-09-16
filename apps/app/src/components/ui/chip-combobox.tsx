@@ -44,6 +44,8 @@ type ChipComboboxProps = {
   createDisabled?: boolean;
   badgeVariant?: "default" | "outline" | "secondary";
   emptyMessage?: string;
+  closeOnSelect?: boolean | ((id: number) => boolean);
+  guidance?: boolean;
 };
 
 /** Max visible rows of badges before pagination kicks in. */
@@ -96,6 +98,8 @@ function measureVisibleCount(container: HTMLElement): {
 
 export function ChipCombobox({
   label,
+  closeOnSelect = false,
+  guidance = false,
   placeholder,
   options,
   selectedIds,
@@ -242,6 +246,7 @@ export function ChipCombobox({
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button
+                aria-label={`Add ${label.toLowerCase()}`}
                 variant="ghost"
                 size="icon"
                 className="size-6"
@@ -250,7 +255,14 @@ export function ChipCombobox({
                 <PlusIcon size={14} />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[250px] p-0" align="start">
+            <PopoverContent
+              data-guidance-popup={guidance || undefined}
+              collisionPadding={
+                guidance ? { top: 8, bottom: 64, left: 8, right: 8 } : undefined
+              }
+              className="w-[250px] p-0"
+              align="start"
+            >
               <Command
                 shouldFilter={false}
                 // cmdk inside Radix Dialog incorrectly sets data-[disabled]
@@ -275,12 +287,21 @@ export function ChipCombobox({
                           key={option.id}
                           value={String(option.id)}
                           onSelect={() => {
+                            const closeAfterSelection =
+                              !isSelected &&
+                              (typeof closeOnSelect === "function"
+                                ? closeOnSelect(option.id)
+                                : closeOnSelect);
                             if (isSelected) {
                               onRemove(option.id);
                             } else {
                               onAdd(option.id);
                             }
                             setSearch("");
+                            if (closeAfterSelection) {
+                              setOpen(false);
+                              return;
+                            }
                             requestAnimationFrame(() => {
                               inputRef.current?.focus();
                             });

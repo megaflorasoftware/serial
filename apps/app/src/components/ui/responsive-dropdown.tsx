@@ -138,6 +138,7 @@ export function ControlledResponsiveDialog({
   onOpenAutoFocus,
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");
+  const drawerRef = React.useRef<HTMLDivElement>(null);
 
   if (isDesktop) {
     return (
@@ -204,8 +205,30 @@ export function ControlledResponsiveDialog({
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[calc(100dvh-6rem)]">
+    <Drawer
+      open={open}
+      onOpenChange={onOpenChange}
+      onRelease={(_event, staysOpen) => {
+        if (staysOpen) return;
+        requestAnimationFrame(() => {
+          const drawer = drawerRef.current;
+          if (!drawer || drawer.dataset.state !== "open") return;
+          // A controlled dismissal can be declined, for example while confirming
+          // a skipped guide. Vaul leaves its drag styles behind in that case.
+          drawer.style.removeProperty("transform");
+          drawer.style.removeProperty("transition");
+          const overlay = drawer.previousElementSibling;
+          if (
+            overlay instanceof HTMLElement &&
+            overlay.hasAttribute("data-vaul-overlay")
+          ) {
+            overlay.style.removeProperty("opacity");
+            overlay.style.removeProperty("transition");
+          }
+        });
+      }}
+    >
+      <DrawerContent ref={drawerRef} className="max-h-[calc(100dvh-6rem)]">
         <DrawerHeader className="shrink-0 text-left">
           {onBack && (
             <button

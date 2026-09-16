@@ -36,6 +36,11 @@ import type {
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import type { BookmarkSaveResult } from "~/server/bookmarks/contracts";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
+import {
+  feedCreatedDuringOnboarding,
+  feedSavedDuringOnboarding,
+  requestOnboardingSkip,
+} from "~/lib/onboarding/store";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import {
@@ -122,6 +127,7 @@ export function AddFeedDialog() {
   });
 
   const onOpenChange = (open = false) => {
+    if (!open && requestOnboardingSkip()) return;
     onDialogOpenChange(open);
 
     if (!open) {
@@ -159,6 +165,7 @@ export function AddFeedDialog() {
       const createdFeed = result.feeds[0];
       if (!createdFeed) return;
 
+      feedCreatedDuringOnboarding(createdFeed.id);
       discovery.reset();
       launchDialog("edit-feed", { selectedFeedId: createdFeed.id });
     } catch {
@@ -226,6 +233,7 @@ export function AddFeedDialog() {
   return (
     <Dialog open={isOpen && canMutate} onOpenChange={onOpenChange}>
       <DialogContent
+        data-onboarding="find-feed"
         ref={dialogContentRef}
         hideClose
         overlayClassName="bg-black/40"
@@ -445,6 +453,7 @@ function EditFeedDialogFooter({
       </Button>
       <Button
         disabled={!canMutate || isFormDisabled || actions.isUpdatingFeed}
+        data-onboarding="save-feed"
         onClick={actions.handleSave}
         className="flex-1"
       >
@@ -638,6 +647,7 @@ function useEditFeedDialogActions({
         name,
       });
       toast.success("Feed updated!");
+      feedSavedDuringOnboarding();
       onClose();
     } catch {
       // Error handled by toast
@@ -787,7 +797,9 @@ export function EditFeedDialog({
   return (
     <ControlledResponsiveDialog
       open={selectedFeedId !== null}
-      onOpenChange={onClose}
+      onOpenChange={() => {
+        if (!requestOnboardingSkip()) onClose();
+      }}
       title="Edit Feed"
       headerRight={
         <div className="flex items-center gap-2">

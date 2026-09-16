@@ -103,7 +103,7 @@ export function AtprotoConnectionListItem({
  * starts the authorize round trip directly instead of asking for a handle
  * again; the link callback rebinds the same row.
  */
-function useAtprotoReconnect() {
+export function useAtprotoReconnect() {
   return useMutation(
     orpc.atproto.reconnectAccount.mutationOptions({
       onSuccess: (data) => {
