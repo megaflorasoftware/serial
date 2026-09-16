@@ -201,6 +201,29 @@ function BookmarkResult({
   );
 }
 
+function useAutomaticDiscovery(
+  query: string | null,
+  state: FeedDiscoveryCommandProps["state"],
+  onDiscover: () => void,
+) {
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
+  const isPending =
+    query !== null &&
+    state !== "discovering" &&
+    state !== "select" &&
+    lastQuery !== query;
+  const canDiscover = state === "input" || state === "no-results";
+  useEffect(() => {
+    if (!query || !canDiscover || lastQuery === query) return;
+    const timeout = window.setTimeout(() => {
+      setLastQuery(query);
+      onDiscover();
+    }, AUTO_DISCOVERY_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [query, canDiscover, lastQuery, onDiscover]);
+  return { isPending, reset: () => setLastQuery(null) };
+}
+
 export function FeedDiscoveryCommand({
   url,
   onUrlChange,
@@ -220,39 +243,8 @@ export function FeedDiscoveryCommand({
   const isDiscovering = state === "discovering";
   const hasNoResults = state === "no-results";
   const isSelecting = state === "select";
-  const [lastAutoDiscoveredUrl, setLastAutoDiscoveredUrl] = useState<
-    string | null
-  >(null);
-  const isAutoDiscoveryPending =
-    normalizedUrl !== null &&
-    !isDiscovering &&
-    !isSelecting &&
-    lastAutoDiscoveredUrl !== normalizedUrl;
-  useEffect(() => {
-    if (
-      !normalizedUrl ||
-      isAddingFeed ||
-      isDiscovering ||
-      isSelecting ||
-      lastAutoDiscoveredUrl === normalizedUrl
-    ) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setLastAutoDiscoveredUrl(normalizedUrl);
-      onDiscover();
-    }, AUTO_DISCOVERY_DELAY_MS);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [
-    isDiscovering,
-    isAddingFeed,
-    isSelecting,
-    lastAutoDiscoveredUrl,
-    normalizedUrl,
-    onDiscover,
-  ]);
+  const { isPending: isAutoDiscoveryPending, reset: resetAutoDiscovery } =
+    useAutomaticDiscovery(normalizedUrl, state, onDiscover);
 
   useEffect(() => {
     if (!isSelecting) return;
@@ -281,7 +273,7 @@ export function FeedDiscoveryCommand({
         ref={inputRef}
         value={url}
         onValueChange={(nextUrl) => {
-          setLastAutoDiscoveredUrl(null);
+          resetAutoDiscovery();
           onUrlChange(nextUrl);
         }}
         className="h-14 text-base"
