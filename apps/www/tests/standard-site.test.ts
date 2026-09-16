@@ -34,9 +34,8 @@ const release = buildReleaseDocumentSource({
 
 describe("release publication", () => {
   it("keeps the release identity while moving its URL under the publication", () => {
-    const oldDocument = { ...release, path: "/releases/2026-09-11" };
     expect(buildDocumentUri(publicationUri, release)).toBe(
-      buildDocumentUri(publicationUri, oldDocument),
+      "at://did:plc:serial/site.standard.document/3mv7b42cwqisi",
     );
     expect(`${STANDARD_SITE.publicationUrl}${release.path}`).toBe(
       "https://www.serial.tube/releases/2026-09-11/",
