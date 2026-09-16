@@ -3,7 +3,18 @@ import { createBookmarkTestDatabase } from "../bookmarks/database";
 import { feedOrigins, feeds, user } from "~/server/db/schema";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import { fetchWebsiteFeedData } from "~/server/rss/parsers/website";
+import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
+import {
+  addRefreshStats,
+  emptyRefreshStats,
+  rssAttemptSummary,
+} from "~/server/rss/stats";
+import { publisher } from "~/server/api/publisher";
 import { getCachedFeedResult } from "~/server/rss/feedCache";
+
+vi.mock("~/server/api/publisher", () => ({
+  publisher: { publish: vi.fn(async () => undefined) },
+}));
 
 const kv = vi.hoisted(() => new Map<string, string>());
 vi.mock("~/server/kv", () => ({
@@ -101,4 +112,30 @@ it("refreshes metadata and reports invalidation for live and cached empty feeds"
     data: { title: "New title", description: "New description" },
   });
   expect(fetchWebsiteFeedData).toHaveBeenCalledTimes(1);
+});
+
+it("carries metadata changes in the attempt summary without starting a separate repair", async () => {
+  const fetchable = await reader("metadata");
+  vi.mocked(fetchWebsiteFeedData).mockResolvedValue({
+    id: fetchable.feed.id,
+    title: "Updated title",
+    url: "https://example.com",
+    items: [],
+    fetchMetadata: {},
+  });
+  const pageStats = await refreshUserFeeds({
+    db: fixture.database,
+    feedsList: [fetchable],
+    channel: "reader",
+  });
+  const attemptStats = emptyRefreshStats();
+  addRefreshStats(attemptStats, pageStats);
+  expect(rssAttemptSummary(attemptStats)).toMatchObject({
+    metadataChanged: true,
+  });
+  expect(
+    vi
+      .mocked(publisher.publish)
+      .mock.calls.map(([, payload]) => payload.source),
+  ).toEqual(["rss"]);
 });

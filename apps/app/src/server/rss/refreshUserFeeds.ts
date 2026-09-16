@@ -57,13 +57,12 @@ export async function refreshUserFeeds({
     feedNameMap.set(feed.id, feed.name);
   }
 
-  let metadataChanged = false;
   const pending = new Map<number, number>();
   const results = new Map<number, FeedResult[]>();
   for (const { feed } of activeOrigins)
     pending.set(feed.id, (pending.get(feed.id) ?? 0) + 1);
   for await (const result of fetchAndInsertFeedData({ db }, activeOrigins)) {
-    metadataChanged ||= result.metadataChanged === true;
+    if (result.metadataChanged) stats.metadataChanged = true;
     const group = results.get(result.id) ?? [];
     group.push(result);
     results.set(result.id, group);
@@ -115,14 +114,5 @@ export async function refreshUserFeeds({
     results.delete(result.id);
   }
 
-  if (metadataChanged && channel)
-    await publisher.publish(channel, {
-      source: "invalidation",
-      chunk: {
-        type: "reconciliation-invalidation",
-        domains: ["organization", "navigation"],
-        scopeImpact: { type: "known", selectors: [] },
-      },
-    });
   return stats;
 }

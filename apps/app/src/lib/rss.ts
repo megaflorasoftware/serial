@@ -19,6 +19,7 @@ export type RssAttemptCounts = {
 };
 
 export type RssAttemptSummary = RssAttemptCounts & {
+  metadataChanged?: boolean;
   outcome: RssAttemptOutcome;
   affectedFeeds: RssAffectedFeed[];
   originFailureFeedIds: number[];
