@@ -19,6 +19,12 @@ import { useFetchNewData } from "~/lib/data/store";
 import { useReconciliationDisplayStatus } from "~/lib/data/reconciliation";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 
+const reconciliationMessages = {
+  syncing: "Checking for newer data",
+  retrying: "Data may be stale. Retrying automatically",
+  stale: "Data may be stale. Refresh to try again.",
+};
+
 function formatRelativeTime(targetMs: number, now: number): string {
   const diffMs = targetMs - now;
   if (diffMs <= 0) return "now";
@@ -133,12 +139,8 @@ export function RefetchItemsButton() {
           <span tabIndex={0}>{button}</span>
         </TooltipTrigger>
         <TooltipContent>
-          {reconciliationStatus === "syncing" ? (
-            "Checking for newer data"
-          ) : reconciliationStatus === "retrying" ? (
-            "Data may be stale. Retrying automatically"
-          ) : reconciliationStatus === "stale" ? (
-            "Data may be stale. Refresh to try again."
+          {reconciliationStatus !== "idle" ? (
+            reconciliationMessages[reconciliationStatus]
           ) : (
             <>
               Refresh available in{" "}
