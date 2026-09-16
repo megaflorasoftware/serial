@@ -1,25 +1,14 @@
+import { RELEASES } from "../releases";
+
 const SORTABLE_BASE32_CHARACTERS = "234567abcdefghijklmnopqrstuvwxyz";
 const TID_LENGTH = 13;
 
 export const STANDARD_SITE = {
   documentCollection: "site.standard.document",
   publicationCollection: "site.standard.publication",
-  publicationDescription:
-    "Guides, release notes, and product updates for Serial, a calm and customizable RSS reader.",
-  publicationName: "Serial",
-  publicationUrl: "https://www.serial.tube",
-  documentTypes: {
-    guide: {
-      keyPrefix: "guides",
-      pathPrefix: "/guides",
-      tags: ["guide"],
-    },
-    release: {
-      keyPrefix: "",
-      pathPrefix: "/releases",
-      tags: ["release"],
-    },
-  },
+  publicationDescription: RELEASES.description,
+  publicationName: RELEASES.name,
+  publicationUrl: RELEASES.url,
 } as const;
 
 export type StandardSiteContent = {
@@ -81,34 +70,21 @@ function buildTid(timestampMicroseconds: number, clockId: number) {
   return tid;
 }
 
-function buildDocumentSource(
+export function buildReleaseDocumentSource(
   content: StandardSiteContent,
-  documentType: (typeof STANDARD_SITE.documentTypes)[keyof typeof STANDARD_SITE.documentTypes],
 ): StandardSiteDocumentSource {
-  const key = documentType.keyPrefix
-    ? `${documentType.keyPrefix}/${content.slug}`
-    : content.slug;
-
   return {
-    key,
+    key: content.slug,
     title: content.title,
-    path: `${documentType.pathPrefix}/${content.slug}`,
+    path: `/${content.slug}/`,
     publishedAt: `${content.publish_date}T00:00:00.000Z`,
-    tags: [...documentType.tags],
+    tags: ["release"],
     markdownContent: content.content,
     ...(content.description ? { description: content.description } : {}),
     ...(content.updated_at
       ? { updatedAt: `${content.updated_at}T00:00:00.000Z` }
       : {}),
   };
-}
-
-export function buildReleaseDocumentSource(release: StandardSiteContent) {
-  return buildDocumentSource(release, STANDARD_SITE.documentTypes.release);
-}
-
-export function buildGuideDocumentSource(guide: StandardSiteContent) {
-  return buildDocumentSource(guide, STANDARD_SITE.documentTypes.guide);
 }
 
 export function getDocumentRkey(
