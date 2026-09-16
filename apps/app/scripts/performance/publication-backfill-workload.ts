@@ -36,6 +36,8 @@ export async function createPublicationBackfillWorkload(
       exportSubscriptions: true,
     });
   for (let offset = 0; offset < count; offset += 50) {
+    // Bound fixture writes so seeding does not flood the database driver.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const rows = await database
       .insert(feeds)
       .values(

@@ -32,6 +32,8 @@ try {
   await workload.run();
   const samples = [];
   for (let index = 0; index < 15; index++) {
+    // Reset this sample before measuring it; samples cannot overlap.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     if ("prepare" in workload) await workload.prepare();
     session.instrumentation.reset();
     const started = performance.now();
