@@ -15,6 +15,10 @@ function makeItem(pageIndex: number, itemIndex: number): ApplicationFeedItem {
   const id = `page-${pageIndex}-item-${itemIndex}`;
   const date = new Date(Date.UTC(2026, 0, 1, 0, pageIndex, itemIndex));
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id,
     feedId: 7,
     contentId: id,

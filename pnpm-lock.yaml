@@ -37,6 +37,9 @@ importers:
 
   apps/app:
     dependencies:
+      '@atproto-labs/did-resolver':
+        specifier: ^0.3.7
+        version: 0.3.7
       '@atproto-labs/fetch-node':
         specifier: ^0.3.7
         version: 0.3.7
@@ -163,6 +166,9 @@ importers:
       '@serial/extension-identity':
         specifier: workspace:*
         version: link:../../packages/extension-identity
+      '@serial/standard-site':
+        specifier: workspace:*
+        version: link:../../packages/standard-site
       '@serial/ui':
         specifier: workspace:*
         version: link:../../packages/ui

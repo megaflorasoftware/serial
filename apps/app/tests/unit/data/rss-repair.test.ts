@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ReconciliationScopeTarget } from "~/lib/reconciliation";
 import type { RssAttemptSummary } from "~/lib/rss";
-import { rssSummaryAffectsTarget } from "~/lib/data/rssRepair";
+import {
+  rssRepairTargets,
+  rssSummaryAffectsTarget,
+} from "~/lib/data/rssRepair";
 
 const summary: RssAttemptSummary = {
   outcome: "partial",
@@ -73,4 +76,25 @@ describe("RSS repair targeting", () => {
       ),
     ).toBe(false);
   });
+});
+
+it("combines metadata and item targets in the completion repair", () => {
+  const active = target({ type: "feed", feedId: 7 });
+  expect(
+    rssRepairTargets(
+      { ...summary, metadataChanged: true },
+      active,
+      memberships,
+    ),
+  ).toEqual([{ type: "organization" }, { type: "navigation" }, active]);
+  expect(
+    rssRepairTargets(
+      { ...summary, affectedFeeds: [], metadataChanged: true },
+      active,
+      memberships,
+    ),
+  ).toEqual([{ type: "organization" }, { type: "navigation" }]);
+  expect(
+    rssRepairTargets({ ...summary, affectedFeeds: [] }, active, memberships),
+  ).toEqual([]);
 });

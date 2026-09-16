@@ -372,6 +372,20 @@
       "when": 1789527864765,
       "tag": "0052_talented_iceman",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1789532149165,
+      "tag": "0053_brief_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1789535105654,
+      "tag": "0054_right_mentallo",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,12 @@ import { strongRefSchema } from "../lexicons";
 import { buildBlueskyCdnImageUrl, buildBlueskyPostUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 
+export type ResolvedRecordCard = {
+  url: string;
+  title: string;
+  description?: string;
+};
+
 export type ConvertedDocument = {
   html: string;
   /** Plaintext of the first paragraph, for the description fallback. */
@@ -29,7 +35,10 @@ export class ConversionContext implements FacetRenderContext {
   private depth = 0;
   private asideDepth = 0;
 
-  constructor(readonly did: string) {}
+  constructor(
+    readonly did: string,
+    readonly records: ReadonlyMap<string, ResolvedRecordCard> = new Map(),
+  ) {}
 
   /** CDN URL for a blob in this repo, or undefined when the cid is malformed. */
   imageUrl(cid: string) {

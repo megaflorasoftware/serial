@@ -20,6 +20,10 @@ function makeItem(
   overrides: Partial<ApplicationFeedItem> = {},
 ): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id,
     feedId: 1,
     contentId: id,

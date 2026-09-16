@@ -1,4 +1,14 @@
-import { and, asc, count, eq, gt, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  countDistinct,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+} from "drizzle-orm";
 import type { db as Database } from "~/server/db";
 import type { FetchableOrigin } from "./types";
 import { feedOrigins, feeds } from "~/server/db/schema";
@@ -24,7 +34,7 @@ export async function countDueFeeds(
   now: Date,
 ) {
   const result = await database
-    .select({ value: count() })
+    .select({ value: countDistinct(feedOrigins.feedId) })
     .from(feedOrigins)
     .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
     .where(dueOriginCondition(userId, now))
@@ -34,22 +44,33 @@ export async function countDueFeeds(
 
 export async function getDueFeedPage(
   database: typeof Database,
-  input: { userId: string; afterOriginId?: number; now: Date },
+  input: { userId: string; afterFeedId?: number; now: Date },
 ): Promise<FetchableOrigin[]> {
-  const rows = await database
+  const feedPage = database
+    .select({ id: feedOrigins.feedId })
+    .from(feedOrigins)
+    .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+    .where(
+      and(
+        dueOriginCondition(input.userId, input.now),
+        input.afterFeedId
+          ? gt(feedOrigins.feedId, input.afterFeedId)
+          : undefined,
+      ),
+    )
+    .groupBy(feedOrigins.feedId)
+    .orderBy(asc(feedOrigins.feedId))
+    .limit(RSS_FEED_PAGE_SIZE);
+  return database
     .select({ origin: feedOrigins, feed: feeds })
     .from(feedOrigins)
     .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
     .where(
       and(
         dueOriginCondition(input.userId, input.now),
-        input.afterOriginId
-          ? gt(feedOrigins.id, input.afterOriginId)
-          : undefined,
+        inArray(feedOrigins.feedId, feedPage),
       ),
     )
-    .orderBy(asc(feedOrigins.id))
-    .limit(RSS_FEED_PAGE_SIZE)
+    .orderBy(asc(feedOrigins.feedId), asc(feedOrigins.id))
     .all();
-  return rows;
 }

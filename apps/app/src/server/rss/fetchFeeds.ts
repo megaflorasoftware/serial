@@ -1,8 +1,10 @@
+import { sanitizeEmbeddedHtml } from "@serial/standard-site";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   FEED_ADD_MAX_DISCOVERED_FEEDS,
   FEED_INGESTION_CONCURRENCY,
 } from "@serial/bookmark-capture";
+import { runDatabaseWrite } from "../db/retry-write";
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
 import { feedItems, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
@@ -18,6 +20,10 @@ import {
   fetchYouTubeFeedDetails,
 } from "./parsers/youtube";
 import { computeItemHash } from "./hash";
+import { writeObservedItems } from "./writeItems";
+import { rssObservation } from "./itemObservation";
+import { ingestAtmosphere } from "./ingestAtmosphere";
+import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { readFeedHttp } from "./feedHttp";
 import { isAuthorizedTestRssUrl } from "./testRssOrigin";
@@ -141,10 +147,11 @@ export async function fetchNewFeedDetails(
   return feedDetailList;
 }
 
-type FeedResult =
+export type FeedResult = { metadataChanged?: boolean } & (
   | {
       status: "success";
       feedItems: ApplicationFeedItem[];
+      removedItemIds?: string[];
       id: number;
       originId: number;
       fromCache?: boolean;
@@ -160,8 +167,11 @@ type FeedResult =
       id: number;
       originId: number;
       error: unknown;
+      feedItems?: ApplicationFeedItem[];
+      removedItemIds?: string[];
       fromCache?: boolean;
-    };
+    }
+);
 
 type FetchStateUpdate = Pick<
   typeof feedOrigins.$inferInsert,
@@ -174,11 +184,13 @@ async function writeOriginFetchState(
   originId: number,
   update: FetchStateUpdate,
 ) {
-  await dbSemaphore.run(() =>
-    context.db
-      .update(feedOrigins)
-      .set(update)
-      .where(eq(feedOrigins.id, originId)),
+  await runDatabaseWrite(context.db, () =>
+    dbSemaphore.run(() =>
+      context.db
+        .update(feedOrigins)
+        .set(update)
+        .where(eq(feedOrigins.id, originId)),
+    ),
   );
 }
 
@@ -228,7 +240,8 @@ async function insertFeedItems(
       return {
         feedId,
         contentId: item.id,
-        content: item.content,
+        content: sanitizeEmbeddedHtml(item.content ?? ""),
+        bodySource: item.content ? "rss" : "none",
         contentSnippet: item.contentSnippet,
         contentType: feedContentType,
         title: item.title,
@@ -281,29 +294,32 @@ async function insertFeedItems(
   }
 
   const feedItemsList = (
-    await dbSemaphore.run(() =>
-      context.db
-        .insert(feedItems)
-        .values(changedItems)
-        .onConflictDoUpdate({
-          target: [feedItems.url, feedItems.feedId],
-          set: buildConflictUpdateColumns(feedItems, [
-            "author",
-            "content",
-            "contentHash",
-            "contentId",
-            "contentSnippet",
-            "contentType",
-            "normalizedUrl",
-            "createdAt",
-            "orientation",
-            "postedAt",
-            "thumbnail",
-            "title",
-            "url",
-          ]),
-        })
-        .returning(),
+    await runDatabaseWrite(context.db, () =>
+      dbSemaphore.run(() =>
+        context.db
+          .insert(feedItems)
+          .values(changedItems)
+          .onConflictDoUpdate({
+            target: [feedItems.url, feedItems.feedId],
+            set: buildConflictUpdateColumns(feedItems, [
+              "author",
+              "content",
+              "bodySource",
+              "contentHash",
+              "contentId",
+              "contentSnippet",
+              "contentType",
+              "normalizedUrl",
+              "createdAt",
+              "orientation",
+              "postedAt",
+              "thumbnail",
+              "title",
+              "url",
+            ]),
+          })
+          .returning(),
+      ),
     )
   )
     .filter(Boolean)
@@ -341,6 +357,49 @@ export async function* fetchAndInsertFeedData(
         return { status: "skipped", ...ids };
       }
 
+      if (origin.kind === "atproto")
+        return (await ingestAtmosphere(context.db, fetchable)) as FeedResult;
+
+      const writeItems = async (data: RSSFeedWithMetadata) => {
+        if (feed.platform === "website") {
+          const metadataChanged = await refreshOriginMetadata(
+            context.db,
+            fetchable,
+            {
+              name: data.title,
+              imageUrl: data.imageUrl,
+              description: data.description,
+              siteUrl: data.url,
+            },
+          );
+          const observations = boundFeedItems(data.items).flatMap((item) => {
+            try {
+              return [rssObservation(item)];
+            } catch {
+              return [];
+            }
+          });
+          const written = await writeObservedItems(
+            context.db,
+            feed,
+            observations,
+          );
+          return {
+            feedItems: written.items,
+            removedItemIds: written.removedItemIds,
+            metadataChanged,
+          };
+        }
+        return {
+          feedItems: await insertFeedItems(
+            context,
+            feed.id,
+            boundFeedItems(data.items),
+            databaseFeeds,
+          ),
+        };
+      };
+
       // Check cross-user cache
       const cachedResult = await getCachedFeedResult(origin.locator);
 
@@ -358,31 +417,37 @@ export async function* fetchAndInsertFeedData(
         }
 
         if (cachedResult.status === "empty") {
+          const written = await writeItems({
+            ...cachedResult.data,
+            id: feed.id,
+            items: [],
+            fetchMetadata: cachedResult.fetchMetadata,
+          });
           await writeOriginFetchState(
             context,
             origin.id,
             fetchedState(now, cachedResult.fetchMetadata),
           );
-          return { status: "empty", ...ids, fromCache: true };
+          return {
+            status: "empty",
+            ...ids,
+            fromCache: true,
+            metadataChanged:
+              "metadataChanged" in written ? written.metadataChanged : false,
+          };
         }
 
         // cached success
+        const written = await writeItems({ ...cachedResult.data, id: feed.id });
         await writeOriginFetchState(
           context,
           origin.id,
           fetchedState(now, cachedResult.data.fetchMetadata),
         );
 
-        const applicationFeedItems = await insertFeedItems(
-          context,
-          feed.id,
-          boundFeedItems(cachedResult.data.items),
-          databaseFeeds,
-        );
-
         return {
           status: "success",
-          feedItems: applicationFeedItems,
+          ...written,
           ...ids,
           fromCache: true,
         };
@@ -433,42 +498,49 @@ export async function* fetchAndInsertFeedData(
       const completedFeed = feedData as RSSFeedWithMetadata;
 
       if (!completedFeed.items.length) {
+        const written = await writeItems(completedFeed);
         await setCachedFeedResult(origin.locator, {
           status: "empty",
           fetchMetadata: completedFeed.fetchMetadata,
+          data: {
+            title: completedFeed.title,
+            url: completedFeed.url,
+            imageUrl: completedFeed.imageUrl,
+            description: completedFeed.description,
+          },
         });
         await writeOriginFetchState(
           context,
           origin.id,
           fetchedState(now, completedFeed.fetchMetadata),
         );
-        return { status: "empty", ...ids };
+        return {
+          status: "empty",
+          ...ids,
+          metadataChanged:
+            "metadataChanged" in written ? written.metadataChanged : false,
+        };
       }
 
       await setCachedFeedResult(origin.locator, {
         status: "success",
         data: {
           title: completedFeed.title,
+          imageUrl: completedFeed.imageUrl,
+          description: completedFeed.description,
           url: completedFeed.url,
           items: completedFeed.items,
           fetchMetadata: completedFeed.fetchMetadata,
         },
       });
 
+      const written = await writeItems(completedFeed);
       await writeOriginFetchState(
         context,
         origin.id,
         fetchedState(now, completedFeed.fetchMetadata),
       );
-
-      const applicationFeedItems = await insertFeedItems(
-        context,
-        feed.id,
-        completedFeed.items,
-        databaseFeeds,
-      );
-
-      return { status: "success", feedItems: applicationFeedItems, ...ids };
+      return { status: "success", ...written, ...ids };
     } catch (e) {
       // Push back nextFetchAt so a broken origin isn't retried every minute
       try {

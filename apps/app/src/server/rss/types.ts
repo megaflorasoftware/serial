@@ -66,6 +66,9 @@ export type RSSContent = {
   author: string;
   url: string;
   thumbnail?: string;
+  mediaThumbnail?: string;
+  firstImageUrl?: string;
+  tags?: string[];
   content?: string;
   contentSnippet?: string;
   source?: {
@@ -87,6 +90,8 @@ export type RSSFeed = {
   id: number;
   url: string;
   title: string;
+  imageUrl?: string;
+  description?: string;
   items: RSSContent[];
 };
 

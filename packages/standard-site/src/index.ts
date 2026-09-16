@@ -3,6 +3,7 @@ export * from "./uris";
 export * from "./subscription-key";
 export * from "./sanitize";
 export {
+  MAX_EMBEDDED_RECORDS_PER_DOCUMENT,
   convertDocumentContent,
   convertResolvedContent,
   INTERACTIVE_PLACEHOLDER_TEXT,

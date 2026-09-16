@@ -1,4 +1,7 @@
-import type { ReconciliationScopeTarget } from "~/lib/reconciliation";
+import type {
+  ReconciliationScopeTarget,
+  ReconciliationTarget,
+} from "~/lib/reconciliation";
 import type { RssAttemptSummary } from "~/lib/rss";
 import type { DatabaseFeedCategory } from "~/server/db/schema";
 import { buildContentStatusKey } from "~/lib/content-status";
@@ -34,4 +37,21 @@ export function rssSummaryAffectsTarget(
   return (memberships.viewFeedIds[target.scope.viewId] ?? []).some((feedId) =>
     affectedFeedIds.has(feedId),
   );
+}
+
+export function rssRepairTargets(
+  summary: RssAttemptSummary,
+  activeTarget: ReconciliationScopeTarget | null,
+  memberships: RssRepairMemberships,
+): ReconciliationTarget[] {
+  const targets: ReconciliationTarget[] = [];
+  if (summary.metadataChanged) targets.push({ type: "organization" });
+  if (summary.metadataChanged || summary.affectedFeeds.length > 0)
+    targets.push({ type: "navigation" });
+  if (
+    activeTarget &&
+    rssSummaryAffectsTarget(summary, activeTarget, memberships)
+  )
+    targets.push(activeTarget);
+  return targets;
 }

@@ -65,6 +65,7 @@ const enclosureSchema = z
 
 export const websiteItemSchema = z.object({
   creator: z.string().optional(),
+  categories: z.array(z.string()).optional(),
   title: z.string(),
   link: z.string(),
   pubDate: z.string().optional(),
@@ -83,7 +84,7 @@ export const websiteItemSchema = z.object({
   enclosure: enclosureSchema,
 });
 
-function extractThumbnail(
+function extractMediaThumbnail(
   item: z.infer<typeof websiteItemSchema>,
 ): string | undefined {
   // Try media:thumbnail first
@@ -105,6 +106,10 @@ function extractThumbnail(
     return item.enclosure.url;
   }
 
+  return undefined;
+}
+
+function extractBodyImage(item: z.infer<typeof websiteItemSchema>) {
   // Try to extract first image from content:encoded or content
   const htmlContent =
     item["content:encoded"] || item.content || item.description || "";
@@ -237,7 +242,10 @@ export async function fetchWebsiteFeedData(
             publishedDate: item.pubDate || item.isoDate || item.updated || "",
             url: item.link,
             author: item.creator ?? "",
-            thumbnail: extractThumbnail(item),
+            thumbnail: extractMediaThumbnail(item) ?? extractBodyImage(item),
+            mediaThumbnail: extractMediaThumbnail(item) ?? "",
+            firstImageUrl: extractBodyImage(item) ?? "",
+            tags: item.categories ?? [],
             content: getLongestString(
               item["content:encoded"],
               item.content,
@@ -271,6 +279,8 @@ export async function fetchWebsiteFeedData(
     return {
       id: feed.id,
       title: data.title,
+      imageUrl: data.image?.url,
+      description: data.description,
       url: data.link ?? new URL(origin.locator).origin,
       items,
       fetchMetadata,

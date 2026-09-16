@@ -69,7 +69,8 @@
     "benchmark:client:coverage": "node --import=tsx scripts/performance/inventory-client-audit.ts",
     "benchmark:client:coverage:check": "node --import=tsx scripts/performance/inventory-client-audit.ts --check",
     "benchmark:inventory": "node --import=tsx scripts/performance/inventory-app-queries.ts",
-    "benchmark:inventory:check": "node --import=tsx scripts/performance/inventory-app-queries.ts --check"
+    "benchmark:inventory:check": "node --import=tsx scripts/performance/inventory-app-queries.ts --check",
+    "benchmark:ingest": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-ingest-benchmark.ts"
   },
   "dependencies": {
     "@atproto-labs/fetch-node": "^0.3.7",
@@ -162,7 +163,9 @@
     "vaul": "^1.1.2",
     "xstate": "^5.32.4",
     "zod": "^4.4.3",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "@serial/standard-site": "workspace:*",
+    "@atproto-labs/did-resolver": "^0.3.7"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

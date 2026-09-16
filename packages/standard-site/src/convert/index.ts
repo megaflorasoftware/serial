@@ -1,8 +1,13 @@
 import { z } from "zod";
-import { convertLeafletContent, leafletContentSchema } from "./leaflet";
+import {
+  convertLeafletContent,
+  embeddedRecordCardUri,
+  leafletContentSchema,
+  renderableLeafletBlocks,
+} from "./leaflet";
 import { convertOffprintContent, offprintContentSchema } from "./offprint";
 import { convertPcktItems, pcktBlobSchema, pcktContentSchema } from "./pckt";
-import type { ConvertedDocument } from "./shared";
+import type { ConvertedDocument, ResolvedRecordCard } from "./shared";
 import { BLOCK_NATIVE_CONTENT_TYPES, type DocumentRecord } from "../lexicons";
 import { sanitizeArticleHtml } from "../sanitize";
 
@@ -19,6 +24,7 @@ export type ConvertDocumentOptions = {
   /** DID of the repo the document lives in; every blob reference resolves against it. */
   did: string;
   loadBlob: BlobLoader;
+  resolveRecord?: (uri: string) => Promise<ResolvedRecordCard | null>;
 };
 
 const leafletBlobPagesSchema = z.array(z.unknown());
@@ -85,9 +91,10 @@ async function resolveContent(
 export function convertResolvedContent(
   content: unknown,
   did: string,
+  records?: ReadonlyMap<string, ResolvedRecordCard>,
 ): ConvertedDocument | null {
   const leaflet = leafletContentSchema.safeParse(content);
-  if (leaflet.success) return convertLeafletContent(leaflet.data, did);
+  if (leaflet.success) return convertLeafletContent(leaflet.data, did, records);
   const offprint = offprintContentSchema.safeParse(content);
   if (offprint.success) return convertOffprintContent(offprint.data, did);
   const pckt = pcktContentSchema.safeParse(content);
@@ -110,7 +117,29 @@ export async function convertDocumentContent(
   if (!content) return null;
   const resolved = await resolveContent(content, options);
   if (resolved === null) return null;
-  const converted = convertResolvedContent(resolved, options.did);
+  const records = new Map<string, ResolvedRecordCard>();
+  if (options.resolveRecord) {
+    const leaflet = leafletContentSchema.safeParse(resolved);
+    const uris = leaflet.success ? embeddedRecordUris(leaflet.data) : [];
+    for (const uri of uris) {
+      const card = await options.resolveRecord(uri);
+      if (card) records.set(uri, card);
+    }
+  }
+  const converted = convertResolvedContent(resolved, options.did, records);
   if (!converted || !converted.html.trim()) return null;
   return { ...converted, html: sanitizeArticleHtml(converted.html) };
+}
+
+export const MAX_EMBEDDED_RECORDS_PER_DOCUMENT = 16;
+
+/** Only cards emitted from linear pages are resolved. */
+function embeddedRecordUris(content: z.infer<typeof leafletContentSchema>) {
+  const uris = new Set<string>();
+  for (const block of renderableLeafletBlocks(content)) {
+    const uri = embeddedRecordCardUri(block);
+    if (uri) uris.add(uri);
+    if (uris.size >= MAX_EMBEDDED_RECORDS_PER_DOCUMENT) break;
+  }
+  return uris;
 }

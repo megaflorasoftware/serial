@@ -190,11 +190,11 @@ export async function runBackgroundFeedRefresh(
         });
         refreshStarted = true;
 
-        let afterOriginId: number | undefined;
+        let afterFeedId: number | undefined;
         while (true) {
           const feedPage = await getDueFeedPage(dependencies.db, {
             userId: candidate.id,
-            afterOriginId,
+            afterFeedId,
             now: dependencies.now,
           });
           if (feedPage.length === 0) break;
@@ -204,7 +204,7 @@ export async function runBackgroundFeedRefresh(
             metrics.maximumFeedPageSize,
             feedPage.length,
           );
-          afterOriginId = feedPage.at(-1)?.origin.id;
+          afterFeedId = feedPage.at(-1)?.feed.id;
           const pageStats = await refreshFeedPage({
             db: dependencies.db,
             feedsList: feedPage,

@@ -13,6 +13,10 @@ const NOW = new Date("2026-08-19T12:00:00.000Z");
 
 function feedItem(): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: "article-one",
     feedId: 1,
     contentId: "article-one",

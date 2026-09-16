@@ -96,6 +96,40 @@ async function seedFeeds(input: {
 }
 
 describe("due origin page bounds", () => {
+  it("keeps both due origins together and counts each Feed once", async () => {
+    const seeded = await seedFeeds({
+      userId: "due-user",
+      count: 51,
+      isActive: () => true,
+      nextFetchAt: () => PAST,
+    });
+    await session.database.insert(feedOrigins).values(
+      seeded.map(({ id }) => ({
+        feedId: id,
+        userId: "due-user",
+        kind: "atproto",
+        locator: `at://did:plc:alice/site.standard.publication/${id}`,
+        nextFetchAt: PAST,
+      })),
+    );
+    expect(await countDueFeeds(session.database, "due-user", NOW)).toBe(51);
+    session.instrumentation.reset();
+    const page = await getDueFeedPage(session.database, {
+      userId: "due-user",
+      now: NOW,
+    });
+    expect(page).toHaveLength(100);
+    expect(new Set(page.map(({ feed }) => feed.id)).size).toBe(50);
+    expect(session.instrumentation.snapshot().materializedRows).toBe(100);
+    expect(session.instrumentation.snapshot().statementCount).toBe(1);
+    const last = await getDueFeedPage(session.database, {
+      userId: "due-user",
+      now: NOW,
+      afterFeedId: page.at(-1)!.feed.id,
+    });
+    expect(last).toHaveLength(2);
+  });
+
   it("pages due origins on active feeds in one statement bounded by the page size", async () => {
     // 1,000 feeds: half inactive, and of the active half every third (the
     // multiples of six) is not yet due, so a page must skip many rows without
@@ -140,12 +174,12 @@ describe("due origin page bounds", () => {
 
     // Walking every page by origin id cursor visits each due origin once.
     const seen = new Set<number>();
-    let afterOriginId: number | undefined;
+    let afterFeedId: number | undefined;
     let pages = 0;
     while (true) {
       const page = await getDueFeedPage(session.database, {
         userId: "due-user",
-        afterOriginId,
+        afterFeedId,
         now: NOW,
       });
       if (page.length === 0) break;
@@ -154,7 +188,7 @@ describe("due origin page bounds", () => {
         expect(seen.has(origin.id)).toBe(false);
         seen.add(origin.id);
       }
-      afterOriginId = page.at(-1)?.origin.id;
+      afterFeedId = page.at(-1)?.feed.id;
     }
     expect(seen.size).toBe(dueCount);
     expect(pages).toBe(Math.ceil(dueCount / RSS_FEED_PAGE_SIZE));

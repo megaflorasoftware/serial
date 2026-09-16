@@ -292,6 +292,10 @@ function makeBookmark(index: number): ApplicationBookmark {
 function makeFeedItem(index: number): ApplicationFeedItem {
   const date = new Date(FIXTURE_TIME.getTime() - index * 1_000);
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: `audit-feed-item-${index}`,
     feedId: (index % 100) + 1,
     contentId: `audit-${index}`,
@@ -613,10 +617,10 @@ export function runClientAuditProfile(
   let fixture = seedClientFixture(profileName);
   const profile = fixture.profile;
   const localProjectionView = fixture.views.at(-1)!;
+  const localProjectionFeedIds = new Set(localProjectionView.feedIds);
   const localProjectionFeedItemIds = fixture.feedItems
     .filter(
-      (item) =>
-        item.isWatchLater && localProjectionView.feedIds.includes(item.feedId),
+      (item) => item.isWatchLater && localProjectionFeedIds.has(item.feedId),
     )
     .map((item) => item.id);
   const localViewProjection = measure(() => {

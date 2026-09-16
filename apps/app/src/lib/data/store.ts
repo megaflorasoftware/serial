@@ -7,6 +7,7 @@ import { createSelectorHooks } from "./createSelectorHooks";
 import {
   applyFeedItemPageRetention,
   getPersistedFeedItemRetentionState,
+  removeRetainedFeedItems,
 } from "./feed-page-retention";
 import { mergeFeedItem } from "./feed-items/mergeFeedItem";
 import { hasFeedItemListProjectionChanged } from "./feed-items/listProjection";
@@ -462,9 +463,22 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 loadingActor.send({ type: "FEED_STATUS" });
                 break;
               }
-              case "feed-items":
+              case "feed-items": {
+                if (chunk.removedItemIds?.length) {
+                  const removed = new Set(chunk.removedItemIds);
+                  const state = get();
+                  set({
+                    ...removeRetainedFeedItems(state, removed),
+                    feedItemProjectionRevision:
+                      state.feedItemProjectionRevision + 1,
+                    pendingFulltextItems: state.pendingFulltextItems.filter(
+                      (id) => !removed.has(id),
+                    ),
+                  });
+                }
                 mergeFeedItems(chunk.feedItems);
                 break;
+              }
               case "rss-attempt-complete":
                 loadingActor.send({ type: "BACKGROUND_REFRESH_COMPLETE" });
                 break;

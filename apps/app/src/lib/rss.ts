@@ -19,6 +19,7 @@ export type RssAttemptCounts = {
 };
 
 export type RssAttemptSummary = RssAttemptCounts & {
+  metadataChanged?: boolean;
   outcome: RssAttemptOutcome;
   affectedFeeds: RssAffectedFeed[];
   originFailureFeedIds: number[];
@@ -31,7 +32,12 @@ export type RssPublishedChunk =
       nextRefreshAt: Date;
     }
   | { type: "feed-status"; feedId: number; status: RssFeedStatus }
-  | { type: "feed-items"; feedId: number; feedItems: ApplicationFeedItem[] }
+  | {
+      type: "feed-items";
+      feedId: number;
+      feedItems: ApplicationFeedItem[];
+      removedItemIds?: string[];
+    }
   | ({ type: "rss-attempt-complete" } & RssAttemptSummary);
 
 export type FetchDueSourcesResult =
