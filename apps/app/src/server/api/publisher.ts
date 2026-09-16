@@ -1,3 +1,4 @@
+import type { PublicationSyncProgress } from "~/lib/auth/publication-sync";
 import { MemoryPublisher } from "@orpc/experimental-publisher/memory";
 import type { BookmarkPublishedChunk } from "~/server/mixed-content/events";
 import type { RssPublishedChunk } from "~/lib/rss";
@@ -6,6 +7,7 @@ import { env } from "~/env";
 import { logError, logMessage } from "~/server/logger";
 
 type DataPublishedChunk =
+  | { source: "publication-sync"; chunk: PublicationSyncProgress }
   | { source: "bookmark"; chunk: BookmarkPublishedChunk }
   | { source: "rss"; chunk: RssPublishedChunk };
 

@@ -1,3 +1,5 @@
+import { persistAtprotoSyncSettings } from "./sync-settings";
+import { atprotoSubscriptionMirror } from "~/server/db/schema";
 import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getAtprotoClient } from "./client";
 import {
@@ -26,7 +28,6 @@ import {
   atprotoSyncPreferencesSchema,
   DEFAULT_ATPROTO_SYNC_SETTINGS,
   syncMethodNeedsWriteScope,
-  syncSettingsFromPreferences,
 } from "~/lib/auth/atproto-sync-settings";
 import { parseExtensionConnectCallback } from "~/lib/extension-auth";
 
@@ -519,15 +520,24 @@ export async function unlinkAtprotoConnection(userId: string): Promise<void> {
   await revokeAtprotoConnection(row.did);
   // The row survives to be rebound later, so the sync settings go back to
   // the None default here rather than leaking into the next link.
-  await db
-    .update(atprotoConnections)
-    .set({
-      userId: null,
-      ...DEFAULT_ATPROTO_SYNC_SETTINGS,
-      syncSettingsVersion: sql`${atprotoConnections.syncSettingsVersion} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(eq(atprotoConnections.id, row.id));
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(atprotoSubscriptionMirror)
+      .where(eq(atprotoSubscriptionMirror.connectionId, row.id));
+    await tx
+      .update(atprotoConnections)
+      .set({
+        userId: null,
+        subscriptionRepoRev: null,
+        subscriptionSyncCursor: null,
+        subscriptionSyncToken: null,
+        subscriptionSyncExpiresAt: null,
+        ...DEFAULT_ATPROTO_SYNC_SETTINGS,
+        syncSettingsVersion: sql`${atprotoConnections.syncSettingsVersion} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(atprotoConnections.id, row.id));
+  });
 }
 
 /**
@@ -678,32 +688,11 @@ export async function completeAtprotoUpgrade(input: {
  * the user and the DID so a callback can never write another user's row.
  * Returns whether a row matched.
  */
-export async function saveAtprotoSyncSettings(
-  input: {
-    userId: string;
-    did: string;
-    preferences: AtprotoSyncPreferences;
-    expectedVersion?: number;
-  },
+export function saveAtprotoSyncSettings(
+  input: Parameters<typeof persistAtprotoSyncSettings>[0],
   database: Pick<typeof db, "update"> = db,
-): Promise<boolean> {
-  const result = await database
-    .update(atprotoConnections)
-    .set({
-      ...syncSettingsFromPreferences(input.preferences),
-      syncSettingsVersion: sql`${atprotoConnections.syncSettingsVersion} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(atprotoConnections.userId, input.userId),
-        eq(atprotoConnections.did, input.did),
-        input.expectedVersion === undefined
-          ? undefined
-          : eq(atprotoConnections.syncSettingsVersion, input.expectedVersion),
-      ),
-    );
-  return result.rowsAffected > 0;
+) {
+  return persistAtprotoSyncSettings(input, database);
 }
 
 /**

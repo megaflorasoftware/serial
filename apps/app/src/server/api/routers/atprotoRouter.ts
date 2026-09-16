@@ -1,3 +1,5 @@
+import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
+import { publisher } from "~/server/api/publisher";
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -382,3 +384,26 @@ export const unlinkAccount = protectedProcedure.handler(async ({ context }) => {
 
   return { success: true };
 });
+
+/** Settings saves, consent returns, and Sync now share this client-initiated operation. */
+export const syncSubscriptions = protectedProcedure
+  .input(z.object({ runId: z.uuid() }))
+  .handler(async ({ context, input }) => {
+    const connection = await context.db.query.atprotoConnections.findFirst({
+      where: eq(atprotoConnections.userId, context.user.id),
+    });
+    if (!isConnectionActive(connection))
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: "Reconnect your Atmosphere account before syncing.",
+      });
+    return syncPublicationSubscriptions({
+      database: context.db,
+      userId: context.user.id,
+      runId: input.runId,
+      onProgress: (chunk) =>
+        publisher.publish(`user:${context.user.id}`, {
+          source: "publication-sync",
+          chunk,
+        }),
+    });
+  });

@@ -445,6 +445,13 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         switch (source) {
           case "rss": {
             switch (chunk.type) {
+              case "refresh-progress":
+                loadingActor.send({
+                  type: "REFRESH_PROGRESS",
+                  total: chunk.total,
+                  completed: chunk.completed,
+                });
+                break;
               case "refresh-start":
                 set({ feedStatusDict: {} });
                 updateRefreshCooldown(new Date(chunk.nextRefreshAt));

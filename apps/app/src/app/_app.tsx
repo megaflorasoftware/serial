@@ -1,3 +1,4 @@
+import { requestPublicationSync } from "~/lib/data/publication-sync";
 import "~/styles/globals.css";
 
 import {
@@ -243,6 +244,7 @@ function useAtprotoReturn(
 
     if (result === "success") {
       if (outcome.successMessage) toast.success(outcome.successMessage);
+      if (param === ATPROTO_CONSENT_RESULT_PARAM) void requestPublicationSync();
     } else {
       // Own-property lookup only: `result` is an unvalidated query param, so
       // a plain `map[result]` would resolve inherited keys ("toString") to a

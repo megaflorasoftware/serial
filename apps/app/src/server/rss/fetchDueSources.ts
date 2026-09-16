@@ -1,3 +1,5 @@
+import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
+import type { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import { resolveAutomaticRssOwner } from "./automaticOwnership";
 import { countDueFeeds, getDueFeedPage } from "./dueFeeds";
 import { refreshUserFeeds } from "./refreshUserFeeds";
@@ -30,6 +32,7 @@ type FetchDueSourcesDependencies = {
     channel?: string;
   }) => Promise<RefreshStats>;
   now?: () => Date;
+  syncSubscriptions?: typeof syncPublicationSubscriptions;
 };
 
 export async function fetchDueSources(input: {
@@ -58,16 +61,29 @@ export async function fetchDueSources(input: {
     return { status: "cooldown", nextRefreshAt: eligibility.nextRefreshAt };
   }
 
+  const syncStarted = await syncBeforeFeedRefresh({
+    database: input.database,
+    userId: input.userId,
+    channel: input.channel,
+    nextRefreshAt: eligibility.nextRefreshAt,
+    publish: input.publish,
+    sync: dependencies.syncSubscriptions,
+  });
   const now = dependencies.now?.() ?? new Date();
   const countDue = dependencies.countDue ?? countDueFeeds;
   const getDuePage = dependencies.getDuePage ?? getDueFeedPage;
   const refreshFeedPage = dependencies.refreshFeedPage ?? refreshUserFeeds;
   const totalFeeds = await countDue(input.database, input.userId, now);
-  await input.publish(input.channel, {
-    type: "refresh-start",
-    totalFeeds,
-    nextRefreshAt: eligibility.nextRefreshAt,
-  });
+  await input.publish(
+    input.channel,
+    syncStarted
+      ? { type: "refresh-progress", total: totalFeeds, completed: 0 }
+      : {
+          type: "refresh-start",
+          totalFeeds,
+          nextRefreshAt: eligibility.nextRefreshAt,
+        },
+  );
 
   const stats = emptyRefreshStats();
   try {

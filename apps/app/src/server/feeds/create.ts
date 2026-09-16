@@ -7,11 +7,7 @@ import {
 } from "~/server/api/routers/feed-router/utils";
 import { feedCategories, feedsSchema, viewFeeds } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
-import {
-  attachMissingFeedOrigins,
-  findFeedForOrigins,
-  insertFeedWithOrigins,
-} from "~/server/feeds/origins";
+import { createOrReuseFeed } from "~/server/feeds/origins";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
 
 export async function createFeedsForUser(input: {
@@ -61,38 +57,20 @@ export async function createFeedsForUser(input: {
     for (const newFeed of newFeedDetails) {
       // Each lookup must see earlier inserts, and reused Feeds must not consume slots.
       // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      const existingFeed = await findFeedForOrigins(
-        transaction,
-        input.userId,
-        newFeed.origins,
-      );
-      if (existingFeed) {
-        const hasMissing = newFeed.origins.some(
-          (origin) =>
-            !existingFeed.origins.some(
-              (existing) => existing.kind === origin.kind,
-            ),
-        );
-        if (hasMissing || input.returnExisting) {
-          results.push({
-            feed: await attachMissingFeedOrigins(
-              transaction,
-              existingFeed,
-              newFeed.origins,
-            ),
-            created: false as const,
-          });
-          continue;
-        }
-        results.push({ error: "Feed already exists" });
-        continue;
-      }
-
-      const insertedFeed = await insertFeedWithOrigins(transaction, {
+      const result = await createOrReuseFeed(transaction, {
         userId: input.userId,
         details: newFeed,
         isActive: newFeedCount < remainingSlots,
       });
+      if (!result.created) {
+        results.push(
+          result.attached || input.returnExisting
+            ? result
+            : { error: "Feed already exists" },
+        );
+        continue;
+      }
+      const insertedFeed = result.feed;
       if (input.categoryIds.length > 0) {
         await transaction.insert(feedCategories).values(
           input.categoryIds.map((categoryId) => ({

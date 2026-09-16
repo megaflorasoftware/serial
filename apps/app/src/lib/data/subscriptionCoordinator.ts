@@ -1,3 +1,4 @@
+import { loadingActor } from "./loading-machine";
 import { bookmarksStore } from "./bookmarks/store";
 import { feedCategoriesStore } from "./feed-categories/store";
 import { feedItemsStore } from "./store";
@@ -59,6 +60,13 @@ export function applyPublishedChunks(
   payloads: PublishedChunk[],
   options: { refreshNavigation?: boolean } = {},
 ) {
+  for (const payload of payloads) {
+    if (payload.source === "publication-sync")
+      loadingActor.send({
+        type: "PUBLICATION_SYNC_PROGRESS",
+        ...payload.chunk,
+      });
+  }
   const affectedScopes = new Map<string, LoadedMixedScope>();
   let bookmarkProjectionChanged = false;
   let navigationSnapshotChanged = payloads.some(
@@ -66,10 +74,7 @@ export function applyPublishedChunks(
       "refreshNavigationSnapshot" in chunk &&
       chunk.refreshNavigationSnapshot === true,
   );
-  const feedPayloads = payloads.filter(
-    (payload) =>
-      payload.source !== "bookmark" && payload.source !== "invalidation",
-  );
+  const feedPayloads = payloads.filter((payload) => payload.source === "rss");
   if (feedPayloads.length > 0) {
     const incomingItemIds = incomingFeedItemIds(feedPayloads);
     const previousFeedItems = Object.fromEntries(

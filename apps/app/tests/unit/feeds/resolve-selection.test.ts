@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
-import { resolveFeedSelection } from "~/server/feeds/resolveSelection";
+import {
+  resolveFeedSelection,
+  resolvePublicationFeed,
+} from "~/server/feeds/resolveSelection";
 import { discoverFeeds } from "~/server/feeds/discovery";
 import { resolvePublication } from "~/server/feeds/publications";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
@@ -144,4 +147,16 @@ describe("resolving a selected publication", () => {
       origins: [{ kind: "atproto", locator: publicationUri }],
     });
   });
+});
+
+it("resolves a subscription URI once before discovering the publication's RSS origin", async () => {
+  const [details] = await resolvePublicationFeed("user", publicationUri);
+  expect(details?.origins).toEqual([
+    expect.objectContaining({ kind: "atproto", locator: publicationUri }),
+  ]);
+  expect(resolvePublication).toHaveBeenCalledExactlyOnceWith(publicationUri);
+  expect(discoverFeeds).toHaveBeenCalledExactlyOnceWith(
+    "user",
+    publication.siteUrl,
+  );
 });

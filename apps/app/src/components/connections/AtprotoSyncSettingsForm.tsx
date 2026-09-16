@@ -1,3 +1,4 @@
+import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -48,6 +49,7 @@ export function useAtprotoSyncSettingsSave() {
           queryKey: orpc.atproto.getConnectionStatus.queryKey(),
         });
         toast.success("Settings saved");
+        await requestPublicationSync();
       },
       onError: (error) => {
         toast.error(error.message || "Failed to save sync settings");

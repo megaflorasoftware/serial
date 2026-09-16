@@ -1,3 +1,5 @@
+import { requestPublicationSync } from "~/lib/data/publication-sync";
+import { useLoadingMode } from "~/lib/data/loading-machine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -132,6 +134,9 @@ export function AtprotoConnectionPane() {
   const unlinkMutation = useAtprotoUnlink();
   const reconnectMutation = useAtprotoReconnect();
   const syncSettingsSave = useAtprotoSyncSettingsSave();
+  const loading = useLoadingMode();
+  const syncMutation = useMutation({ mutationFn: requestPublicationSync });
+  const syncBusy = syncMutation.isPending || loading.mode === "importing";
   // Either round trip leaves the page; neither action may start while the
   // other is under way.
   const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
@@ -158,7 +163,7 @@ export function AtprotoConnectionPane() {
     <div className="grid gap-6">
       <ConnectedAccountRow
         label={status.handle ?? "Connected"}
-        disabled={accountBusy || syncSettingsSave.busy}
+        disabled={accountBusy || syncSettingsSave.busy || syncBusy}
         disconnecting={unlinkMutation.isPending}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
@@ -172,10 +177,29 @@ export function AtprotoConnectionPane() {
         key={JSON.stringify(status.syncPreferences)}
         savedPreferences={status.syncPreferences}
         hasWriteScope={status.hasWriteScope}
-        disabled={status.needsReconnect || accountBusy}
+        disabled={status.needsReconnect || accountBusy || syncBusy}
         saving={syncSettingsSave.busy}
         onSave={syncSettingsSave.save}
       />
+      <Button
+        variant="outline"
+        className="w-fit"
+        disabled={
+          status.needsReconnect ||
+          accountBusy ||
+          syncSettingsSave.busy ||
+          syncBusy ||
+          status.syncPreferences.method === "none"
+        }
+        onClick={() => syncMutation.mutate()}
+      >
+        {syncBusy ? (
+          <Loader2Icon className="animate-spin" size={16} />
+        ) : (
+          <RefreshCwIcon size={16} />
+        )}
+        <span className="ml-1.5">Sync now</span>
+      </Button>
     </div>
   );
 }

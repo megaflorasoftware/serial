@@ -52,8 +52,6 @@ export async function resolveFeedSelection(
     return resolveFeedSelection(userId, url, row);
   }
   const selected = discoveredFeedSchema.parse(selection);
-  let rss = selected.origins?.find((origin) => origin.kind === "rss");
-  let publicationDiscovery: DiscoveredFeed[] | undefined;
   const atmosphere = selected.origins?.find(
     (origin) => origin.kind === "atproto",
   );
@@ -62,6 +60,26 @@ export async function resolveFeedSelection(
     : null;
   if (atmosphere && !publication)
     throw new Error("Unable to read the selected publication");
+  return resolveSelectedFeed(userId, selected, publication);
+}
+
+/** Subscription imports resolve their publication once, then use the same discovery and validation as Add. */
+export async function resolvePublicationFeed(
+  userId: string,
+  publicationUri: string,
+) {
+  const publication = await resolvePublication(publicationUri);
+  if (!publication) throw new Error("Unable to read the selected publication");
+  return resolveSelectedFeed(userId, publicationRow(publication), publication);
+}
+
+async function resolveSelectedFeed(
+  userId: string,
+  selected: DiscoveredFeed,
+  publication: Awaited<ReturnType<typeof resolvePublication>>,
+) {
+  let rss = selected.origins?.find((origin) => origin.kind === "rss");
+  let publicationDiscovery: DiscoveredFeed[] | undefined;
   if (publication && !rss) {
     publicationDiscovery = await discoverFeeds(userId, publication.siteUrl);
     const matching = publicationDiscovery.find((row) =>

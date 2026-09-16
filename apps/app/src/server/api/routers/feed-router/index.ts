@@ -1,3 +1,4 @@
+import { deleteUserFeeds } from "~/server/feeds/delete";
 import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
 import { DISCOVERY_QUERY_LIMIT } from "@serial/feed-discovery";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
@@ -256,32 +257,9 @@ export const createFromSubscriptionImport = protectedProcedure
 const deleteFeed = protectedProcedure
   .input(z.number())
   .handler(async ({ context, input }) => {
-    await context.db.transaction(async (tx) => {
-      const deletedFeeds = await tx
-        .delete(feeds)
-        .where(and(eq(feeds.id, input), eq(feeds.userId, context.user.id)))
-        .returning({ id: feeds.id });
-
-      if (deletedFeeds.length === 0) return;
-
-      const userViews = await tx
-        .select({ id: views.id })
-        .from(views)
-        .where(eq(views.userId, context.user.id));
-
-      if (userViews.length > 0) {
-        await tx.delete(viewSections).where(
-          and(
-            eq(viewSections.itemType, VIEW_LAYOUT_ITEM_TYPE.FEED),
-            eq(viewSections.itemId, input),
-            inArray(
-              viewSections.viewId,
-              userViews.map((view) => view.id),
-            ),
-          ),
-        );
-      }
-    });
+    await context.db.transaction((tx) =>
+      deleteUserFeeds(tx, context.user.id, [input]),
+    );
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),
@@ -416,40 +394,9 @@ export const bulkDelete = protectedProcedure
   .handler(async ({ context, input }) => {
     if (input.feedIds.length === 0) return;
 
-    await context.db.transaction(async (tx) => {
-      const deletedFeeds = await tx
-        .delete(feeds)
-        .where(
-          and(
-            inArray(feeds.id, input.feedIds),
-            eq(feeds.userId, context.user.id),
-          ),
-        )
-        .returning({ id: feeds.id });
-
-      if (deletedFeeds.length === 0) return;
-
-      const userViews = await tx
-        .select({ id: views.id })
-        .from(views)
-        .where(eq(views.userId, context.user.id));
-
-      if (userViews.length > 0) {
-        await tx.delete(viewSections).where(
-          and(
-            eq(viewSections.itemType, VIEW_LAYOUT_ITEM_TYPE.FEED),
-            inArray(
-              viewSections.itemId,
-              deletedFeeds.map((feed) => feed.id),
-            ),
-            inArray(
-              viewSections.viewId,
-              userViews.map((view) => view.id),
-            ),
-          ),
-        );
-      }
-    });
+    await context.db.transaction((tx) =>
+      deleteUserFeeds(tx, context.user.id, input.feedIds),
+    );
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),
