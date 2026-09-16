@@ -46,7 +46,7 @@ const INSTRUCTIONS: Record<
   },
   "find-feed": {
     selector: '[data-onboarding="find-feed"]',
-    text: "Paste www.serial.tube and add Serial Releases.",
+    text: "Enter a website address, then choose a Feed to follow.",
   },
   "save-feed": {
     selector: '[data-onboarding="save-feed"]',
@@ -74,7 +74,7 @@ const INSTRUCTIONS: Record<
   "choose-feed": {
     highlightDialog: true,
     selector: 'button[aria-label="Add feeds"]',
-    text: "Click + and select Serial Releases to include it in this View.",
+    text: "Click + and select your Feed to include it in this View.",
   },
   "open-display": {
     highlightDialog: true,
@@ -387,12 +387,14 @@ function AccountOnboarding({ userId }: { userId: string }) {
           {state.step === "add-feed" && (
             <>
               <p className="text-muted-foreground">
-                Let&apos;s follow Serial Releases. Copy the website address,
-                then paste it into Add Feed.
+                Follow a website you enjoy to see its new posts in Serial.
+              </p>
+              <p className="text-muted-foreground">
+                Not sure where to start? Try following Serial.
               </p>
               <div className="flex gap-2">
                 <Input
-                  aria-label="Feed website"
+                  aria-label="Suggested website"
                   value="www.serial.tube"
                   readOnly
                   className="flex-1"
@@ -405,7 +407,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText("www.serial.tube");
-                      guideOnboarding("open-feed-menu");
+                      toast.success("Website address copied.");
                     } catch {
                       toast.error(
                         "Couldn't copy the address. Please try again.",
@@ -416,6 +418,9 @@ function AccountOnboarding({ userId }: { userId: string }) {
                   <CopyIcon size={16} />
                 </Button>
               </div>
+              <Button onClick={() => guideOnboarding("open-feed-menu")}>
+                Next
+              </Button>
             </>
           )}
           {state.step === "atmosphere-sync-setup" && <SyncSlide />}

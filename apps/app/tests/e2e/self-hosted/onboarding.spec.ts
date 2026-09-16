@@ -30,7 +30,7 @@ async function start(page: Page, step = "introduction") {
     });
     await db.execute({
       sql: "UPDATE serial_feed SET name = ? WHERE id = (SELECT id FROM serial_feed WHERE user_id = (SELECT id FROM serial_user WHERE email = ?) LIMIT 1)",
-      args: ["Serial Releases", email],
+      args: ["Weekend reading", email],
     });
   } finally {
     db.close();
@@ -180,7 +180,7 @@ for (const mobile of [false, true]) {
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     await page.getByRole("button", { name: "Add feeds", exact: true }).click();
     await page
-      .getByRole("option", { name: "Serial Releases", exact: true })
+      .getByRole("option", { name: "Weekend reading", exact: true })
       .click();
     await expect(page.getByPlaceholder("Search feeds...")).toHaveCount(0);
     await page.getByRole("tab", { name: "Display", exact: true }).click();
@@ -219,7 +219,7 @@ for (const mobile of [false, true]) {
 }
 
 for (const mobile of [false, true]) {
-  test(`default colors and manual Feed menu entry ${mobile ? "mobile" : "desktop"}`, async ({
+  test(`default colors, optional URL copying, and manual Feed menu entry ${mobile ? "mobile" : "desktop"}`, async ({
     page,
     context,
   }) => {
@@ -237,11 +237,11 @@ for (const mobile of [false, true]) {
       dark: [60, 10, 15],
     });
     await expect(
-      page.getByRole("textbox", { name: "Feed website" }),
+      page.getByRole("textbox", { name: "Suggested website" }),
     ).toHaveValue("www.serial.tube");
     await page.reload();
     await expect(
-      page.getByRole("textbox", { name: "Feed website" }),
+      page.getByRole("textbox", { name: "Suggested website" }),
     ).toBeVisible();
     expect(
       await page.evaluate(() => {
@@ -257,10 +257,19 @@ for (const mobile of [false, true]) {
       [60, 10, 15],
     ]);
     await page.getByRole("button", { name: "Copy website address" }).click();
-    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
+    await expect(
+      page.getByText("Website address copied.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Suggested website" }),
+    ).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       "www.serial.tube",
     );
+    // Next also works on a fresh slide without copying the suggestion.
+    await page.reload();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
     await page
       .locator(
         mobile
@@ -273,7 +282,10 @@ for (const mobile of [false, true]) {
       .locator('[data-onboarding="add-feed"]')
       .filter({ visible: true })
       .click();
-    await expect(guide(page)).toContainText("Paste www.serial.tube");
+    await expect(guide(page)).toContainText("Enter a website address");
+    const search = page.locator('[data-onboarding="find-feed"] input');
+    await search.fill("https://example.com/my-favorite-site");
+    await expect(search).toHaveValue("https://example.com/my-favorite-site");
   });
 }
 
