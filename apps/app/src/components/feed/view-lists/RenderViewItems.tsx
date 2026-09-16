@@ -396,8 +396,10 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
     currentView,
     filteredItemIds,
   );
-  const { sections: fullComputedSections, toggleRead } =
-    useSoftReads(computedSections);
+  const { sections: fullComputedSections, toggleRead } = useSoftReads(
+    computedSections,
+    currentView,
+  );
   const filteredFeedItemsOrder = useMemo(
     () => fullComputedSections.flatMap((section) => section.items),
     [fullComputedSections],

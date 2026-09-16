@@ -21,6 +21,74 @@ test.describe("Saved soft reads", () => {
     if (email) await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
   });
 
+  for (const scope of ["Tag", "View"] as const) {
+    test(`removes a retained bookmark when its ${scope} assignment is removed`, async ({
+      page,
+    }) => {
+      const fixture = await seedMixedViewSectionCase(
+        SELF_HOSTED_TURSO_PORT,
+        SELF_HOSTED_APP_PORT,
+        {
+          feedSectionFeedItem: false,
+          tagSectionFeedItem: false,
+          tagSectionBookmark: scope === "Tag",
+          uncategorizedFeedItem: false,
+          uncategorizedBookmark: scope === "View",
+        },
+      );
+      email = fixture.email;
+      await signIn({ page, email, password: fixture.password });
+      await page.getByRole("tab", { name: /^Saved/ }).click();
+      if (scope === "View") {
+        await page
+          .getByRole("radio", { name: fixture.viewName, exact: true })
+          .click();
+      } else {
+        await page.getByRole("button", { name: "Menu", exact: true }).click();
+        await page
+          .locator('[data-sidebar="group"]')
+          .filter({
+            has: page.locator('[data-sidebar="group-label"]', {
+              hasText: "Tags",
+            }),
+          })
+          .locator('[data-sidebar="menu-button"]')
+          .filter({ hasText: fixture.tagName })
+          .click();
+      }
+      const id =
+        scope === "Tag"
+          ? fixture.items.tagSectionBookmark
+          : fixture.items.uncategorizedBookmark;
+      const row = page.locator(`article[data-item-id="${id}"]`);
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      await row.hover();
+      await row.getByRole("button", { name: /^Archive/ }).click();
+      await expect
+        .poll(
+          async () =>
+            (await getBookmarkState(SELF_HOSTED_TURSO_PORT, id))?.isRead,
+        )
+        .toBe(true);
+      await expect(row).toHaveCSS("opacity", "0.75");
+      await row.hover();
+      await row.getByRole("button", { name: "Edit Bookmark" }).click();
+      const dialog = page.getByRole("dialog");
+      const assignment = dialog.getByRole("button", {
+        name: scope === "Tag" ? fixture.tagName : fixture.viewName,
+        exact: true,
+      });
+      await expect(assignment).toHaveAttribute("aria-pressed", "true");
+      const update = page.waitForResponse((response) =>
+        response.url().includes(`/bookmark/set${scope}`),
+      );
+      await assignment.click();
+      expect((await update).ok()).toBe(true);
+      await expect(assignment).toHaveAttribute("aria-pressed", "false");
+      await expect(row).toHaveCount(0);
+    });
+  }
+
   for (const scope of ["View", "Tag", "Feed"] as const) {
     test(`clears retention when changing ${scope} scope and returning`, async ({
       page,

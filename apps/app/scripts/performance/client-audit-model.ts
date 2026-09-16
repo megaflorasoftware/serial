@@ -25,7 +25,11 @@ import {
   selectPersistedPages,
 } from "~/lib/data/page-retention";
 import { projectLocalMixedContentOrder } from "~/lib/data/mixed-content/bookmarkProjection";
-import { retainSoftReadPositions } from "~/components/feed/view-lists/softReads";
+import {
+  getEligibleSoftReadIds,
+  retainEligibleSoftReadPositions,
+  retainSoftReadPositions,
+} from "~/components/feed/view-lists/softReads";
 
 const PAGE_SIZE = 30;
 const CONTENT_STATUSES: readonly ContentStatusFilter[] = CONTENT_STATUS_FILTERS;
@@ -627,19 +631,44 @@ export function runClientAuditProfile(
         : [],
     ),
   );
+  const softReadView = {
+    ...makeView(0),
+    feedIds: [...new Set(fixture.feedItems.map((item) => item.feedId))],
+    categoryIds: fixture.views.map((view) => view.id),
+  };
+  const softReadViews = fixture.views.map((view) =>
+    view.id === softReadView.id ? softReadView : view,
+  );
   const softReadProjection = measure(() => {
+    const eligibleIds = getEligibleSoftReadIds({
+      positions: softReadPositions,
+      bookmarksById: bookmarksStore.getState().snapshot(),
+      feedItemsById: feedItemsStore.getState().feedItemsDict,
+      feedCategories: [],
+      views: softReadViews,
+      currentView: softReadView,
+      categoryFilter: -1,
+      feedFilter: -1,
+      saveStatus: "saved",
+    });
+    const section = {
+      name: "Saved",
+      layout: "list" as const,
+      startIndex: 0,
+      isUncategorized: true,
+      placement: null,
+    };
+    const activePositions = retainEligibleSoftReadPositions(softReadPositions, [
+      { ...section, items: eligibleIds },
+    ]);
     retainSoftReadPositions(
       [
         {
-          name: "Saved",
+          ...section,
           items: savedIds.filter((id) => !softReadPositions.has(id)),
-          layout: "list",
-          startIndex: 0,
-          isUncategorized: true,
-          placement: null,
         },
       ],
-      softReadPositions,
+      activePositions,
     );
     return 0;
   });

@@ -1,35 +1,77 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAtomValue } from "jotai";
-import { retainSoftReadPositions, softReadSectionKey } from "./softReads";
+import {
+  getEligibleSoftReadIds,
+  retainEligibleSoftReadPositions,
+  retainSoftReadPositions,
+  softReadSectionKey,
+} from "./softReads";
 import type { SoftReadPosition } from "./softReads";
+import { useViewSections } from "./useViewSections";
 import type { ViewSection } from "./useViewSections";
-import { contentStatusFilterAtom } from "~/lib/data/atoms";
+import type { ApplicationView } from "~/server/db/schema";
+import {
+  categoryFilterAtom,
+  contentStatusFilterAtom,
+  feedFilterAtom,
+} from "~/lib/data/atoms";
 import { bookmarksStore } from "~/lib/data/bookmarks/store";
+import { useFeedCategories } from "~/lib/data/feed-categories";
 import { feedItemsStore, useFeedItemsListProjection } from "~/lib/data/store";
+import { useViews } from "~/lib/data/views";
 import {
   clearRetainedEntityPins,
   setRetainedEntityPins,
 } from "~/lib/data/page-retention";
 
-export function useSoftReads(sections: ViewSection[]) {
-  const { saveStatus } = useAtomValue(contentStatusFilterAtom);
+export function useSoftReads(
+  sections: ViewSection[],
+  currentView: ApplicationView | null,
+) {
+  const contentStatusFilter = useAtomValue(contentStatusFilterAtom);
+  const { saveStatus } = contentStatusFilter;
+  const categoryFilter = useAtomValue(categoryFilterAtom);
+  const feedFilter = useAtomValue(feedFilterAtom);
   const owner = useId();
   const [positions, setPositions] = useState(
     new Map<string, SoftReadPosition>(),
   );
   const feedItems = useFeedItemsListProjection();
+  const { feedCategories } = useFeedCategories();
+  const { views } = useViews();
   const bookmarkRevision = bookmarksStore.useRevision();
-  const activePositions = useMemo(() => {
+  const eligibleIds = useMemo(() => {
     void bookmarkRevision;
-    return new Map(
-      [...positions].filter(([id]) => {
-        const bookmark = bookmarksStore.getState().getBookmark(id);
-        return bookmark
-          ? bookmark.isSaved
-          : feedItems.getItems()[id]?.isWatchLater === true;
-      }),
-    );
-  }, [positions, feedItems, bookmarkRevision]);
+    return getEligibleSoftReadIds({
+      positions,
+      bookmarksById: bookmarksStore.getState().snapshot(),
+      feedItemsById: feedItems.getItems(),
+      feedCategories,
+      views,
+      currentView,
+      categoryFilter,
+      feedFilter,
+      saveStatus,
+    });
+  }, [
+    bookmarkRevision,
+    categoryFilter,
+    currentView,
+    feedFilter,
+    feedCategories,
+    feedItems,
+    positions,
+    saveStatus,
+    views,
+  ]);
+  const { computedSections: eligibleSections } = useViewSections(
+    currentView,
+    eligibleIds,
+  );
+  const activePositions = useMemo(
+    () => retainEligibleSoftReadPositions(positions, eligibleSections),
+    [positions, eligibleSections],
+  );
   const retainedSections = useMemo(
     () => retainSoftReadPositions(sections, activePositions),
     [sections, activePositions],

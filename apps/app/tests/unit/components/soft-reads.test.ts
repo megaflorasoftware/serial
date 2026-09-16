@@ -5,7 +5,13 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewSection } from "~/components/feed/view-lists/useViewSections";
 import { useSoftReads } from "~/components/feed/view-lists/useSoftReads";
-import { retainSoftReadPositions } from "~/components/feed/view-lists/softReads";
+import {
+  getEligibleSoftReadIds,
+  retainEligibleSoftReadPositions,
+  retainSoftReadPositions,
+} from "~/components/feed/view-lists/softReads";
+import type { ApplicationBookmark } from "~/server/mixed-content/projection";
+import type { ApplicationFeedItem, ApplicationView } from "~/server/db/schema";
 import {
   clearRetainedEntityPins,
   getRetainedEntityPins,
@@ -14,29 +20,77 @@ import {
 const state = vi.hoisted(
   (): {
     saveStatus: string;
-    bookmarks: Record<string, { isSaved: boolean }>;
-    feeds: Record<string, { isWatchLater: boolean }>;
+    bookmarks: Record<string, ApplicationBookmark>;
+    feeds: Record<string, ApplicationFeedItem>;
     revision: number;
+    categoryFilter: number;
+    feedFilter: number;
   } => ({
     saveStatus: "saved",
     bookmarks: {},
     feeds: {},
     revision: 0,
+    categoryFilter: -1,
+    feedFilter: -1,
   }),
 );
-vi.mock("jotai", () => ({
-  useAtomValue: () => ({ saveStatus: state.saveStatus }),
+const currentView = vi.hoisted(() => ({
+  id: 1,
+  userId: "user",
+  name: "Saved",
+  categoryIds: [10],
+  feedIds: [1],
+  contentFilter: 7,
+  daysWindow: 0,
+  readStatus: 0,
+  layout: "list",
+  placement: 0,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+  isDefault: false,
+  viewSections: [],
+})) as ApplicationView;
+const atoms = vi.hoisted(() => ({
+  contentStatus: {},
+  category: {},
+  feed: {},
 }));
-vi.mock("~/lib/data/atoms", () => ({ contentStatusFilterAtom: {} }));
+vi.mock("jotai", () => ({
+  useAtomValue: (atom: object) =>
+    atom === atoms.contentStatus
+      ? { saveStatus: state.saveStatus, archiveStatus: "unread" }
+      : atom === atoms.category
+        ? state.categoryFilter
+        : state.feedFilter,
+}));
+vi.mock("~/lib/data/atoms", () => ({
+  contentStatusFilterAtom: atoms.contentStatus,
+  categoryFilterAtom: atoms.category,
+  feedFilterAtom: atoms.feed,
+}));
 vi.mock("~/lib/data/bookmarks/store", () => ({
   bookmarksStore: {
     useRevision: () => state.revision,
-    getState: () => ({ getBookmark: (id: string) => state.bookmarks[id] }),
+    getState: () => ({
+      getBookmark: (id: string) => state.bookmarks[id],
+      snapshot: () => state.bookmarks,
+    }),
   },
 }));
 vi.mock("~/lib/data/store", () => ({
   useFeedItemsListProjection: () => ({ getItems: () => state.feeds }),
   feedItemsStore: { getState: () => ({ feedItemsDict: state.feeds }) },
+}));
+vi.mock("~/lib/data/feed-categories", () => ({
+  useFeedCategories: () => ({ feedCategories: [] }),
+}));
+vi.mock("~/lib/data/views", () => ({
+  useViews: () => ({ views: [currentView] }),
+}));
+vi.mock("~/components/feed/view-lists/useViewSections", () => ({
+  useViewSections: (_view: ApplicationView | null, ids: string[]) => ({
+    computedSections: [section(ids)],
+  }),
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -62,7 +116,7 @@ function mount() {
   roots.push(root);
   let current: ReturnType<typeof useSoftReads>;
   function List({ sections }: { sections: ViewSection[] }) {
-    current = useSoftReads(sections);
+    current = useSoftReads(sections, currentView);
     return null;
   }
   return {
@@ -83,9 +137,32 @@ function mount() {
 
 beforeEach(() => {
   state.saveStatus = "saved";
-  state.bookmarks = { bookmark: { isSaved: true } };
-  state.feeds = { feed: { isWatchLater: true } };
+  state.bookmarks = {
+    bookmark: {
+      id: "bookmark",
+      isSaved: true,
+      isRead: false,
+      viewIds: [currentView.id],
+      tagIds: [],
+      contentType: "article",
+      createdAt: new Date(),
+    } as unknown as ApplicationBookmark,
+  };
+  state.feeds = {
+    feed: {
+      id: "feed",
+      feedId: 1,
+      isWatchLater: true,
+      isWatched: false,
+      platform: "website",
+      contentType: "article",
+      orientation: null,
+      postedAt: new Date(),
+    } as unknown as ApplicationFeedItem,
+  };
   state.revision++;
+  state.categoryFilter = -1;
+  state.feedFilter = -1;
 });
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -162,9 +239,20 @@ describe("Saved soft reads for a view visit", () => {
       list.render([]);
       expect(list.items).toEqual(["feed", "bookmark"]);
       state.bookmarks =
-        action === "delete" ? {} : { bookmark: { isSaved: false } };
+        action === "delete"
+          ? {}
+          : {
+              bookmark: {
+                ...state.bookmarks.bookmark!,
+                isSaved: false,
+              },
+            };
       state.feeds =
-        action === "delete" ? {} : { feed: { isWatchLater: false } };
+        action === "delete"
+          ? {}
+          : {
+              feed: { ...state.feeds.feed!, isWatchLater: false },
+            };
       state.revision++;
       list.render([]);
       expect(list.items).toEqual([]);
@@ -172,6 +260,30 @@ describe("Saved soft reads for a view visit", () => {
       expect(getRetainedEntityPins("feed-item").size).toBe(0);
     },
   );
+
+  it("releases a retained bookmark that leaves the selected Tag", () => {
+    state.categoryFilter = 10;
+    state.bookmarks.bookmark = {
+      ...state.bookmarks.bookmark!,
+      tagIds: [10],
+    };
+    const list = mount();
+    list.render(["bookmark"]);
+    list.toggle("bookmark");
+    list.render([]);
+    expect(list.items).toEqual(["bookmark"]);
+    expect(getRetainedEntityPins("bookmark").has("bookmark")).toBe(true);
+
+    state.bookmarks.bookmark = {
+      ...state.bookmarks.bookmark,
+      tagIds: [],
+    };
+    state.revision++;
+    list.render([]);
+
+    expect(list.items).toEqual([]);
+    expect(getRetainedEntityPins("bookmark").has("bookmark")).toBe(false);
+  });
 
   it("retains positions in multiple sections while accepting new pages", () => {
     const sections = [section(["a", "c"], 1), section(["e", "new"], 2)];
@@ -187,5 +299,94 @@ describe("Saved soft reads for a view visit", () => {
       ["d", "e", "new"],
     ]);
     expect(result.map((entry) => entry.startIndex)).toEqual([0, 3]);
+  });
+
+  it("drops bookmarks that leave the selected Tag or View", () => {
+    const bookmark = {
+      ...state.bookmarks.bookmark!,
+      tagIds: [10],
+      viewIds: [currentView.id],
+    };
+    const positions = new Map([
+      ["bookmark", { sectionKey: "uncategorized", index: 0 }],
+    ]);
+    const input = {
+      positions,
+      bookmarksById: { bookmark },
+      feedItemsById: {},
+      feedCategories: [],
+      views: [currentView],
+      currentView,
+      feedFilter: -1,
+      saveStatus: "saved" as const,
+    };
+
+    expect(getEligibleSoftReadIds({ ...input, categoryFilter: 10 })).toEqual([
+      "bookmark",
+    ]);
+    expect(
+      getEligibleSoftReadIds({
+        ...input,
+        categoryFilter: 10,
+        bookmarksById: { bookmark: { ...bookmark, tagIds: [] } },
+      }),
+    ).toEqual([]);
+    expect(
+      getEligibleSoftReadIds({
+        ...input,
+        categoryFilter: -1,
+        bookmarksById: { bookmark: { ...bookmark, tagIds: [] } },
+      }),
+    ).toEqual(["bookmark"]);
+    expect(
+      getEligibleSoftReadIds({
+        ...input,
+        categoryFilter: -1,
+        bookmarksById: {
+          bookmark: { ...bookmark, tagIds: [], viewIds: [] },
+        },
+      }),
+    ).toEqual([]);
+  });
+
+  it("drops feed items that leave the selected View", () => {
+    const positions = new Map([
+      ["feed", { sectionKey: "uncategorized", index: 0 }],
+    ]);
+    const input = {
+      positions,
+      bookmarksById: {},
+      feedItemsById: state.feeds,
+      feedCategories: [],
+      currentView,
+      categoryFilter: -1,
+      feedFilter: -1,
+      saveStatus: "saved" as const,
+    };
+
+    expect(getEligibleSoftReadIds({ ...input, views: [currentView] })).toEqual([
+      "feed",
+    ]);
+    const removedFeedView = { ...currentView, feedIds: [] };
+    expect(
+      getEligibleSoftReadIds({
+        ...input,
+        currentView: removedFeedView,
+        views: [removedFeedView],
+      }),
+    ).toEqual([]);
+  });
+
+  it("drops positions whose assigned section changed or disappeared", () => {
+    const positions = new Map([
+      ["moved", { sectionKey: "tag:1", index: 0 }],
+      ["missing", { sectionKey: "tag:3", index: 1 }],
+      ["stable", { sectionKey: "tag:2", index: 2 }],
+    ]);
+    const eligibleSections = [section([], 1), section(["moved", "stable"], 2)];
+
+    expect([
+      ...retainEligibleSoftReadPositions(positions, eligibleSections).keys(),
+    ]).toEqual(["stable"]);
   });
 });
