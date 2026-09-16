@@ -31,9 +31,11 @@ export const FEED_ORIGIN_CONFLICT =
   "These origins belong to different Feeds or conflict with an existing origin. No Feeds were changed.";
 
 function verifiedLocators(origin: NewFeedDetails["origins"][number]) {
-  return origin.kind === FEED_ORIGIN_KIND.RSS
-    ? [...new Set([origin.locator, ...(origin.alternateLocators ?? [])])]
-    : [origin.locator];
+  return new Set(
+    origin.kind === FEED_ORIGIN_KIND.RSS
+      ? [origin.locator, ...(origin.alternateLocators ?? [])]
+      : [origin.locator],
+  );
 }
 
 /** Two indexed locator lookups at most; legacy duplicates of one locator keep the lowest-id match. */
@@ -55,7 +57,7 @@ export async function findFeedForOrigins(
             and(
               eq(feedOrigins.userId, userId),
               eq(feedOrigins.kind, origin.kind),
-              inArray(feedOrigins.locator, verifiedLocators(origin)),
+              inArray(feedOrigins.locator, [...verifiedLocators(origin)]),
             ),
           )
           .groupBy(feedOrigins.locator)
@@ -80,7 +82,7 @@ export async function findFeedForOrigins(
   const byKind = new Map(feed.origins.map((origin) => [origin.kind, origin]));
   for (const origin of origins) {
     const existing = byKind.get(origin.kind);
-    if (existing && !verifiedLocators(origin).includes(existing.locator))
+    if (existing && !verifiedLocators(origin).has(existing.locator))
       throw new Error(FEED_ORIGIN_CONFLICT);
   }
   return feed;
