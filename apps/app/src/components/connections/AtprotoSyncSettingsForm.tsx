@@ -102,7 +102,7 @@ export function AtprotoSyncSettingsForm({
     // This client-only settings form submits through the shared oRPC mutation.
     // react-doctor-disable-next-line react-doctor/no-prevent-default
     <form
-      className="grid gap-4"
+      className="grid gap-6"
       onSubmit={(e) => {
         e.preventDefault();
         onSave({ method, importAsInactive });
