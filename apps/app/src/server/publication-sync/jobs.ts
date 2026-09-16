@@ -93,6 +93,9 @@ export async function runPublicationSyncJobs(
                 await database
                   .update(connections)
                   .set({
+                    subscriptionJobExpiresAt: new Date(
+                      Date.now() + JOB_LEASE_MS,
+                    ),
                     subscriptionJobProgress: {
                       completed: progress.completed,
                       total: progress.total,

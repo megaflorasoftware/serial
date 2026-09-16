@@ -15,26 +15,22 @@ export async function createPublicationBackfillWorkload(
   count: number,
 ) {
   const userId = "backfill-benchmark";
-  await database
-    .insert(user)
-    .values({
-      id: userId,
-      name: "Benchmark",
-      email: "backfill@example.com",
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  await database
-    .insert(atprotoConnections)
-    .values({
-      id: userId,
-      userId,
-      did: "did:plc:abcdefghijklmnopqrstuvwx",
-      session: "fixture",
-      scopes: "atproto include:site.standard.authSocial",
-      exportSubscriptions: true,
-    });
+  await database.insert(user).values({
+    id: userId,
+    name: "Benchmark",
+    email: "backfill@example.com",
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await database.insert(atprotoConnections).values({
+    id: userId,
+    userId,
+    did: "did:plc:abcdefghijklmnopqrstuvwx",
+    session: "fixture",
+    scopes: "atproto include:site.standard.authSocial",
+    exportSubscriptions: true,
+  });
   for (let offset = 0; offset < count; offset += 50) {
     // Bound fixture writes so seeding does not flood the database driver.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -49,16 +45,14 @@ export async function createPublicationBackfillWorkload(
         })),
       )
       .returning({ id: feeds.id });
-    await database
-      .insert(feedOrigins)
-      .values(
-        rows.map(({ id }) => ({
-          userId,
-          feedId: id,
-          kind: "rss",
-          locator: `https://example.com/feed/${id}`,
-        })),
-      );
+    await database.insert(feedOrigins).values(
+      rows.map(({ id }) => ({
+        userId,
+        feedId: id,
+        kind: "rss",
+        locator: `https://example.com/feed/${id}`,
+      })),
+    );
   }
   let requests = 0;
   return {

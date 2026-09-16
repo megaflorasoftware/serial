@@ -140,3 +140,17 @@ it("turning sync off cancels queued work", async () => {
     pending: false,
   });
 });
+
+it("finishes unclassified sync failures as partial instead of polling them forever", async () => {
+  await save();
+  const sync = vi
+    .fn<typeof syncPublicationSubscriptions>()
+    .mockResolvedValue({ ...completed(), status: "partial", failed: 1 });
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    result: { status: "partial", failed: 1 },
+  });
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(sync).toHaveBeenCalledTimes(1);
+});

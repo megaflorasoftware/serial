@@ -30,7 +30,8 @@ export const createQueryClient = () =>
         serializeData: SuperJSON.serialize,
         shouldDehydrateQuery: (query) =>
           query.meta?.persist !== false &&
-          (defaultShouldDehydrateQuery(query) || query.state.status === "pending"),
+          (defaultShouldDehydrateQuery(query) ||
+            query.state.status === "pending"),
         shouldRedactErrors: () => false,
       },
       hydrate: {

@@ -163,15 +163,13 @@ describe("upgrade callback failure cleanup", () => {
 });
 
 it("persists sync work before redirecting from successful consent", async () => {
-  await session.database
-    .insert(atprotoConnections)
-    .values({
-      did: DID,
-      userId: "user-1",
-      session: "new-session",
-      status: "active",
-      scopes: "atproto include:site.standard.authSocial",
-    });
+  await session.database.insert(atprotoConnections).values({
+    did: DID,
+    userId: "user-1",
+    session: "new-session",
+    status: "active",
+    scopes: "atproto include:site.standard.authSocial",
+  });
   await expectCallbackRedirect("success");
   const row = await session.database
     .select()

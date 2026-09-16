@@ -14,7 +14,7 @@ export function nextPublicationSyncAttempt(result: PublicationSyncResult) {
   const retryTimes = [
     ...(result.retryAt ? [new Date(result.retryAt).getTime()] : []),
     ...(result.deferred ? [Date.now() + 1000] : []),
-    ...(result.failed || result.status === "busy" ? [Date.now() + 60_000] : []),
+    ...(result.status === "busy" ? [Date.now() + 60_000] : []),
   ];
   return retryTimes.length
     ? new Date(Math.max(Date.now() + 1000, Math.min(...retryTimes)))
