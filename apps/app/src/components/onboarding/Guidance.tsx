@@ -103,10 +103,12 @@ function useGuidanceTarget(
       targetRef.current = target;
       const popup = guidanceTarget(POPUP_SELECTOR);
       const rect = boundsOf([target, popup]);
-      const dialog = highlightDialog
+      const highlightedDialog = highlightDialog
         ? target?.closest<HTMLElement>('[role="dialog"][data-state="open"]')
         : null;
-      const highlight = dialog ? boundsOf([dialog, popup]) : rect;
+      const highlight = highlightedDialog
+        ? boundsOf([highlightedDialog, popup])
+        : rect;
       const viewport = window.visualViewport;
       const focusedInput = target?.matches("input, textarea") ? target : null;
       if (
@@ -341,8 +343,7 @@ export function Guidance({
   }, [selector, host, confirming, targetRef]);
 
   if (!host) return null;
-  const { x, y, width, height, viewportWidth, viewportHeight, viewportTop } =
-    position;
+  const { x, y, width, viewportWidth, viewportHeight, viewportTop } = position;
   const helperWidth = Math.min(300, viewportWidth - 32);
   const { highlightX, highlightY, highlightWidth, highlightHeight } = position;
   const radius = Math.min(6, highlightWidth / 2, highlightHeight / 2);
