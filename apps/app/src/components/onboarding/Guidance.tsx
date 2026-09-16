@@ -38,6 +38,7 @@ type Position = {
   viewportWidth: number;
   viewportHeight: number;
   viewportTop: number;
+  bottomDrawerOpen: boolean;
 };
 const EMPTY: Position = {
   x: 0,
@@ -47,6 +48,7 @@ const EMPTY: Position = {
   viewportWidth: 0,
   viewportHeight: 0,
   viewportTop: 0,
+  bottomDrawerOpen: false,
 };
 
 function useGuidanceTarget(
@@ -107,6 +109,9 @@ function useGuidanceTarget(
         viewportWidth: viewport?.width ?? innerWidth,
         viewportHeight: viewport?.height ?? innerHeight,
         viewportTop: viewport?.offsetTop ?? 0,
+        bottomDrawerOpen: dialogs.some((dialog) =>
+          dialog.matches('[data-vaul-drawer-direction="bottom"]'),
+        ),
       };
       setPosition((old) =>
         Object.keys(updated).every(
@@ -315,6 +320,7 @@ export function Guidance({
   const { x, y, width, height, viewportWidth, viewportHeight, viewportTop } =
     position;
   const helperWidth = Math.min(300, viewportWidth - 32);
+  const radius = Math.min(6, width / 2, height / 2);
 
   const bottom = viewportTop + viewportHeight;
   const beside = x + width + helperWidth + 24 < viewportWidth;
@@ -344,7 +350,14 @@ export function Guidance({
           <path
             fill="rgb(0 0 0 / 0.35)"
             fillRule="evenodd"
-            d={`M0 0H${innerWidth}V${innerHeight}H0Z M${x} ${y}H${x + width}V${y + height}H${x}Z`}
+            d={[
+              `M0 0H${innerWidth}V${innerHeight}H0Z`,
+              `M${x + radius} ${y}`,
+              `H${x + width - radius}Q${x + width} ${y} ${x + width} ${y + radius}`,
+              `V${y + height - radius}Q${x + width} ${y + height} ${x + width - radius} ${y + height}`,
+              `H${x + radius}Q${x} ${y + height} ${x} ${y + height - radius}`,
+              `V${y + radius}Q${x} ${y} ${x + radius} ${y}Z`,
+            ].join(" ")}
           />
         </svg>
       )}
@@ -397,7 +410,11 @@ export function Guidance({
           <Button
             variant="secondary"
             className="pointer-events-auto fixed left-1/2 -translate-x-1/2 shadow-sm"
-            style={{ top: bottom - 52 }}
+            style={{
+              top: position.bottomDrawerOpen
+                ? `calc(${viewportTop + 16}px + env(safe-area-inset-top, 0px))`
+                : bottom - 52,
+            }}
             onPointerDown={onSkip}
             onClick={onSkip}
           >

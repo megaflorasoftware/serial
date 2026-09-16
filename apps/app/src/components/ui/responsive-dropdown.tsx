@@ -236,7 +236,7 @@ export function ControlledResponsiveDialog({
         overlayClassName={previewDrawer ? "bg-transparent" : undefined}
         className={cn(
           "max-h-[calc(100dvh-6rem)]",
-          previewDrawer && "mx-auto w-full max-w-3xl pb-14",
+          previewDrawer && "mx-auto w-full max-w-3xl",
         )}
         onOpenAutoFocus={onOpenAutoFocus}
       >

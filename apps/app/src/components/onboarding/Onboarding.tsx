@@ -5,6 +5,7 @@ import { CopyIcon, DownloadIcon, ImportIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Guidance } from "./Guidance";
 import type { OnboardingInstruction } from "~/lib/onboarding/store";
+import { ColorModeToggleGroup } from "~/components/color-theme/ColorModeToggleGroup";
 import { useAtprotoReconnect } from "~/components/connections/AtprotoConnection";
 import { ReconnectBanner } from "~/components/connections/ConnectedAccountRow";
 import {
@@ -149,7 +150,7 @@ function ThemePicker() {
   return (
     <div className="grid gap-6">
       <div
-        className="grid grid-cols-4 gap-3"
+        className="grid grid-cols-4 gap-3 md:grid-cols-8"
         role="group"
         aria-label="Color themes"
       >
@@ -349,6 +350,13 @@ function AccountOnboarding({ userId }: { userId: string }) {
           if (!open) close();
         }}
         title={titles[state.step]}
+        headerRight={
+          state.step === "choose-colors" ? (
+            <div className="shrink-0">
+              <ColorModeToggleGroup />
+            </div>
+          ) : undefined
+        }
       >
         <div className="grid gap-6 py-2">
           {state.step === "introduction" && (
