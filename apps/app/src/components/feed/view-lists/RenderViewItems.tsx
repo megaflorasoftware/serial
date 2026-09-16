@@ -400,31 +400,23 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
     return <FeedLoading />;
   }
 
-  if (
-    paginationState.isLoaded &&
-    hasFetchedFeeds &&
-    !feeds.length &&
-    filteredFeedItemsOrder.length === 0 &&
-    Object.keys(bookmarksStore.getState().snapshot()).length === 0
-  ) {
-    return <FeedEmptyState />;
-  }
+  if (filteredFeedItemsOrder.length === 0) {
+    if (
+      paginationState.isLoaded &&
+      hasFetchedFeeds &&
+      !feeds.length &&
+      Object.keys(bookmarksStore.getState().snapshot()).length === 0
+    ) {
+      return <FeedEmptyState />;
+    }
 
-  // Show skeletons while feed items are being fetched
-  if (
-    (!paginationState.isLoaded || paginationState.isFetching) &&
-    filteredFeedItemsOrder.length === 0
-  ) {
-    return <ViewListSkeleton layout={baseLayout} />;
-  }
+    if (!paginationState.isLoaded || paginationState.isFetching) {
+      return <ViewListSkeleton layout={baseLayout} />;
+    }
 
-  if (
-    hasFetchedFeeds &&
-    paginationState.isLoaded &&
-    hasFetchedFeedCategories &&
-    !filteredFeedItemsOrder.length
-  ) {
-    return <EmptyState />;
+    if (hasFetchedFeeds && hasFetchedFeedCategories) {
+      return <EmptyState />;
+    }
   }
 
   return (
