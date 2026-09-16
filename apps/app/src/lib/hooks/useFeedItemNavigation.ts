@@ -153,6 +153,7 @@ export function useFeedItemNavigation(
   items: string[],
   isGridLayout: boolean = false,
   sections?: SectionInfo[],
+  toggleReadInView?: (id: string, mutate: () => boolean) => boolean,
 ) {
   const [selectedItemId, setSelectedItemId] = useAtom(selectedItemIdAtom);
   const viewFilterId = useAtomValue(viewFilterIdAtom);
@@ -567,7 +568,12 @@ export function useFeedItemNavigation(
   const toggleReadWithAdvance = useCallback(
     (contentId: string, toggleRead: () => boolean) => {
       const idx = items.indexOf(contentId);
-      if (!toggleRead()) return;
+      if (
+        !(toggleReadInView
+          ? toggleReadInView(contentId, toggleRead)
+          : toggleRead())
+      )
+        return;
       if (idx === -1) return;
 
       if (
@@ -578,7 +584,12 @@ export function useFeedItemNavigation(
         selectItemAfterCurrentItemLeavesView(idx);
       }
     },
-    [items, contentStatusFilter, selectItemAfterCurrentItemLeavesView],
+    [
+      items,
+      contentStatusFilter,
+      selectItemAfterCurrentItemLeavesView,
+      toggleReadInView,
+    ],
   );
 
   const toggleSavedWithAdvance = useCallback(

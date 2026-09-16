@@ -53,6 +53,12 @@ describe("client performance audit model", () => {
         mixedStoreNotifications: 0,
         authoritativeRefills: 0,
       });
+      expect(result.operations.softReadProjection).toMatchObject({
+        bookmarkStoreNotifications: 0,
+        feedItemStoreNotifications: 0,
+        mixedStoreNotifications: 0,
+        authoritativeRefills: 0,
+      });
     },
     30_000,
   );

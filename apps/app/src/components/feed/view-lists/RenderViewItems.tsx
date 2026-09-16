@@ -14,6 +14,7 @@ import {
 } from "./skeletons";
 import { useViewListScroll } from "./useViewListScroll";
 import { useViewSections } from "./useViewSections";
+import { useSoftReads } from "./useSoftReads";
 import { ViewItemGrid } from "./ViewItemGrid";
 import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
@@ -26,6 +27,7 @@ import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import {
   categoryFilterAtom,
   contentStatusFilterAtom,
+  dateFilterAtom,
   feedFilterAtom,
   selectedItemIdAtom,
   viewFilterAtom,
@@ -252,6 +254,7 @@ function ContentStatusSectionList({
   sentinelRef,
   showPaginationLoader,
   showPaginationEnd,
+  toggleRead,
 }: {
   fullComputedSections: ViewSection[];
   visibleComputedSections: ViewSection[];
@@ -259,6 +262,7 @@ function ContentStatusSectionList({
   sentinelRef: (node: HTMLDivElement | null) => void;
   showPaginationLoader: boolean;
   showPaginationEnd: boolean;
+  toggleRead: (id: string, mutate: () => boolean) => boolean;
 }) {
   const navigationItems = useMemo(
     () => fullComputedSections.flatMap((section) => section.items),
@@ -281,6 +285,7 @@ function ContentStatusSectionList({
     navigationItems,
     navigationIsGridLayout,
     navigationSectionInfo,
+    toggleRead,
   );
   const handleSectionMarkAsRead = useCallback(
     (sectionIndex: number) => {
@@ -323,30 +328,42 @@ function ContentStatusSectionList({
 }
 
 export function RenderViewItems() {
-  const { feeds, hasFetchedFeeds } = useFeeds();
-  const { hasFetchedFeedCategories } = useFeedCategories();
-
-  const hasInitialData = useHasInitialData();
-
-  const filteredFeedItemsOrder = useFilteredContentOrder();
-
   const currentView = useAtomValue(viewFilterAtom);
   const feedFilter = useAtomValue(feedFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
-  const {
-    sentinelRef,
-    paginationState,
-    visibleItems: visibleFilteredFeedItemsOrder,
-    hasRenderedAllItems,
-  } = useViewListScroll(filteredFeedItemsOrder);
-
-  const { computedSections: fullComputedSections, baseLayout } =
-    useViewSections(currentView, filteredFeedItemsOrder);
-  const { computedSections: visibleComputedSections } = useViewSections(
-    currentView,
-    visibleFilteredFeedItemsOrder,
-  );
+  const dateFilter = useAtomValue(dateFilterAtom);
   const contentStatusFilter = useAtomValue(contentStatusFilterAtom);
+  const viewListKey = `view-${currentView?.id ?? "none"}-${buildContentStatusKey(contentStatusFilter)}`;
+  const scopeKey = `${viewListKey}-feed-${feedFilter}-tag-${categoryFilter}-date-${dateFilter}`;
+
+  return <ViewVisit key={scopeKey} viewListKey={viewListKey} />;
+}
+
+function ViewVisit({ viewListKey }: { viewListKey: string }) {
+  const { feeds, hasFetchedFeeds } = useFeeds();
+  const { hasFetchedFeedCategories } = useFeedCategories();
+  const hasInitialData = useHasInitialData();
+  const filteredItemIds = useFilteredContentOrder();
+  const currentView = useAtomValue(viewFilterAtom);
+  const { computedSections, baseLayout } = useViewSections(
+    currentView,
+    filteredItemIds,
+  );
+  const { sections: fullComputedSections, toggleRead } =
+    useSoftReads(computedSections);
+  const filteredFeedItemsOrder = useMemo(
+    () => fullComputedSections.flatMap((section) => section.items),
+    [fullComputedSections],
+  );
+  const { sentinelRef, paginationState, visibleItems, hasRenderedAllItems } =
+    useViewListScroll(filteredFeedItemsOrder);
+  const visibleComputedSections = useMemo(() => {
+    const visibleIds = new Set(visibleItems);
+    return fullComputedSections.map((section) => ({
+      ...section,
+      items: section.items.filter((id) => visibleIds.has(id)),
+    }));
+  }, [fullComputedSections, visibleItems]);
   const selectedItemId = useAtomValue(selectedItemIdAtom);
   const setSelectedItemId = useSetAtom(selectedItemIdAtom);
   const navigationItems = useMemo(
@@ -365,9 +382,6 @@ export function RenderViewItems() {
     setSelectedItemId,
     ready: rootListReady,
   });
-  const contentStatusKey = buildContentStatusKey(contentStatusFilter);
-  const viewListKey = `view-${currentView?.id ?? "none"}-${contentStatusKey}`;
-  const contentStatusContextKey = `${viewListKey}-feed-${feedFilter}-tag-${categoryFilter}`;
   const shouldShowPaginationEnd =
     hasRenderedAllItems &&
     paginationState?.hasMore === false &&
@@ -415,7 +429,7 @@ export function RenderViewItems() {
 
   return (
     <ContentStatusSectionList
-      key={contentStatusContextKey}
+      toggleRead={toggleRead}
       fullComputedSections={fullComputedSections}
       visibleComputedSections={visibleComputedSections}
       viewListKey={viewListKey}
