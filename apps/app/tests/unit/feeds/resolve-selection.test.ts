@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as Publications from "~/server/feeds/publications";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import {
   resolveFeedSelection,
@@ -10,18 +11,9 @@ import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { newRssFeedDetails } from "~/server/rss/types";
 
 vi.mock("~/server/feeds/discovery", () => ({ discoverFeeds: vi.fn() }));
-vi.mock("~/server/feeds/publications", () => ({
+vi.mock("~/server/feeds/publications", async (original) => ({
+  ...(await original<typeof Publications>()),
   resolvePublication: vi.fn(),
-  publicationRow: (publication: {
-    siteUrl: string;
-    uri: string;
-    name: string;
-  }) => ({
-    url: publication.siteUrl,
-    siteUrl: publication.siteUrl,
-    title: publication.name,
-    origins: [{ kind: "atproto", locator: publication.uri }],
-  }),
 }));
 vi.mock("~/server/rss/fetchFeeds", () => ({ fetchNewFeedDetails: vi.fn() }));
 

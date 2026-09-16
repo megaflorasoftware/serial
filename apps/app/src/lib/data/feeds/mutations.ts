@@ -1,18 +1,49 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsMutating,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useFetchFeedCategories } from "../feed-categories/store";
 import { useFetchViewFeeds } from "../view-feeds/store";
 import { useFetchViews, useRemoveFeedReferences } from "../views/store";
 import { feedItemsStore, useFetchFeedItemsForFeed } from "../store";
 import {
+  feedsStore,
   useAddFeed,
   useFetchFeeds,
   useRemoveFeed,
   useUpdateFeed,
 } from "./store";
+import type { ApplicationFeedOrigin } from "~/server/db/schema";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import { orpc } from "~/lib/orpc";
 import { refreshNavigationSnapshotSafely } from "~/lib/data/navigation/store";
+
+const REVALIDATE_FEED_MUTATION_KEY = ["feed", "revalidate"] as const;
+const revalidatingFeedIds = new Set<number>();
+
+function mergeRevalidatedOrigins(
+  current: ApplicationFeedOrigin[],
+  returned: ApplicationFeedOrigin[],
+) {
+  const returnedKinds = new Set(returned.map((origin) => origin.kind));
+  return [
+    ...returned,
+    ...current.filter((origin) => !returnedKinds.has(origin.kind)),
+  ];
+}
+
+export function useIsFeedRevalidating(feedId: number | null) {
+  return (
+    useIsMutating({
+      mutationKey: REVALIDATE_FEED_MUTATION_KEY,
+      predicate: (mutation) =>
+        (mutation.state.variables as { feedId?: number } | undefined)
+          ?.feedId === feedId,
+    }) > 0
+  );
+}
 
 export function useCreateFeedMutation() {
   const fetchFeedItemsForFeed = useFetchFeedItemsForFeed();
@@ -202,3 +233,53 @@ export function useBulkSetActiveMutation() {
     }),
   );
 }
+
+export function useRevalidateFeedMutation() {
+  const updateFeed = useUpdateFeed();
+  const mutationOptions = orpc.feed.revalidate.mutationOptions({
+    mutationKey: REVALIDATE_FEED_MUTATION_KEY,
+  });
+  const revalidateFeed = mutationOptions.mutationFn;
+  return useMutation(
+    orpc.feed.revalidate.mutationOptions({
+      mutationKey: REVALIDATE_FEED_MUTATION_KEY,
+      mutationFn: async (input, context) => {
+        if (revalidatingFeedIds.has(input.feedId)) {
+          throw new DuplicateFeedRevalidationError();
+        }
+        revalidatingFeedIds.add(input.feedId);
+        try {
+          return await revalidateFeed!(input, context);
+        } finally {
+          revalidatingFeedIds.delete(input.feedId);
+        }
+      },
+      onMutate: ({ feedId }) => feedsStore.getState().feedsDict[feedId],
+      onSuccess: (feed, _input, baseline) => {
+        const current = feedsStore.getState().feedsDict[feed.id];
+        if (current && baseline) {
+          updateFeed(feed.id, {
+            origins: mergeRevalidatedOrigins(current.origins, feed.origins),
+            ...(current.name === baseline.name &&
+            current.nameEditedAt === baseline.nameEditedAt
+              ? { name: feed.name, nameEditedAt: feed.nameEditedAt }
+              : {}),
+            ...(current.imageUrl === baseline.imageUrl
+              ? { imageUrl: feed.imageUrl }
+              : {}),
+            ...(current.siteUrl === baseline.siteUrl
+              ? { siteUrl: feed.siteUrl }
+              : {}),
+          });
+        }
+        toast.success("Feed revalidated");
+      },
+      onError: (error) => {
+        if (!(error instanceof DuplicateFeedRevalidationError))
+          toast.error("Couldn't revalidate Feed. Please try again.");
+      },
+    }),
+  );
+}
+
+class DuplicateFeedRevalidationError extends Error {}

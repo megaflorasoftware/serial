@@ -2,7 +2,11 @@ import { discoveredFeedSchema } from "@serial/feed-discovery/validation";
 import { combinePublicationRows } from "@serial/feed-discovery";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import { discoverFeeds } from "./discovery";
-import { publicationRow, resolvePublication } from "./publications";
+import {
+  publicationOrigin,
+  publicationRow,
+  resolvePublication,
+} from "./publications";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { NewFeedDetails } from "~/server/rss/types";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
@@ -130,19 +134,7 @@ async function resolveSelectedFeed(
       imageUrl: publication.imageUrl ?? rssDetails?.imageUrl,
       platform: rssDetails?.platform ?? "website",
       siteUrl: publication.siteUrl,
-      origins: [
-        ...(rssDetails?.origins ?? []),
-        {
-          kind: "atproto",
-          locator: publication.uri,
-          publicationDid: publication.did,
-          publicationRkey: publication.rkey,
-          pdsUrl: publication.pdsUrl,
-          sourceName: publication.name,
-          sourceImageUrl: publication.imageUrl,
-          sourceDescription: publication.description,
-        },
-      ],
+      origins: [...(rssDetails?.origins ?? []), publicationOrigin(publication)],
     },
   ];
 }

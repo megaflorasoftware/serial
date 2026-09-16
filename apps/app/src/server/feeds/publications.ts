@@ -6,6 +6,7 @@ import {
   parsePublicationUri,
   STANDARD_SITE_COLLECTIONS,
 } from "@serial/standard-site";
+import type { NewFeedOriginDetails } from "~/server/rss/types";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import { getAtprotoIdentityResolver } from "~/server/auth/atproto/identity";
 import { createHardenedFetch } from "~/server/auth/atproto/hardened-fetch";
@@ -197,5 +198,20 @@ export function publicationRow(
     title: publication.name,
     imageUrl: publication.imageUrl,
     origins: [{ kind: "atproto", locator: publication.uri }],
+  };
+}
+
+export function publicationOrigin(
+  publication: ResolvedPublication,
+): NewFeedOriginDetails {
+  return {
+    kind: "atproto",
+    locator: publication.uri,
+    publicationDid: publication.did,
+    publicationRkey: publication.rkey,
+    pdsUrl: publication.pdsUrl,
+    sourceName: publication.name,
+    sourceImageUrl: publication.imageUrl,
+    sourceDescription: publication.description,
   };
 }

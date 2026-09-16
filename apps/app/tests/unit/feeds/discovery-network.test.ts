@@ -1,5 +1,9 @@
+import { discoverFeeds as scoutFeeds } from "feedscout";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { discoverFeeds } from "~/server/feeds/discovery";
+import {
+  discoverFeedOriginsForRevalidation,
+  discoverFeeds,
+} from "~/server/feeds/discovery";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import {
   resolvePublication,
@@ -45,6 +49,12 @@ function response(url: string, text: string, ok = true) {
     status: ok ? 200 : 404,
     statusText: "",
     headers: new Headers(),
+  };
+}
+function statusResponse(url: string, status: number) {
+  return {
+    ...response(url, "", status >= 200 && status < 300),
+    status,
   };
 }
 describe("publication website discovery", () => {
@@ -122,4 +132,145 @@ describe("publication website discovery", () => {
       1,
     );
   });
+});
+
+it("fails revalidation when an advertised publication cannot be read", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    response(url, url.includes("/.well-known/") ? uri : "<html></html>"),
+  );
+  vi.mocked(resolvePublication).mockRejectedValue(new Error("PDS unavailable"));
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("PDS unavailable");
+});
+it("fails revalidation when the website cannot be read", async () => {
+  vi.mocked(readFeedHttp).mockResolvedValue(
+    response("https://example.com/", "", false),
+  );
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("Unable to read");
+});
+it.each([
+  ["network", 0],
+  ["rate limit", 429],
+  ["server", 503],
+] as const)(
+  "fails revalidation when well-known publication discovery has a %s failure",
+  async (failure, status) => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+      if (url.includes("/.well-known/")) {
+        if (failure === "network") throw new Error("well-known unavailable");
+        return statusResponse(url, status);
+      }
+      return response(url, "<html></html>");
+    });
+    await expect(
+      discoverFeedOriginsForRevalidation("https://example.com/"),
+    ).rejects.toThrow(
+      failure === "network" ? "well-known unavailable" : String(status),
+    );
+  },
+);
+it("allows an absent well-known publication during revalidation", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    url.includes("/.well-known/")
+      ? statusResponse(url, 404)
+      : response(url, "<html></html>"),
+  );
+  expect(
+    await discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).toEqual([]);
+});
+it("fails when feedscout catches a failed advertised RSS request", async () => {
+  const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+    "feedscout",
+  );
+  vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+  vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+    if (url === "https://example.com/feed.xml")
+      throw new Error("advertised RSS unavailable");
+    if (url.includes("/.well-known/")) return statusResponse(url, 404);
+    return response(
+      url,
+      '<link rel="alternate" type="application/rss+xml" href="/feed.xml">',
+    );
+  });
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("advertised RSS unavailable");
+});
+it("fails when an advertised RSS request is rate limited", async () => {
+  const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+    "feedscout",
+  );
+  vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+  vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+    if (url === "https://example.com/feed.xml") return statusResponse(url, 429);
+    if (url.includes("/.well-known/")) return statusResponse(url, 404);
+    return response(
+      url,
+      '<link rel="alternate" type="application/rss+xml" href="/feed.xml">',
+    );
+  });
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("429");
+});
+it("ignores failed speculative RSS guesses", async () => {
+  vi.mocked(scoutFeeds).mockResolvedValueOnce([
+    {
+      url: "https://example.com/feed.xml",
+      isValid: false,
+      method: "guess",
+      error: new Error("guess unavailable"),
+    },
+  ]);
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    url.includes("/.well-known/")
+      ? statusResponse(url, 404)
+      : response(url, "<html></html>"),
+  );
+  expect(
+    await discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).toEqual([]);
+});
+it("succeeds with no candidates when the website has no source links", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    response(url, "<html></html>"),
+  );
+  expect(
+    await discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).toEqual([]);
+});
+
+it("caps discovery transport reads and publication candidates", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    response(
+      url,
+      url === "https://www.example.com/"
+        ? Array.from(
+            { length: 20 },
+            (_, i) =>
+              `<link rel="site.standard.publication" href="${uri}${i}">`,
+          ).join("")
+        : "",
+    ),
+  );
+  vi.mocked(scoutFeeds).mockImplementationOnce(async (_url, options) => {
+    await Promise.resolve();
+    await Promise.allSettled(
+      Array.from({ length: 100 }, (_, i) =>
+        options!.fetchFn!(`https://www.example.com/candidate-${i}`, {}),
+      ),
+    );
+    return [];
+  });
+  await discoverFeedOriginsForRevalidation("https://www.example.com/");
+  expect(readFeedHttp).toHaveBeenCalledTimes(24);
+  expect(resolvePublication).toHaveBeenCalledTimes(4);
+  for (const [, options] of vi.mocked(readFeedHttp).mock.calls) {
+    expect(options?.maxBodyBytes).toBe(1024 * 1024);
+    expect(options?.totalDurationMs).toBeLessThanOrEqual(5000);
+  }
 });
