@@ -268,6 +268,8 @@ export async function syncPublicationSubscriptions(input: {
             records = [await store.create(publicationUri)];
           else {
             for (const record of records) {
+              // Recheck the grant after each delete before authorizing the next.
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop
               await assertSubscriptionSyncCurrent(database, connection, true);
               // Each delete uses the current grant and the previous observed CID.
               // react-doctor-disable-next-line react-doctor/async-await-in-loop
