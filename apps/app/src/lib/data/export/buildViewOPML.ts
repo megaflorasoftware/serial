@@ -9,7 +9,7 @@ import type {
   DatabaseViewFeed,
 } from "~/server/db/schema";
 import { isFeedCompatibleWithContentFilter } from "~/lib/data/feed-items/filters";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
+import { getFeedRssUrl, getFeedWebsiteUrl } from "~/lib/feeds/origins";
 import { UNCATEGORIZED_VIEW_ID } from "~/lib/data/views/constants";
 import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 
@@ -28,7 +28,8 @@ function feedToOPMLItem(
   const feedUrl = getFeedRssUrl(feed);
   return {
     title: feed.name || feedUrl,
-    xmlUrl: feedUrl,
+    xmlUrl: feedUrl || undefined,
+    htmlUrl: getFeedWebsiteUrl(feed),
     tags: tagNames,
   };
 }

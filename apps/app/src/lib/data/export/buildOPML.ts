@@ -1,6 +1,7 @@
 export type OPMLFeedItem = {
   title: string;
-  xmlUrl: string;
+  xmlUrl?: string;
+  htmlUrl?: string;
   tags?: string[];
 };
 
@@ -37,11 +38,10 @@ function serializeTags(tags?: string[]) {
 
 function feedOutline(feed: OPMLFeedItem, indent: string): string {
   const title = escapeXml(feed.title);
-  const xmlUrl = escapeXml(feed.xmlUrl);
   const standardCategory = feed.tags?.join(",");
   const serialTags = serializeTags(feed.tags);
 
-  return `${indent}<outline type="rss" title="${title}" text="${title}" xmlUrl="${xmlUrl}"${attribute(
+  return `${indent}<outline${attribute("type", feed.xmlUrl ? "rss" : undefined)} title="${title}" text="${title}"${attribute("xmlUrl", feed.xmlUrl)}${attribute("htmlUrl", feed.htmlUrl)}${attribute(
     "category",
     standardCategory,
   )}${attribute("serial:tags", serialTags)} />`;

@@ -52,7 +52,11 @@ import { getAssumedFeedPlatform } from "~/server/rss/validateFeedUrl";
 import { useSaveBookmarkMutation } from "~/lib/data/bookmarks/mutations";
 import { BookmarkOrganizationEditor } from "~/components/bookmarks/BookmarkOrganizationEditor";
 import { useCanMutate } from "~/lib/data/offline-mutations";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
+import {
+  getAtmosphereOrigin,
+  getFeedWebsiteUrl,
+  getFeedRssUrl,
+} from "~/lib/feeds/origins";
 
 function useViewOptions() {
   const { views } = useViews();
@@ -315,22 +319,6 @@ function getPrioritizedTagIds(
   return prioritizedTagIds;
 }
 
-function getFeedWebsiteUrl(feed: ApplicationFeed | undefined) {
-  if (!feed) return "#";
-  const feedUrl = getFeedRssUrl(feed);
-  if (!feedUrl) return "#";
-  try {
-    const url = new URL(feedUrl);
-    if (feed.platform === "youtube") {
-      const channelId = url.searchParams.get("channel_id");
-      if (channelId) return `https://www.youtube.com/channel/${channelId}`;
-    }
-    return url.origin;
-  } catch {
-    return "#";
-  }
-}
-
 function useEditFeedForm(selectedFeedId: null | number) {
   const [name, setName] = useState<string>("");
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -448,20 +436,63 @@ function EditFeedDialogFooter({
   );
 }
 
+function CopyFeedLinkButton({
+  url,
+  label,
+  success,
+}: {
+  url: string;
+  label: string;
+  success: string;
+}) {
+  const [hasCopied, setHasCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(success);
+      setHasCopied(true);
+      clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setHasCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy URL");
+    }
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          aria-label={label}
+          onClick={copy}
+        >
+          {hasCopied ? <CheckIcon size={16} /> : <LinkIcon size={16} />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function FeedNameField({
   name,
   setName,
   feed,
-  hasCopied,
-  onCopy,
 }: {
   name: string;
   setName: (name: string) => void;
   feed: ApplicationFeed | undefined;
-  hasCopied: boolean;
-  onCopy: () => void;
 }) {
-  const websiteUrl = getFeedWebsiteUrl(feed);
+  const websiteUrl = feed && getFeedWebsiteUrl(feed);
+  const feedUrl = feed && getFeedRssUrl(feed);
+  const publicationUri = feed && getAtmosphereOrigin(feed)?.locator;
   const platformName =
     PLATFORM_TO_FORMATTED_NAME_MAP[feed?.platform ?? "youtube"];
 
@@ -477,34 +508,44 @@ function FeedNameField({
           onChange={(e) => setName(e.target.value)}
           className="flex-1"
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0"
-              onClick={onCopy}
-            >
-              {hasCopied ? <CheckIcon size={16} /> : <LinkIcon size={16} />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy Feed URL</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline" size="icon" className="shrink-0" asChild>
-              <a
-                href={websiteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Open in ${platformName}`}
+        {feedUrl && (
+          <CopyFeedLinkButton
+            key={feedUrl}
+            url={feedUrl}
+            label="Copy Feed URL"
+            success="Feed URL copied!"
+          />
+        )}
+        {publicationUri && (
+          <CopyFeedLinkButton
+            key={publicationUri}
+            url={publicationUri}
+            label="Copy publication link"
+            success="Publication link copied!"
+          />
+        )}
+        {websiteUrl && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                asChild
               >
-                <ExternalLinkIcon size={16} />
-              </a>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Open in {platformName}</TooltipContent>
-        </Tooltip>
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open in ${platformName}`}
+                >
+                  <ExternalLinkIcon size={16} />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open in {platformName}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   );
@@ -517,7 +558,6 @@ function useEditFeedDialogActions({
   selectedCategories,
   selectedViewIds,
   selectedOpenLocation,
-  feedUrl,
   onClose,
 }: {
   canMutate: boolean;
@@ -526,12 +566,10 @@ function useEditFeedDialogActions({
   selectedCategories: number[];
   selectedViewIds: number[];
   selectedOpenLocation: FeedOpenLocation;
-  feedUrl: string | undefined;
   onClose: () => void;
 }) {
   const [isUpdatingFeed, setIsUpdatingFeed] = useState(false);
   const [isDeletingFeed, setIsDeletingFeed] = useState(false);
-  const [hasCopied, setHasCopied] = useState(false);
   const isUpdatingFeedRef = useRef(false);
   const isDeletingFeedRef = useRef(false);
 
@@ -591,20 +629,11 @@ function useEditFeedDialogActions({
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(feedUrl ?? "");
-    toast.success("Feed URL copied!");
-    setHasCopied(true);
-    setTimeout(() => setHasCopied(false), 2000);
-  };
-
   return {
     isUpdatingFeed,
     isDeletingFeed,
-    hasCopied,
     handleDelete,
     handleSave,
-    handleCopy,
   };
 }
 
@@ -730,7 +759,6 @@ export function EditFeedDialog({
     selectedCategories,
     selectedViewIds,
     selectedOpenLocation,
-    feedUrl: feed ? getFeedRssUrl(feed) : undefined,
     onClose,
   });
 
@@ -757,13 +785,7 @@ export function EditFeedDialog({
       }
     >
       <div className="grid gap-6">
-        <FeedNameField
-          name={name}
-          setName={setName}
-          feed={feed}
-          hasCopied={actions.hasCopied}
-          onCopy={actions.handleCopy}
-        />
+        <FeedNameField name={name} setName={setName} feed={feed} />
         <EditFeedViewsField
           canMutate={canMutate}
           selectedViewIds={selectedViewIds}

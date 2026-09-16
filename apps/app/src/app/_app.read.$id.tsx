@@ -1,5 +1,9 @@
 "use client";
 
+import { httpUrl } from "@serial/feed-discovery";
+import { getFeedWebsiteUrl } from "~/lib/feeds/origins";
+import { getOriginActionLabel } from "~/lib/content/capabilities";
+
 import clsx from "clsx";
 
 import { createFileRoute } from "@tanstack/react-router";
@@ -173,6 +177,23 @@ function FeedReader({
   const { shouldShowTruncationAlert, handleAlertResponse } = useTruncationAlert(
     { feed, feedItem, canMutate },
   );
+
+  if (hasRefreshedFeedItem && feedItem && !content.trim()) {
+    const originalUrl =
+      httpUrl(feedItem.url) ?? (feed && getFeedWebsiteUrl(feed));
+    if (originalUrl) {
+      return (
+        <ContentRendererFallback
+          destination={{
+            renderer: "origin",
+            external: true,
+            href: originalUrl,
+            actionLabel: getOriginActionLabel(feedItem),
+          }}
+        />
+      );
+    }
+  }
 
   return (
     <div

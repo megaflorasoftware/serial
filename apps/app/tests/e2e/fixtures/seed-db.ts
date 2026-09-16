@@ -324,6 +324,49 @@ export async function matchBookmarkToFeedItem(
   client.close();
 }
 
+export async function addArticlePublicationOrigin(
+  tursoPort: number,
+  itemId: string,
+  options: { rss: boolean; active: boolean },
+) {
+  const { db, client } = getDb(tursoPort);
+  try {
+    const item = await db
+      .select()
+      .from(schema.feedItems)
+      .where(eq(schema.feedItems.id, itemId))
+      .get();
+    if (!item) throw new Error("Missing article fixture");
+    const feed = await db
+      .select()
+      .from(schema.feeds)
+      .where(eq(schema.feeds.id, item.feedId))
+      .get();
+    if (!feed) throw new Error("Missing article Feed fixture");
+    if (!options.rss)
+      await db
+        .delete(schema.feedOrigins)
+        .where(eq(schema.feedOrigins.feedId, feed.id));
+    const publicationUri = "at://did:plc:alice/site.standard.publication/blog";
+    const siteUrl = "https://example.com/publication";
+    await db
+      .update(schema.feeds)
+      .set({ siteUrl, name: "My renamed Feed", isActive: options.active })
+      .where(eq(schema.feeds.id, feed.id));
+    await db.insert(schema.feedOrigins).values({
+      feedId: feed.id,
+      userId: feed.userId,
+      kind: "atproto",
+      locator: publicationUri,
+      sourceName: "Published name",
+      nextFetchAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    });
+    return { publicationUri, siteUrl };
+  } finally {
+    client.close();
+  }
+}
+
 export async function setFeedItemContent(
   tursoPort: number,
   id: string,

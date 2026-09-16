@@ -6,6 +6,7 @@ import {
   Edit2Icon,
   MinusIcon,
   PauseIcon,
+  OrbitIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -46,6 +47,8 @@ import {
 import { isContentStatusAvailable } from "~/lib/content-status";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 
+import { getFeedPublicationName } from "~/lib/feeds/origins";
+
 function useDebouncedState(defaultValue: string, delay: number) {
   const [searchQuery, setSearchQuery] = useState(defaultValue);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,6 +77,18 @@ function sortFeedOptions(a: ApplicationFeed, b: ApplicationFeed) {
   return a.name.localeCompare(b.name);
 }
 
+function PublicationGlyph({ name }: { name?: string }) {
+  if (name === undefined) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <OrbitIcon size={16} className="ml-auto shrink-0" aria-label={name} />
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 const EMPTY_FEED_AVAILABILITY: NavigationSnapshot["feeds"] = {};
 
 type FeedOption = ApplicationFeed & {
@@ -87,6 +102,7 @@ type FeedOption = ApplicationFeed & {
 const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   feedId,
   name,
+  publicationName,
   hasEntries,
   isSelected,
   onSelect,
@@ -94,6 +110,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
 }: {
   feedId: number;
   name: string;
+  publicationName?: string;
   hasEntries: boolean;
   isSelected: boolean;
   onSelect: (feedId: number) => void;
@@ -139,6 +156,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
           </div>
         )}
         <div className="line-clamp-1">{name}</div>
+        <PublicationGlyph name={publicationName} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -152,6 +170,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
 const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
   feedId,
   name,
+  publicationName,
   hasEntries,
   isSelected,
   onSelect,
@@ -159,6 +178,7 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
 }: {
   feedId: number;
   name: string;
+  publicationName?: string;
   hasEntries: boolean;
   isSelected: boolean;
   onSelect: (feedId: number) => void;
@@ -187,6 +207,7 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
           </TooltipContent>
         </Tooltip>
         <div className="text-muted-foreground line-clamp-1">{name}</div>
+        <PublicationGlyph name={publicationName} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -411,6 +432,7 @@ export function SidebarFeeds() {
               key={feed.id}
               feedId={feed.id}
               name={feed.name}
+              publicationName={getFeedPublicationName(feed)}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}
@@ -425,6 +447,7 @@ export function SidebarFeeds() {
               key={feed.id}
               feedId={feed.id}
               name={feed.name}
+              publicationName={getFeedPublicationName(feed)}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}
@@ -442,6 +465,7 @@ export function SidebarFeeds() {
                   key={feed.id}
                   feedId={feed.id}
                   name={feed.name}
+                  publicationName={getFeedPublicationName(feed)}
                   hasEntries={feed.hasEntries}
                   isSelected={feed.id === feedFilter}
                   onSelect={selectFeed}
