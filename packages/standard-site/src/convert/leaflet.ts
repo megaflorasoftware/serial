@@ -14,6 +14,7 @@ import {
 } from "./html";
 import {
   blockName,
+  blockSchema,
   blueskyPostCard,
   ConversionContext,
   richTextHeading,
@@ -23,12 +24,11 @@ import {
   type Block,
 } from "./shared";
 import { blobRefSchema } from "../lexicons";
-import { sanitizeEmbeddedHtml } from "../sanitize";
+import { sanitizeEmbeddedContent } from "../sanitize";
 import { buildPdslsUrl } from "../uris";
+import { validEntriesSchema } from "../parse";
 
 const PREFIX = "pub.leaflet.blocks.";
-
-const blockSchema = z.looseObject({ $type: z.string() });
 
 const imageSchema = z.object({
   image: blobRefSchema,
@@ -61,7 +61,7 @@ const listSchema = z.object({
 
 const pageSchema = z.object({
   $type: z.string(),
-  blocks: z.array(z.object({ block: blockSchema })).optional(),
+  blocks: validEntriesSchema(z.object({ block: blockSchema })).optional(),
 });
 
 // Pages parse one at a time so a malformed page drops itself, not the document.
@@ -81,7 +81,7 @@ function renderListItemContent(
   const contentType = blockName(item.content, PREFIX);
   if (contentType === "image") return renderImage(item.content, context, false);
   const text = richTextSchema.safeParse(item.content);
-  if (!text.success) return "";
+  if (!text.success || !text.data.plaintext.trim()) return "";
   const inner = renderRichText(text.data, context);
   return contentType === "header" ? element("strong", undefined, inner) : inner;
 }
@@ -155,9 +155,24 @@ function renderImage(
 }
 
 /** Inline HTML keeps only what the article schema permits; nothing left means a placeholder. */
-function renderHtmlBlock(html: string) {
-  const sanitized = sanitizeEmbeddedHtml(html).trim();
-  return sanitized || interactivePlaceholder(null);
+function renderHtmlBlock(html: string, context: ConversionContext) {
+  let sanitized: ReturnType<typeof sanitizeEmbeddedContent>;
+  try {
+    sanitized = sanitizeEmbeddedContent(html);
+  } catch (error) {
+    // The HTML parser and sanitizer use recursion on author-controlled nesting.
+    // Keep this unsupported block local without hiding other conversion errors.
+    if (
+      error instanceof RangeError &&
+      error.message === "Maximum call stack size exceeded"
+    ) {
+      return interactivePlaceholder(null);
+    }
+    throw error;
+  }
+  if (sanitized.firstParagraph) context.noteParagraph(sanitized.firstParagraph);
+  if (sanitized.firstImageUrl) context.noteImage(sanitized.firstImageUrl);
+  return sanitized.html.trim() || interactivePlaceholder(null);
 }
 
 function renderBlock(block: Block, context: ConversionContext): string {
@@ -243,13 +258,13 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "iframe": {
       // The deprecated inline `html` takes precedence over `url`.
       const html = stringProperty(block, "html");
-      if (html?.trim()) return renderHtmlBlock(html);
+      if (html?.trim()) return renderHtmlBlock(html, context);
       const url = stringProperty(block, "url");
       return url ? embedPlaceholder(url, url) : interactivePlaceholder(null);
     }
     case "html": {
       const html = stringProperty(block, "html");
-      return html === undefined ? "" : renderHtmlBlock(html);
+      return html === undefined ? "" : renderHtmlBlock(html, context);
     }
     case "page":
     case "poll":

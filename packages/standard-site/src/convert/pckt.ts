@@ -16,6 +16,7 @@ import {
 } from "./html";
 import {
   blockName,
+  blockArraySchema,
   blueskyPostCard,
   ConversionContext,
   richTextHeading,
@@ -26,12 +27,11 @@ import {
 } from "./shared";
 import { blobRefSchema } from "../lexicons";
 import { buildBlueskyProfileUrl } from "../uris";
+import { validEntriesSchema } from "../parse";
 
 const PREFIX = "blog.pckt.block.";
 
-const blockSchema = z.looseObject({ $type: z.string() });
-
-const containerSchema = z.object({ content: z.array(blockSchema) });
+const containerSchema = z.object({ content: blockArraySchema });
 
 const imageAttrsSchema = z.object({
   src: z.string(),
@@ -42,18 +42,20 @@ const imageAttrsSchema = z.object({
 
 const cellSchema = z.object({
   $type: z.string(),
-  content: z.array(blockSchema),
+  content: blockArraySchema,
   colspan: z.number().optional(),
   rowspan: z.number().optional(),
 });
 
 const tableSchema = z.object({
-  content: z.array(z.object({ content: z.array(cellSchema) })),
+  content: validEntriesSchema(
+    z.object({ content: validEntriesSchema(cellSchema) }),
+  ),
 });
 
 export const pcktContentSchema = z.object({
   $type: z.literal("blog.pckt.content"),
-  items: z.array(blockSchema).optional(),
+  items: blockArraySchema.optional(),
   blob: blobRefSchema.optional(),
   references: z.array(blobRefSchema).optional(),
 });
@@ -62,22 +64,31 @@ export type PcktContent = z.infer<typeof pcktContentSchema>;
 
 /** The blob JSON either is the items array or wraps it as `{ items }`. */
 export const pcktBlobSchema = z.union([
-  z.array(blockSchema),
-  z.object({ items: z.array(blockSchema) }).transform((value) => value.items),
+  blockArraySchema,
+  z.object({ items: blockArraySchema }).transform((value) => value.items),
 ]);
 
 /**
- * Text blocks inside cells and items render inline; anything else keeps its block
- * markup. Callers run this inside `context.nested`.
+ * A single text block stays inline. Multiple paragraphs retain their boundaries;
+ * all other blocks keep their markup. Callers run this inside `context.nested`.
  */
 function renderInline(blocks: Block[], context: ConversionContext) {
-  return blocks
-    .map((block) => {
-      const text = richTextSchema.safeParse(block);
-      if (text.success && blockName(block, PREFIX) === "text") {
-        return renderRichText(text.data, context);
-      }
-      return renderBlock(block, context);
+  const prepared = blocks.map((block) => {
+    const text =
+      blockName(block, PREFIX) === "text"
+        ? richTextSchema.safeParse(block)
+        : null;
+    return { block, text: text?.success ? text.data : null };
+  });
+  const hasMultipleParagraphs =
+    prepared.filter((entry) => entry.text?.plaintext.trim()).length > 1;
+  return prepared
+    .map(({ block, text }) => {
+      if (!text) return renderBlock(block, context);
+      if (!text.plaintext.trim()) return "";
+      if (hasMultipleParagraphs) context.noteParagraph(text.plaintext);
+      const html = renderRichText(text, context);
+      return hasMultipleParagraphs ? paragraph(html) : html;
     })
     .join("");
 }
@@ -141,7 +152,9 @@ function renderTable(block: Block, context: ConversionContext) {
   const parsed = tableSchema.safeParse(block);
   if (!parsed.success) return "";
   const span = (value: number | undefined) =>
-    value && value > 1 ? String(value) : undefined;
+    value !== undefined && Number.isSafeInteger(value) && value > 1
+      ? String(value)
+      : undefined;
   return context.nested(() => {
     let hasContent = false;
     const rows = parsed.data.content.map((row) => {

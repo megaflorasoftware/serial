@@ -3,6 +3,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 import type { Options as SanitizeSchema } from "rehype-sanitize";
+import { safeSourceUrl } from "./convert/html";
 
 export const SERIAL_EMBED_KINDS = ["youtube", "interactive"] as const;
 export type SerialEmbedKind = (typeof SERIAL_EMBED_KINDS)[number];
@@ -73,6 +74,73 @@ function buildProcessor(schema: SanitizeSchema) {
 
 const articleProcessor = buildProcessor(ARTICLE_SANITIZE_SCHEMA);
 const embeddedProcessor = buildProcessor(EMBEDDED_HTML_SANITIZE_SCHEMA);
+
+type HtmlTree = ReturnType<typeof embeddedProcessor.parse>;
+type HtmlNode = HtmlTree | HtmlTree["children"][number];
+
+/** Walk in document order without adding recursion for author-controlled HTML. */
+function* walkHtml(root: HtmlNode) {
+  const pending = [{ node: root, inAside: false }];
+  while (pending.length > 0) {
+    const { node, inAside } = pending.pop()!;
+    const excluded =
+      inAside ||
+      (node.type === "element" &&
+        (node.tagName === "blockquote" || node.tagName === "aside"));
+    yield { node, inAside: excluded };
+    if ("children" in node) {
+      for (let index = node.children.length - 1; index >= 0; index -= 1) {
+        pending.push({ node: node.children[index]!, inAside: excluded });
+      }
+    }
+  }
+}
+
+function paragraphText(paragraph: HtmlNode) {
+  let text = "";
+  for (const { node } of walkHtml(paragraph)) {
+    if (node.type === "text") text += node.value;
+    if (node.type === "element" && node.tagName === "br") text += "\n";
+  }
+  return text.trim();
+}
+
+/** Sanitize once and derive fallbacks from the same tree that produces the body. */
+export function sanitizeEmbeddedContent(html: string) {
+  const parsed = embeddedProcessor.parse(html);
+  // Sanitization unwraps unsupported `aside` elements. Keep their paragraph
+  // source offsets so that removing the wrapper does not make its text eligible.
+  const asideParagraphs = new Set<number>();
+  for (const { node, inAside } of walkHtml(parsed)) {
+    if (inAside && node.type === "element" && node.tagName === "p") {
+      const offset = node.position?.start.offset;
+      if (offset !== undefined) asideParagraphs.add(offset);
+    }
+  }
+  const sanitized = embeddedProcessor.runSync(parsed);
+  let firstParagraph: string | null = null;
+  let firstImageUrl: string | null = null;
+  for (const { node, inAside } of walkHtml(sanitized)) {
+    if (node.type !== "element") continue;
+    if (
+      firstParagraph === null &&
+      node.tagName === "p" &&
+      !inAside &&
+      !asideParagraphs.has(node.position?.start.offset ?? -1)
+    ) {
+      firstParagraph = paragraphText(node) || null;
+    }
+    if (firstImageUrl === null && node.tagName === "img") {
+      const src = node.properties.src;
+      firstImageUrl = safeSourceUrl(typeof src === "string" ? src : undefined);
+    }
+  }
+  return {
+    html: String(embeddedProcessor.stringify(sanitized)),
+    firstParagraph,
+    firstImageUrl,
+  };
+}
 
 export function sanitizeArticleHtml(html: string) {
   return String(articleProcessor.processSync(html));

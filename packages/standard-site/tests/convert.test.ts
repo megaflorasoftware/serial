@@ -13,6 +13,9 @@ import {
   loadDocumentFixture,
   rejectingBlobLoader,
   stubBlobLoader,
+  leaflet,
+  offprint,
+  pckt,
 } from "./fixtures";
 import type { FixtureName } from "./fixtures";
 
@@ -42,26 +45,6 @@ function expectFixedPoint(html: string) {
 
 function count(html: string, pattern: RegExp) {
   return html.match(pattern)?.length ?? 0;
-}
-
-function leaflet(blocks: Array<Record<string, unknown>>) {
-  return {
-    $type: "pub.leaflet.content",
-    pages: [
-      {
-        $type: "pub.leaflet.pages.linearDocument",
-        blocks: blocks.map((block) => ({ block })),
-      },
-    ],
-  };
-}
-
-function offprint(items: Array<Record<string, unknown>>) {
-  return { $type: "app.offprint.content", items };
-}
-
-function pckt(items: Array<Record<string, unknown>>) {
-  return { $type: "blog.pckt.content", items };
 }
 
 describe("convertDocumentContent fixtures", () => {

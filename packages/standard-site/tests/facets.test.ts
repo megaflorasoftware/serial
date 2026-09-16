@@ -2,6 +2,32 @@ import { describe, expect, it } from "vitest";
 import { renderFootnotes, renderRichText } from "../src/convert/facets";
 
 describe("renderRichText", () => {
+  it("numbers unsorted and overlapping footnotes by first displayed marker", () => {
+    const context = { footnotes: [] };
+    const reference = (start: number, end: number, id: string) => ({
+      index: { byteStart: start, byteEnd: end },
+      features: [{ $type: "x#footnote", footnoteId: id, contentPlaintext: id }],
+    });
+    const html = renderRichText(
+      {
+        plaintext: "abcdef",
+        facets: [
+          reference(4, 6, "last"),
+          reference(0, 4, "middle"),
+          reference(1, 2, "first"),
+          reference(5, 6, "first"),
+        ],
+      },
+      context,
+    );
+    expect(html).toBe(
+      "ab<sup>[1]</sup>cd<sup>[2]</sup>ef<sup>[3]</sup><sup>[1]</sup>",
+    );
+    expect(renderFootnotes(context)).toBe(
+      "<section><ol><li>first</li><li>middle</li><li>last</li></ol></section>",
+    );
+  });
+
   it("preserves link precedence when ranges start together and end separately", () => {
     expect(
       renderRichText({

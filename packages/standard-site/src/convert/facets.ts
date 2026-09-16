@@ -9,6 +9,7 @@ import {
   type Attributes,
 } from "./html";
 import { buildBlueskyProfileUrl } from "../uris";
+import { validEntriesSchema } from "../parse";
 
 /**
  * The three platforms share one rich-text model: plaintext plus byte-indexed facets
@@ -17,14 +18,15 @@ import { buildBlueskyProfileUrl } from "../uris";
  */
 export const facetSchema = z.object({
   index: z.object({ byteStart: z.int(), byteEnd: z.int() }),
-  features: z.array(z.looseObject({ $type: z.string() })),
+  features: validEntriesSchema(z.looseObject({ $type: z.string() })),
 });
 
 export type Facet = z.infer<typeof facetSchema>;
+export const facetArraySchema = validEntriesSchema(facetSchema);
 
 export const richTextSchema = z.object({
   plaintext: z.string(),
-  facets: z.array(facetSchema).optional(),
+  facets: facetArraySchema.optional().catch(undefined),
 });
 
 export type RichText = z.infer<typeof richTextSchema>;
@@ -75,7 +77,7 @@ function stringField(feature: Feature, name: string) {
 type Wrapper = {
   tag?: string;
   attributes?: Attributes;
-  marker?: string;
+  footnote?: Footnote;
 };
 
 function inlineTag(tag: string): Wrapper {
@@ -86,10 +88,7 @@ function link(href: string | null): Wrapper | null {
   return href ? { tag: "a", attributes: { href } } : null;
 }
 
-function wrapperFor(
-  feature: Feature,
-  context: FacetRenderContext,
-): Wrapper | null {
+function wrapperFor(feature: Feature): Wrapper | null {
   switch (featureName(feature)) {
     case "bold":
       return inlineTag("strong");
@@ -117,25 +116,32 @@ function wrapperFor(
       const text = stringField(feature, "contentPlaintext");
       if (text === undefined) return null;
       const id = stringField(feature, "footnoteId");
-      const numbers = footnoteNumbers(context);
-      let number = id ? numbers.get(id) : undefined;
-      if (number === undefined) {
-        const facets = z.array(facetSchema).safeParse(feature.contentFacets);
-        context.footnotes.push({
+      const facets = facetArraySchema.safeParse(feature.contentFacets);
+      return {
+        footnote: {
           id: id ?? "",
           text: {
             plaintext: text,
             facets: facets.success ? facets.data : undefined,
           },
-        });
-        number = context.footnotes.length;
-        if (id) numbers.set(id, number);
-      }
-      return { marker: element("sup", undefined, `[${number}]`) };
+        },
+      };
     }
     default:
       return null;
   }
+}
+
+/** Allocate numbers when references appear, rather than when facets are parsed. */
+function footnoteMarker(footnote: Footnote, context: FacetRenderContext) {
+  const numbers = footnoteNumbers(context);
+  let number = footnote.id ? numbers.get(footnote.id) : undefined;
+  if (number === undefined) {
+    context.footnotes.push(footnote);
+    number = context.footnotes.length;
+    if (footnote.id) numbers.set(footnote.id, number);
+  }
+  return element("sup", undefined, `[${number}]`);
 }
 
 function isContinuationByte(byte: number | undefined) {
@@ -153,11 +159,7 @@ function snapToCodePoint(bytes: Uint8Array, offset: number) {
 
 type ResolvedFacet = { start: number; end: number; wrappers: Wrapper[] };
 
-function resolveFacets(
-  facets: Facet[],
-  bytes: Uint8Array,
-  context: FacetRenderContext,
-): ResolvedFacet[] {
+function resolveFacets(facets: Facet[], bytes: Uint8Array): ResolvedFacet[] {
   return facets
     .map((facet) => ({
       start: snapToCodePoint(bytes, facet.index.byteStart),
@@ -169,20 +171,22 @@ function resolveFacets(
       start,
       end,
       wrappers: features
-        .map((feature) => wrapperFor(feature, context))
+        .map(wrapperFor)
         .filter((wrapper): wrapper is Wrapper => wrapper !== null),
     }))
     .filter((facet) => facet.wrappers.length > 0)
     .sort((left, right) => left.start - right.start || right.end - left.end);
 }
 
-/** Nested anchors are invalid HTML, so only the outermost link wraps a segment. */
-function withoutNestedAnchors(wrappers: Wrapper[]) {
-  let seenAnchor = false;
+/** Duplicate formatting adds no content and must not create unbounded nesting. */
+function distinctFormatting(wrappers: Wrapper[]) {
+  if (wrappers.length < 2) return wrappers;
+  const seenTags = new Set<string>();
   return wrappers.filter((wrapper) => {
-    if (wrapper.tag !== "a") return true;
-    if (seenAnchor) return false;
-    seenAnchor = true;
+    if (!wrapper.tag) return true;
+    // The first anchor still wins when link facets overlap.
+    if (seenTags.has(wrapper.tag)) return false;
+    seenTags.add(wrapper.tag);
     return true;
   });
 }
@@ -197,7 +201,7 @@ export function renderRichText(
   context: FacetRenderContext = { footnotes: [] },
 ) {
   const bytes = new TextEncoder().encode(text.plaintext);
-  const facets = resolveFacets(text.facets ?? [], bytes, context);
+  const facets = resolveFacets(text.facets ?? [], bytes);
   if (facets.length === 0) return escapeText(text.plaintext);
 
   const boundaries = new Set<number>([0, bytes.length]);
@@ -210,7 +214,7 @@ export function renderRichText(
     endings.set(facet.end, ending);
   }
   const offsets = [...boundaries].sort((left, right) => left - right);
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
   // Insertion order matches the sorted facets, preserving outermost-link
   // precedence while visiting only active ranges at each boundary.
   const activeFacets = new Set<ResolvedFacet>();
@@ -226,7 +230,7 @@ export function renderRichText(
       nextFacet += 1;
     }
     const active = [...activeFacets];
-    const wrappers = withoutNestedAnchors(
+    const wrappers = distinctFormatting(
       active.flatMap((facet) => facet.wrappers),
     );
     const tagged = wrappers.filter(
@@ -235,7 +239,9 @@ export function renderRichText(
     const markers = active
       .filter((facet) => facet.end === to)
       .flatMap((facet) => facet.wrappers)
-      .map((wrapper) => wrapper.marker ?? "")
+      .map((wrapper) =>
+        wrapper.footnote ? footnoteMarker(wrapper.footnote, context) : "",
+      )
       .join("");
 
     html +=

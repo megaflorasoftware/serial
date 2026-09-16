@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { facetSchema, renderRichText, richTextSchema } from "./facets";
+import { facetArraySchema, renderRichText, richTextSchema } from "./facets";
 import {
   codeBlock,
   element,
@@ -14,6 +14,7 @@ import {
 } from "./html";
 import {
   blockName,
+  blockArraySchema,
   blueskyPostCard,
   ConversionContext,
   richTextHeading,
@@ -25,8 +26,6 @@ import {
 import { blobRefSchema } from "../lexicons";
 
 const PREFIX = "app.offprint.block.";
-
-const blockSchema = z.looseObject({ $type: z.string() });
 
 // List items are parsed one level at a time so nesting depth is bounded by the
 // context rather than by the schema.
@@ -61,7 +60,7 @@ const imageSetSchema = z.object({
 
 export const offprintContentSchema = z.object({
   $type: z.literal("app.offprint.content"),
-  items: z.array(blockSchema),
+  items: blockArraySchema,
 });
 
 export type OffprintContent = z.infer<typeof offprintContentSchema>;
@@ -78,7 +77,9 @@ function renderListItems(
       .map((item) => listItemSchema.safeParse(item))
       .filter((result) => result.success)
       .map(({ data: item }) => {
-        const inner = item.content ? renderRichText(item.content, context) : "";
+        const inner = item.content?.plaintext.trim()
+          ? renderRichText(item.content, context)
+          : "";
         const nested = item.children?.length
           ? renderListItems(item.children, ordered, undefined, context, task)
           : "";
@@ -98,9 +99,9 @@ function renderImage(value: unknown, context: ConversionContext) {
   const img = context.blobImage(parsed.data.image.ref.$link, parsed.data.alt);
   if (!img) return "";
   // Malformed caption facets lose the formatting, not the image.
-  const captionFacets = z
-    .array(facetSchema)
-    .safeParse((value as { captionFacets?: unknown }).captionFacets);
+  const captionFacets = facetArraySchema.safeParse(
+    (value as { captionFacets?: unknown }).captionFacets,
+  );
   const caption = parsed.data.caption
     ? renderRichText(
         {
@@ -137,7 +138,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "heading":
       return richTextHeading(block, context);
     case "blockquote": {
-      const items = z.array(blockSchema).safeParse(block.content);
+      const items = blockArraySchema.safeParse(block.content);
       if (!items.success) return "";
       const inner = context.aside(() =>
         context.nested(() =>

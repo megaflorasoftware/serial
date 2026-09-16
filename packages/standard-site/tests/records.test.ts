@@ -316,6 +316,17 @@ describe("subscription record key", () => {
 });
 
 describe("article sanitizer", () => {
+  it("round-trips escaped Latin-1 text and attributes through the article parser", () => {
+    for (let codePoint = 0; codePoint < 256; codePoint += 1) {
+      const text = `a${String.fromCodePoint(codePoint)}b`;
+      const html =
+        paragraph(escapeText(text)) +
+        codeBlock(text, undefined) +
+        image("https://example.com/image", text);
+      expect(sanitizeArticleHtml(html), `code point ${codePoint}`).toBe(html);
+    }
+  });
+
   it.each(["\r", "\r\n"])("normalizes %j in text and attributes", (newline) => {
     const text = `a${newline}b`;
     const html =

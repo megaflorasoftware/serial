@@ -50,3 +50,23 @@ export function stubBlobLoader(blobs: Record<string, unknown>): BlobLoader {
     );
   };
 }
+
+export function leaflet(blocks: Array<Record<string, unknown>>) {
+  return {
+    $type: "pub.leaflet.content",
+    pages: [
+      {
+        $type: "pub.leaflet.pages.linearDocument",
+        blocks: blocks.map((block) => ({ block })),
+      },
+    ],
+  };
+}
+
+export function offprint(items: Array<Record<string, unknown>>) {
+  return { $type: "app.offprint.content", items };
+}
+
+export function pckt(items: Array<Record<string, unknown>>) {
+  return { $type: "blog.pckt.content", items };
+}

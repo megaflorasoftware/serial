@@ -1,8 +1,10 @@
+import { z } from "zod";
 import type { FacetRenderContext } from "./facets";
 import { renderFootnotes, renderRichText, richTextSchema } from "./facets";
 import { heading, image, linkCard, paragraph } from "./html";
 import { strongRefSchema } from "../lexicons";
 import { buildBlueskyCdnImageUrl, buildBlueskyPostUrl } from "../uris";
+import { validEntriesSchema } from "../parse";
 
 export type ConvertedDocument = {
   html: string;
@@ -83,7 +85,9 @@ export class ConversionContext implements FacetRenderContext {
   }
 }
 
-export type Block = { $type: string } & Record<string, unknown>;
+export const blockSchema = z.looseObject({ $type: z.string() });
+export const blockArraySchema = validEntriesSchema(blockSchema);
+export type Block = z.infer<typeof blockSchema>;
 
 /**
  * Strips the platform's block NSID prefix and any `#def` suffix (a `$type` may name
