@@ -82,7 +82,7 @@ async function renderPane() {
   roots.push(root);
   const client = new QueryClient();
   clients.push(client);
-  await act(async () => {
+  await act(() => {
     root.render(
       createElement(
         QueryClientProvider,

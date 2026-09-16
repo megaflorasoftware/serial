@@ -6,12 +6,14 @@ import {
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
 import { atprotoConnections, user } from "~/server/db/schema";
+import type * as AtprotoConfig from "~/server/auth/atproto/config";
+import type * as AtprotoService from "~/server/auth/atproto/service";
+import type * as AuthApi from "better-auth/api";
 
-const { dbHolder, finishAuth, revoke } = vi.hoisted(() => ({
-  dbHolder: { current: undefined as unknown },
-  finishAuth: vi.fn(),
-  revoke: vi.fn(),
-}));
+const { dbHolder, finishAuth, revoke } = vi.hoisted(() => {
+  const dbHolder: { current: unknown } = { current: undefined };
+  return { dbHolder, finishAuth: vi.fn(), revoke: vi.fn() };
+});
 vi.mock("~/server/db", () => ({
   get db() {
     return dbHolder.current;
@@ -28,15 +30,15 @@ vi.mock("~/server/auth/atproto/client", () => ({
   getAtprotoClient: () => Promise.resolve({ revoke }),
 }));
 vi.mock("~/server/auth/atproto/config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/server/auth/atproto/config")>()),
+  ...(await importOriginal<typeof AtprotoConfig>()),
   validateAtprotoConfigAtStartup: vi.fn(),
 }));
 vi.mock("~/server/auth/atproto/service", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/server/auth/atproto/service")>()),
+  ...(await importOriginal<typeof AtprotoService>()),
   finishAtprotoAuth: finishAuth,
 }));
 vi.mock("better-auth/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("better-auth/api")>()),
+  ...(await importOriginal<typeof AuthApi>()),
   getSessionFromCtx: () => Promise.resolve({ user: { id: "user-1" } }),
 }));
 vi.mock("~/server/logger", () => ({
