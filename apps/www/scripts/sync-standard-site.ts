@@ -1,14 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { AtpAgent } from "@atproto/api";
-import matter from "gray-matter";
 import { z } from "zod";
-import {
-  buildGuideDocumentSource,
-  buildReleaseDocumentSource,
-  parsePublicationUri,
-  STANDARD_SITE,
-} from "../src/lib/standard-site";
-import type { StandardSiteContent } from "../src/lib/standard-site";
+import { parsePublicationUri, STANDARD_SITE } from "../src/lib/standard-site";
+import { loadReleaseDocuments } from "./lib/standard-site-content";
 import {
   assertStandardSiteSyncPlanIsSafe,
   planStandardSiteSync,
@@ -24,17 +18,6 @@ const syncEnvSchema = z.object({
 
 const syncEnv = syncEnvSchema.parse(process.env);
 
-const frontmatterSchema = z.object({
-  title: z.string(),
-  description: z.string().optional(),
-  publish_date: z.string(),
-  updated_at: z.string().optional(),
-  public: z.boolean(),
-});
-
-const GUIDES_DIR = new URL("../src/content/guides/", import.meta.url);
-const RELEASES_DIR = new URL("../src/content/releases/", import.meta.url);
-
 const isDryRun = process.argv.includes("--dry-run");
 const allowLargeDelete = process.argv.includes("--allow-large-delete");
 const publicationUri = syncEnv.WWW_STANDARD_SITE_PUBLICATION_URI;
@@ -43,46 +26,6 @@ const publicationIcon = {
   mimeType: "image/png",
   url: new URL("../public/icon-256.png", import.meta.url),
 } as const;
-
-async function loadContentDirectory(
-  directory: URL,
-): Promise<StandardSiteContent[]> {
-  const fileNames = await readdir(directory);
-  const documents: StandardSiteContent[] = [];
-
-  for (const fileName of fileNames) {
-    if (!fileName.endsWith(".md")) continue;
-
-    const raw = await readFile(new URL(fileName, directory), "utf8");
-    const { data, content } = matter(raw);
-    const parsed = frontmatterSchema.parse(data);
-
-    if (!parsed.public) continue;
-
-    documents.push({
-      slug: fileName.replace(/\.md$/, ""),
-      title: parsed.title,
-      content: content.trim(),
-      publish_date: parsed.publish_date,
-      description: parsed.description,
-      updated_at: parsed.updated_at,
-    });
-  }
-
-  return documents;
-}
-
-async function loadDocuments() {
-  const releases = await loadContentDirectory(RELEASES_DIR);
-  const guides = await loadContentDirectory(GUIDES_DIR);
-
-  const releaseDocuments = releases.map(buildReleaseDocumentSource);
-  const guideDocuments = guides.map(buildGuideDocumentSource);
-
-  return [...releaseDocuments, ...guideDocuments].sort((a, b) =>
-    a.publishedAt.localeCompare(b.publishedAt),
-  );
-}
 
 async function listRecords(agent: AtpAgent, repo: string, collection: string) {
   const records: StandardSiteRecord[] = [];
@@ -104,7 +47,7 @@ async function listRecords(agent: AtpAgent, repo: string, collection: string) {
 }
 
 async function syncStandardSite() {
-  const documents = await loadDocuments();
+  const documents = await loadReleaseDocuments();
   const agent = new AtpAgent({ service: syncEnv.WWW_STANDARD_SITE_PDS_URL });
   await agent.login({
     identifier: syncEnv.WWW_STANDARD_SITE_IDENTIFIER,

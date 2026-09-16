@@ -3,6 +3,7 @@ import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { render } from "astro:content";
 import sanitizeHtml from "sanitize-html";
 import { getAllReleases } from "../../lib/content";
+import { RELEASES } from "../../lib/releases";
 
 function resolveSiteUrl(site, value) {
   if (!value || !value.startsWith("/")) return value;
@@ -22,7 +23,7 @@ function resolveAttribute(site, attribute) {
 export async function GET(context) {
   const container = await AstroContainer.create();
   const releases = await getAllReleases();
-  const releasesUrl = new URL("/releases/", context.site).toString();
+  const releasesUrl = `${RELEASES.url}/`;
   const iconUrl = new URL("/icon-256.png", context.site).toString();
 
   const items = await Promise.all(
@@ -34,7 +35,7 @@ export async function GET(context) {
         title: release.data.title,
         description: release.data.description,
         pubDate: new Date(`${release.data.publish_date}T00:00:00Z`),
-        link: new URL(`/releases/${release.id}/`, context.site).toString(),
+        link: `${releasesUrl}${release.id}/`,
         content: sanitizeHtml(content, {
           allowedTags: sanitizeHtml.defaults.allowedTags.concat([
             "img",
@@ -57,15 +58,15 @@ export async function GET(context) {
   );
 
   return rss({
-    title: "Serial Releases",
-    description: "Release notes and product updates from Serial.",
+    title: RELEASES.name,
+    description: RELEASES.description,
     site: releasesUrl,
     items,
     customData: `
       <language>en-us</language>
       <image>
         <url>${iconUrl}</url>
-        <title>Serial Releases</title>
+        <title>${RELEASES.name}</title>
         <link>${releasesUrl}</link>
       </image>
     `,
