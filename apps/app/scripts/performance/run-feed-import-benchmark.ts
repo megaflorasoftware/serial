@@ -22,9 +22,13 @@ try {
   await workload.run();
   const samples = [];
   for (let index = 0; index < 15; index++) {
+    // Every sample must start from the same unattached Feed.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await workload.reset();
     session.instrumentation.reset();
     const started = performance.now();
+    // Concurrent samples would measure contention and share instrumentation.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const result = await workload.run();
     const elapsedMs = performance.now() - started;
     const evidence = session.instrumentation.snapshot();

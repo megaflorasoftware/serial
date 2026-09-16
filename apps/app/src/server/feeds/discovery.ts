@@ -117,10 +117,12 @@ async function discoverFeedsWithoutLimits(
     if (strict) {
       const failedAdvertisedSource = feedscoutResult.value.find(
         (feed) =>
-          !feed.isValid && feed.method !== "guess" && feed.error !== undefined,
+          !feed.isValid &&
+          (feed.method === "html" || feed.method === "headers" ||
+            (feed.method !== "guess" && feed.error !== undefined)),
       );
       if (failedAdvertisedSource && !failedAdvertisedSource.isValid)
-        throw failedAdvertisedSource.error;
+        throw failedAdvertisedSource.error ?? new Error("Unable to read the advertised Feed");
     }
     discoveredFeeds.push(
       ...feedscoutResult.value.filter((feed) => feed.isValid),
@@ -271,7 +273,10 @@ async function discoverWebsite(
     async (row) => {
       try {
         const response = await read(row.url);
-        if (!response.ok) return null;
+        if (!response.ok) {
+          if (strict) throw new FeedImportDeferredError();
+          return null;
+        }
         const parsed = parseSyndicationFeed(response.text, row.url);
         return {
           row: {
@@ -415,20 +420,25 @@ export async function discoverFeedOriginsForImport(
               Math.max(
                 Date.now() + 60_000,
                 Number.isFinite(retryAt) ? retryAt : 0,
+                incomplete?.retryAt.getTime() ?? 0,
               ),
             ),
           );
         }
         return response;
       } catch (error) {
-        incomplete = new FeedImportDeferredError();
+        incomplete ??= new FeedImportDeferredError();
         throw error;
       }
     };
     const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
     const page = await read(url);
     if (!page.ok) throw incomplete ?? new FeedImportDeferredError();
-    const rows = await discoverWebsite(url, read, signal, true);
+    const rows = await discoverWebsite(url, read, signal, true).catch(
+      (error: unknown) => {
+        throw incomplete ?? error;
+      },
+    );
     if (incomplete || signal.aborted)
       throw incomplete ?? new FeedImportDeferredError();
     return rows;

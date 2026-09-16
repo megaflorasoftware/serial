@@ -1,23 +1,23 @@
-import type * as Evidence from "~/server/feeds/revalidationEvidence";
-import type * as Subscriptions from "~/server/subscriptions/helpers";
-import type * as Invalidation from "~/server/reconciliation/invalidation";
 import { createRouterClient } from "@orpc/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type * as Evidence from "~/server/feeds/revalidationEvidence";
+import type * as Subscriptions from "~/server/subscriptions/helpers";
+import type * as Invalidation from "~/server/reconciliation/invalidation";
+import type { ORPCContext } from "~/server/orpc/base";
 import { createFromSubscriptionImport } from "~/server/api/routers/feed-router";
 import { streamingImport } from "~/server/api/routers/initialRouter";
 import { readOriginEvidence } from "~/server/feeds/revalidationEvidence";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
-  feeds,
-  feedOrigins,
   feedCategories,
-  viewFeeds,
+  feedOrigins,
+  feeds,
   user,
+  viewFeeds,
 } from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
-import type { ORPCContext } from "~/server/orpc/base";
 
 const state = vi.hoisted((): { database: unknown } => ({
   database: undefined,
@@ -105,7 +105,43 @@ beforeEach(async () => {
     itemUrls: new Set(["https://example.com/article"]),
   }));
 });
-afterEach(() => fixture.cleanup());
+afterEach(() => {
+  vi.useRealTimers();
+  fixture.cleanup();
+});
+
+it("does not commit a streaming import after preparation times out", async () => {
+  vi.useFakeTimers();
+  let finishPreparation: ((details: Array<typeof rss>) => void) | undefined;
+  vi.mocked(fetchNewFeedDetails).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishPreparation = resolve;
+      }),
+  );
+
+  const eventsPromise = (async () => {
+    const events = [];
+    for await (const event of await api().streaming({
+      feeds: [{ feedUrl: rss.origins[0]!.locator, categories: [] }],
+    }))
+      events.push(event);
+    return events;
+  })();
+  await vi.advanceTimersByTimeAsync(15_000);
+  const events = await eventsPromise;
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      type: "import-feed-error",
+      error: "Import timed out",
+    }),
+  );
+
+  finishPreparation?.([rss]);
+  await vi.runAllTimersAsync();
+  await Promise.resolve();
+  expect(await fixture.database.select().from(feedOrigins)).toHaveLength(1);
+});
 
 it.each(["bulk", "streaming"] as const)(
   "%s OPML attaches verified origins and preserves existing organization",

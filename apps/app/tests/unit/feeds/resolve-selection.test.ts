@@ -20,6 +20,16 @@ vi.mock("~/server/feeds/discovery", () => ({
 vi.mock("~/server/feeds/publications", async (original) => ({
   ...(await original<typeof Publications>()),
   resolvePublication: vi.fn(),
+  publicationRow: (publication: {
+    siteUrl: string;
+    uri: string;
+    name: string;
+  }) => ({
+    url: publication.siteUrl,
+    siteUrl: publication.siteUrl,
+    title: publication.name,
+    origins: [{ kind: "atproto", locator: publication.uri }],
+  }),
 }));
 vi.mock("~/server/rss/fetchFeeds", () => ({ fetchNewFeedDetails: vi.fn() }));
 

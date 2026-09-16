@@ -41,6 +41,7 @@ const publication = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(scoutFeeds).mockResolvedValue([]);
   vi.mocked(resolvePublication).mockResolvedValue(publication);
   vi.mocked(searchPublications).mockResolvedValue([]);
 });
@@ -279,6 +280,63 @@ it("caps discovery transport reads and publication candidates", async () => {
 });
 
 describe("import discovery completeness", () => {
+  it.each(["html", "headers"] as const)(
+    "defers an unreadable advertised %s feed",
+    async (method) => {
+      vi.mocked(scoutFeeds).mockResolvedValue([
+        { url: "https://example.com/rss", isValid: false, method },
+      ]);
+      vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+        response(url, "<html></html>"),
+      );
+      await expect(
+        discoverFeedOriginsForImport(
+          `invalid-${method}`,
+          "https://example.com",
+        ),
+      ).rejects.toBeInstanceOf(FeedImportDeferredError);
+      expect(vi.mocked(scoutFeeds).mock.calls[0]?.[1]).toMatchObject({
+        includeInvalid: true,
+      });
+    },
+  );
+  it("does not treat a discovered RSS origin disappearing as absence", async () => {
+    vi.mocked(scoutFeeds).mockResolvedValue([
+      { url: "https://example.com/rss", isValid: true, format: "rss" },
+    ]);
+    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+      response(url, "<html></html>", url === "https://example.com"),
+    );
+    await expect(
+      discoverFeedOriginsForImport("missing-rss", "https://example.com"),
+    ).rejects.toBeInstanceOf(FeedImportDeferredError);
+  });
+  it("preserves the longest Retry-After across subsequent failures", async () => {
+    vi.mocked(scoutFeeds).mockImplementation(async (_url, options) => {
+      await options!.fetchFn!("https://example.com/slow");
+      await options!.fetchFn!("https://example.com/offline");
+      return [];
+    });
+    vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+      if (url.endsWith("/offline")) throw new Error("offline");
+      if (url.endsWith("/slow"))
+        return {
+          ...response(url, "", false),
+          status: 429,
+          headers: new Headers({ "retry-after": "900" }),
+        };
+      return response(url, "<html></html>");
+    });
+    const before = Date.now();
+    const error = await discoverFeedOriginsForImport(
+      "multiple-failures",
+      "https://example.com",
+    ).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(FeedImportDeferredError);
+    expect(
+      (error as FeedImportDeferredError).retryAt.getTime(),
+    ).toBeGreaterThanOrEqual(before + 900_000);
+  });
   it("allows completed empty discovery when optional endpoints do not exist", async () => {
     vi.mocked(readFeedHttp).mockImplementation(async (url) =>
       response(url, "<html></html>", !url.includes("/.well-known/")),

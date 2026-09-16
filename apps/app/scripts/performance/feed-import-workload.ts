@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import {
-  prepareFeedImport,
   commitFeedImport,
+  prepareFeedImport,
 } from "../../src/server/feeds/imports";
 import { feedOrigins, feeds, user } from "../../src/server/db/schema";
 import { newRssFeedDetails } from "../../src/server/rss/types";
@@ -13,19 +13,19 @@ export async function createFeedImportWorkload(
   count: number,
 ) {
   const userId = "feed-import-benchmark";
-  await database
-    .insert(user)
-    .values({
-      id: userId,
-      name: "Benchmark",
-      email: "feed-import@example.com",
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+  await database.insert(user).values({
+    id: userId,
+    name: "Benchmark",
+    email: "feed-import@example.com",
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
   let targetId = 0;
   const selected = Math.floor(count / 2);
   for (let offset = 0; offset < count; offset += 50) {
+    // Serialize fixture batches to bound SQLite writes and memory.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const rows = await database
       .insert(feeds)
       .values(
@@ -38,16 +38,16 @@ export async function createFeedImportWorkload(
         })),
       )
       .returning({ id: feeds.id, siteUrl: feeds.siteUrl });
-    await database
-      .insert(feedOrigins)
-      .values(
-        rows.map((row) => ({
-          feedId: row.id,
-          userId,
-          kind: "atproto",
-          locator: `at://did:plc:example/site.standard.publication/${row.id}`,
-        })),
-      );
+    // Origin rows depend on the generated Feed IDs from this batch.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database.insert(feedOrigins).values(
+      rows.map((row) => ({
+        feedId: row.id,
+        userId,
+        kind: "atproto",
+        locator: `at://did:plc:example/site.standard.publication/${row.id}`,
+      })),
+    );
     targetId ||=
       rows.find((row) => row.siteUrl === `https://site-${selected}.example.com`)
         ?.id ?? 0;

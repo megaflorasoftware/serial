@@ -105,6 +105,7 @@ export async function syncPublicationSubscriptions(input: {
   let changedFeeds = false;
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
+  let observedCompleteSnapshot = true;
   let lastProgressAt = 0;
   const progress = async (completed: number, total: number) => {
     if (completed > 0 && completed < total && Date.now() - lastProgressAt < 100)
@@ -200,6 +201,7 @@ export async function syncPublicationSubscriptions(input: {
     for (const [index, publicationUri] of publications.entries()) {
       if (Date.now() > deadline) {
         counts.deferred += publications.length - index;
+        observedCompleteSnapshot = false;
         break;
       }
       cursor = publicationUri;
@@ -219,11 +221,47 @@ export async function syncPublicationSubscriptions(input: {
         connection.importSubscriptions &&
         localFeedId === null &&
         records.length > 0;
+      const skippedImport =
+        priorImport?.importState === "skipped" &&
+        priorImport.importGeneration ===
+          connection.subscriptionImportGeneration &&
+        connection.importSubscriptions &&
+        localFeedId === null &&
+        records.length > 0;
+      if (skippedImport) counts.skipped++;
       if (
         pendingImport &&
         priorImport?.importRetryAt &&
         priorImport.importRetryAt > new Date()
       ) {
+        if (
+          !observationUnchanged(
+            old,
+            records,
+            localFeedId,
+            connection.subscriptionImportGeneration,
+            connection.subscriptionExportGeneration,
+          )
+        ) {
+          await renewSubscriptionSync(database, connection);
+          await database.transaction(async (tx) => {
+            await assertSubscriptionSyncCurrent(tx, connection);
+            await saveSubscriptionObservation(tx, {
+              connection,
+              publicationUri,
+              visibility: store.visibility,
+              previous: old,
+              records,
+              feedId: null,
+              imported: true,
+              failure: {
+                state: "pending",
+                retryAt: priorImport.importRetryAt,
+                attempts: priorImport.importFailures,
+              },
+            });
+          });
+        }
         counts.deferred++;
         await progress(index + 1, publications.length);
         continue;
@@ -333,6 +371,13 @@ export async function syncPublicationSubscriptions(input: {
             records,
             feedId,
             imported: action === "import",
+            failure: skippedImport
+              ? {
+                  state: "skipped",
+                  retryAt: null,
+                  attempts: priorImport?.importFailures ?? 1,
+                }
+              : undefined,
           });
           return { imported, inactive, removed };
         });
@@ -400,7 +445,9 @@ export async function syncPublicationSubscriptions(input: {
       .set({
         subscriptionSyncCursor: cursor,
         subscriptionRepoRev:
-          counts.failed || counts.deferred || wroteRecords ? null : rev,
+          counts.failed || !observedCompleteSnapshot || wroteRecords
+            ? null
+            : rev,
       })
       .where(syncClaimCondition(connection));
   } catch (error) {

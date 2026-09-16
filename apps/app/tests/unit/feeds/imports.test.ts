@@ -130,6 +130,45 @@ it("skips a same-site candidate without overlapping articles", async () => {
   expect(await fixture.database.select().from(feedOrigins)).toHaveLength(1);
 });
 
+it("skips conflicting RSS origins even when Atmosphere articles overlap", async () => {
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "owner",
+    details: rss,
+    isActive: true,
+  });
+  await expect(
+    prepare({
+      ...publication,
+      origins: [{ kind: "rss", locator: `${site}/other-rss` }, atproto],
+    }),
+  ).rejects.toBeInstanceOf(FeedImportSkippedError);
+  expect(readOriginEvidence).not.toHaveBeenCalled();
+  expect(await fixture.database.select().from(feedOrigins)).toHaveLength(1);
+});
+
+it("allows distinct RSS Feeds on the same site, including concurrent imports", async () => {
+  const prepared = await prepare();
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "owner",
+    details: {
+      ...rss,
+      origins: [{ kind: "rss", locator: `${site}/section-rss` }],
+    },
+    isActive: true,
+  });
+  expect(await commit(prepared)).toMatchObject({ created: true });
+  expect(
+    await commit(
+      await prepare({
+        ...rss,
+        origins: [{ kind: "rss", locator: `${site}/third-rss` }],
+      }),
+    ),
+  ).toMatchObject({ created: true });
+  expect(await fixture.database.select().from(feeds)).toHaveLength(3);
+  expect(readOriginEvidence).not.toHaveBeenCalled();
+});
+
 it("does not use another user's matching publication", async () => {
   await insertFeedWithOrigins(fixture.database, {
     userId: "other",

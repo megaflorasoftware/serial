@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, sql } from "drizzle-orm";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import {
   createOrReuseFeed,
@@ -18,7 +18,7 @@ import {
 import type { FeedDatabase } from "./origins";
 import type { DatabaseFeedWithOrigins } from "~/server/db/schema";
 import type { NewFeedDetails, NewFeedOriginDetails } from "~/server/rss/types";
-import { feeds } from "~/server/db/schema";
+import { feedOrigins, feeds } from "~/server/db/schema";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 
 export type PreparedFeedImport = {
@@ -38,10 +38,16 @@ function originIdentity(origins: NewFeedOriginDetails[]) {
 async function siteCandidates(
   database: FeedDatabase,
   userId: string,
-  siteUrl: string | null | undefined,
+  details: NewFeedDetails,
 ) {
-  const site = siteUrl && normalizePublicationUrl(siteUrl);
+  const site = details.siteUrl && normalizePublicationUrl(details.siteUrl);
   if (!site) return [];
+  // Distinct RSS feeds on one site are valid. Only cross-origin candidates
+  // require duplicate prevention; combined imports also check kind conflicts.
+  const candidateKinds =
+    details.origins.length === 1
+      ? [details.origins[0]!.kind === "rss" ? "atproto" : "rss"]
+      : ["rss", "atproto"];
   const rows = await database
     .select()
     .from(feeds)
@@ -49,6 +55,17 @@ async function siteCandidates(
       and(
         eq(feeds.userId, userId),
         sql`rtrim(substr(${feeds.siteUrl}, 1, min(instr(${feeds.siteUrl} || '?', '?'), instr(${feeds.siteUrl} || '#', '#')) - 1), '/') = ${site}`,
+        exists(
+          database
+            .select({ id: feedOrigins.id })
+            .from(feedOrigins)
+            .where(
+              and(
+                eq(feedOrigins.feedId, feeds.id),
+                inArray(feedOrigins.kind, candidateKinds),
+              ),
+            ),
+        ),
       ),
     )
     .limit(REVALIDATION_MAX_CANDIDATES + 1);
@@ -88,7 +105,7 @@ export async function prepareFeedImport(
   const exact = await matchingFeed(database, userId, details);
   const candidates = exact
     ? [exact]
-    : await siteCandidates(database, userId, details.siteUrl);
+    : await siteCandidates(database, userId, details);
   const siteSnapshot = exact ? "" : candidateIdentity(candidates);
   if (
     exact &&
@@ -120,6 +137,16 @@ export async function prepareFeedImport(
   for (const candidate of candidates) {
     if (candidate.origins.length !== 1) continue;
     const existing = candidate.origins[0]!;
+    const sameKind = details.origins.find(
+      (origin) => origin.kind === existing.kind,
+    );
+    if (
+      sameKind &&
+      ![sameKind.locator, ...(sameKind.alternateLocators ?? [])].includes(
+        existing.locator,
+      )
+    )
+      continue;
     const addition = details.origins.find(
       (origin) => origin.kind !== existing.kind,
     );
@@ -191,7 +218,7 @@ export async function commitFeedImport(
   } else if (
     current ||
     candidateIdentity(
-      await siteCandidates(database, userId, prepared.details.siteUrl),
+      await siteCandidates(database, userId, prepared.details),
     ) !== prepared.siteCandidates
   ) {
     throw new FeedImportDeferredError(

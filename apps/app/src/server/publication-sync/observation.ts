@@ -50,6 +50,8 @@ export async function saveSubscriptionObservation(
       exportGeneration: connection.subscriptionExportGeneration,
       updatedAt: new Date(),
     };
+    // These writes share the caller's transaction and must remain serialized.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await database
       .insert(mirror)
       .values(values)
