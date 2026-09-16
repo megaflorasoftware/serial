@@ -396,6 +396,63 @@ describe("fetchAndInsertFeedData with content update", () => {
 });
 
 describe("fetchAndInsertFeedData content diffing", () => {
+  it("ingests undated JSON items once and preserves first-seen time when content changes", async () => {
+    const jsonFeed = (title: string) =>
+      JSON.stringify({
+        version: "https://jsonfeed.org/version/1.1",
+        title: "Example",
+        items: [
+          {
+            id: "undated",
+            url: `${baseUrl}/post`,
+            title,
+            content_text: "Body",
+            image: `${baseUrl}/image.png`,
+          },
+        ],
+      });
+    currentContent = jsonFeed("Original");
+    const feed = makeFeed({ platform: "website" });
+    const first = createMockDb();
+    const startedAt = Math.floor(Date.now() / 1000) * 1000;
+    for await (const result of fetchAndInsertFeedData({ db: first.db as any }, [
+      feed,
+    ])) {
+      expect(result.status).toBe("success");
+    }
+    const inserted = first.insertValuesCalls[0] as Array<{
+      postedAt: Date;
+      title: string;
+    }>;
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]!.postedAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+    expect(inserted[0]!.postedAt.getTime()).toBeLessThanOrEqual(Date.now());
+
+    const repeat = createMockDb(inserted);
+    for await (const result of fetchAndInsertFeedData(
+      { db: repeat.db as any },
+      [feed],
+    )) {
+      expect(result.status).toBe("success");
+    }
+    expect(repeat.insertValuesCalls).toHaveLength(0);
+
+    currentContent = jsonFeed("Edited");
+    const updated = createMockDb(inserted);
+    for await (const result of fetchAndInsertFeedData(
+      { db: updated.db as any },
+      [feed],
+    )) {
+      expect(result.status).toBe("success");
+    }
+    expect(updated.insertValuesCalls[0]).toMatchObject([
+      {
+        title: "Edited",
+        postedAt: inserted[0]!.postedAt,
+      },
+    ]);
+    setServerContent("v1");
+  });
   it("skips insert for unchanged items when server returns 200", async () => {
     setServerContent("v1");
 

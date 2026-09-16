@@ -1,4 +1,5 @@
 import { parseFeed } from "feedsmith";
+import { decodeHTML } from "entities";
 import { httpUrl } from "@serial/feed-discovery";
 import type { FeedFetchMetadata, RSSContent } from "./types";
 
@@ -48,6 +49,18 @@ function firstImage(content: string | undefined, base: string) {
   );
 }
 
+function contentSnippet(content: string | undefined) {
+  if (content === undefined) return undefined;
+  return decodeHTML(
+    content
+      .replace(
+        /<\/?(?:h[1-6]|br|p|ul|ol|li|blockquote|section|table|tr|div)\b[^>]*>/gi,
+        "\n",
+      )
+      .replace(/<[^>]*>/g, ""),
+  ).trim();
+}
+
 /** One parser for discovery ranking and website ingestion, including JSON Feed. */
 export function parseSyndicationFeed(
   text: string,
@@ -86,7 +99,7 @@ export function parseSyndicationFeed(
           category.term ? [category.term] : [],
         ),
         content,
-        contentSnippet: item.summary,
+        contentSnippet: contentSnippet(item.summary ?? content),
         thumbnail:
           absoluteUrl(enclosure?.href, link) ?? firstImage(content, link),
       });
@@ -126,7 +139,8 @@ export function parseSyndicationFeed(
         updatedDate: item.date_modified,
         tags: item.tags ?? [],
         content,
-        contentSnippet: item.summary,
+        contentSnippet:
+          item.summary ?? item.content_text ?? contentSnippet(content),
         thumbnail:
           absoluteUrl(
             item.image ??
@@ -183,7 +197,7 @@ export function parseSyndicationFeed(
             )
           : [],
       content,
-      contentSnippet: item.description,
+      contentSnippet: contentSnippet(item.description ?? content),
       thumbnail:
         absoluteUrl(
           item.media?.thumbnails?.[0]?.url ??

@@ -49,6 +49,33 @@ function response(url: string, text: string, ok = true) {
 }
 describe("publication website discovery", () => {
   it.each(["link", "well-known"])(
+    "discovers a subpath publication from the origin root through %s",
+    async (method) => {
+      vi.mocked(resolvePublication).mockResolvedValue({
+        ...publication,
+        siteUrl: "https://www.example.com/blog",
+      });
+      vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+        response(
+          url,
+          url.includes("/.well-known/")
+            ? method === "well-known"
+              ? uri
+              : ""
+            : method === "link"
+              ? `<link rel="site.standard.publication" href="${uri}">`
+              : "",
+        ),
+      );
+      expect(
+        await discoverFeeds("subpath-test", "https://www.example.com"),
+      ).toHaveLength(1);
+      expect(
+        await discoverFeeds("sibling-test", "https://www.example.com/shop"),
+      ).toEqual([]);
+    },
+  );
+  it.each(["link", "well-known"])(
     "discovers a redirected website through %s",
     async (method) => {
       vi.mocked(readFeedHttp).mockImplementation(async (url) => {

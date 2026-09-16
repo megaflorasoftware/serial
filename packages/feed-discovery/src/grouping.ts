@@ -139,3 +139,50 @@ export function combinePublicationRows(
   }
   return result;
 }
+
+function rssLocators(feed: DiscoveredFeed) {
+  const locators = new Set<string>();
+  for (const origin of feed.origins ?? []) {
+    if (origin.kind !== "rss") continue;
+    locators.add(origin.locator);
+    for (const alternate of origin.alternateUrls ?? []) locators.add(alternate);
+  }
+  if (!feed.origins) locators.add(feed.url);
+  return locators;
+}
+
+function sharesRssLocator(left: DiscoveredFeed, right: DiscoveredFeed) {
+  const rightLocators = rssLocators(right);
+  return [...rssLocators(left)].some((locator) => rightLocators.has(locator));
+}
+
+function atprotoLocator(feed: DiscoveredFeed) {
+  return feed.origins?.find((origin) => origin.kind === "atproto")?.locator;
+}
+
+function isDuplicate(left: DiscoveredFeed, right: DiscoveredFeed) {
+  const leftAtproto = atprotoLocator(left);
+  return (
+    sharesRssLocator(left, right) ||
+    (leftAtproto !== undefined && leftAtproto === atprotoLocator(right))
+  );
+}
+
+/** Keep browser-discovered RSS rows that a remote discovery response could not see. */
+export function mergeCapturedDiscoveryFeeds(
+  captured: DiscoveredFeed[],
+  remote: DiscoveredFeed[],
+  limit: number,
+) {
+  const merged: DiscoveredFeed[] = [];
+  const remoteWebsite = remote.filter((feed) => rssLocators(feed).size > 0);
+  const remoteAtmosphere = remote.filter(
+    (feed) => rssLocators(feed).size === 0,
+  );
+  for (const feed of [...remoteWebsite, ...captured, ...remoteAtmosphere]) {
+    if (merged.some((existing) => isDuplicate(existing, feed))) continue;
+    merged.push(feed);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}

@@ -263,6 +263,7 @@ async function insertFeedItems(
         url: feedItems.url,
         contentHash: feedItems.contentHash,
         normalizedUrl: feedItems.normalizedUrl,
+        postedAt: feedItems.postedAt,
       })
       .from(feedItems)
       .where(
@@ -273,10 +274,17 @@ async function insertFeedItems(
 
   const existingByUrl = new Map(existingItems.map((item) => [item.url, item]));
 
-  const feedItemListWithHash = feedItemList.map((item) => ({
-    ...item,
-    contentHash: computeItemHash(item),
-  }));
+  const firstSeenAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+  const feedItemListWithHash = feedItemList.map((item) => {
+    // Undated items retain their first-seen time across refreshes and edits.
+    const datedItem = {
+      ...item,
+      postedAt: Number.isFinite(item.postedAt.getTime())
+        ? item.postedAt
+        : (existingByUrl.get(item.url)?.postedAt ?? firstSeenAt),
+    };
+    return { ...datedItem, contentHash: computeItemHash(datedItem) };
+  });
 
   const changedItems = feedItemListWithHash.filter((incoming) => {
     const existing = existingByUrl.get(incoming.url);

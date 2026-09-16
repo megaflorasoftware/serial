@@ -116,6 +116,84 @@ describe("Feed origin attachment", () => {
     ).rejects.toThrow(FEED_ORIGIN_CONFLICT);
     expect(await session.database.select().from(feedOrigins)).toHaveLength(2);
   });
+  it("reuses a verified alternate while preserving the stored RSS locator", async () => {
+    const original = await seed("owner", "https://example.com/atom.xml");
+    session.instrumentation.reset();
+    const result = await session.database.transaction(async (database) => {
+      const match = await findFeedForOrigins(database, "owner", [
+        {
+          kind: "rss",
+          locator: rss.locator,
+          alternateLocators: ["https://example.com/atom.xml"],
+        },
+        atmosphere,
+      ]);
+      return attachMissingFeedOrigins(database, match!, [rss, atmosphere]);
+    });
+    const evidence = session.instrumentation.snapshot();
+    expect(evidence.statementCount).toBeLessThanOrEqual(7);
+    expect(evidence.materializedRows).toBeLessThanOrEqual(4);
+    expect(result).toMatchObject({
+      id: original.id,
+      name: original.name,
+      isActive: original.isActive,
+      openLocation: original.openLocation,
+    });
+    expect(
+      result.origins.find((origin) => origin.kind === "rss")?.locator,
+    ).toBe("https://example.com/atom.xml");
+    expect(await session.database.select().from(feeds)).toHaveLength(1);
+  });
+  it("rejects verified alternate locators that resolve to different Feeds", async () => {
+    await seed("owner", rss.locator);
+    for (let duplicate = 0; duplicate < 8; duplicate++) await seed();
+    await seed("owner", "https://example.com/atom.xml");
+    session.instrumentation.reset();
+    await expect(
+      findFeedForOrigins(session.database, "owner", [
+        {
+          kind: "rss",
+          locator: rss.locator,
+          alternateLocators: ["https://example.com/atom.xml"],
+        },
+        atmosphere,
+      ]),
+    ).rejects.toThrow(FEED_ORIGIN_CONFLICT);
+    const evidence = session.instrumentation.snapshot();
+    expect(evidence.statementCount).toBeLessThanOrEqual(2);
+    expect(evidence.materializedRows).toBeLessThanOrEqual(2);
+    expect(await session.database.select().from(feedOrigins)).toHaveLength(10);
+  });
+  it("keeps the lowest-id match for legacy duplicates of one exact locator", async () => {
+    const first = await seed();
+    await seed();
+    expect(
+      (await findFeedForOrigins(session.database, "owner", [rss]))?.id,
+    ).toBe(first.id);
+  });
+  it("does not use stored alternates without fresh verification", async () => {
+    await insertFeedWithOrigins(session.database, {
+      userId: "owner",
+      isActive: false,
+      details: {
+        ...newRssFeedDetails({
+          url: "https://example.com/atom.xml",
+          name: "My custom name",
+          platform: "website",
+        }),
+        origins: [
+          {
+            kind: "rss",
+            locator: "https://example.com/atom.xml",
+            alternateLocators: [rss.locator],
+          },
+        ],
+      },
+    });
+    expect(
+      await findFeedForOrigins(session.database, "owner", [rss]),
+    ).toBeUndefined();
+  });
   it("does not reuse another user's Feed", async () => {
     await seed("other");
     expect(

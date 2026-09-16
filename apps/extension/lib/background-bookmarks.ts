@@ -1,3 +1,4 @@
+import { DISCOVERY_TOTAL_BUDGET_MS } from "@serial/feed-discovery";
 import { parseDiscoveredFeeds } from "@serial/feed-discovery/validation";
 import {
   EXTENSION_FEED_ADD_REQUEST_TIMEOUT_MS,
@@ -26,6 +27,9 @@ type BookmarkBackgroundDependencies = {
     options?: { timeoutMs?: number },
   ) => Promise<Response>;
 };
+
+const EXTENSION_DISCOVERY_REQUEST_TIMEOUT_MS =
+  DISCOVERY_TOTAL_BUDGET_MS + 3_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -125,7 +129,9 @@ async function authenticatedApiRequest(
     },
     path === "/api/extension/feeds"
       ? { timeoutMs: EXTENSION_FEED_ADD_REQUEST_TIMEOUT_MS }
-      : undefined,
+      : path === "/api/extension/bookmark-feed-discovery"
+        ? { timeoutMs: EXTENSION_DISCOVERY_REQUEST_TIMEOUT_MS }
+        : undefined,
   );
   if (response.status === 401 || response.status === 403) {
     await dependencies.clearSession(session);

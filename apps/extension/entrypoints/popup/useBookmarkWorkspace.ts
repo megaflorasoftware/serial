@@ -1,4 +1,8 @@
-import { feedDiscoveryKey } from "@serial/feed-discovery";
+import {
+  DISCOVERY_LIMIT,
+  feedDiscoveryKey,
+  mergeCapturedDiscoveryFeeds,
+} from "@serial/feed-discovery";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -103,7 +107,14 @@ export function useBookmarkWorkspace(input: {
         }
         const currentWorkspace = workspaceRef.current;
         if (currentWorkspace?.bookmark.id === savedWorkspace.bookmark.id) {
-          replaceWorkspace({ ...currentWorkspace, feeds: response.feeds });
+          replaceWorkspace({
+            ...currentWorkspace,
+            feeds: mergeCapturedDiscoveryFeeds(
+              savedWorkspace.feeds,
+              response.feeds,
+              DISCOVERY_LIMIT,
+            ),
+          });
         }
         setFeedDiscoveryStatus("loaded");
       } catch {

@@ -149,6 +149,120 @@ describe("extension Bookmark workspace lifecycle", () => {
     expect(sendMessage).toHaveBeenCalledTimes(2);
   });
 
+  it("preserves captured Feeds missing from a partial remote result", async () => {
+    const capturedFeeds = [
+      { url: "https://example.com/main.xml", title: "Captured main" },
+      { url: "https://example.com/private.xml", title: "Captured private" },
+    ];
+    const combinedFeed = {
+      url: "https://example.com/main.atom",
+      title: "Remote publication",
+      origins: [
+        {
+          kind: "rss" as const,
+          locator: "https://example.com/main.atom",
+          alternateUrls: ["https://example.com/main.xml"],
+        },
+        {
+          kind: "atproto" as const,
+          locator: "at://did:plc:example/site.standard.publication/main",
+        },
+      ],
+    };
+    const atmosphereFeed = {
+      url: "https://atmosphere.example",
+      title: "Atmosphere only",
+      origins: [
+        {
+          kind: "atproto" as const,
+          locator: "at://did:plc:atmosphere/site.standard.publication/main",
+        },
+      ],
+    };
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "saved",
+        workspace: { ...workspace, feeds: capturedFeeds },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "feeds-discovered",
+        feeds: [combinedFeed, atmosphereFeed],
+      });
+    vi.stubGlobal("browser", { runtime: { sendMessage } });
+
+    await act(async () => root.render(createElement(Harness)));
+
+    expect(controller.workspace?.feeds).toEqual([
+      combinedFeed,
+      capturedFeeds[1],
+      atmosphereFeed,
+    ]);
+  });
+
+  it("does not let Atmosphere results exhaust the captured Feed limit", async () => {
+    const capturedFeed = {
+      url: "https://example.com/private.xml",
+      title: "Captured private",
+    };
+    const atmosphereFeeds = Array.from({ length: 16 }, (_, index) => ({
+      url: `https://publication-${index}.example`,
+      title: `Publication ${index}`,
+      origins: [
+        {
+          kind: "atproto" as const,
+          locator: `at://did:plc:${index}/site.standard.publication/main`,
+        },
+      ],
+    }));
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "saved",
+        workspace: { ...workspace, feeds: [capturedFeed] },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "feeds-discovered",
+        feeds: atmosphereFeeds,
+      });
+    vi.stubGlobal("browser", { runtime: { sendMessage } });
+
+    await act(async () => root.render(createElement(Harness)));
+
+    expect(controller.workspace?.feeds).toHaveLength(16);
+    expect(controller.workspace?.feeds[0]).toEqual(capturedFeed);
+    expect(controller.workspace?.feeds.slice(1)).toEqual(
+      atmosphereFeeds.slice(0, 15),
+    );
+  });
+
+  it("keeps captured Feeds when remote discovery returns none", async () => {
+    const capturedFeeds = [
+      { url: "https://example.com/private.xml", title: "Captured private" },
+    ];
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "saved",
+        workspace: { ...workspace, feeds: capturedFeeds },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "feeds-discovered",
+        feeds: [],
+      });
+    vi.stubGlobal("browser", { runtime: { sendMessage } });
+
+    await act(async () => root.render(createElement(Harness)));
+
+    expect(controller.workspace?.feeds).toEqual(capturedFeeds);
+  });
+
   it.each([
     {
       name: "empty result",

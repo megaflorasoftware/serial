@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { db as defaultDatabase } from "~/server/db";
 import type {
   DatabaseFeed,
@@ -30,7 +30,13 @@ export type FeedRow = { id: number; userId: string };
 export const FEED_ORIGIN_CONFLICT =
   "These origins belong to different Feeds or conflict with an existing origin. No Feeds were changed.";
 
-/** Two indexed locator lookups at most; legacy duplicate RSS locators keep the lowest-id match. */
+function verifiedLocators(origin: NewFeedDetails["origins"][number]) {
+  return origin.kind === FEED_ORIGIN_KIND.RSS
+    ? [...new Set([origin.locator, ...(origin.alternateLocators ?? [])])]
+    : [origin.locator];
+}
+
+/** Two indexed locator lookups at most; legacy duplicates of one locator keep the lowest-id match. */
 export async function findFeedForOrigins(
   database: FeedDatabase,
   userId: string,
@@ -39,24 +45,32 @@ export async function findFeedForOrigins(
   const matches = (
     await Promise.all(
       origins.map(async (origin) => {
-        const [match] = await database
-          .select({ feed: feeds })
+        const lowestFeedByLocator = database
+          .select({
+            feedId: sql<number>`min(${feedOrigins.feedId})`.as("feed_id"),
+            locator: feedOrigins.locator,
+          })
           .from(feedOrigins)
-          .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
           .where(
             and(
-              eq(feeds.userId, userId),
               eq(feedOrigins.userId, userId),
               eq(feedOrigins.kind, origin.kind),
-              eq(feedOrigins.locator, origin.locator),
+              inArray(feedOrigins.locator, verifiedLocators(origin)),
             ),
           )
-          .orderBy(asc(feedOrigins.feedId))
-          .limit(1);
-        return match?.feed;
+          .groupBy(feedOrigins.locator)
+          .as("lowest_feed_by_locator");
+        const rows = await database
+          .select({ feed: feeds, locator: lowestFeedByLocator.locator })
+          .from(lowestFeedByLocator)
+          .innerJoin(feeds, eq(feeds.id, lowestFeedByLocator.feedId))
+          .where(eq(feeds.userId, userId))
+          .orderBy(asc(lowestFeedByLocator.feedId))
+          .all();
+        return rows.map((row) => row.feed);
       }),
     )
-  ).filter((feed) => feed !== undefined);
+  ).flat();
   if (new Set(matches.map((feed) => feed.id)).size > 1)
     throw new Error(FEED_ORIGIN_CONFLICT);
   const match = matches[0];
@@ -66,7 +80,7 @@ export async function findFeedForOrigins(
   const byKind = new Map(feed.origins.map((origin) => [origin.kind, origin]));
   for (const origin of origins) {
     const existing = byKind.get(origin.kind);
-    if (existing && existing.locator !== origin.locator)
+    if (existing && !verifiedLocators(origin).includes(existing.locator))
       throw new Error(FEED_ORIGIN_CONFLICT);
   }
   return feed;

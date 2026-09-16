@@ -1,10 +1,34 @@
 import { discoveredFeedSchema } from "@serial/feed-discovery/validation";
+import { combinePublicationRows } from "@serial/feed-discovery";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import { discoverFeeds } from "./discovery";
-import { resolvePublication } from "./publications";
+import { publicationRow, resolvePublication } from "./publications";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { NewFeedDetails } from "~/server/rss/types";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
+
+function isCombinedSelection(
+  rssDetails: NewFeedDetails,
+  publication: NonNullable<Awaited<ReturnType<typeof resolvePublication>>>,
+) {
+  const rss = rssDetails.origins.find((origin) => origin.kind === "rss");
+  if (!rss) return false;
+  const [combined] = combinePublicationRows(
+    [
+      {
+        url: rss.locator,
+        title: rssDetails.name,
+        siteUrl: rssDetails.siteUrl ?? undefined,
+        imageUrl: rssDetails.imageUrl ?? undefined,
+        origins: [{ kind: "rss", locator: rss.locator }],
+      },
+    ],
+    [publicationRow(publication)],
+  );
+  return combined?.origins?.some(
+    (origin) => origin.kind === "atproto" && origin.locator === publication.uri,
+  );
+}
 
 /** Selected rows are hints. Names, PDS endpoints, and origin associations come from fresh server reads. */
 export async function resolveFeedSelection(
@@ -29,6 +53,7 @@ export async function resolveFeedSelection(
   }
   const selected = discoveredFeedSchema.parse(selection);
   let rss = selected.origins?.find((origin) => origin.kind === "rss");
+  let publicationDiscovery: DiscoveredFeed[] | undefined;
   const atmosphere = selected.origins?.find(
     (origin) => origin.kind === "atproto",
   );
@@ -38,8 +63,8 @@ export async function resolveFeedSelection(
   if (atmosphere && !publication)
     throw new Error("Unable to read the selected publication");
   if (publication && !rss) {
-    const rows = await discoverFeeds(userId, publication.siteUrl);
-    const matching = rows.find((row) =>
+    publicationDiscovery = await discoverFeeds(userId, publication.siteUrl);
+    const matching = publicationDiscovery.find((row) =>
       row.origins?.some(
         (origin) =>
           origin.kind === "atproto" && origin.locator === publication.uri,
@@ -55,7 +80,9 @@ export async function resolveFeedSelection(
   if (rssDetails && rss?.alternateUrls?.length) {
     // Rediscover under the shared request/body budget instead of fetching each
     // client-provided alternate with the full ingestion budget.
-    const rows = await discoverFeeds(userId, rssDetails.siteUrl ?? rss.locator);
+    const rows =
+      publicationDiscovery ??
+      (await discoverFeeds(userId, rssDetails.siteUrl ?? rss.locator));
     const verified = rows
       .flatMap((row) => row.origins ?? [])
       .find(
@@ -76,13 +103,8 @@ export async function resolveFeedSelection(
     }));
   }
   if (!publication) return rssDetails ? [rssDetails] : [];
-  if (
-    rssDetails &&
-    normalizePublicationUrl(rssDetails.siteUrl ?? "") !==
-      normalizePublicationUrl(publication.siteUrl)
-  ) {
-    throw new Error("The RSS Feed and publication belong to different sites");
-  }
+  if (rssDetails && !isCombinedSelection(rssDetails, publication))
+    throw new Error("The RSS Feed and publication cannot be combined");
   return [
     {
       ...(rssDetails ?? {}),

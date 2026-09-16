@@ -169,7 +169,8 @@
     "@atproto-labs/did-resolver": "^0.3.7",
     "@serial/feed-discovery": "workspace:*",
     "feedsmith": "^2.9.5",
-    "@atproto-labs/identity-resolver": "^0.4.7"
+    "@atproto-labs/identity-resolver": "^0.4.7",
+    "entities": "^8.0.0"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

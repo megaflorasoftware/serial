@@ -18,6 +18,7 @@ describe("syndication parser", () => {
       tags: ["garden"],
       thumbnail: "https://example.com/photo.jpg",
       content: "<p>Body</p>",
+      contentSnippet: "Body",
       updatedDate: "2026-09-15T00:00:00Z",
       publishedDate: "2026-09-15T00:00:00Z",
     });
@@ -46,6 +47,7 @@ describe("syndication parser", () => {
       id: "post",
       author: "Alice",
       content: "&lt;script&gt; &amp; text",
+      contentSnippet: "<script> & text",
       tags: ["garden"],
       updatedDate: "2026-09-15T00:00:00Z",
     });
@@ -62,5 +64,15 @@ describe("syndication parser", () => {
       content: "<p>Body</p>",
       thumbnail: "https://example.com/photo.jpg",
     });
+  });
+  it("decodes HTML excerpts into plain snippets without changing the body", () => {
+    const result = parseSyndicationFeed(
+      `<rss version="2.0"><channel><title>Example</title><link>https://example.com</link><description>Feed</description><item><guid>post</guid><link>https://example.com/post</link><description><![CDATA[<p>First &amp; second</p><p>Third &lt;literal&gt;</p>]]></description></item></channel></rss>`,
+      "https://example.com/rss",
+    );
+    expect(result.items[0]?.contentSnippet).toMatch(
+      /^First & second\s+Third <literal>$/,
+    );
+    expect(result.items[0]?.content).toContain("<p>First &amp; second</p>");
   });
 });

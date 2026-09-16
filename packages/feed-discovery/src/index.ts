@@ -3,11 +3,13 @@ export type { DiscoveredFeed, DiscoveredOrigin } from "./validation";
 export {
   collapseSyndicationAlternates,
   combinePublicationRows,
+  mergeCapturedDiscoveryFeeds,
 } from "./grouping";
 export type { SyndicationCandidate } from "./grouping";
 
 export const DISCOVERY_LIMIT = 16;
 export const DISCOVERY_QUERY_LIMIT = 1024;
+export const DISCOVERY_TOTAL_BUDGET_MS = 12_000;
 
 export function httpUrl(value: string): string | null {
   try {

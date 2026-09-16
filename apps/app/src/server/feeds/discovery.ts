@@ -6,6 +6,7 @@ import {
   collapseSyndicationAlternates,
   combinePublicationRows,
   DISCOVERY_LIMIT,
+  DISCOVERY_TOTAL_BUDGET_MS,
   httpUrl,
 } from "@serial/feed-discovery";
 import {
@@ -125,7 +126,7 @@ async function discoverFeedsWithoutLimits(
 
 function requestReader() {
   const requests = new Map<string, ReturnType<typeof readFeedHttp>>();
-  const deadline = Date.now() + 12_000;
+  const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
   return ((url, options) => {
     const key = `${options?.method ?? "GET"}:${url}`;
     const existing = requests.get(key);
@@ -216,7 +217,8 @@ async function websitePublications(
     const site = new URL(result.siteUrl);
     if (
       site.origin === target.origin &&
-      (target.pathname === site.pathname ||
+      (target.pathname === "/" ||
+        target.pathname === site.pathname ||
         target.pathname.startsWith(`${site.pathname.replace(/\/$/, "")}/`))
     ) {
       rows.push(publicationRow(result));
@@ -279,7 +281,7 @@ export async function discoverFeeds(
   if (!lease.ok) return [];
   try {
     const read = requestReader();
-    const signal = AbortSignal.timeout(12_000);
+    const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
     if (input.publicationUri) {
       const publication = await resolvePublication(
         input.publicationUri,
