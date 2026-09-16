@@ -137,11 +137,15 @@ export async function prepareFeedImport(
   for (const candidate of candidates) {
     if (candidate.origins.length !== 1) continue;
     const existing = candidate.origins[0]!;
+    // A Feed has at most two origins and there are at most four candidates.
+    // react-doctor-disable-next-line react-doctor/js-index-maps
     const sameKind = details.origins.find(
       (origin) => origin.kind === existing.kind,
     );
     if (
       sameKind &&
+      // Verified alternates are bounded by discovery's eight-source budget.
+      // react-doctor-disable-next-line react-doctor/js-set-map-lookups
       ![sameKind.locator, ...(sameKind.alternateLocators ?? [])].includes(
         existing.locator,
       )

@@ -118,11 +118,15 @@ async function discoverFeedsWithoutLimits(
       const failedAdvertisedSource = feedscoutResult.value.find(
         (feed) =>
           !feed.isValid &&
-          (feed.method === "html" || feed.method === "headers" ||
+          (feed.method === "html" ||
+            feed.method === "headers" ||
             (feed.method !== "guess" && feed.error !== undefined)),
       );
       if (failedAdvertisedSource && !failedAdvertisedSource.isValid)
-        throw failedAdvertisedSource.error ?? new Error("Unable to read the advertised Feed");
+        throw (
+          failedAdvertisedSource.error ??
+          new Error("Unable to read the advertised Feed")
+        );
     }
     discoveredFeeds.push(
       ...feedscoutResult.value.filter((feed) => feed.isValid),
