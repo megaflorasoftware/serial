@@ -1,8 +1,29 @@
 import { toast } from "sonner";
+import type { QueryClient } from "@tanstack/react-query";
 import type {
   PublicationSyncJobStatus,
   PublicationSyncResult,
 } from "~/lib/auth/publication-sync";
+import { orpc } from "~/lib/orpc";
+
+/** Explicit saves and consent need feedback even if work finishes before polling starts. */
+export async function refreshPublicationSyncProgress(queryClient: QueryClient) {
+  try {
+    // A read started before the save may still contain the previous request.
+    await queryClient.cancelQueries({
+      queryKey: orpc.atproto.getSyncStatus.queryKey(),
+    });
+    const job = await queryClient.fetchQuery(
+      orpc.atproto.getSyncStatus.queryOptions({
+        staleTime: 0,
+        meta: { persist: false },
+      }),
+    );
+    if (job && !job.pending) showPublicationSyncProgress(job);
+  } catch (error) {
+    console.error("Unable to refresh publication sync progress", error);
+  }
+}
 
 export const PUBLICATION_SYNC_TOAST = "publication-subscription-sync";
 export function publicationSyncMessage(result: PublicationSyncResult) {

@@ -15,6 +15,7 @@ import {
   syncMethodNeedsWriteScope,
 } from "~/lib/auth/atproto-sync-settings";
 import { orpc } from "~/lib/orpc";
+import { refreshPublicationSyncProgress } from "~/lib/data/publication-sync";
 
 export const ATPROTO_PERMISSIONS_NOTICE =
   "In order to save Serial subscriptions to your PDS, we need additional permissions.";
@@ -47,9 +48,7 @@ export function useAtprotoSyncSettingsSave() {
           queryKey: orpc.atproto.getConnectionStatus.queryKey(),
         });
         toast.success("Settings saved");
-        void queryClient.invalidateQueries({
-          queryKey: orpc.atproto.getSyncStatus.queryKey(),
-        });
+        void refreshPublicationSyncProgress(queryClient);
       },
       onError: (error) => {
         toast.error(error.message || "Failed to save sync settings");
