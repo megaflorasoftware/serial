@@ -5,14 +5,14 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
-import { atprotoConnections, user } from "~/server/db/schema";
 import type * as AtprotoConfig from "~/server/auth/atproto/config";
 import type * as AtprotoService from "~/server/auth/atproto/service";
 import type * as AuthApi from "better-auth/api";
+import { atprotoConnections, user } from "~/server/db/schema";
 
 const { dbHolder, finishAuth, revoke } = vi.hoisted(() => {
-  const dbHolder: { current: unknown } = { current: undefined };
-  return { dbHolder, finishAuth: vi.fn(), revoke: vi.fn() };
+  const holder: { current: unknown } = { current: undefined };
+  return { dbHolder: holder, finishAuth: vi.fn(), revoke: vi.fn() };
 });
 vi.mock("~/server/db", () => ({
   get db() {
