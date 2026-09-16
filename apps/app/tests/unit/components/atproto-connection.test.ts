@@ -28,6 +28,7 @@ vi.mock("~/components/auth/AtprotoHandleField", () => ({
 }));
 vi.mock("~/components/connections/AtprotoSyncSettingsForm", () => ({
   AtprotoSyncSettingsForm: () => null,
+  useAtprotoSyncSettingsSave: () => ({ busy: false, save: vi.fn() }),
 }));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

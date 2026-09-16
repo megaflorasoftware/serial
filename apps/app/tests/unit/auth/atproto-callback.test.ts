@@ -282,6 +282,7 @@ describe("finishAtprotoAuth", () => {
           expectedDid: DID,
           upgradeUserId: "user-1",
           pendingSyncPreferences: { method: "export", importAsInactive: true },
+          pendingSyncSettingsVersion: 7,
         }),
       }),
     });
@@ -291,6 +292,7 @@ describe("finishAtprotoAuth", () => {
     });
 
     expect(result.upgradeUserId).toBe("user-1");
+    expect(result.pendingSyncSettingsVersion).toBe(7);
     expect(result.pendingSyncPreferences).toEqual({
       method: "export",
       importAsInactive: true,
@@ -316,6 +318,30 @@ describe("finishAtprotoAuth", () => {
 
     expect(result.pendingSyncPreferences).toBeNull();
   });
+
+  it.each([undefined, -1, 1.5, "1", Number.MAX_SAFE_INTEGER + 1])(
+    "rejects a missing or malformed pending settings version: %s",
+    async (pendingSyncSettingsVersion) => {
+      clientHolder.current = fakeClient({
+        callback: vi.fn().mockResolvedValue({
+          session: oauthSession(DID),
+          state: JSON.stringify({
+            expectedDid: DID,
+            upgradeUserId: "user-1",
+            pendingSyncPreferences: {
+              method: "export",
+              importAsInactive: false,
+            },
+            pendingSyncSettingsVersion,
+          }),
+        }),
+      });
+      const result = await finishAtprotoAuth(new URLSearchParams("code=abc"), {
+        deferHandleResolution: true,
+      });
+      expect(result.pendingSyncSettingsVersion).toBeNull();
+    },
+  );
 
   it("treats an unresolvable handle as display data, not a failure", async () => {
     const oauth = oauthSession(DID);

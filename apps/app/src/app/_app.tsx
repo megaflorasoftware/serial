@@ -195,6 +195,7 @@ const ATPROTO_LINK_ERROR_MESSAGES: Record<string, string> = {
 
 const ATPROTO_CONSENT_ERROR_MESSAGES: Record<string, string> = {
   denied: "Permissions weren't granted, so your sync settings were not saved.",
+  changed: "Your sync settings changed. Review them and save again.",
 };
 
 /**

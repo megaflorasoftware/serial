@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
-import { AtprotoSyncSettingsForm } from "./AtprotoSyncSettingsForm";
+import {
+  AtprotoSyncSettingsForm,
+  useAtprotoSyncSettingsSave,
+} from "./AtprotoSyncSettingsForm";
 import { ConnectedAccountRow } from "./ConnectedAccountRow";
 import { ConnectionListRow } from "./ConnectionListRow";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
@@ -128,6 +131,7 @@ export function AtprotoConnectionPane() {
   } = useAtprotoConnectionStatus();
   const unlinkMutation = useAtprotoUnlink();
   const reconnectMutation = useAtprotoReconnect();
+  const syncSettingsSave = useAtprotoSyncSettingsSave();
   // Either round trip leaves the page; neither action may start while the
   // other is under way.
   const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
@@ -154,7 +158,7 @@ export function AtprotoConnectionPane() {
     <div className="grid gap-6">
       <ConnectedAccountRow
         label={status.handle ?? "Connected"}
-        disabled={accountBusy}
+        disabled={accountBusy || syncSettingsSave.busy}
         disconnecting={unlinkMutation.isPending}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
@@ -168,7 +172,9 @@ export function AtprotoConnectionPane() {
         key={JSON.stringify(status.syncPreferences)}
         savedPreferences={status.syncPreferences}
         hasWriteScope={status.hasWriteScope}
-        disabled={status.needsReconnect}
+        disabled={status.needsReconnect || accountBusy}
+        saving={syncSettingsSave.busy}
+        onSave={syncSettingsSave.save}
       />
     </div>
   );

@@ -20,32 +20,8 @@ import { orpc } from "~/lib/orpc";
 export const ATPROTO_PERMISSIONS_NOTICE =
   "In order to save Serial subscriptions to your PDS, we need additional permissions.";
 
-/**
- * The Atmosphere subscription sync settings: the four-way method and the
- * inactive-import preference, saved together by one explicit Save so a
- * resync never follows an innocuous click. Local edits live only until
- * the pane unmounts; the caller remounts the form when the saved values
- * change.
- */
-export function AtprotoSyncSettingsForm({
-  savedPreferences,
-  hasWriteScope,
-  disabled,
-}: {
-  savedPreferences: AtprotoSyncPreferences;
-  hasWriteScope: boolean;
-  disabled: boolean;
-}) {
-  // Edits stay local until Save; the parent's key resets them after a saved change.
-  // react-doctor-disable-next-line react-doctor/no-derived-useState
-  const [method, setMethod] = useState<AtprotoSyncMethod>(
-    savedPreferences.method,
-  );
-  // This is the other editable preference, reset by the same parent key.
-  // react-doctor-disable-next-line react-doctor/no-derived-useState
-  const [importAsInactive, setImportAsInactive] = useState(
-    savedPreferences.importAsInactive,
-  );
+/** The pane shares this operation state across Save and account actions. */
+export function useAtprotoSyncSettingsSave() {
   // Keep controls locked until navigation, but let Back restore the form
   // if the user abandons consent and the browser retains this page.
   const [redirecting, setRedirecting] = useState(false);
@@ -79,11 +55,47 @@ export function AtprotoSyncSettingsForm({
     }),
   );
 
+  return {
+    save: saveMutation.mutate,
+    busy: saveMutation.isPending || redirecting,
+  };
+}
+
+/**
+ * The Atmosphere subscription sync settings: the four-way method and the
+ * inactive-import preference, saved together by one explicit Save so a
+ * resync never follows an innocuous click. Local edits live only until
+ * the pane unmounts; the caller remounts the form when the saved values
+ * change.
+ */
+export function AtprotoSyncSettingsForm({
+  savedPreferences,
+  hasWriteScope,
+  disabled,
+  saving,
+  onSave,
+}: {
+  savedPreferences: AtprotoSyncPreferences;
+  hasWriteScope: boolean;
+  disabled: boolean;
+  saving: boolean;
+  onSave: (preferences: AtprotoSyncPreferences) => void;
+}) {
+  // Edits stay local until Save; the parent's key resets them after a saved change.
+  // react-doctor-disable-next-line react-doctor/no-derived-useState
+  const [method, setMethod] = useState<AtprotoSyncMethod>(
+    savedPreferences.method,
+  );
+  // This is the other editable preference, reset by the same parent key.
+  // react-doctor-disable-next-line react-doctor/no-derived-useState
+  const [importAsInactive, setImportAsInactive] = useState(
+    savedPreferences.importAsInactive,
+  );
+
   const dirty =
     method !== savedPreferences.method ||
     importAsInactive !== savedPreferences.importAsInactive;
   const needsConsent = syncMethodNeedsWriteScope(method) && !hasWriteScope;
-  const busy = saveMutation.isPending || redirecting;
 
   return (
     // This client-only settings form submits through the shared oRPC mutation.
@@ -92,7 +104,7 @@ export function AtprotoSyncSettingsForm({
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        saveMutation.mutate({ method, importAsInactive });
+        onSave({ method, importAsInactive });
       }}
     >
       <div className="grid gap-2">
@@ -101,7 +113,7 @@ export function AtprotoSyncSettingsForm({
           id="atproto-sync-method"
           type="single"
           value={method}
-          disabled={disabled || busy}
+          disabled={disabled || saving}
           onValueChange={(value) => {
             if (!value) return;
             setMethod(value as AtprotoSyncMethod);
@@ -136,11 +148,11 @@ export function AtprotoSyncSettingsForm({
           id="atproto-import-as-inactive"
           checked={importAsInactive}
           onCheckedChange={setImportAsInactive}
-          disabled={disabled || busy}
+          disabled={disabled || saving}
         />
       </div>
-      <Button type="submit" disabled={disabled || busy || !dirty}>
-        {busy ? <Loader2Icon className="animate-spin" size={16} /> : "Save"}
+      <Button type="submit" disabled={disabled || saving || !dirty}>
+        {saving ? <Loader2Icon className="animate-spin" size={16} /> : "Save"}
       </Button>
     </form>
   );

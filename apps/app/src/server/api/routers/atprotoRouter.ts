@@ -138,6 +138,7 @@ export const saveSyncSettings = protectedProcedure
           scope: ATPROTO_FULL_SCOPE,
           userId: context.user.id,
           pendingSyncPreferences: input,
+          syncSettingsVersion: connection.syncSettingsVersion,
         });
         return { saved: false as const, consentUrl: url.toString() };
       } catch (err) {

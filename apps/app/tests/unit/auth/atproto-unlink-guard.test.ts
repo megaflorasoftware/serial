@@ -385,6 +385,7 @@ describe("atproto connection procedures", () => {
           expectedDid: DID,
           upgradeUserId: "user-1",
           pendingSyncPreferences: { method: "export", importAsInactive: true },
+          pendingSyncSettingsVersion: 0,
         }),
       }),
     );

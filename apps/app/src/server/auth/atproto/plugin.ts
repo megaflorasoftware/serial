@@ -215,7 +215,8 @@ export const atprotoPlugin = () => {
           if (
             result.linkUserId ||
             result.upgradeUserId ||
-            result.pendingSyncPreferences
+            result.pendingSyncPreferences ||
+            result.pendingSyncSettingsVersion !== null
           ) {
             logError("[atproto] add-on state arrived on the sign-in callback");
             throw ctx.redirect(SIGN_IN_ERROR_REDIRECT);
@@ -372,15 +373,22 @@ export const atprotoPlugin = () => {
               sessionUserId: session.user.id,
               upgradeUserId: result.upgradeUserId,
               pendingSyncPreferences: result.pendingSyncPreferences,
+              pendingSyncSettingsVersion: result.pendingSyncSettingsVersion,
             });
           } catch (err) {
             // The code exchange already replaced the stored grant for the
             // connection's own DID (the service pinned the subject), so a
-            // failure here leaves the previous settings unchanged. Keep
-            // the returned grant, even if narrower than requested: revoking
-            // would sever the owner's working connection with no older
-            // session to fall back on.
+            // failure here leaves the previous settings unchanged. A
+            // disconnect during consent may have unbound the row; clean
+            // up those credentials while retaining any bound owner's grant.
             logError("[atproto] upgrade failed:", err);
+            await revokeAtprotoConnectionIfUnbound(result.did).catch(
+              (revokeErr) =>
+                logError(
+                  "[atproto] failed to revoke after upgrade failure:",
+                  revokeErr,
+                ),
+            );
             const consentResult: AtprotoConsentResult =
               err instanceof AtprotoUpgradeError ? err.code : "error";
             throw ctx.redirect(consentResultRedirect(consentResult));

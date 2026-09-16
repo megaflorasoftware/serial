@@ -442,6 +442,7 @@ describe("atproto consent upgrade", () => {
     authorizeMock.mockResolvedValue(new URL("https://pds.example/authorize"));
 
     await upgradeAtprotoAuth({
+      syncSettingsVersion: 0,
       did: DID,
       scope: "atproto include:site.standard.authSocial",
       userId: "user-1",
@@ -455,6 +456,7 @@ describe("atproto consent upgrade", () => {
         expectedDid: DID,
         upgradeUserId: "user-1",
         pendingSyncPreferences: { method: "export", importAsInactive: false },
+        pendingSyncSettingsVersion: 0,
       }),
       redirect_uri: "https://serial.test/api/auth/atproto/upgrade-callback",
     });
@@ -465,6 +467,7 @@ describe("atproto consent upgrade", () => {
   it("refuses a scope outside the allowlist", async () => {
     await expect(
       upgradeAtprotoAuth({
+        syncSettingsVersion: 0,
         did: DID,
         scope: "atproto repo:*",
         userId: "user-1",
@@ -475,7 +478,9 @@ describe("atproto consent upgrade", () => {
   });
 
   it("saves the pending settings once consent comes back for the same user", async () => {
+    session.instrumentation.reset();
     const saved = await completeAtprotoUpgrade({
+      pendingSyncSettingsVersion: 0,
       did: DID,
       grantedScope: "atproto include:site.standard.authSocial",
       sessionUserId: "user-1",
@@ -487,10 +492,14 @@ describe("atproto consent upgrade", () => {
     });
 
     expect(saved).toEqual({ method: "bidirectional", importAsInactive: true });
+    const writes = session.instrumentation.snapshot();
+    expect(writes.statementCount).toBe(2);
+    expect(writes.materializedRows).toBe(0);
     expect(await connectionRow()).toMatchObject({
       importSubscriptions: true,
       exportSubscriptions: true,
       importAsInactive: true,
+      syncSettingsVersion: 1,
     });
     // The sign-in account row records the broader grant too, so a later
     // reconnect that finds only that row re-requests the same scope.
@@ -500,6 +509,94 @@ describe("atproto consent upgrade", () => {
       .where(eq(account.accountId, DID))
       .get();
     expect(accountRow?.scope).toBe("atproto include:site.standard.authSocial");
+  });
+
+  it("rolls preferences back when the account scope write fails", async () => {
+    await session.baseClient.execute(`
+      CREATE TRIGGER fail_account_scope BEFORE UPDATE OF scope ON serial_account
+      BEGIN SELECT RAISE(ABORT, 'scope write failed'); END
+    `);
+
+    await expect(
+      completeAtprotoUpgrade({
+        did: DID,
+        grantedScope: "atproto include:site.standard.authSocial",
+        sessionUserId: "user-1",
+        upgradeUserId: "user-1",
+        pendingSyncSettingsVersion: 0,
+        pendingSyncPreferences: { method: "export", importAsInactive: true },
+      }),
+    ).rejects.toThrow();
+    expect(await connectionRow()).toMatchObject({
+      importSubscriptions: false,
+      exportSubscriptions: false,
+      importAsInactive: false,
+      syncSettingsVersion: 0,
+    });
+  });
+
+  it("keeps the bound connection usable when its sign-in account row is missing", async () => {
+    await session.database.delete(account).where(eq(account.accountId, DID));
+    await expect(
+      completeAtprotoUpgrade({
+        did: DID,
+        grantedScope: "atproto include:site.standard.authSocial",
+        sessionUserId: "user-1",
+        upgradeUserId: "user-1",
+        pendingSyncSettingsVersion: 0,
+        pendingSyncPreferences: { method: "export", importAsInactive: false },
+      }),
+    ).resolves.toEqual({ method: "export", importAsInactive: false });
+    expect((await connectionRow())?.exportSubscriptions).toBe(true);
+  });
+
+  it.each([false, true])(
+    "keeps newer settings when consent finishes, even after returning to the original values: %s",
+    async (returnToOriginal) => {
+      await saveAtprotoSyncSettings({
+        userId: "user-1",
+        did: DID,
+        preferences: { method: "import", importAsInactive: true },
+      });
+      if (returnToOriginal) {
+        await saveAtprotoSyncSettings({
+          userId: "user-1",
+          did: DID,
+          preferences: { method: "none", importAsInactive: false },
+        });
+      }
+      const before = await connectionRow();
+      await expect(
+        completeAtprotoUpgrade({
+          did: DID,
+          grantedScope: "atproto include:site.standard.authSocial",
+          sessionUserId: "user-1",
+          upgradeUserId: "user-1",
+          pendingSyncSettingsVersion: 0,
+          pendingSyncPreferences: { method: "export", importAsInactive: false },
+        }),
+      ).rejects.toMatchObject({ code: "changed" });
+      expect(await connectionRow()).toEqual(before);
+    },
+  );
+
+  it("rejects an old consent attempt after unlink and rebind", async () => {
+    await unlinkAtprotoConnection("user-1");
+    await session.database
+      .update(atprotoConnections)
+      .set({ userId: "user-1", status: "active", session: "new-session" })
+      .where(eq(atprotoConnections.did, DID));
+    await expect(
+      completeAtprotoUpgrade({
+        did: DID,
+        grantedScope: "atproto include:site.standard.authSocial",
+        sessionUserId: "user-1",
+        upgradeUserId: "user-1",
+        pendingSyncSettingsVersion: 0,
+        pendingSyncPreferences: { method: "export", importAsInactive: false },
+      }),
+    ).rejects.toMatchObject({ code: "changed" });
+    expect((await connectionRow())?.exportSubscriptions).toBe(false);
   });
 
   it.each(["export", "bidirectional"] as const)(
@@ -513,6 +610,7 @@ describe("atproto consent upgrade", () => {
 
       await expect(
         completeAtprotoUpgrade({
+          pendingSyncSettingsVersion: 0,
           did: DID,
           grantedScope: "atproto",
           sessionUserId: "user-1",
@@ -531,6 +629,7 @@ describe("atproto consent upgrade", () => {
   it("rejects a callback whose state names a different user and saves nothing", async () => {
     await expect(
       completeAtprotoUpgrade({
+        pendingSyncSettingsVersion: 0,
         did: DID,
         grantedScope: "atproto include:site.standard.authSocial",
         sessionUserId: "user-2",
@@ -544,6 +643,7 @@ describe("atproto consent upgrade", () => {
   it("rejects a callback that carried no pending settings", async () => {
     await expect(
       completeAtprotoUpgrade({
+        pendingSyncSettingsVersion: 0,
         did: DID,
         grantedScope: "atproto include:site.standard.authSocial",
         sessionUserId: "user-1",
@@ -567,6 +667,7 @@ describe("atproto consent upgrade", () => {
   it("rejects a callback for a DID that is not the session user's connection", async () => {
     await expect(
       completeAtprotoUpgrade({
+        pendingSyncSettingsVersion: 0,
         did: OTHER_DID,
         grantedScope: "atproto include:site.standard.authSocial",
         sessionUserId: "user-1",

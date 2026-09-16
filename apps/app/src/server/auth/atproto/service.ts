@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getAtprotoClient } from "./client";
 import {
   assertAllowedAtprotoScope,
@@ -63,6 +63,8 @@ export interface AtprotoCallbackResult {
    * broader grant exists. Null outside upgrade flows.
    */
   pendingSyncPreferences: AtprotoSyncPreferences | null;
+  /** Settings version when Save started, null outside versioned upgrades. */
+  pendingSyncSettingsVersion: number | null;
   /**
    * Where a sign-in flow returns the user once the session exists, null
    * when the flow started without a destination. Only the extension
@@ -223,6 +225,7 @@ export async function finishAtprotoAuth(
     linkUserId: appState.linkUserId ?? null,
     upgradeUserId: appState.upgradeUserId ?? null,
     pendingSyncPreferences: appState.pendingSyncPreferences ?? null,
+    pendingSyncSettingsVersion: appState.pendingSyncSettingsVersion ?? null,
     returnTo: appState.returnTo ?? null,
   };
 }
@@ -268,6 +271,7 @@ function parseAppState(state: string | null): {
   linkUserId?: string;
   upgradeUserId?: string;
   pendingSyncPreferences?: AtprotoSyncPreferences;
+  pendingSyncSettingsVersion?: number;
   returnTo?: string;
 } {
   if (!state) return {};
@@ -277,6 +281,7 @@ function parseAppState(state: string | null): {
       linkUserId?: unknown;
       upgradeUserId?: unknown;
       pendingSyncPreferences?: unknown;
+      pendingSyncSettingsVersion?: unknown;
       returnTo?: unknown;
     };
     const preferences = atprotoSyncPreferencesSchema.safeParse(
@@ -294,6 +299,12 @@ function parseAppState(state: string | null): {
       pendingSyncPreferences: preferences.success
         ? preferences.data
         : undefined,
+      pendingSyncSettingsVersion:
+        typeof parsed.pendingSyncSettingsVersion === "number" &&
+        Number.isSafeInteger(parsed.pendingSyncSettingsVersion) &&
+        parsed.pendingSyncSettingsVersion >= 0
+          ? parsed.pendingSyncSettingsVersion
+          : undefined,
       returnTo:
         typeof parsed.returnTo === "string"
           ? (parseExtensionConnectCallback(parsed.returnTo) ?? undefined)
@@ -513,6 +524,7 @@ export async function unlinkAtprotoConnection(userId: string): Promise<void> {
     .set({
       userId: null,
       ...DEFAULT_ATPROTO_SYNC_SETTINGS,
+      syncSettingsVersion: sql`${atprotoConnections.syncSettingsVersion} + 1`,
       updatedAt: new Date(),
     })
     .where(eq(atprotoConnections.id, row.id));
@@ -542,6 +554,7 @@ export async function upgradeAtprotoAuth(input: {
   scope: string;
   userId: string;
   pendingSyncPreferences: AtprotoSyncPreferences;
+  syncSettingsVersion: number;
 }): Promise<URL> {
   // Never hand an unbounded caller-supplied scope to the authorization
   // server; a broader grant must be added to the allowlist deliberately.
@@ -555,6 +568,7 @@ export async function upgradeAtprotoAuth(input: {
       expectedDid: input.did,
       upgradeUserId: input.userId,
       pendingSyncPreferences: input.pendingSyncPreferences,
+      pendingSyncSettingsVersion: input.syncSettingsVersion,
     }),
     redirect_uri: getAtprotoUpgradeRedirectUri(),
   });
@@ -566,7 +580,7 @@ export async function upgradeAtprotoAuth(input: {
  */
 export class AtprotoUpgradeError extends Error {
   constructor(
-    public readonly code: "state" | "denied",
+    public readonly code: "state" | "denied" | "changed",
     message: string,
   ) {
     super(message);
@@ -589,6 +603,7 @@ export async function completeAtprotoUpgrade(input: {
   sessionUserId: string;
   upgradeUserId: string | null;
   pendingSyncPreferences: AtprotoSyncPreferences | null;
+  pendingSyncSettingsVersion: number | null;
 }): Promise<AtprotoSyncPreferences> {
   const { did, sessionUserId } = input;
   if (!input.upgradeUserId || input.upgradeUserId !== sessionUserId) {
@@ -597,10 +612,13 @@ export async function completeAtprotoUpgrade(input: {
       `Upgrade callback for ${did} did not match the session that started it`,
     );
   }
-  if (!input.pendingSyncPreferences) {
+  if (
+    !input.pendingSyncPreferences ||
+    input.pendingSyncSettingsVersion === null
+  ) {
     throw new AtprotoUpgradeError(
       "state",
-      `Upgrade callback for ${did} carried no pending settings`,
+      `Upgrade callback for ${did} carried no versioned pending settings`,
     );
   }
   if (
@@ -612,36 +630,47 @@ export async function completeAtprotoUpgrade(input: {
       `Upgrade callback for ${did} did not grant subscription write access`,
     );
   }
-  const saved = await saveAtprotoSyncSettings({
-    userId: sessionUserId,
-    did,
-    preferences: input.pendingSyncPreferences,
+  const preferences = input.pendingSyncPreferences;
+  const expectedVersion = input.pendingSyncSettingsVersion;
+  await db.transaction(async (tx) => {
+    const saved = await saveAtprotoSyncSettings(
+      { userId: sessionUserId, did, preferences, expectedVersion },
+      tx,
+    );
+    if (!saved) {
+      const boundConnection = await tx
+        .select({ id: atprotoConnections.id })
+        .from(atprotoConnections)
+        .where(
+          and(
+            eq(atprotoConnections.userId, sessionUserId),
+            eq(atprotoConnections.did, did),
+          ),
+        )
+        .get();
+      throw new AtprotoUpgradeError(
+        boundConnection ? "changed" : "state",
+        `The connection or sync settings changed before consent completed for ${did}`,
+      );
+    }
+    const scopeRecorded = await tx
+      .update(account)
+      .set({ scope: input.grantedScope, updatedAt: new Date() })
+      .where(
+        and(
+          eq(account.userId, sessionUserId),
+          eq(account.providerId, ATPROTO_PROVIDER_ID),
+          eq(account.accountId, did),
+        ),
+      );
+    if (scopeRecorded.rowsAffected === 0) {
+      // A bound connection remains usable without its sign-in account row.
+      logError(
+        `[atproto] no account row to record the upgraded scope for ${did}`,
+      );
+    }
   });
-  if (!saved) {
-    throw new AtprotoUpgradeError(
-      "state",
-      `${did} is not the connection bound to ${sessionUserId}`,
-    );
-  }
-  const scopeRecorded = await db
-    .update(account)
-    .set({ scope: input.grantedScope, updatedAt: new Date() })
-    .where(
-      and(
-        eq(account.userId, sessionUserId),
-        eq(account.providerId, ATPROTO_PROVIDER_ID),
-        eq(account.accountId, did),
-      ),
-    );
-  if (scopeRecorded.rowsAffected === 0) {
-    // The settings are saved either way; say so loudly, because a
-    // reconnect that later finds only the account row would fall back to
-    // a scope that never learned about this upgrade.
-    logError(
-      `[atproto] no account row to record the upgraded scope for ${did}`,
-    );
-  }
-  return input.pendingSyncPreferences;
+  return preferences;
 }
 
 /**
@@ -649,21 +678,29 @@ export async function completeAtprotoUpgrade(input: {
  * the user and the DID so a callback can never write another user's row.
  * Returns whether a row matched.
  */
-export async function saveAtprotoSyncSettings(input: {
-  userId: string;
-  did: string;
-  preferences: AtprotoSyncPreferences;
-}): Promise<boolean> {
-  const result = await db
+export async function saveAtprotoSyncSettings(
+  input: {
+    userId: string;
+    did: string;
+    preferences: AtprotoSyncPreferences;
+    expectedVersion?: number;
+  },
+  database: Pick<typeof db, "update"> = db,
+): Promise<boolean> {
+  const result = await database
     .update(atprotoConnections)
     .set({
       ...syncSettingsFromPreferences(input.preferences),
+      syncSettingsVersion: sql`${atprotoConnections.syncSettingsVersion} + 1`,
       updatedAt: new Date(),
     })
     .where(
       and(
         eq(atprotoConnections.userId, input.userId),
         eq(atprotoConnections.did, input.did),
+        input.expectedVersion === undefined
+          ? undefined
+          : eq(atprotoConnections.syncSettingsVersion, input.expectedVersion),
       ),
     );
   return result.rowsAffected > 0;

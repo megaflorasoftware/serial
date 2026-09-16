@@ -973,6 +973,8 @@ export const atprotoConnections = sqliteTable("atproto_connections", {
   importAsInactive: integer("import_as_inactive", { mode: "boolean" })
     .notNull()
     .default(false),
+  // Consent only saves the submitted draft if no newer settings save won.
+  syncSettingsVersion: integer("sync_settings_version").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" })
     .$default(() => new Date())
     .notNull(),

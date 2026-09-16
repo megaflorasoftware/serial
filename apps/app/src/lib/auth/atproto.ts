@@ -48,4 +48,5 @@ export type AtprotoLinkResult = "success" | "conflict" | "exists" | "error";
  */
 export const ATPROTO_CONSENT_RESULT_PARAM = "atproto_consent";
 
-export type AtprotoConsentResult = "success" | "denied" | "state" | "error";
+export type AtprotoConsentResult =
+  "success" | "denied" | "changed" | "state" | "error";
