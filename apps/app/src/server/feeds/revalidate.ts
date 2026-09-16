@@ -100,6 +100,8 @@ export async function revalidateFeed(
               entry.locator === observed.origin.locator,
           );
           if (!origin) continue;
+          // Each derivation must see the preceding origin update in this transaction.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await applyOriginMetadata(
             tx,
             { origin, feed: current },

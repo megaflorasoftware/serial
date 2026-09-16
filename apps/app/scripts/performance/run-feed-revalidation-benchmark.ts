@@ -22,6 +22,8 @@ try {
   );
   const samples = [];
   for (let i = 0; i < 18; i++) {
+    // Each sample must reset and measure the same database without overlapping runs.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await workload.prepare();
     globalThis.gc?.();
     session.instrumentation.reset();

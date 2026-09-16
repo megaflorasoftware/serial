@@ -44,6 +44,8 @@ export async function createFeedRevalidationWorkload(
     details: { name: "RSS", platform: "website", origins: [rss.origin] },
   });
   for (let offset = 0; offset < historySize; offset += 100) {
+    // Bound SQLite writes and allocation while seeding each history batch.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await database.insert(feedItems).values(
       Array.from({ length: Math.min(100, historySize - offset) }, (_, i) => ({
         id: `history-${offset + i}`,
