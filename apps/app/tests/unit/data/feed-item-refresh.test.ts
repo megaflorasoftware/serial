@@ -5,12 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import { useRefreshFeedItem } from "~/lib/hooks/useRefreshFeedItem";
 
-const mocks = vi.hoisted(() => ({
-  getById: vi.fn(),
-  setFeedItem: vi.fn(),
-  retain: vi.fn(),
-  items: {},
-}));
+const mocks = vi.hoisted(() => {
+  const items: Record<string, ApplicationFeedItem> = {};
+  return { getById: vi.fn(), setFeedItem: vi.fn(), retain: vi.fn(), items };
+});
 vi.mock("~/lib/orpc", () => ({
   orpcRouterClient: { feedItem: { getById: mocks.getById } },
 }));
