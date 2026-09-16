@@ -3,20 +3,27 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ViewSection } from "~/components/feed/view-lists/useViewSections";
 import { useSoftReads } from "~/components/feed/view-lists/useSoftReads";
 import { retainSoftReadPositions } from "~/components/feed/view-lists/softReads";
-import type { ViewSection } from "~/components/feed/view-lists/useViewSections";
 import {
   clearRetainedEntityPins,
   getRetainedEntityPins,
 } from "~/lib/data/page-retention";
 
-const state = vi.hoisted(() => ({
-  saveStatus: "saved",
-  bookmarks: {} as Record<string, { isSaved: boolean }>,
-  feeds: {} as Record<string, { isWatchLater: boolean }>,
-  revision: 0,
-}));
+const state = vi.hoisted(
+  (): {
+    saveStatus: string;
+    bookmarks: Record<string, { isSaved: boolean }>;
+    feeds: Record<string, { isWatchLater: boolean }>;
+    revision: number;
+  } => ({
+    saveStatus: "saved",
+    bookmarks: {},
+    feeds: {},
+    revision: 0,
+  }),
+);
 vi.mock("jotai", () => ({
   useAtomValue: () => ({ saveStatus: state.saveStatus }),
 }));
@@ -49,7 +56,7 @@ function section(
   };
 }
 
-const roots: ReturnType<typeof createRoot>[] = [];
+const roots: Array<ReturnType<typeof createRoot>> = [];
 function mount() {
   const root = createRoot(document.createElement("div"));
   roots.push(root);

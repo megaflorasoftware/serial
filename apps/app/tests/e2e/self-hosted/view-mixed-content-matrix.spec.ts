@@ -441,7 +441,7 @@ test.describe("exhaustive mixed-content View section matrix", () => {
     });
   }
 
-  test("advances in Saved Unread and exposes the item in Saved Archived", async ({
+  test("advances while retaining Saved Unread items until status navigation", async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -484,16 +484,25 @@ test.describe("exhaustive mixed-content View section matrix", () => {
     );
     await expect(feedItem).toBeVisible({ timeout: 30_000 });
 
+    const initialOrder = await renderedItemIdsInOrder(
+      feedMain.locator("article[data-item-id]"),
+    );
+
     await feedItem.getByRole("link").hover();
     await page.keyboard.press("e");
-    await expect(feedItem).toHaveCount(0);
+    await expect(feedItem).toHaveCSS("opacity", "0.75");
+    expect(
+      await renderedItemIdsInOrder(feedMain.locator("article[data-item-id]")),
+    ).toEqual(initialOrder);
     await expect(nextFeedItem.getByRole("link")).toHaveClass(/md:bg-muted/);
     await expect(
       feedMain.getByRole("heading", { name: "Test Blog", exact: true }),
-    ).toHaveCount(0);
+    ).toBeVisible();
 
     await contentStatusTab(page, "Archived").click();
     await expect(feedItem).toBeVisible();
+    await contentStatusTab(page, "Unread").click();
+    await expect(feedItem).toHaveCount(0);
   });
 
   test("collapses Saved Archived into one View section", async ({ page }) => {

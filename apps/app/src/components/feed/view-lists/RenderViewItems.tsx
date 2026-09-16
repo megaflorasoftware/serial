@@ -339,6 +339,19 @@ export function RenderViewItems() {
   return <ViewVisit key={scopeKey} viewListKey={viewListKey} />;
 }
 
+function ViewListSkeleton({ layout }: { layout: ViewSection["layout"] }) {
+  switch (layout) {
+    case VIEW_LAYOUT.LARGE_LIST:
+      return <LargeListSkeleton />;
+    case VIEW_LAYOUT.GRID:
+      return <GridSkeleton />;
+    case VIEW_LAYOUT.LARGE_GRID:
+      return <LargeGridSkeleton />;
+    default:
+      return <StandardListSkeleton />;
+  }
+}
+
 function ViewVisit({ viewListKey }: { viewListKey: string }) {
   const { feeds, hasFetchedFeeds } = useFeeds();
   const { hasFetchedFeedCategories } = useFeedCategories();
@@ -366,25 +379,21 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
   }, [fullComputedSections, visibleItems]);
   const selectedItemId = useAtomValue(selectedItemIdAtom);
   const setSelectedItemId = useSetAtom(selectedItemIdAtom);
-  const navigationItems = useMemo(
-    () => fullComputedSections.flatMap((section) => section.items),
-    [fullComputedSections],
-  );
   const rootListReady =
     hasInitialData &&
-    (navigationItems.length > 0 ||
+    (filteredFeedItemsOrder.length > 0 ||
       (hasFetchedFeeds &&
         hasFetchedFeedCategories &&
         (paginationState.isLoaded || feeds.length === 0)));
   useRootItemScrollRestoration({
-    activeItemIds: navigationItems,
+    activeItemIds: filteredFeedItemsOrder,
     selectedItemId,
     setSelectedItemId,
     ready: rootListReady,
   });
   const shouldShowPaginationEnd =
     hasRenderedAllItems &&
-    paginationState?.hasMore === false &&
+    paginationState.hasMore === false &&
     paginationState.isFetching !== true;
 
   if (!hasInitialData) {
@@ -406,16 +415,7 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
     (!paginationState.isLoaded || paginationState.isFetching) &&
     filteredFeedItemsOrder.length === 0
   ) {
-    switch (baseLayout) {
-      case VIEW_LAYOUT.LARGE_LIST:
-        return <LargeListSkeleton />;
-      case VIEW_LAYOUT.GRID:
-        return <GridSkeleton />;
-      case VIEW_LAYOUT.LARGE_GRID:
-        return <LargeGridSkeleton />;
-      default:
-        return <StandardListSkeleton />;
-    }
+    return <ViewListSkeleton layout={baseLayout} />;
   }
 
   if (
@@ -434,7 +434,7 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
       visibleComputedSections={visibleComputedSections}
       viewListKey={viewListKey}
       sentinelRef={sentinelRef}
-      showPaginationLoader={paginationState?.isFetching === true}
+      showPaginationLoader={paginationState.isFetching === true}
       showPaginationEnd={shouldShowPaginationEnd}
     />
   );

@@ -49,12 +49,11 @@ export function useSoftReads(sections: ViewSection[]) {
     [owner],
   );
 
-  useEffect(() => {
-    if (activePositions.size !== positions.size) {
-      setPositions(activePositions);
-      pinPositions(activePositions);
-    }
-  }, [activePositions, positions, pinPositions]);
+  if (activePositions.size !== positions.size) setPositions(activePositions);
+  useEffect(
+    () => pinPositions(activePositions),
+    [activePositions, pinPositions],
+  );
   useEffect(() => () => clearRetainedEntityPins(owner), [owner]);
 
   const toggleRead = useCallback(

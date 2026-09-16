@@ -90,6 +90,14 @@ describe("client performance audit model", () => {
     );
   });
 
+  it("includes soft-read projection in the operation duration gate", () => {
+    const result = runClientAuditProfile("small");
+    result.operations.softReadProjection.durationMs = 51;
+    expect(evaluateClientAuditOperationBudgets(result)).toContain(
+      "softReadProjection: 51.0ms > 50ms",
+    );
+  });
+
   it("keeps normalized persistence mutations within their explicit budget", () => {
     const result = runClientAuditProfile("stress");
 
