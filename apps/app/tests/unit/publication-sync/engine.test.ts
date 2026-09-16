@@ -6,6 +6,7 @@ import type {
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
 import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
+import { runPublicationSyncJobs } from "~/server/publication-sync/jobs";
 import {
   atprotoConnections,
   atprotoSubscriptionMirror,
@@ -356,20 +357,28 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
       );
     return details(uri);
   });
-  expect(await run()).toMatchObject({
+  const first = await run();
+  expect(first).toMatchObject({
     imported: 1,
     deferred: 1,
     failed: 0,
     status: "partial",
   });
   const rows = await fixture.database.select().from(atprotoSubscriptionMirror);
+  const retryAt = rows.find(
+    (row) => row.publicationUri === publication("limited"),
+  )!.importRetryAt;
+  // Mirror timestamps use seconds; queued deadlines retain milliseconds.
+  expect(Math.floor(first.retryAt!.getTime() / 1000) * 1000).toBe(
+    retryAt!.getTime(),
+  );
   expect(
     rows.find((row) => row.publicationUri === publication("limited")),
   ).toMatchObject({ feedId: null, importState: "pending", importFailures: 1 });
   resolveFeed
     .mockClear()
     .mockImplementation(async (_user, uri) => details(uri));
-  expect(await run()).toMatchObject({ imported: 0, deferred: 1 });
+  expect(await run()).toMatchObject({ imported: 0, deferred: 1, retryAt });
   expect(resolveFeed).not.toHaveBeenCalled();
   expect(store.list).toHaveBeenCalledTimes(1);
   await fixture.database
@@ -390,6 +399,22 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
       (row) => row.importState === null,
     ),
   ).toBe(true);
+});
+it("schedules queued import retries at their backoff deadline", async () => {
+  records = [record("pending")];
+  await method("import");
+  const retryAt = new Date(Date.now() + 600_000);
+  resolveFeed.mockRejectedValue(
+    new FeedImportDeferredError(undefined, retryAt),
+  );
+  const sync = vi.fn(() => run());
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(
+    (await fixture.database.select().from(atprotoConnections).get())
+      ?.subscriptionNextAttemptAt,
+  ).toEqual(retryAt);
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(sync).toHaveBeenCalledTimes(1);
 });
 it("reports ambiguous imports once without automatically retrying or exporting them", async () => {
   records = [record("ambiguous")];
@@ -472,8 +497,6 @@ it("retains normal upstream-deletion semantics after a deferred import succeeds"
 it("persists continuation when a legacy enabled connection starts backfill during refresh", async () => {
   const { backfillPublicationOrigins, BACKFILL_BATCH_SIZE } =
     await import("~/server/publication-sync/backfill");
-  const { runPublicationSyncJobs } =
-    await import("~/server/publication-sync/jobs");
   await method("export");
   await fixture.database
     .update(atprotoConnections)

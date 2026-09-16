@@ -13,7 +13,7 @@ export function newPublicationSyncRequest(enabled: boolean) {
 export function nextPublicationSyncAttempt(result: PublicationSyncResult) {
   const retryTimes = [
     ...(result.retryAt ? [new Date(result.retryAt).getTime()] : []),
-    ...(result.deferred ? [Date.now() + 1000] : []),
+    ...(result.deferred && !result.retryAt ? [Date.now() + 1000] : []),
     ...(result.status === "busy" ? [Date.now() + 60_000] : []),
   ];
   return retryTimes.length

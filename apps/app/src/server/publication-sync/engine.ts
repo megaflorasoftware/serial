@@ -109,6 +109,9 @@ export async function syncPublicationSubscriptions(input: {
         assertSubscriptionSyncCurrent(database, connection, true),
     });
   let retryAt: Date | undefined;
+  const retryAfter = (next: Date) => {
+    if (!retryAt || next < retryAt) retryAt = next;
+  };
   let changedFeeds = false;
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
@@ -213,6 +216,7 @@ export async function syncPublicationSubscriptions(input: {
     for (const [index, publicationUri] of publications.entries()) {
       if (Date.now() > deadline) {
         counts.deferred += publications.length - index;
+        retryAfter(new Date());
         observedCompleteSnapshot = false;
         break;
       }
@@ -246,6 +250,7 @@ export async function syncPublicationSubscriptions(input: {
         priorImport?.importRetryAt &&
         priorImport.importRetryAt > new Date()
       ) {
+        retryAfter(priorImport.importRetryAt);
         if (
           !observationUnchanged(
             old,
@@ -409,7 +414,7 @@ export async function syncPublicationSubscriptions(input: {
             600_000,
             60_000 * 2 ** Math.min(attempts - 1, 4),
           );
-          const retryAt = skipped
+          const importRetryAt = skipped
             ? null
             : new Date(
                 Math.max(
@@ -431,13 +436,16 @@ export async function syncPublicationSubscriptions(input: {
               imported: true,
               failure: {
                 state: skipped ? "skipped" : "pending",
-                retryAt,
+                retryAt: importRetryAt,
                 attempts,
               },
             });
           });
           if (skipped) counts.skipped++;
-          else counts.deferred++;
+          else {
+            counts.deferred++;
+            retryAfter(importRetryAt!);
+          }
         } else counts.failed++;
         if (
           !(error instanceof FeedImportSkippedError) &&
