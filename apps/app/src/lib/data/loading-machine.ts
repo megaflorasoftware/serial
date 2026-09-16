@@ -7,14 +7,6 @@ import { assign, createActor, setup } from "xstate";
 
 type LoadingMachineEvent =
   | { type: "REFRESH_PROGRESS"; total: number; completed: number }
-  | { type: "PUBLICATION_SYNC_START"; runId: string }
-  | {
-      type: "PUBLICATION_SYNC_PROGRESS";
-      runId: string;
-      completed: number;
-      total: number;
-    }
-  | { type: "PUBLICATION_SYNC_COMPLETE"; runId: string }
   // Initial reconciliation
   | { type: "INITIAL_LOAD_START" }
   | { type: "RECONCILIATION_COMPLETE" }
@@ -51,7 +43,6 @@ type LoadingMachineEvent =
 // ---------------------------------------------------------------------------
 
 type LoadingMachineContext = {
-  publicationSyncId: string | null;
   totalFeeds: number;
   completedFeeds: number;
   importErrors: number;
@@ -62,7 +53,6 @@ type LoadingMachineContext = {
 };
 
 const INITIAL_CONTEXT: LoadingMachineContext = {
-  publicationSyncId: null,
   totalFeeds: 0,
   completedFeeds: 0,
   importErrors: 0,
@@ -127,30 +117,6 @@ export const loadingMachine = setup({
   context: { ...INITIAL_CONTEXT },
   // Global handler — works in any state
   on: {
-    PUBLICATION_SYNC_START: {
-      target: ".importing",
-      actions: assign({
-        publicationSyncId: ({ event }) => event.runId,
-        failedImportUrls: () => new Set<string>(),
-        importDeactivatedCount: 0,
-        importMaxActiveFeeds: 0,
-        totalFeeds: 0,
-        completedFeeds: 0,
-        importErrors: 0,
-      }),
-    },
-    PUBLICATION_SYNC_PROGRESS: {
-      guard: ({ context, event }) => context.publicationSyncId === event.runId,
-      actions: assign({
-        totalFeeds: ({ event }) => event.total,
-        completedFeeds: ({ event }) => event.completed,
-      }),
-    },
-    PUBLICATION_SYNC_COMPLETE: {
-      guard: ({ context, event }) => context.publicationSyncId === event.runId,
-      target: ".idle",
-      actions: assign({ publicationSyncId: null }),
-    },
     REFRESH_COOLDOWN_UPDATE: {
       actions: assign({
         nextRefreshAt: ({ event }) => event.nextRefreshAt,
@@ -233,7 +199,6 @@ export const loadingMachine = setup({
         },
 
         FEED_STATUS: [
-          { guard: ({ context }) => context.publicationSyncId !== null },
           {
             guard: "allFeedsCompleteAfterStatus",
             target: "idle",
@@ -242,7 +207,6 @@ export const loadingMachine = setup({
           { actions: "incrementCompleted" },
         ],
         FEED_STATUS_BATCH: [
-          { guard: ({ context }) => context.publicationSyncId !== null },
           {
             guard: "allFeedsCompleteAfterStatusBatch",
             target: "idle",
@@ -292,7 +256,6 @@ export const loadingMachine = setup({
     importing: {
       on: {
         FEED_STATUS: [
-          { guard: ({ context }) => context.publicationSyncId !== null },
           {
             guard: "allFeedsCompleteAfterStatus",
             target: "idle",
@@ -301,7 +264,6 @@ export const loadingMachine = setup({
           { actions: "incrementCompleted" },
         ],
         FEED_STATUS_BATCH: [
-          { guard: ({ context }) => context.publicationSyncId !== null },
           {
             guard: "allFeedsCompleteAfterStatusBatch",
             target: "idle",

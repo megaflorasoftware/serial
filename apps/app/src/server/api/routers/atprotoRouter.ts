@@ -3,8 +3,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { DatabaseAtprotoConnection } from "~/server/db/schema";
 import type { ORPCContext } from "~/server/orpc/base";
-import { publisher } from "~/server/api/publisher";
-import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
+import {
+  getPublicationSyncJob,
+  wakePublicationSyncJobs,
+} from "~/server/publication-sync/jobs";
 import {
   ATPROTO_PROVIDER_ID,
   getAdminSigninMethods,
@@ -164,6 +166,7 @@ export const saveSyncSettings = protectedProcedure
           "Connect your Atmosphere account before changing sync settings.",
       });
     }
+    wakePublicationSyncJobs(context.db);
     return { saved: true as const, consentUrl: null };
   });
 
@@ -385,25 +388,7 @@ export const unlinkAccount = protectedProcedure.handler(async ({ context }) => {
   return { success: true };
 });
 
-/** Settings saves and consent returns share this client-initiated operation. */
-export const syncSubscriptions = protectedProcedure
-  .input(z.object({ runId: z.uuid() }))
-  .handler(async ({ context, input }) => {
-    const connection = await context.db.query.atprotoConnections.findFirst({
-      where: eq(atprotoConnections.userId, context.user.id),
-    });
-    if (!isConnectionActive(connection))
-      throw new ORPCError("PRECONDITION_FAILED", {
-        message: "Reconnect your Atmosphere account before syncing.",
-      });
-    return syncPublicationSubscriptions({
-      database: context.db,
-      userId: context.user.id,
-      runId: input.runId,
-      onProgress: (chunk) =>
-        publisher.publish(`user:${context.user.id}`, {
-          source: "publication-sync",
-          chunk,
-        }),
-    });
-  });
+/** Read persisted progress without starting or owning server work. */
+export const getSyncStatus = protectedProcedure.handler(({ context }) =>
+  getPublicationSyncJob(context.db, context.user.id),
+);

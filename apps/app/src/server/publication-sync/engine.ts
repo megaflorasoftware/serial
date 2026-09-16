@@ -1,4 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import {
+  newPublicationSyncRequest,
+  nextPublicationSyncAttempt,
+} from "./requests";
+import { backfillPublicationOrigins } from "./backfill";
 import { planPublicationSync } from "./plan";
 import { saveSubscriptionObservation } from "./observation";
 import {
@@ -68,6 +73,7 @@ export async function syncPublicationSubscriptions(input: {
   runId?: string;
   onProgress?: (progress: PublicationSyncProgress) => Promise<void>;
   dependencies?: {
+    backfill?: typeof backfillPublicationOrigins;
     store?: SubscriptionRecordStore;
     resolveFeed?: typeof resolveImportedFeed;
     activationBudget?: typeof getFeedsActivationBudget;
@@ -102,6 +108,7 @@ export async function syncPublicationSubscriptions(input: {
       authorizeWrite: () =>
         assertSubscriptionSyncCurrent(database, connection, true),
     });
+  let retryAt: Date | undefined;
   let changedFeeds = false;
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
@@ -123,6 +130,11 @@ export async function syncPublicationSubscriptions(input: {
   };
   try {
     await progress(0, 0);
+    const backfill = await (
+      input.dependencies?.backfill ?? backfillPublicationOrigins
+    )(database, connection);
+    changedFeeds = backfill.attached > 0;
+    retryAt = backfill.retryAt;
     const [previous, localOrigins, rev] = await Promise.all([
       database
         .select()
@@ -454,6 +466,27 @@ export async function syncPublicationSubscriptions(input: {
     counts.failed++;
     logError("[publication-sync] sync failed", error);
   } finally {
+    // Pre-refresh runs also own durable continuation, including users who enabled
+    // export before queued sync existed. Never replace a newer settings request.
+    const nextAttemptAt = nextPublicationSyncAttempt({
+      ...counts,
+      status: "partial",
+      retryAt,
+    });
+    if (nextAttemptAt) {
+      await database
+        .update(atprotoConnections)
+        .set({
+          ...newPublicationSyncRequest(true),
+          subscriptionNextAttemptAt: nextAttemptAt,
+        })
+        .where(
+          and(
+            syncClaimCondition(connection),
+            isNull(atprotoConnections.subscriptionNextAttemptAt),
+          ),
+        );
+    }
     await database
       .update(atprotoConnections)
       .set({ subscriptionSyncToken: null, subscriptionSyncExpiresAt: null })
@@ -473,6 +506,7 @@ export async function syncPublicationSubscriptions(input: {
   }
   return {
     ...counts,
+    ...(retryAt ? { retryAt } : {}),
     status:
       counts.failed || counts.deferred || counts.skipped
         ? "partial"

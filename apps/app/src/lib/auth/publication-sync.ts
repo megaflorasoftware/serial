@@ -8,6 +8,7 @@ export type PublicationSyncCounts = {
   deferred: number;
 };
 export type PublicationSyncResult = PublicationSyncCounts & {
+  retryAt?: Date;
   status: "completed" | "partial" | "skipped" | "busy";
 };
 export type PublicationSyncProgress = {
@@ -24,3 +25,10 @@ export const emptyPublicationSyncCounts = (): PublicationSyncCounts => ({
   skipped: 0,
   deferred: 0,
 });
+
+export type PublicationSyncJobStatus = {
+  runId: string;
+  pending: boolean;
+  progress: { completed: number; total: number } | null;
+  result: PublicationSyncResult | null;
+};

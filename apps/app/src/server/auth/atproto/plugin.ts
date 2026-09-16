@@ -36,6 +36,8 @@ import type {
   AtprotoConsentResult,
   AtprotoLinkResult,
 } from "~/lib/auth/atproto";
+import { wakePublicationSyncJobs } from "~/server/publication-sync/jobs";
+import { db } from "~/server/db";
 import { enforceResolvedSignupPolicy } from "~/server/auth/policy";
 import {
   ATPROTO_CONSENT_RESULT_PARAM,
@@ -394,6 +396,7 @@ export const atprotoPlugin = () => {
             throw ctx.redirect(consentResultRedirect(consentResult));
           }
 
+          wakePublicationSyncJobs(db);
           throw ctx.redirect(consentResultRedirect("success"));
         },
       ),

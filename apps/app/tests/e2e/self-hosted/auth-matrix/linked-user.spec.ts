@@ -10,6 +10,7 @@ import {
   cleanupUser,
   generateTestEmail,
   getAtprotoLinkState,
+  holdAtprotoSyncWorker,
   seedAtprotoLink,
   seedAtprotoOnlyUser,
 } from "../../fixtures/seed-db";
@@ -134,6 +135,50 @@ test.describe("atproto connection management", () => {
         accountRowCount: 0,
         connection: { userId: null, status: "disconnected", session: null },
       });
+  });
+
+  test("settings save leaves controls usable while sync survives dialog closure and reload", async ({
+    page,
+  }) => {
+    test.setTimeout(90000);
+    testEmail = generateTestEmail();
+    did = `did:plc:e2e${randomBytes(6).toString("hex")}`;
+    await signUp({
+      page,
+      name: "Sync Tester",
+      email: testEmail,
+      password: "password123",
+    });
+    await seedAtprotoLink(SELF_HOSTED_TURSO_PORT, testEmail, {
+      did,
+      handle: "sync.example.com",
+    });
+    await holdAtprotoSyncWorker(SELF_HOSTED_TURSO_PORT, did);
+    await clearQueryCache(page);
+    await page.reload();
+    await openAtmospherePane(page);
+    await page.getByRole("radio", { name: "Import to Serial" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      page.getByText("Settings saved", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("radio", { name: "None", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByText("You can keep using Serial or close the app."),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await expect(
+      page.getByText("You can keep using Serial or close the app."),
+    ).toBeVisible();
+    await openAtmospherePane(page);
+    await page.getByRole("radio", { name: "None", exact: true }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      page.getByText("You can keep using Serial or close the app."),
+    ).not.toBeVisible();
   });
 
   test("handle typeahead suggests accounts and threads the selected DID", async ({

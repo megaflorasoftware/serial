@@ -6,7 +6,6 @@ import type {
   AtprotoSyncMethod,
   AtprotoSyncPreferences,
 } from "~/lib/auth/atproto-sync-settings";
-import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
@@ -48,7 +47,9 @@ export function useAtprotoSyncSettingsSave() {
           queryKey: orpc.atproto.getConnectionStatus.queryKey(),
         });
         toast.success("Settings saved");
-        await requestPublicationSync();
+        void queryClient.invalidateQueries({
+          queryKey: orpc.atproto.getSyncStatus.queryKey(),
+        });
       },
       onError: (error) => {
         toast.error(error.message || "Failed to save sync settings");

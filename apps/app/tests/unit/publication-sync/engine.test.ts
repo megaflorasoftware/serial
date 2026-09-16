@@ -468,3 +468,62 @@ it("retains normal upstream-deletion semantics after a deferred import succeeds"
   expect(await run()).toMatchObject({ removed: 1, exported: 0 });
   expect(await fixture.database.select().from(feeds)).toHaveLength(0);
 });
+
+it("persists continuation when a legacy enabled connection starts backfill during refresh", async () => {
+  const { backfillPublicationOrigins, BACKFILL_BATCH_SIZE } =
+    await import("~/server/publication-sync/backfill");
+  const { runPublicationSyncJobs } =
+    await import("~/server/publication-sync/jobs");
+  await method("export");
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionRequestId: null, subscriptionNextAttemptAt: null });
+  for (let i = 0; i < BACKFILL_BATCH_SIZE + 1; i++) {
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details: {
+        name: `Old feed ${i}`,
+        platform: "website",
+        siteUrl: "https://example.com",
+        origins: [{ kind: "rss", locator: `https://example.com/rss/${i}` }],
+      },
+      isActive: false,
+    });
+  }
+  const probe = vi.fn(() => Promise.resolve(null));
+  const sync: typeof syncPublicationSubscriptions = (input) =>
+    syncPublicationSubscriptions({
+      ...input,
+      dependencies: {
+        store,
+        invalidate,
+        backfill: (database, connection) =>
+          backfillPublicationOrigins(database, connection, {
+            readOriginEvidence: (origin) =>
+              Promise.resolve({
+                origin: { ...origin },
+                siteUrl: "https://example.com",
+                itemUrls: new Set(["https://example.com/article"]),
+              }),
+            readBackfillPublication: probe,
+          }),
+      },
+    });
+  await sync({ database: fixture.database, userId: "owner" });
+  expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE);
+  const pending = await fixture.database
+    .select()
+    .from(atprotoConnections)
+    .get();
+  expect(pending?.subscriptionRequestId).toEqual(expect.any(String));
+  expect(pending?.subscriptionNextAttemptAt).toBeInstanceOf(Date);
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionNextAttemptAt: new Date(0) });
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE + 1);
+  expect(
+    (await fixture.database.select().from(atprotoConnections).get())
+      ?.subscriptionNextAttemptAt,
+  ).toBeNull();
+});

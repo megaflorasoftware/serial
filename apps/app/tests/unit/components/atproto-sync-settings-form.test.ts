@@ -15,6 +15,7 @@ const { saveSettings, unlinkAccount, connectionStatus } = vi.hoisted(() => ({
 vi.mock("~/lib/orpc", () => ({
   orpc: {
     atproto: {
+      getSyncStatus: { queryKey: () => ["atproto-sync-status"] },
       getConnectionStatus: {
         queryOptions: () => ({
           queryKey: ["atproto-status"],

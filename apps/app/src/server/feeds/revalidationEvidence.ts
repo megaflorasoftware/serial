@@ -4,7 +4,11 @@ import {
   parseDocumentRecord,
   parseDocumentUri,
 } from "@serial/standard-site";
-import { publicationOrigin, resolvePublication } from "./publications";
+import {
+  publicationOrigin,
+  PublicationUnavailableError,
+  resolvePublication,
+} from "./publications";
 import type { NewFeedOriginDetails } from "~/server/rss/types";
 import { createPublicationClient } from "~/server/rss/atprotoClient";
 import { readFeedHttp } from "~/server/rss/feedHttp";
@@ -69,7 +73,8 @@ export async function readOriginEvidence(
     };
   }
   const publication = await resolvePublication(origin.locator);
-  if (!publication) throw new Error("Unable to read the publication");
+  if (!publication)
+    throw new PublicationUnavailableError("Unable to read the publication");
   const urls: string[] = [];
   if (includeItems) {
     const client = createPublicationClient();
