@@ -127,17 +127,13 @@ export const loadingMachine = setup({
   context: { ...INITIAL_CONTEXT },
   // Global handler — works in any state
   on: {
-    REFRESH_PROGRESS: {
-      guard: ({ context }) => context.publicationSyncId === null,
-      actions: assign({
-        totalFeeds: ({ event }) => event.total,
-        completedFeeds: ({ event }) => event.completed,
-      }),
-    },
     PUBLICATION_SYNC_START: {
       target: ".importing",
       actions: assign({
         publicationSyncId: ({ event }) => event.runId,
+        failedImportUrls: () => new Set<string>(),
+        importDeactivatedCount: 0,
+        importMaxActiveFeeds: 0,
         totalFeeds: 0,
         completedFeeds: 0,
         importErrors: 0,
@@ -229,6 +225,13 @@ export const loadingMachine = setup({
     // -----------------------------------------------------------------
     backgroundRefresh: {
       on: {
+        REFRESH_PROGRESS: {
+          actions: assign({
+            totalFeeds: ({ event }) => event.total,
+            completedFeeds: ({ event }) => event.completed,
+          }),
+        },
+
         FEED_STATUS: [
           { guard: ({ context }) => context.publicationSyncId !== null },
           {

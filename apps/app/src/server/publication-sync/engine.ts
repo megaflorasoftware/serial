@@ -25,9 +25,8 @@ import type {
 import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
 import {
   atprotoConnections,
-  atprotoSubscriptionMirror as mirror,
   feedOrigins,
-  feeds,
+  atprotoSubscriptionMirror as mirror,
 } from "~/server/db/schema";
 import { createOrReuseFeed } from "~/server/feeds/origins";
 import { deleteUserFeeds } from "~/server/feeds/delete";
@@ -270,6 +269,8 @@ export async function syncPublicationSubscriptions(input: {
           else {
             for (const record of records) {
               await assertSubscriptionSyncCurrent(database, connection, true);
+              // Each delete uses the current grant and the previous observed CID.
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop
               await store.remove(record);
             }
             records = [];
@@ -323,6 +324,8 @@ export async function syncPublicationSubscriptions(input: {
               exportGeneration: connection.subscriptionExportGeneration,
               updatedAt: new Date(),
             };
+            // Writes share one transaction and commit the publication observation together.
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop
             await tx
               .insert(mirror)
               .values(values)

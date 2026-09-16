@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { loadingActor } from "./loading-machine";
-import { orpcRouterClient } from "~/lib/orpc";
 import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
+import { orpcRouterClient } from "~/lib/orpc";
 
 let pending: Promise<void> | undefined;
 function waitForIdle() {

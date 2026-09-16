@@ -1,9 +1,8 @@
-import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
-import type { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import { resolveAutomaticRssOwner } from "./automaticOwnership";
 import { countDueFeeds, getDueFeedPage } from "./dueFeeds";
 import { refreshUserFeeds } from "./refreshUserFeeds";
 import { addRefreshStats, emptyRefreshStats, rssAttemptSummary } from "./stats";
+import type { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import type { RefreshStats } from "./stats";
 import type { FetchableOrigin } from "./types";
 import type { db as Database } from "~/server/db";
@@ -12,6 +11,7 @@ import type {
   RssPublishedChunk,
   RssTrigger,
 } from "~/lib/rss";
+import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
 import { checkUserRefreshEligibility } from "~/server/subscriptions/helpers";
 
 type RefreshEligibility =

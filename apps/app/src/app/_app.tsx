@@ -1,4 +1,3 @@
-import { requestPublicationSync } from "~/lib/data/publication-sync";
 import "~/styles/globals.css";
 
 import {
@@ -16,6 +15,7 @@ import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
 import { GlobalImportDropzone } from "../components/feed/import/GlobalImportDropzone";
 import type React from "react";
+import { requestPublicationSync } from "~/lib/data/publication-sync";
 import FeedLoading from "~/components/loading";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { Button } from "~/components/ui/button";

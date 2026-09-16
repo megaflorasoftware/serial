@@ -1,4 +1,3 @@
-import { deleteUserFeeds } from "~/server/feeds/delete";
 import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
 import { DISCOVERY_QUERY_LIMIT } from "@serial/feed-discovery";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
@@ -7,6 +6,7 @@ import {
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
 } from "./utils";
+import { deleteUserFeeds } from "~/server/feeds/delete";
 import { getFeedRssUrl } from "~/lib/feeds/origins";
 import {
   findFeedByRssUrl,
@@ -26,8 +26,6 @@ import {
   feedsSchema,
   openLocationSchema,
   viewFeeds,
-  views,
-  viewSections,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
@@ -38,7 +36,6 @@ import {
   isAdminUser,
 } from "~/server/subscriptions/helpers";
 import { getEffectivePlanConfig } from "~/server/subscriptions/plans";
-import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 import { createFeedsForUser } from "~/server/feeds/create";
 import { discoverFeeds as discoverFeedsForUrl } from "~/server/feeds/discovery";
 import {

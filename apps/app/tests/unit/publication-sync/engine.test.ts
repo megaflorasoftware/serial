@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
-import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import type {
   SubscriptionRecord,
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
+import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import {
   atprotoConnections,
   atprotoSubscriptionMirror,
   feeds,
-  feedOrigins,
   user,
 } from "~/server/db/schema";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
@@ -96,7 +95,7 @@ beforeEach(async () => {
     latestRev: vi.fn(async () => String(rev)),
     list: vi.fn(async () => ({ records: [...records], invalidRecordUris: [] })),
     create: vi.fn(async (uri) => {
-      const value = record(uri.split("/").at(-1)!);
+      const value = record(uri.split("/").at(-1));
       records.push(value);
       rev++;
       return value;

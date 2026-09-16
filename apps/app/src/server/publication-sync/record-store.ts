@@ -1,5 +1,3 @@
-import { createHardenedFetch } from "~/server/auth/atproto/hardened-fetch";
-import { resolvePublicPds } from "~/server/auth/atproto/did-resolver";
 import { z } from "zod";
 import {
   buildSubscriptionRecordKey,
@@ -8,8 +6,10 @@ import {
   parseSubscriptionRecord,
   STANDARD_SITE_COLLECTIONS,
 } from "@serial/standard-site";
-import { createPublicationClient } from "~/server/rss/atprotoClient";
 import type { restoreAtprotoSession } from "~/server/auth/atproto/service";
+import { createHardenedFetch } from "~/server/auth/atproto/hardened-fetch";
+import { resolvePublicPds } from "~/server/auth/atproto/did-resolver";
+import { createPublicationClient } from "~/server/rss/atprotoClient";
 
 export type SubscriptionRecord = {
   uri: string;
@@ -19,13 +19,13 @@ export type SubscriptionRecord = {
 /** Subscription transport is independent of sync policy and persistence. */
 export interface SubscriptionRecordStore {
   visibility: "public" | "private";
-  latestRev(): Promise<string | null>;
-  list(): Promise<{
+  latestRev: () => Promise<string | null>;
+  list: () => Promise<{
     records: SubscriptionRecord[];
     invalidRecordUris: string[];
   }>;
-  create(publicationUri: string): Promise<SubscriptionRecord>;
-  remove(record: SubscriptionRecord): Promise<void>;
+  create: (publicationUri: string) => Promise<SubscriptionRecord>;
+  remove: (record: SubscriptionRecord) => Promise<void>;
 }
 const pageSchema = z.object({
   records: z.array(z.unknown()).max(100),

@@ -1,6 +1,5 @@
-import { persistAtprotoSyncSettings } from "./sync-settings";
-import { atprotoSubscriptionMirror } from "~/server/db/schema";
 import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { persistAtprotoSyncSettings } from "./sync-settings";
 import { getAtprotoClient } from "./client";
 import {
   assertAllowedAtprotoScope,
@@ -20,8 +19,12 @@ import {
 import type { AtprotoRedirectUri } from "./config";
 import type { OAuthSession } from "@atproto/oauth-client-node";
 import type { AtprotoSyncPreferences } from "~/lib/auth/atproto-sync-settings";
+import {
+  account,
+  atprotoConnections,
+  atprotoSubscriptionMirror,
+} from "~/server/db/schema";
 import { db } from "~/server/db";
-import { account, atprotoConnections } from "~/server/db/schema";
 import { getKV } from "~/server/kv";
 import { captureException, logError } from "~/server/logger";
 import {

@@ -1,4 +1,3 @@
-import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -7,6 +6,7 @@ import type {
   AtprotoSyncMethod,
   AtprotoSyncPreferences,
 } from "~/lib/auth/atproto-sync-settings";
+import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";

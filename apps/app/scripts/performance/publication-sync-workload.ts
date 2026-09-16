@@ -14,29 +14,27 @@ export async function createPublicationSyncWorkload(
 ) {
   const userId = "publication-sync-benchmark";
   const did = "did:plc:abcdefghijklmnopqrstuvwx";
-  await database
-    .insert(user)
-    .values({
-      id: userId,
-      name: "Benchmark",
-      email: "publication-sync@example.com",
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  await database
-    .insert(atprotoConnections)
-    .values({
-      id: userId,
-      userId,
-      did,
-      session: "test",
-      status: "active",
-      importSubscriptions: true,
-      exportSubscriptions: true,
-      subscriptionRepoRev: "unchanged",
-    });
+  await database.insert(user).values({
+    id: userId,
+    name: "Benchmark",
+    email: "publication-sync@example.com",
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await database.insert(atprotoConnections).values({
+    id: userId,
+    userId,
+    did,
+    session: "test",
+    status: "active",
+    importSubscriptions: true,
+    exportSubscriptions: true,
+    subscriptionRepoRev: "unchanged",
+  });
   for (let offset = 0; offset < count; offset += 50) {
+    // Seed one bounded batch at a time so fixture setup cannot flood the driver.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const rows = await database
       .insert(feeds)
       .values(
@@ -50,29 +48,25 @@ export async function createPublicationSyncWorkload(
       .returning({ id: feeds.id });
     const publicationUri = (id: number) =>
       `at://${did}/site.standard.publication/${id}`;
-    await database
-      .insert(feedOrigins)
-      .values(
-        rows.map((row) => ({
-          userId,
-          feedId: row.id,
-          kind: "atproto",
-          locator: publicationUri(row.id),
-        })),
-      );
-    await database
-      .insert(atprotoSubscriptionMirror)
-      .values(
-        rows.map((row) => ({
-          connectionId: userId,
-          publicationUri: publicationUri(row.id),
-          recordUri: `at://${did}/site.standard.graph.subscription/${row.id}`,
-          recordCid: "cid",
-          feedId: row.id,
-          provenance: "serial" as const,
-          remotePresent: true,
-        })),
-      );
+    await database.insert(feedOrigins).values(
+      rows.map((row) => ({
+        userId,
+        feedId: row.id,
+        kind: "atproto",
+        locator: publicationUri(row.id),
+      })),
+    );
+    await database.insert(atprotoSubscriptionMirror).values(
+      rows.map((row) => ({
+        connectionId: userId,
+        publicationUri: publicationUri(row.id),
+        recordUri: `at://${did}/site.standard.graph.subscription/${row.id}`,
+        recordCid: "cid",
+        feedId: row.id,
+        provenance: "serial" as const,
+        remotePresent: true,
+      })),
+    );
   }
   let requests = 0;
   const unexpected = async (): Promise<never> => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildSubscriptionRecordKey } from "@serial/standard-site";
-import { createPublicSubscriptionStore } from "~/server/publication-sync/record-store";
 import type { OAuthSession } from "@atproto/oauth-client-node";
+import { createPublicSubscriptionStore } from "~/server/publication-sync/record-store";
 
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
 const publication = `at://${did}/site.standard.publication/one`;

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { db as Database } from "~/server/db";
 import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
 import { fetchDueSources } from "~/server/rss/fetchDueSources";
 import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
-import type { db as Database } from "~/server/db";
 
 describe("pre-refresh subscription sync", () => {
   it("starts the winner's lifecycle before subscription work and only then loads due Feeds", async () => {

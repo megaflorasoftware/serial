@@ -1,5 +1,3 @@
-import { requestPublicationSync } from "~/lib/data/publication-sync";
-import { useLoadingMode } from "~/lib/data/loading-machine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -9,6 +7,8 @@ import {
 } from "./AtprotoSyncSettingsForm";
 import { ConnectedAccountRow } from "./ConnectedAccountRow";
 import { ConnectionListRow } from "./ConnectionListRow";
+import { useLoadingMode } from "~/lib/data/loading-machine";
+import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
 import { Button } from "~/components/ui/button";
 import { orpc } from "~/lib/orpc";
@@ -131,16 +131,6 @@ export function AtprotoConnectionPane() {
     isFetching,
     refetch,
   } = useAtprotoConnectionStatus();
-  const unlinkMutation = useAtprotoUnlink();
-  const reconnectMutation = useAtprotoReconnect();
-  const syncSettingsSave = useAtprotoSyncSettingsSave();
-  const loading = useLoadingMode();
-  const syncMutation = useMutation({ mutationFn: requestPublicationSync });
-  const syncBusy = syncMutation.isPending || loading.mode === "importing";
-  // Either round trip leaves the page; neither action may start while the
-  // other is under way.
-  const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
-
   // A later poll that fails keeps whatever status already rendered; only
   // a pane with nothing to show falls back to the retry card.
   if (!status) {
@@ -159,11 +149,38 @@ export function AtprotoConnectionPane() {
     return <AtprotoConnectionForm />;
   }
 
+  return <ConnectedAtmospherePane status={status} />;
+}
+
+function ConnectedAtmospherePane({
+  status,
+}: {
+  status: NonNullable<ReturnType<typeof useAtprotoConnectionStatus>["data"]>;
+}) {
+  const unlinkMutation = useAtprotoUnlink();
+  const reconnectMutation = useAtprotoReconnect();
+  const syncSettingsSave = useAtprotoSyncSettingsSave();
+  const loading = useLoadingMode();
+  const queryClient = useQueryClient();
+  const syncMutation = useMutation({
+    mutationFn: requestPublicationSync,
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: orpc.atproto.getConnectionStatus.queryKey(),
+      }),
+  });
+  const syncBusy = syncMutation.isPending || loading.mode === "importing";
+  // Either round trip leaves the page; neither action may start while the
+  // other is under way.
+  const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
+  const busy = accountBusy || syncSettingsSave.busy || syncBusy;
+  const unavailable = status.needsReconnect || busy;
+
   return (
     <div className="grid gap-6">
       <ConnectedAccountRow
         label={status.handle ?? "Connected"}
-        disabled={accountBusy || syncSettingsSave.busy || syncBusy}
+        disabled={busy}
         disconnecting={unlinkMutation.isPending}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
@@ -177,20 +194,14 @@ export function AtprotoConnectionPane() {
         key={JSON.stringify(status.syncPreferences)}
         savedPreferences={status.syncPreferences}
         hasWriteScope={status.hasWriteScope}
-        disabled={status.needsReconnect || accountBusy || syncBusy}
+        disabled={unavailable}
         saving={syncSettingsSave.busy}
         onSave={syncSettingsSave.save}
       />
       <Button
         variant="outline"
         className="w-fit"
-        disabled={
-          status.needsReconnect ||
-          accountBusy ||
-          syncSettingsSave.busy ||
-          syncBusy ||
-          status.syncPreferences.method === "none"
-        }
+        disabled={unavailable || status.syncPreferences.method === "none"}
         onClick={() => syncMutation.mutate()}
       >
         {syncBusy ? (
