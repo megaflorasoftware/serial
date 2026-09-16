@@ -1,4 +1,9 @@
 import {
+  classifyDiscoveryInput,
+  feedDiscoveryKey,
+} from "@serial/feed-discovery";
+import { PublicationRowContent } from "@serial/ui";
+import {
   BookmarkIcon,
   Loader2Icon,
   RefreshCwIcon,
@@ -102,7 +107,8 @@ export function FeedDiscoveryCommand({
   loadingLabel = "Adding feed…",
 }: FeedDiscoveryCommandProps) {
   const commandRef = useRef<HTMLDivElement>(null);
-  const normalizedUrl = normalizeFeedSearchUrl(url);
+  const normalizedUrl = classifyDiscoveryInput(url) ? url.trim() : null;
+  const bookmarkUrl = normalizeFeedSearchUrl(url);
   const isAddingFeed = state === "adding";
   const isDiscovering = state === "discovering";
   const hasNoResults = state === "no-results";
@@ -207,6 +213,22 @@ export function FeedDiscoveryCommand({
                 </CenteredStateContent>
               </div>
             )}
+            {!bookmarkUrl && STATIC_FEED_SEARCH_OPTIONS.length > 0 && (
+              <CommandGroup heading="Suggested feeds">
+                {STATIC_FEED_SEARCH_OPTIONS.filter((option) =>
+                  [option.label, ...(option.keywords ?? [])]
+                    .join(" ")
+                    .toLowerCase()
+                    .includes(url.toLowerCase()),
+                ).map((option) => (
+                  <StaticFeedResult
+                    key={option.url}
+                    option={option}
+                    onSelect={(selected) => onDiscover(selected.url)}
+                  />
+                ))}
+              </CommandGroup>
+            )}
             <CommandGroup
               heading="Feeds"
               className={isSelecting || hasNoResults ? undefined : "hidden"}
@@ -223,7 +245,7 @@ export function FeedDiscoveryCommand({
                   <div className="min-w-0">
                     <p className="truncate">Retry finding feeds</p>
                     <p className="text-muted-foreground truncate text-xs">
-                      No feeds found for URL.
+                      No feeds found.
                     </p>
                   </div>
                 </CommandItem>
@@ -231,46 +253,40 @@ export function FeedDiscoveryCommand({
               {discoveredFeeds.map((feed) => (
                 <CommandItem
                   className="gap-2"
-                  key={feed.url}
-                  value={`${feed.title ?? ""} ${feed.url}`}
+                  key={feedDiscoveryKey(feed)}
+                  value={`${feed.title ?? ""} ${feedDiscoveryKey(feed)}`}
                   onSelect={() => onSelectFeed(feed)}
                 >
-                  <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded">
-                    <RssIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate">{feed.title || feed.url}</p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {feed.url}
-                    </p>
-                  </div>
+                  <PublicationRowContent feed={feed} />
                 </CommandItem>
               ))}
             </CommandGroup>
-            <CommandGroup
-              heading="Bookmark"
-              className={isSelecting || hasNoResults ? undefined : "hidden"}
-            >
-              {(isSelecting || hasNoResults) && (
-                <CommandItem
-                  className="gap-2"
-                  value={`${BOOKMARK_ACTION_LABEL[bookmarkPlatform]} ${normalizedUrl}`}
-                  onSelect={() => onSelectBookmark(normalizedUrl)}
-                >
-                  <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
-                    <BookmarkIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate">
-                      {BOOKMARK_ACTION_LABEL[bookmarkPlatform]}
-                    </p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {normalizedUrl}
-                    </p>
-                  </div>
-                </CommandItem>
-              )}
-            </CommandGroup>
+            {bookmarkUrl && (
+              <CommandGroup
+                heading="Bookmark"
+                className={isSelecting || hasNoResults ? undefined : "hidden"}
+              >
+                {(isSelecting || hasNoResults) && (
+                  <CommandItem
+                    className="gap-2"
+                    value={`${BOOKMARK_ACTION_LABEL[bookmarkPlatform]} ${bookmarkUrl}`}
+                    onSelect={() => onSelectBookmark(bookmarkUrl)}
+                  >
+                    <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
+                      <BookmarkIcon className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate">
+                        {BOOKMARK_ACTION_LABEL[bookmarkPlatform]}
+                      </p>
+                      <p className="text-muted-foreground truncate text-xs">
+                        {bookmarkUrl}
+                      </p>
+                    </div>
+                  </CommandItem>
+                )}
+              </CommandGroup>
+            )}
           </>
         ) : (
           <>

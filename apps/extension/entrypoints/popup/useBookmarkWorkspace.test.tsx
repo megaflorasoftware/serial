@@ -122,18 +122,23 @@ describe("extension Bookmark workspace lifecycle", () => {
     ]);
   });
 
-  it("uses page-declared Feeds without starting remote discovery", async () => {
+  it("discovers Atmosphere origins even when capture already found RSS", async () => {
     const declaredWorkspace = {
       ...workspace,
       feeds: [{ url: "https://example.com/declared.xml" }],
     };
-    const sendMessage = vi.fn(() =>
-      Promise.resolve({
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce({
         ok: true,
         status: "saved",
         workspace: declaredWorkspace,
-      } satisfies BookmarkMessageResponse),
-    );
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "feeds-discovered",
+        feeds: declaredWorkspace.feeds,
+      });
     vi.stubGlobal("browser", { runtime: { sendMessage } });
 
     await act(async () => root.render(createElement(Harness)));
@@ -141,7 +146,7 @@ describe("extension Bookmark workspace lifecycle", () => {
     expect(controller.status).toBe("saved");
     expect(controller.feedDiscoveryStatus).toBe("loaded");
     expect(controller.workspace?.feeds).toEqual(declaredWorkspace.feeds);
-    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it.each([

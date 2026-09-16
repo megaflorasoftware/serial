@@ -1,4 +1,6 @@
+import { resolveFeedSelection } from "./resolveSelection";
 import type { db as defaultDatabase } from "~/server/db";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import {
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
@@ -6,22 +8,26 @@ import {
 import { feedCategories, feedsSchema, viewFeeds } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import {
-  findFeedByRssUrl,
+  attachMissingFeedOrigins,
+  findFeedForOrigins,
   insertFeedWithOrigins,
 } from "~/server/feeds/origins";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
-import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
 
 export async function createFeedsForUser(input: {
   database: typeof defaultDatabase;
   userId: string;
   url: string;
+  selection?: DiscoveredFeed;
   categoryIds: number[];
   viewIds?: number[];
   returnExisting?: boolean;
 }) {
-  const newFeedDetails = await fetchNewFeedDetails(input.url);
+  const newFeedDetails = await resolveFeedSelection(
+    input.userId,
+    input.url,
+    input.selection,
+  );
   if (!newFeedDetails.length) throw new Error("Unsupported feed URL");
 
   const { remainingSlots, maxActiveFeeds } = await getFeedsActivationBudget(
@@ -50,44 +56,61 @@ export async function createFeedsForUser(input: {
       throw new Error("Unauthorized: One or more views do not belong to user");
     }
 
-    return Promise.all(
-      newFeedDetails.map(async (newFeed, index) => {
-        const feedUrl = getFeedRssUrl(newFeed);
-        if (!feedUrl) return { error: "No feed url found." };
-        const existingFeed = await findFeedByRssUrl(transaction, {
-          feedUrl,
-          userId: input.userId,
-        });
-        if (existingFeed) {
-          return input.returnExisting
-            ? { feed: existingFeed, created: false as const }
-            : { error: "Feed already exists" };
+    let newFeedCount = 0;
+    const results = [];
+    for (const newFeed of newFeedDetails) {
+      const existingFeed = await findFeedForOrigins(
+        transaction,
+        input.userId,
+        newFeed.origins,
+      );
+      if (existingFeed) {
+        const hasMissing = newFeed.origins.some(
+          (origin) =>
+            !existingFeed.origins.some(
+              (existing) => existing.kind === origin.kind,
+            ),
+        );
+        if (hasMissing || input.returnExisting) {
+          results.push({
+            feed: await attachMissingFeedOrigins(
+              transaction,
+              existingFeed,
+              newFeed.origins,
+            ),
+            created: false as const,
+          });
+          continue;
         }
+        results.push({ error: "Feed already exists" });
+        continue;
+      }
 
-        const insertedFeed = await insertFeedWithOrigins(transaction, {
-          userId: input.userId,
-          details: newFeed,
-          isActive: index < remainingSlots,
-        });
-        if (input.categoryIds.length > 0) {
-          await transaction.insert(feedCategories).values(
-            input.categoryIds.map((categoryId) => ({
-              feedId: Number(insertedFeed.id),
-              categoryId,
-            })),
-          );
-        }
-        if (input.viewIds?.length) {
-          await transaction.insert(viewFeeds).values(
-            input.viewIds.map((viewId) => ({
-              viewId,
-              feedId: Number(insertedFeed.id),
-            })),
-          );
-        }
-        return { feed: insertedFeed, created: true as const };
-      }),
-    );
+      const insertedFeed = await insertFeedWithOrigins(transaction, {
+        userId: input.userId,
+        details: newFeed,
+        isActive: newFeedCount < remainingSlots,
+      });
+      if (input.categoryIds.length > 0) {
+        await transaction.insert(feedCategories).values(
+          input.categoryIds.map((categoryId) => ({
+            feedId: Number(insertedFeed.id),
+            categoryId,
+          })),
+        );
+      }
+      if (input.viewIds?.length) {
+        await transaction.insert(viewFeeds).values(
+          input.viewIds.map((viewId) => ({
+            viewId,
+            feedId: Number(insertedFeed.id),
+          })),
+        );
+      }
+      newFeedCount++;
+      results.push({ feed: insertedFeed, created: true as const });
+    }
+    return results;
   });
 
   const errors = results.filter(

@@ -54,6 +54,7 @@ export function makeFetchableOrigin(
       sourceName: null,
       sourceImageUrl: null,
       sourceDescription: null,
+      alternateLocators: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       ...origin,

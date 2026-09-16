@@ -1,5 +1,5 @@
 {
-  "name": "@serial/bookmark-capture",
+  "name": "@serial/feed-discovery",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,12 +8,10 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./extract": "./src/extract.ts"
+    "./schema": "./src/schema.ts"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.6.0",
-    "dompurify": "^3.4.12",
-    "@serial/feed-discovery": "workspace:*"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

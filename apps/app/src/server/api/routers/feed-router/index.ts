@@ -1,3 +1,5 @@
+import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
+import { DISCOVERY_QUERY_LIMIT } from "@serial/feed-discovery";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -62,6 +64,7 @@ export type BulkImportFromFileResult =
   BulkImportFromFileError | BulkImportFromFileSuccess;
 
 const createFeedInputSchema = z.object({
+  selection: discoveredFeedSchema.optional(),
   url: z.string().min(5),
   categoryIds: boundedNumberIdsSchema,
   viewIds: boundedNumberIdsSchema.optional(),
@@ -558,7 +561,7 @@ export const bulkSetActive = protectedProcedure
   });
 
 export const discoverFeeds = protectedProcedure
-  .input(z.object({ url: z.url() }))
+  .input(z.object({ url: z.string().trim().min(1).max(DISCOVERY_QUERY_LIMIT) }))
   .handler(({ input, context }) =>
     discoverFeedsForUrl(context.user.id, input.url),
   );

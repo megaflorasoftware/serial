@@ -27,6 +27,69 @@ export type FeedDatabase = Pick<
 
 export type FeedRow = { id: number; userId: string };
 
+export const FEED_ORIGIN_CONFLICT =
+  "These origins belong to different Feeds or conflict with an existing origin. No Feeds were changed.";
+
+/** Two indexed locator lookups at most; legacy duplicate RSS locators keep the lowest-id match. */
+export async function findFeedForOrigins(
+  database: FeedDatabase,
+  userId: string,
+  origins: NewFeedDetails["origins"],
+) {
+  const matches = [];
+  for (const origin of origins) {
+    const [match] = await database
+      .select({ feed: feeds })
+      .from(feedOrigins)
+      .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+      .where(
+        and(
+          eq(feeds.userId, userId),
+          eq(feedOrigins.userId, userId),
+          eq(feedOrigins.kind, origin.kind),
+          eq(feedOrigins.locator, origin.locator),
+        ),
+      )
+      .orderBy(asc(feedOrigins.feedId))
+      .limit(1);
+    if (match) matches.push(match.feed);
+  }
+  if (new Set(matches.map((feed) => feed.id)).size > 1)
+    throw new Error(FEED_ORIGIN_CONFLICT);
+  const match = matches[0];
+  if (!match) return undefined;
+  const [feed] = await withOrigins(database, [match]);
+  if (!feed) return undefined;
+  for (const origin of origins) {
+    const existing = feed.origins.find((value) => value.kind === origin.kind);
+    if (existing && existing.locator !== origin.locator)
+      throw new Error(FEED_ORIGIN_CONFLICT);
+  }
+  return feed;
+}
+
+export async function attachMissingFeedOrigins(
+  database: FeedDatabase,
+  feed: DatabaseFeedWithOrigins,
+  origins: NewFeedDetails["origins"],
+) {
+  const missing = origins.filter(
+    (origin) => !feed.origins.some((existing) => existing.kind === origin.kind),
+  );
+  if (!missing.length) return feed;
+  const inserted = await database
+    .insert(feedOrigins)
+    .values(
+      missing.map((origin) => ({
+        ...origin,
+        feedId: feed.id,
+        userId: feed.userId,
+      })),
+    )
+    .returning();
+  return { ...feed, origins: [...feed.origins, ...inserted] };
+}
+
 /** Attach origin rows to their Feed rows, preserving the Feed order given. */
 export function attachOrigins<TFeed extends { id: number }>(
   feedRows: TFeed[],

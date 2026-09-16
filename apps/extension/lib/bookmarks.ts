@@ -37,7 +37,7 @@ export type BookmarkMessage =
       assigned: boolean;
     }
   | { type: "bookmark.remove"; bookmarkId: string }
-  | { type: "bookmark.add-feed"; url: string }
+  | { type: "bookmark.add-feed"; url: string; selection?: DiscoveredFeed }
   | { type: "bookmark.create-view"; bookmarkId: string; name: string }
   | { type: "bookmark.create-tag"; bookmarkId: string; name: string };
 

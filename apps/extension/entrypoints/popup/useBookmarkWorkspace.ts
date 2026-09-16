@@ -1,3 +1,5 @@
+import { feedDiscoveryKey } from "@serial/feed-discovery";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BookmarkMutationCoordinator,
@@ -134,11 +136,7 @@ export function useBookmarkWorkspace(input: {
       }
       replaceWorkspace(response.workspace);
       setStatus("saved");
-      if (response.workspace.feeds.length > 0) {
-        setFeedDiscoveryStatus("loaded");
-      } else {
-        void discoverFeeds(response.workspace, generation);
-      }
+      void discoverFeeds(response.workspace, generation);
     } catch (captureError) {
       setError(
         captureError instanceof Error
@@ -337,14 +335,16 @@ export function useBookmarkWorkspace(input: {
   );
 
   const addFeed = useCallback(
-    async (url: string) => {
+    async (feed: DiscoveredFeed) => {
+      const url = feedDiscoveryKey(feed);
       if (pendingFeedUrls.includes(url)) return;
       setPendingFeedUrls((values) => [...values, url]);
       setError(null);
       try {
         const response = await sendBookmarkMessage({
           type: "bookmark.add-feed",
-          url,
+          url: feed.url,
+          selection: feed,
         });
         if (!response.ok) {
           if (response.authExpired) onAuthExpired();

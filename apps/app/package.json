@@ -165,7 +165,10 @@
     "zod": "^4.4.3",
     "zustand": "^5.0.14",
     "@serial/standard-site": "workspace:*",
-    "@atproto-labs/did-resolver": "^0.3.7"
+    "@atproto-labs/did-resolver": "^0.3.7",
+    "@serial/feed-discovery": "workspace:*",
+    "feedsmith": "^2.9.5",
+    "@atproto-labs/identity-resolver": "^0.4.7"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

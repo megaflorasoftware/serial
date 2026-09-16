@@ -1,0 +1,1 @@
+ALTER TABLE `serial_feed_origin` ADD `alternate_locators` text;

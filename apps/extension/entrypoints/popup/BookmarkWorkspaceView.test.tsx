@@ -58,7 +58,7 @@ describe("extension Feed discovery actions", () => {
     expect(markup).toContain('aria-label="Adding Example Feed"');
     expect(markup).toContain("animate-spin");
     expect(markup).not.toContain("lucide-plus");
-    expect(markup.match(/lucide-rss/g)).toHaveLength(1);
+    expect(markup.match(/lucide-rss/g)).toHaveLength(2);
   });
 
   it("shows the completed state only after ingestion finishes", () => {

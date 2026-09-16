@@ -1,3 +1,4 @@
+import { parseDiscoveredFeeds } from "@serial/feed-discovery";
 import {
   EXTENSION_FEED_ADD_REQUEST_TIMEOUT_MS,
   parseExtensionBookmark,
@@ -231,7 +232,9 @@ async function discoverBookmarkFeeds(
     };
   }
   const feeds = isRecord(request.payload)
-    ? parseExtensionDiscoveredFeeds(request.payload.feeds)
+    ? request.payload.publications !== undefined
+      ? parseDiscoveredFeeds(request.payload.publications)
+      : parseExtensionDiscoveredFeeds(request.payload.feeds)
     : null;
   return feeds
     ? { ok: true, status: "feeds-discovered", feeds }
@@ -269,7 +272,12 @@ export async function handleBookmarkMessage(
             "/api/extension/feeds",
             {
               method: "POST",
-              body: JSON.stringify({ url: message.url }),
+              body: JSON.stringify({
+                url: message.url,
+                ...(message.selection?.origins
+                  ? { selection: message.selection }
+                  : {}),
+              }),
             },
             dependencies,
           )
