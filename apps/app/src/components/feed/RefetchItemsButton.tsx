@@ -137,6 +137,8 @@ export function RefetchItemsButton() {
             "Checking for newer data"
           ) : reconciliationStatus === "retrying" ? (
             "Data may be stale. Retrying automatically"
+          ) : reconciliationStatus === "stale" ? (
+            "Data may be stale. Refresh to try again."
           ) : (
             <>
               Refresh available in{" "}

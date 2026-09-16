@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import {
   createReconciliationCoordinatorState,
   transitionReconciliation,
@@ -68,6 +69,7 @@ export type ReconciliationRuntimeDependencies<TLiveEvent> = {
     automaticRssOwner: ReconciliationCoordinatorState["automaticRssOwner"];
   }) => void;
   onFullReconciliationFailed?: (input: { reconciliationId: string }) => void;
+  onRecoveryFailed?: () => void;
 };
 
 export type ReconciliationRuntime<TLiveEvent> = ReturnType<
@@ -128,6 +130,7 @@ export function createReconciliationRuntime<TLiveEvent>(
   let completedBeforeFirstConnection = false;
   let liveSequence = 0;
   let retryDelayMs = 1_000;
+  let recoveringInvalidInput = false;
   let retryIntent: ReconciliationRequestIntent | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   const listeners = new Set<() => void>();
@@ -219,23 +222,31 @@ export function createReconciliationRuntime<TLiveEvent>(
     if (successfulRequestCoversRetry(request)) clearRetry();
   };
 
+  const currentFullIntent = (): ReconciliationRequestIntent => {
+    const selectedScope = dependencies.getCurrentSelection();
+    const intent: ReconciliationRequestIntent = selectedScope
+      ? { type: "full", selectedScope }
+      : {
+          type: "full",
+          coldContentStatus: { saveStatus: "inbox", archiveStatus: "unread" },
+        };
+    return recoveringInvalidInput
+      ? { ...intent, discardManifest: true }
+      : intent;
+  };
+
   const retryIntentForFailure = (
     failedTargets: ReconciliationTarget[] | undefined,
     forceFull = false,
   ): ReconciliationRequestIntent => {
     if (
+      recoveringInvalidInput ||
       forceFull ||
       !failedTargets ||
       failedTargets.length === 0 ||
       failedTargets.length > MAX_TARGETED_RECONCILIATION_TARGETS
     ) {
-      const selectedScope = dependencies.getCurrentSelection();
-      return selectedScope
-        ? { type: "full", selectedScope }
-        : {
-            type: "full",
-            coldContentStatus: { saveStatus: "inbox", archiveStatus: "unread" },
-          };
+      return currentFullIntent();
     }
     return { type: "targeted", targets: failedTargets };
   };
@@ -311,6 +322,7 @@ export function createReconciliationRuntime<TLiveEvent>(
       previousParity !== state.serverParityAppliedAt &&
       state.serverParityAppliedAt !== null
     ) {
+      recoveringInvalidInput = false;
       dependencies.mark?.(
         "serial:server-parity-applied",
         state.latestFullEpoch?.reconciliationId,
@@ -360,6 +372,7 @@ export function createReconciliationRuntime<TLiveEvent>(
     > = {};
     const recoverableFailures = new Map<string, ReconciliationTarget>();
     let settled = false;
+    let inputRejected = false;
     try {
       const input = dependencies.buildInput(request);
       const stream = await dependencies.openStream(input, signal);
@@ -463,6 +476,13 @@ export function createReconciliationRuntime<TLiveEvent>(
         }
       }
     } catch (error) {
+      inputRejected =
+        error instanceof ORPCError &&
+        error.code === "BAD_REQUEST" &&
+        typeof error.data === "object" &&
+        error.data !== null &&
+        "issues" in error.data &&
+        Array.isArray(error.data.issues);
       if (!signal.aborted) {
         console.error("Reconciliation request failed", error);
       }
@@ -473,15 +493,33 @@ export function createReconciliationRuntime<TLiveEvent>(
           completedBeforeFirstConnection = true;
         }
         const failedTargets = state.requests[request.reconciliationId]?.targets;
+        const recoveryFailed = inputRejected && recoveringInvalidInput;
+        if (inputRejected) {
+          recoveringInvalidInput = true;
+          clearRetry();
+        }
         send({
           type: "request-settled",
           reconciliationId: request.reconciliationId,
           at: dependencies.now(),
           failed: true,
           failedTargets,
+          inputRejected,
+          recoveryIntent:
+            inputRejected && !recoveryFailed ? currentFullIntent() : undefined,
+          recoveryFailed: recoveryFailed || undefined,
         });
-        scheduleRetry(retryIntentForFailure(failedTargets));
-        if (request.intent.type === "full") {
+        if (inputRejected) {
+          if (recoveryFailed) {
+            dependencies.onRecoveryFailed?.();
+          }
+        } else {
+          scheduleRetry(retryIntentForFailure(failedTargets));
+        }
+        if (
+          request.intent.type === "full" &&
+          (!inputRejected || recoveryFailed)
+        ) {
           dependencies.onFullReconciliationFailed?.({
             reconciliationId: request.reconciliationId,
           });
@@ -492,16 +530,7 @@ export function createReconciliationRuntime<TLiveEvent>(
 
   const requestCurrentFull = () => {
     if (retryIntent) clearRetry();
-    const selectedScope = dependencies.getCurrentSelection();
-    send({
-      type: "request-reconciliation",
-      intent: selectedScope
-        ? { type: "full", selectedScope }
-        : {
-            type: "full",
-            coldContentStatus: { saveStatus: "inbox", archiveStatus: "unread" },
-          },
-    });
+    send({ type: "request-reconciliation", intent: currentFullIntent() });
   };
 
   return {
@@ -516,6 +545,7 @@ export function createReconciliationRuntime<TLiveEvent>(
       clearRetryTimer();
       retryIntent = null;
       retryDelayMs = 1_000;
+      recoveringInvalidInput = false;
       started = false;
       everConnected = false;
       reconnectRequired = false;

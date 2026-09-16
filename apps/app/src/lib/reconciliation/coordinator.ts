@@ -98,6 +98,7 @@ export type ReconciliationCoordinatorState<
   serverParityAppliedAt: number | null;
   sseConnected: boolean;
   retryPending: boolean;
+  recoveryFailed: boolean;
   retryAt: number | null;
   automaticRssOwner: AutomaticRssOwner | null;
   trustedUpToDate: boolean;
@@ -175,6 +176,9 @@ export type ReconciliationCoordinatorEvent<TAuthoritative, TLiveEvent> =
       failed?: boolean;
       failedTargets?: ReconciliationTarget[];
       epochComplete?: boolean;
+      inputRejected?: boolean;
+      recoveryIntent?: ReconciliationRequestIntent;
+      recoveryFailed?: boolean;
     }
   | {
       type: "automatic-rss-owner-resolved";
@@ -232,6 +236,7 @@ export function createReconciliationCoordinatorState<
     serverParityAppliedAt: null,
     sseConnected: false,
     retryPending: false,
+    recoveryFailed: false,
     retryAt: null,
     automaticRssOwner: null,
     trustedUpToDate: false,
@@ -666,6 +671,7 @@ function withEstablishedFullParity<TAuthoritative, TLiveEvent>(
     ...state,
     latestFullEpoch: { ...state.latestFullEpoch, established: true },
     serverParityAppliedAt: at,
+    recoveryFailed: false,
   };
 }
 
@@ -687,6 +693,7 @@ function deriveTrustedUpToDate<TAuthoritative, TLiveEvent>(
       targetKeysOverlap(targetKeys, requiredTargetKeys),
     );
   return Boolean(
+    !state.recoveryFailed &&
     state.cacheUsableAt !== null &&
     state.latestFullEpoch?.established &&
     state.serverParityAppliedAt !== null &&
@@ -977,8 +984,15 @@ export function transitionReconciliation<TAuthoritative, TLiveEvent>(
         ...nextState,
         inFlight: null,
         trailingIntent: null,
+        recoveryFailed: event.recoveryFailed ?? nextState.recoveryFailed,
       };
-      return trailingIntent
+      if (event.recoveryIntent) {
+        return startRequest(
+          { ...nextState, trailingIntent },
+          event.recoveryIntent,
+        );
+      }
+      return trailingIntent && !event.inputRejected
         ? startRequest(nextState, trailingIntent)
         : { state: withDerivedTrust(nextState), commands: [] };
     }

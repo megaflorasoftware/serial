@@ -9,6 +9,7 @@ type LoadingMachineEvent =
   // Initial reconciliation
   | { type: "INITIAL_LOAD_START" }
   | { type: "RECONCILIATION_COMPLETE" }
+  | { type: "RECONCILIATION_FAILED" }
 
   // Background RSS refresh
   | { type: "BACKGROUND_REFRESH_START"; totalFeeds: number }
@@ -168,6 +169,7 @@ export const loadingMachine = setup({
     initialLoad: {
       on: {
         RECONCILIATION_COMPLETE: { target: "idle" },
+        RECONCILIATION_FAILED: { target: "idle" },
         // Import can interrupt initial load
         IMPORT_START: {
           target: "importing",
@@ -219,6 +221,7 @@ export const loadingMachine = setup({
     manualRefresh: {
       on: {
         RECONCILIATION_COMPLETE: { target: "idle" },
+        RECONCILIATION_FAILED: { target: "idle" },
         BACKGROUND_REFRESH_START: {
           target: "backgroundRefresh",
           actions: assign({
