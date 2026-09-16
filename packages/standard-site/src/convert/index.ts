@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { convertLeafletContent, leafletContentSchema } from "./leaflet";
+import {
+  convertLeafletContent,
+  embeddedRecordCardUri,
+  leafletContentSchema,
+  renderableLeafletBlocks,
+} from "./leaflet";
 import { convertOffprintContent, offprintContentSchema } from "./offprint";
 import { convertPcktItems, pcktBlobSchema, pcktContentSchema } from "./pckt";
 import type { ConvertedDocument, ResolvedRecordCard } from "./shared";
@@ -114,7 +119,8 @@ export async function convertDocumentContent(
   if (resolved === null) return null;
   const records = new Map<string, ResolvedRecordCard>();
   if (options.resolveRecord) {
-    const uris = embeddedRecordUris(resolved);
+    const leaflet = leafletContentSchema.safeParse(resolved);
+    const uris = leaflet.success ? embeddedRecordUris(leaflet.data) : [];
     for (const uri of uris) {
       const card = await options.resolveRecord(uri);
       if (card) records.set(uri, card);
@@ -127,33 +133,13 @@ export async function convertDocumentContent(
 
 export const MAX_EMBEDDED_RECORDS_PER_DOCUMENT = 16;
 
-/** Only direct content references are visited; resolved records never enter this walk. */
-function embeddedRecordUris(content: unknown) {
+/** Only cards emitted from linear pages are resolved. */
+function embeddedRecordUris(content: z.infer<typeof leafletContentSchema>) {
   const uris = new Set<string>();
-  const pending: Array<{ value: unknown; depth: number }> = [
-    { value: content, depth: 0 },
-  ];
-  let visited = 0;
-  while (
-    pending.length &&
-    visited++ < 50_000 &&
-    uris.size < MAX_EMBEDDED_RECORDS_PER_DOCUMENT
-  ) {
-    const { value, depth } = pending.pop()!;
-    if (!value || typeof value !== "object" || depth > 64) continue;
-    const record = value as Record<string, unknown>;
-    if (
-      typeof record.$type === "string" &&
-      [
-        "pub.leaflet.blocks.standardSitePost",
-        "pub.leaflet.blocks.standardSitePublication",
-      ].includes(record.$type.split("#")[0]!) &&
-      typeof record.uri === "string"
-    )
-      uris.add(record.uri);
-    const children = Array.isArray(value) ? value : Object.values(value);
-    for (let i = children.length - 1; i >= 0; i--)
-      pending.push({ value: children[i], depth: depth + 1 });
+  for (const block of renderableLeafletBlocks(content)) {
+    const uri = embeddedRecordCardUri(block);
+    if (uri) uris.add(uri);
+    if (uris.size >= MAX_EMBEDDED_RECORDS_PER_DOCUMENT) break;
   }
   return uris;
 }

@@ -74,6 +74,24 @@ export type LeafletContent = z.infer<typeof leafletContentSchema>;
 
 const LINEAR_DOCUMENT_TYPE = "pub.leaflet.pages.linearDocument";
 
+/** Blocks the reader can emit, in source order. Canvas and malformed pages are skipped. */
+export function* renderableLeafletBlocks(content: LeafletContent) {
+  for (const entry of content.pages) {
+    const page = pageSchema.safeParse(entry);
+    if (!page.success || page.data.$type !== LINEAR_DOCUMENT_TYPE) continue;
+    for (const { block } of page.data.blocks ?? []) yield block;
+  }
+}
+
+/** The record URI for a link-card block the renderer accepts. */
+export function embeddedRecordCardUri(block: Block) {
+  const name = blockName(block, PREFIX);
+  if (name !== "standardSitePost" && name !== "standardSitePublication")
+    return null;
+  const uri = stringProperty(block, "uri");
+  return uri && buildPdslsUrl(uri) ? uri : null;
+}
+
 function renderListItemContent(
   item: LeafletListItem,
   context: ConversionContext,
@@ -243,9 +261,9 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return blueskyPostCard(block.postRef);
     case "standardSitePost":
     case "standardSitePublication": {
-      const uri = stringProperty(block, "uri");
-      const href = uri ? buildPdslsUrl(uri) : null;
-      if (!uri || !href) return "";
+      const uri = embeddedRecordCardUri(block);
+      if (!uri) return "";
+      const href = buildPdslsUrl(uri)!;
       const resolved = context.records.get(uri);
       return linkCard({
         href: resolved?.url ?? href,
@@ -290,12 +308,7 @@ export function convertLeafletContent(
 ) {
   const context = new ConversionContext(did, records);
   let html = "";
-  for (const entry of content.pages) {
-    const page = pageSchema.safeParse(entry);
-    if (!page.success || page.data.$type !== LINEAR_DOCUMENT_TYPE) continue;
-    for (const { block } of page.data.blocks ?? []) {
-      html += renderBlock(block, context);
-    }
-  }
+  for (const block of renderableLeafletBlocks(content))
+    html += renderBlock(block, context);
   return context.finish(html);
 }

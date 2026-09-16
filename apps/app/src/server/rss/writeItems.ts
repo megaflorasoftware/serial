@@ -61,10 +61,11 @@ export async function writeObservedItems(
         async (tx) => {
           const locators = [
             ...new Set(
-              incoming.flatMap((item) => [
-                item.url,
-                `${item.kind}:${item.key}`,
-              ]),
+              incoming.flatMap((item) =>
+                item.kind === "atproto"
+                  ? [item.url, `atproto:${item.key}`]
+                  : [item.url],
+              ),
             ),
           ];
           const aliases = await tx
@@ -132,14 +133,15 @@ export async function writeObservedItems(
           const replacements = new Map<string, string>();
           const now = new Date();
           for (const observation of incoming) {
-            const byKey = lookup.get(`${observation.kind}:${observation.key}`);
+            // RSS GUIDs may be reused across distinct URLs. Only documents
+            // have a stable identity that can establish a URL change.
+            const byKey =
+              observation.kind === "atproto"
+                ? lookup.get(`atproto:${observation.key}`)
+                : undefined;
             const byUrl = lookup.get(observation.url);
             // The stable document identity survives a collision with an RSS-only row.
-            const id =
-              (observation.kind === "atproto" ? byKey : undefined) ??
-              byUrl ??
-              byKey ??
-              createId();
+            const id = byKey ?? byUrl ?? createId();
             const row = rows.get(id);
             const values = sources.get(id) ?? {};
             const otherId =
@@ -185,7 +187,8 @@ export async function writeObservedItems(
             if (!row || row.contentHash !== value.contentHash || otherId)
               changed.set(id, value);
             lookup.set(observation.url, id);
-            lookup.set(`${observation.kind}:${observation.key}`, id);
+            if (observation.kind === "atproto")
+              lookup.set(`atproto:${observation.key}`, id);
             rows.set(id, {
               isWatched: false,
               isWatchLater: false,

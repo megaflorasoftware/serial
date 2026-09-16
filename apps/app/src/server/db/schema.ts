@@ -364,6 +364,7 @@ export const feedIngestState = sqliteTable("feed_ingest_state", {
   boundary: text("boundary"),
   newestRkey: text("newest_rkey"),
   pendingRev: text("pending_rev"),
+  retryCursor: text("retry_cursor"),
   initialCount: integer("initial_count").notNull().default(0),
   initialized: integer("initialized", { mode: "boolean" })
     .notNull()
@@ -382,7 +383,11 @@ export const feedDocumentRecords = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.originId, table.uri] }),
-    index("feed_document_retry_idx").on(table.originId, table.status),
+    index("feed_document_retry_idx").on(
+      table.originId,
+      table.status,
+      table.uri,
+    ),
   ],
 );
 

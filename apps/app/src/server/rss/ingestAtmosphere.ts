@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
   buildCanonicalDocumentUrl,
@@ -57,25 +57,13 @@ export async function ingestAtmosphere(
   const publicationUri = parsePublicationUri(origin.locator);
   if (!publicationUri) throw new Error("Invalid publication URI");
   const now = new Date();
-  const [saved, retries, rev] = await Promise.all([
+  const [saved, rev] = await Promise.all([
     dbSemaphore.run(() =>
       database
         .select()
         .from(feedIngestState)
         .where(eq(feedIngestState.originId, origin.id))
         .get(),
-    ),
-    dbSemaphore.run(() =>
-      database
-        .select()
-        .from(feedDocumentRecords)
-        .where(
-          and(
-            eq(feedDocumentRecords.originId, origin.id),
-            eq(feedDocumentRecords.status, "retry"),
-          ),
-        )
-        .limit(100),
     ),
     client.latestRev(publicationUri.did),
   ]);
@@ -85,9 +73,35 @@ export async function ingestAtmosphere(
     boundary: null,
     newestRkey: null,
     pendingRev: null,
+    retryCursor: null,
     initialCount: 0,
     initialized: false,
   };
+  const retryWhere = and(
+    eq(feedDocumentRecords.originId, origin.id),
+    eq(feedDocumentRecords.status, "retry"),
+  );
+  const retries = await dbSemaphore.run(async () => {
+    const afterCursor = await database
+      .select()
+      .from(feedDocumentRecords)
+      .where(
+        state.retryCursor
+          ? and(retryWhere, gt(feedDocumentRecords.uri, state.retryCursor))
+          : retryWhere,
+      )
+      .orderBy(asc(feedDocumentRecords.uri))
+      .limit(100);
+    if (!state.retryCursor || afterCursor.length === 100) return afterCursor;
+    const wrapped = await database
+      .select()
+      .from(feedDocumentRecords)
+      .where(and(retryWhere, lte(feedDocumentRecords.uri, state.retryCursor)))
+      .orderBy(asc(feedDocumentRecords.uri))
+      .limit(100 - afterCursor.length);
+    return [...afterCursor, ...wrapped];
+  });
+  if (retries.length) state.retryCursor = retries.at(-1)!.uri;
   if (
     state.initialized &&
     !state.cursor &&
@@ -124,8 +138,8 @@ export async function ingestAtmosphere(
     siteUrl: publication.value.url,
     pdsUrl: await client.resolvePds(publicationUri.did),
   });
-  const items: ApplicationFeedItem[] = [];
-  const removedItemIds: string[] = [];
+  const items = new Map<string, ApplicationFeedItem>();
+  const removedItemIds = new Set<string>();
   let failed = false;
   let processedDocuments = 0;
   let firstEtag = origin.etag;
@@ -140,9 +154,15 @@ export async function ingestAtmosphere(
     const envelopes = records.flatMap((input) => {
       const parsed = listedRecordSchema.safeParse(input);
       const uri = parsed.success && parseDocumentUri(parsed.data.uri);
-      return parsed.success && uri && uri.did === publicationUri!.did
-        ? [parsed.data]
-        : [];
+      if (parsed.success && uri && uri.did === publicationUri!.did)
+        return [parsed.data];
+      logWarning("Skipping invalid publication document envelope", {
+        uri:
+          parsed.success && typeof parsed.data.uri === "string"
+            ? parsed.data.uri.slice(0, 512)
+            : undefined,
+      });
+      return [];
     });
     const existing = envelopes.length
       ? await database
@@ -160,6 +180,7 @@ export async function ingestAtmosphere(
       : [];
     const known = new Map(existing.map((record) => [record.uri, record]));
     let initialCount = state.initialCount;
+    const statuses: Array<typeof feedDocumentRecords.$inferInsert> = [];
     const candidates = envelopes.filter((record) => {
       const old = known.get(record.uri);
       if (
@@ -172,8 +193,20 @@ export async function ingestAtmosphere(
       if (
         parsed &&
         !documentBelongsToPublication(parsed.value.site, origin.locator)
-      )
+      ) {
+        if (old?.status === "retry") {
+          statuses.push({
+            originId: origin.id,
+            uri: record.uri,
+            cid: record.cid,
+            status: "invalid",
+          });
+          logWarning("Skipping publication document moved to another site", {
+            uri: record.uri,
+          });
+        }
         return false;
+      }
       if (countInitial && !state.initialized && !old && parsed) {
         if (initialCount >= ATMOSPHERE_INITIAL_ITEMS) return false;
         initialCount++;
@@ -182,7 +215,6 @@ export async function ingestAtmosphere(
     });
     const observations: ItemObservation[] = [];
     processedDocuments += candidates.length;
-    const statuses: Array<typeof feedDocumentRecords.$inferInsert> = [];
     for await (const result of workerPool(
       candidates,
       ATMOSPHERE_DOCUMENT_CONCURRENCY,
@@ -267,8 +299,11 @@ export async function ingestAtmosphere(
       (a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
     );
     const written = await writeObservedItems(database, feed, observations);
-    items.push(...written.items);
-    removedItemIds.push(...written.removedItemIds);
+    for (const id of written.removedItemIds) {
+      removedItemIds.add(id);
+      items.delete(id);
+    }
+    for (const item of written.items) items.set(item.id, item);
     if (statuses.length) {
       await runDatabaseWrite(database, () =>
         database.transaction(async (tx) => {
@@ -295,28 +330,38 @@ export async function ingestAtmosphere(
 
   // Failed records are fetched directly, even after they fall off the first repo page.
   const retryRecords: unknown[] = [];
+  async function retireRetry(uri: string, message: string) {
+    await runDatabaseWrite(database, () =>
+      database
+        .update(feedDocumentRecords)
+        .set({ status: "invalid" })
+        .where(
+          and(
+            eq(feedDocumentRecords.originId, origin.id),
+            eq(feedDocumentRecords.uri, uri),
+          ),
+        ),
+    );
+    logWarning(message, { uri });
+  }
   for await (const record of workerPool(
     retries,
     ATMOSPHERE_DOCUMENT_CONCURRENCY,
     async (retry) => {
       try {
-        return await client.getRecord(retry.uri);
+        const fetched = await client.getRecord(retry.uri);
+        const parsed = listedRecordSchema.safeParse(fetched);
+        if (!parsed.success || parsed.data.uri !== retry.uri) {
+          await retireRetry(
+            retry.uri,
+            "Skipping invalid retried publication document",
+          );
+          return null;
+        }
+        return parsed.data;
       } catch (error) {
         if (error instanceof MissingPublicationRecordError) {
-          await runDatabaseWrite(database, () =>
-            database
-              .update(feedDocumentRecords)
-              .set({ status: "invalid" })
-              .where(
-                and(
-                  eq(feedDocumentRecords.originId, origin.id),
-                  eq(feedDocumentRecords.uri, retry.uri),
-                ),
-              ),
-          );
-          logWarning("Skipping missing publication document", {
-            uri: retry.uri,
-          });
+          await retireRetry(retry.uri, "Skipping missing publication document");
         } else {
           failed = true;
         }
@@ -442,13 +487,15 @@ export async function ingestAtmosphere(
   return {
     status: failed
       ? ("error" as const)
-      : items.length
+      : items.size
         ? ("success" as const)
         : ("empty" as const),
     id: feed.id,
     originId: origin.id,
-    feedItems: items,
-    removedItemIds,
+    feedItems: [...items.values()].filter(
+      (item) => !removedItemIds.has(item.id),
+    ),
+    removedItemIds: [...removedItemIds],
     metadataChanged,
     ...(failed
       ? { error: new Error("Some publication documents will be retried") }
