@@ -59,6 +59,8 @@ export async function createFeedsForUser(input: {
     let newFeedCount = 0;
     const results = [];
     for (const newFeed of newFeedDetails) {
+      // Each lookup must see earlier inserts, and reused Feeds must not consume slots.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       const existingFeed = await findFeedForOrigins(
         transaction,
         input.userId,

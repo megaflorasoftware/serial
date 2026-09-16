@@ -73,6 +73,33 @@ function StaticFeedResult({
   );
 }
 
+function SuggestedFeedResults({
+  query = "",
+  onSelect,
+}: {
+  query?: string;
+  onSelect: (option: StaticFeedSearchOption) => void;
+}) {
+  const options = STATIC_FEED_SEARCH_OPTIONS.filter((option) =>
+    [option.label, ...(option.keywords ?? [])]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  if (!options.length) return null;
+  return (
+    <CommandGroup heading="Suggested feeds">
+      {options.map((option) => (
+        <StaticFeedResult
+          key={option.url}
+          option={option}
+          onSelect={onSelect}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
 interface FeedDiscoveryCommandProps {
   url: string;
   onUrlChange: (url: string) => void;
@@ -213,21 +240,11 @@ export function FeedDiscoveryCommand({
                 </CenteredStateContent>
               </div>
             )}
-            {!bookmarkUrl && STATIC_FEED_SEARCH_OPTIONS.length > 0 && (
-              <CommandGroup heading="Suggested feeds">
-                {STATIC_FEED_SEARCH_OPTIONS.filter((option) =>
-                  [option.label, ...(option.keywords ?? [])]
-                    .join(" ")
-                    .toLowerCase()
-                    .includes(url.toLowerCase()),
-                ).map((option) => (
-                  <StaticFeedResult
-                    key={option.url}
-                    option={option}
-                    onSelect={(selected) => onDiscover(selected.url)}
-                  />
-                ))}
-              </CommandGroup>
+            {!bookmarkUrl && (
+              <SuggestedFeedResults
+                query={url}
+                onSelect={(selected) => onDiscover(selected.url)}
+              />
             )}
             <CommandGroup
               heading="Feeds"
@@ -296,19 +313,9 @@ export function FeedDiscoveryCommand({
                 <span>Enter a website, channel, or RSS feed URL.</span>
               </CenteredStateContent>
             </CommandEmpty>
-            {STATIC_FEED_SEARCH_OPTIONS.length > 0 && (
-              <CommandGroup heading="Suggested feeds">
-                {STATIC_FEED_SEARCH_OPTIONS.map((option) => (
-                  <StaticFeedResult
-                    key={`${option.label}:${option.url}`}
-                    option={option}
-                    onSelect={(selectedOption) =>
-                      onDiscover(selectedOption.url)
-                    }
-                  />
-                ))}
-              </CommandGroup>
-            )}
+            <SuggestedFeedResults
+              onSelect={(selected) => onDiscover(selected.url)}
+            />
           </>
         )}
       </CommandList>

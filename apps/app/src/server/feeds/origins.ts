@@ -36,32 +36,36 @@ export async function findFeedForOrigins(
   userId: string,
   origins: NewFeedDetails["origins"],
 ) {
-  const matches = [];
-  for (const origin of origins) {
-    const [match] = await database
-      .select({ feed: feeds })
-      .from(feedOrigins)
-      .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
-      .where(
-        and(
-          eq(feeds.userId, userId),
-          eq(feedOrigins.userId, userId),
-          eq(feedOrigins.kind, origin.kind),
-          eq(feedOrigins.locator, origin.locator),
-        ),
-      )
-      .orderBy(asc(feedOrigins.feedId))
-      .limit(1);
-    if (match) matches.push(match.feed);
-  }
+  const matches = (
+    await Promise.all(
+      origins.map(async (origin) => {
+        const [match] = await database
+          .select({ feed: feeds })
+          .from(feedOrigins)
+          .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+          .where(
+            and(
+              eq(feeds.userId, userId),
+              eq(feedOrigins.userId, userId),
+              eq(feedOrigins.kind, origin.kind),
+              eq(feedOrigins.locator, origin.locator),
+            ),
+          )
+          .orderBy(asc(feedOrigins.feedId))
+          .limit(1);
+        return match?.feed;
+      }),
+    )
+  ).filter((feed) => feed !== undefined);
   if (new Set(matches.map((feed) => feed.id)).size > 1)
     throw new Error(FEED_ORIGIN_CONFLICT);
   const match = matches[0];
   if (!match) return undefined;
   const [feed] = await withOrigins(database, [match]);
   if (!feed) return undefined;
+  const byKind = new Map(feed.origins.map((origin) => [origin.kind, origin]));
   for (const origin of origins) {
-    const existing = feed.origins.find((value) => value.kind === origin.kind);
+    const existing = byKind.get(origin.kind);
     if (existing && existing.locator !== origin.locator)
       throw new Error(FEED_ORIGIN_CONFLICT);
   }
