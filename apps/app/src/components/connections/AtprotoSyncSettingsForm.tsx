@@ -109,7 +109,7 @@ export function AtprotoSyncSettingsForm({
       }}
     >
       <div className="grid gap-2">
-        <Label htmlFor="atproto-sync-method">Sync subscriptions</Label>
+        <Label htmlFor="atproto-sync-method">Subscription sync method</Label>
         <ToggleGroup
           id="atproto-sync-method"
           type="single"

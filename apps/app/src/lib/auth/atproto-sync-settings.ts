@@ -10,9 +10,9 @@ import { z } from "zod";
 
 export const ATPROTO_SYNC_METHODS = [
   "none",
+  "bidirectional",
   "import",
   "export",
-  "bidirectional",
 ] as const;
 
 export type AtprotoSyncMethod = (typeof ATPROTO_SYNC_METHODS)[number];
