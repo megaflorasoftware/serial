@@ -58,6 +58,7 @@ test.describe("Saved soft reads", () => {
           .getByRole("radio", { name: fixture.emptyViewName, exact: true })
           .click();
       } else {
+        await page.getByRole("button", { name: "Menu", exact: true }).click();
         const group = page.locator('[data-sidebar="group"]').filter({
           has: page.locator('[data-sidebar="group-label"]', {
             hasText: `${scope}s`,

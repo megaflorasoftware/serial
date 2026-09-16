@@ -352,6 +352,40 @@ function ViewListSkeleton({ layout }: { layout: ViewSection["layout"] }) {
   }
 }
 
+function getViewPlaceholder({
+  hasInitialData,
+  hasFetchedFeeds,
+  hasFetchedFeedCategories,
+  hasFeeds,
+  hasItems,
+  paginationState,
+  layout,
+}: {
+  hasInitialData: boolean;
+  hasFetchedFeeds: boolean;
+  hasFetchedFeedCategories: boolean;
+  hasFeeds: boolean;
+  hasItems: boolean;
+  paginationState: ReturnType<typeof useViewListScroll>["paginationState"];
+  layout: ViewSection["layout"];
+}) {
+  if (!hasInitialData) return <FeedLoading />;
+  if (hasItems) return null;
+  if (
+    paginationState.isLoaded &&
+    hasFetchedFeeds &&
+    !hasFeeds &&
+    Object.keys(bookmarksStore.getState().snapshot()).length === 0
+  ) {
+    return <FeedEmptyState />;
+  }
+  if (!paginationState.isLoaded || paginationState.isFetching) {
+    return <ViewListSkeleton layout={layout} />;
+  }
+  if (hasFetchedFeeds && hasFetchedFeedCategories) return <EmptyState />;
+  return null;
+}
+
 function ViewVisit({ viewListKey }: { viewListKey: string }) {
   const { feeds, hasFetchedFeeds } = useFeeds();
   const { hasFetchedFeedCategories } = useFeedCategories();
@@ -396,28 +430,16 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
     paginationState.hasMore === false &&
     paginationState.isFetching !== true;
 
-  if (!hasInitialData) {
-    return <FeedLoading />;
-  }
-
-  if (filteredFeedItemsOrder.length === 0) {
-    if (
-      paginationState.isLoaded &&
-      hasFetchedFeeds &&
-      !feeds.length &&
-      Object.keys(bookmarksStore.getState().snapshot()).length === 0
-    ) {
-      return <FeedEmptyState />;
-    }
-
-    if (!paginationState.isLoaded || paginationState.isFetching) {
-      return <ViewListSkeleton layout={baseLayout} />;
-    }
-
-    if (hasFetchedFeeds && hasFetchedFeedCategories) {
-      return <EmptyState />;
-    }
-  }
+  const placeholder = getViewPlaceholder({
+    hasInitialData,
+    hasFetchedFeeds,
+    hasFetchedFeedCategories,
+    hasFeeds: feeds.length > 0,
+    hasItems: filteredFeedItemsOrder.length > 0,
+    paginationState,
+    layout: baseLayout,
+  });
+  if (placeholder) return placeholder;
 
   return (
     <ContentStatusSectionList
