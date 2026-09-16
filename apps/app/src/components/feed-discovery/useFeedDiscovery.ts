@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { normalizeFeedSearchUrl } from "./feedSearchOptions";
+import { classifyDiscoveryInput } from "@serial/feed-discovery";
 import type { DiscoveredFeed } from "./FeedDiscoveryResults";
 import { orpcRouterClient } from "~/lib/orpc";
 
@@ -25,7 +25,9 @@ export function useFeedDiscovery() {
         return;
       }
 
-      const normalizedUrl = normalizeFeedSearchUrl(requestedUrl);
+      const normalizedUrl = classifyDiscoveryInput(requestedUrl)
+        ? requestedUrl.trim()
+        : null;
       if (!normalizedUrl) return;
       const requestId = ++requestIdRef.current;
 

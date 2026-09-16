@@ -70,7 +70,8 @@
     "benchmark:client:coverage:check": "node --import=tsx scripts/performance/inventory-client-audit.ts --check",
     "benchmark:inventory": "node --import=tsx scripts/performance/inventory-app-queries.ts",
     "benchmark:inventory:check": "node --import=tsx scripts/performance/inventory-app-queries.ts --check",
-    "benchmark:ingest": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-ingest-benchmark.ts"
+    "benchmark:ingest": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-ingest-benchmark.ts",
+    "benchmark:client:browser": "SERIAL_RUN_CLIENT_PERFORMANCE=1 pnpm test:e2e:self-hosted client-performance-audit.spec.ts"
   },
   "dependencies": {
     "@atproto-labs/fetch-node": "^0.3.7",
@@ -165,7 +166,11 @@
     "zod": "^4.4.3",
     "zustand": "^5.0.14",
     "@serial/standard-site": "workspace:*",
-    "@atproto-labs/did-resolver": "^0.3.7"
+    "@atproto-labs/did-resolver": "^0.3.7",
+    "@serial/feed-discovery": "workspace:*",
+    "feedsmith": "^2.9.5",
+    "@atproto-labs/identity-resolver": "^0.4.7",
+    "entities": "^8.0.0"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

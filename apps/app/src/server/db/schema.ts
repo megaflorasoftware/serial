@@ -308,6 +308,9 @@ export const feedOrigins = sqliteTable(
     sourceName: text("source_name", { length: 256 }),
     sourceImageUrl: text("source_image_url", { length: 512 }),
     sourceDescription: text("source_description"),
+    alternateLocators: text("alternate_locators", { mode: "json" }).$type<
+      string[]
+    >(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),

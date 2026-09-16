@@ -1,125 +1,23 @@
-import Parser from "rss-parser";
-import { z } from "zod";
 import {
   buildConditionalHeaders,
   parseHttpHeaders,
 } from "../calculateNextFetch";
-import {
-  BASE_FEED_CUSTOM_FIELDS,
-  baseFeedSchema,
-  extractRssMetadata,
-  newRssFeedDetails,
-} from "../types";
+import { newRssFeedDetails } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
+import { parseSyndicationFeed } from "../syndication";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
   FeedFetchResult,
   FetchableOrigin,
   NewFeedDetails,
-  RSSContent,
 } from "../types";
 import { captureException, logError } from "~/server/logger";
 import { workerPool } from "~/lib/workerPool";
 
 const MAX_OG_IMAGE_FETCHES_PER_FEED = 8;
 const OG_IMAGE_FETCH_CONCURRENCY = 2;
-
-function getLongestString(...strings: Array<string | undefined>) {
-  return strings.reduce((acc: string, cur) => {
-    if (!cur) return acc;
-    if (cur.length > acc.length) return cur;
-    return acc;
-  }, "");
-}
-
-const parser = new Parser({
-  customFields: {
-    feed: [...BASE_FEED_CUSTOM_FIELDS],
-    item: [
-      "description",
-      ["media:content", "mediaContent"],
-      ["media:thumbnail", "mediaThumbnail"],
-      "enclosure",
-    ],
-  },
-});
-
-const mediaObjectSchema = z
-  .object({
-    $: z.object({
-      url: z.string().optional(),
-      medium: z.string().optional(),
-      type: z.string().optional(),
-    }),
-  })
-  .optional();
-
-const enclosureSchema = z
-  .object({
-    url: z.string().optional(),
-    type: z.string().optional(),
-  })
-  .optional();
-
-export const websiteItemSchema = z.object({
-  creator: z.string().optional(),
-  categories: z.array(z.string()).optional(),
-  title: z.string(),
-  link: z.string(),
-  pubDate: z.string().optional(),
-  "content:encoded": z.string().optional(),
-  description: z.string().optional(),
-  content: z.string().optional(),
-  contentSnippet: z.string().optional(),
-  isoDate: z.string().optional(),
-  updated: z.string().optional(),
-  // ID fields
-  guid: z.string().optional(),
-  id: z.string().optional(),
-  // Image fields
-  mediaContent: mediaObjectSchema,
-  mediaThumbnail: mediaObjectSchema,
-  enclosure: enclosureSchema,
-});
-
-function extractMediaThumbnail(
-  item: z.infer<typeof websiteItemSchema>,
-): string | undefined {
-  // Try media:thumbnail first
-  if (item.mediaThumbnail?.$.url) {
-    return item.mediaThumbnail.$.url;
-  }
-
-  // Try media:content if it's an image
-  if (item.mediaContent?.$.url) {
-    const type = item.mediaContent.$.type ?? "";
-    const medium = item.mediaContent.$.medium ?? "";
-    if (type.startsWith("image/") || medium === "image") {
-      return item.mediaContent.$.url;
-    }
-  }
-
-  // Try enclosure if it's an image
-  if (item.enclosure?.url && item.enclosure.type?.startsWith("image/")) {
-    return item.enclosure.url;
-  }
-
-  return undefined;
-}
-
-function extractBodyImage(item: z.infer<typeof websiteItemSchema>) {
-  // Try to extract first image from content:encoded or content
-  const htmlContent =
-    item["content:encoded"] || item.content || item.description || "";
-  const imgMatch = htmlContent.match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (imgMatch?.[1]) {
-    return imgMatch[1];
-  }
-
-  return undefined;
-}
 
 async function fetchOgImage(url: string): Promise<string | undefined> {
   try {
@@ -154,48 +52,20 @@ async function fetchOgImage(url: string): Promise<string | undefined> {
   }
 }
 
-export const websiteSchema = baseFeedSchema.extend({
-  items: websiteItemSchema.array(),
-  image: z
-    .object({
-      link: z.string(),
-      url: z.string(),
-      title: z.string(),
-    })
-    .optional(),
-  title: z.string(),
-  description: z.string().optional(),
-  generator: z.string().optional(),
-  link: z.string().optional(),
-  lastBuildDate: z.string().optional(),
-});
-
 export async function getWebsiteFeedIfMatches(
-  rssString: string,
+  text: string,
   url: string,
 ): Promise<NewFeedDetails | null> {
-  const rssData = await parser.parseString(rssString);
-
-  const {
-    data: websiteData,
-    success: websiteSuccess,
-    error,
-  } = websiteSchema.safeParse(rssData);
-
-  if (websiteSuccess) {
-    return newRssFeedDetails({
-      url,
-      platform: "website",
-      name: websiteData.title,
-      imageUrl: websiteData.image?.url,
-      siteUrl: websiteData.link,
-      description: websiteData.description,
-    });
-  } else {
-    logError(error);
-  }
-
-  return null;
+  const data = parseSyndicationFeed(text, url);
+  if (!data.title) return null;
+  return newRssFeedDetails({
+    url,
+    platform: "website",
+    name: data.title,
+    imageUrl: data.imageUrl,
+    siteUrl: data.siteUrl,
+    description: data.description,
+  });
 }
 
 export async function fetchWebsiteFeedData(
@@ -219,43 +89,12 @@ export async function fetchWebsiteFeedData(
         `Failed to fetch website feed: ${feedResponse.status} ${feedResponse.statusText}`,
       );
     }
-    const rssData = await parser.parseString(feedResponse.text);
-
-    const data = websiteSchema.parse(rssData);
-
-    // Build fetch metadata from HTTP headers and RSS elements
+    const data = parseSyndicationFeed(feedResponse.text, origin.locator);
     const fetchMetadata: FeedFetchMetadata = {
       ...parseHttpHeaders(feedResponse),
-      ...extractRssMetadata(data),
+      ...data.fetchMetadata,
     };
-
-    const items = boundFeedItems(
-      data.items.flatMap((item) => {
-        const id = item.guid || item.id;
-
-        if (!id) return [];
-
-        return [
-          {
-            id,
-            title: item.title,
-            publishedDate: item.pubDate || item.isoDate || item.updated || "",
-            url: item.link,
-            author: item.creator ?? "",
-            thumbnail: extractMediaThumbnail(item) ?? extractBodyImage(item),
-            mediaThumbnail: extractMediaThumbnail(item) ?? "",
-            firstImageUrl: extractBodyImage(item) ?? "",
-            tags: item.categories ?? [],
-            content: getLongestString(
-              item["content:encoded"],
-              item.content,
-              item.description,
-            ),
-            contentSnippet: item.contentSnippet,
-          } satisfies RSSContent,
-        ];
-      }),
-    );
+    const items = boundFeedItems(data.items);
 
     const metadataCandidates = items
       .flatMap((item, position) =>
@@ -279,9 +118,9 @@ export async function fetchWebsiteFeedData(
     return {
       id: feed.id,
       title: data.title,
-      imageUrl: data.image?.url,
+      imageUrl: data.imageUrl,
       description: data.description,
-      url: data.link ?? new URL(origin.locator).origin,
+      url: data.siteUrl ?? new URL(origin.locator).origin,
       items,
       fetchMetadata,
     };

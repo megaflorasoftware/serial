@@ -63,6 +63,7 @@ export type RSSContent = {
   title: string;
   subtitle?: string;
   publishedDate: string;
+  updatedDate?: string;
   author: string;
   url: string;
   thumbnail?: string;

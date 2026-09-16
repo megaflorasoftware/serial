@@ -21,6 +21,7 @@ const feedFetchMetadataSchema = z.object({
 });
 
 const rssContentSchema = z.object({
+  updatedDate: z.string().optional(),
   id: z.string(),
   title: z.string(),
   subtitle: z.string().optional(),

@@ -1,4 +1,9 @@
 import {
+  classifyDiscoveryInput,
+  feedDiscoveryKey,
+} from "@serial/feed-discovery";
+import { PublicationRowContent } from "@serial/ui";
+import {
   BookmarkIcon,
   Loader2Icon,
   RefreshCwIcon,
@@ -68,6 +73,33 @@ function StaticFeedResult({
   );
 }
 
+function SuggestedFeedResults({
+  query = "",
+  onSelect,
+}: {
+  query?: string;
+  onSelect: (option: StaticFeedSearchOption) => void;
+}) {
+  const options = STATIC_FEED_SEARCH_OPTIONS.filter((option) =>
+    [option.label, ...(option.keywords ?? [])]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  if (!options.length) return null;
+  return (
+    <CommandGroup heading="Suggested feeds">
+      {options.map((option) => (
+        <StaticFeedResult
+          key={option.url}
+          option={option}
+          onSelect={onSelect}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
 interface FeedDiscoveryCommandProps {
   url: string;
   onUrlChange: (url: string) => void;
@@ -89,6 +121,109 @@ const BOOKMARK_ACTION_LABEL: Record<ContentPlatform, string> = {
   nebula: "Bookmark video to watch later",
 };
 
+function FeedResults({
+  query,
+  visible,
+  retry,
+  feeds,
+  onDiscover,
+  onSelect,
+}: {
+  query: string;
+  visible: boolean;
+  retry: boolean;
+  feeds: DiscoveredFeed[];
+  onDiscover: () => void;
+  onSelect: (feed: DiscoveredFeed) => void;
+}) {
+  return (
+    <CommandGroup heading="Feeds" className={visible ? undefined : "hidden"}>
+      {retry && (
+        <CommandItem
+          className="gap-2"
+          value={`Retry finding feeds ${query}`}
+          onSelect={onDiscover}
+        >
+          <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded">
+            <RefreshCwIcon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate">Retry finding feeds</p>
+            <p className="text-muted-foreground truncate text-xs">
+              No feeds found.
+            </p>
+          </div>
+        </CommandItem>
+      )}
+      {feeds.map((feed) => (
+        <CommandItem
+          className="gap-2"
+          key={feedDiscoveryKey(feed)}
+          value={`${feed.title ?? ""} ${feedDiscoveryKey(feed)}`}
+          onSelect={() => onSelect(feed)}
+        >
+          <PublicationRowContent feed={feed} />
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
+function BookmarkResult({
+  url,
+  platform,
+  visible,
+  onSelect,
+}: {
+  url: string;
+  platform: ContentPlatform;
+  visible: boolean;
+  onSelect: (url: string) => void;
+}) {
+  return (
+    <CommandGroup heading="Bookmark" className={visible ? undefined : "hidden"}>
+      {visible && (
+        <CommandItem
+          className="gap-2"
+          value={`${BOOKMARK_ACTION_LABEL[platform]} ${url}`}
+          onSelect={() => onSelect(url)}
+        >
+          <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
+            <BookmarkIcon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate">{BOOKMARK_ACTION_LABEL[platform]}</p>
+            <p className="text-muted-foreground truncate text-xs">{url}</p>
+          </div>
+        </CommandItem>
+      )}
+    </CommandGroup>
+  );
+}
+
+function useAutomaticDiscovery(
+  query: string | null,
+  state: FeedDiscoveryCommandProps["state"],
+  onDiscover: () => void,
+) {
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
+  const isPending =
+    query !== null &&
+    state !== "discovering" &&
+    state !== "select" &&
+    lastQuery !== query;
+  const canDiscover = state === "input" || state === "no-results";
+  useEffect(() => {
+    if (!query || !canDiscover || lastQuery === query) return;
+    const timeout = window.setTimeout(() => {
+      setLastQuery(query);
+      onDiscover();
+    }, AUTO_DISCOVERY_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [query, canDiscover, lastQuery, onDiscover]);
+  return { isPending, reset: () => setLastQuery(null) };
+}
+
 export function FeedDiscoveryCommand({
   url,
   onUrlChange,
@@ -102,44 +237,14 @@ export function FeedDiscoveryCommand({
   loadingLabel = "Adding feed…",
 }: FeedDiscoveryCommandProps) {
   const commandRef = useRef<HTMLDivElement>(null);
-  const normalizedUrl = normalizeFeedSearchUrl(url);
+  const normalizedUrl = classifyDiscoveryInput(url) ? url.trim() : null;
+  const bookmarkUrl = normalizeFeedSearchUrl(url);
   const isAddingFeed = state === "adding";
   const isDiscovering = state === "discovering";
   const hasNoResults = state === "no-results";
   const isSelecting = state === "select";
-  const [lastAutoDiscoveredUrl, setLastAutoDiscoveredUrl] = useState<
-    string | null
-  >(null);
-  const isAutoDiscoveryPending =
-    normalizedUrl !== null &&
-    !isDiscovering &&
-    !isSelecting &&
-    lastAutoDiscoveredUrl !== normalizedUrl;
-  useEffect(() => {
-    if (
-      !normalizedUrl ||
-      isAddingFeed ||
-      isDiscovering ||
-      isSelecting ||
-      lastAutoDiscoveredUrl === normalizedUrl
-    ) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setLastAutoDiscoveredUrl(normalizedUrl);
-      onDiscover();
-    }, AUTO_DISCOVERY_DELAY_MS);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [
-    isDiscovering,
-    isAddingFeed,
-    isSelecting,
-    lastAutoDiscoveredUrl,
-    normalizedUrl,
-    onDiscover,
-  ]);
+  const { isPending: isAutoDiscoveryPending, reset: resetAutoDiscovery } =
+    useAutomaticDiscovery(normalizedUrl, state, onDiscover);
 
   useEffect(() => {
     if (!isSelecting) return;
@@ -168,7 +273,7 @@ export function FeedDiscoveryCommand({
         ref={inputRef}
         value={url}
         onValueChange={(nextUrl) => {
-          setLastAutoDiscoveredUrl(null);
+          resetAutoDiscovery();
           onUrlChange(nextUrl);
         }}
         className="h-14 text-base"
@@ -207,70 +312,28 @@ export function FeedDiscoveryCommand({
                 </CenteredStateContent>
               </div>
             )}
-            <CommandGroup
-              heading="Feeds"
-              className={isSelecting || hasNoResults ? undefined : "hidden"}
-            >
-              {hasNoResults && (
-                <CommandItem
-                  className="gap-2"
-                  value={`Retry finding feeds ${normalizedUrl}`}
-                  onSelect={() => onDiscover()}
-                >
-                  <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded">
-                    <RefreshCwIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate">Retry finding feeds</p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      No feeds found for URL.
-                    </p>
-                  </div>
-                </CommandItem>
-              )}
-              {discoveredFeeds.map((feed) => (
-                <CommandItem
-                  className="gap-2"
-                  key={feed.url}
-                  value={`${feed.title ?? ""} ${feed.url}`}
-                  onSelect={() => onSelectFeed(feed)}
-                >
-                  <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded">
-                    <RssIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate">{feed.title || feed.url}</p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {feed.url}
-                    </p>
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandGroup
-              heading="Bookmark"
-              className={isSelecting || hasNoResults ? undefined : "hidden"}
-            >
-              {(isSelecting || hasNoResults) && (
-                <CommandItem
-                  className="gap-2"
-                  value={`${BOOKMARK_ACTION_LABEL[bookmarkPlatform]} ${normalizedUrl}`}
-                  onSelect={() => onSelectBookmark(normalizedUrl)}
-                >
-                  <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
-                    <BookmarkIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate">
-                      {BOOKMARK_ACTION_LABEL[bookmarkPlatform]}
-                    </p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {normalizedUrl}
-                    </p>
-                  </div>
-                </CommandItem>
-              )}
-            </CommandGroup>
+            {!bookmarkUrl && (
+              <SuggestedFeedResults
+                query={url}
+                onSelect={(selected) => onDiscover(selected.url)}
+              />
+            )}
+            <FeedResults
+              query={normalizedUrl}
+              visible={isSelecting || hasNoResults}
+              retry={hasNoResults}
+              feeds={discoveredFeeds}
+              onDiscover={() => onDiscover()}
+              onSelect={onSelectFeed}
+            />
+            {bookmarkUrl && (
+              <BookmarkResult
+                url={bookmarkUrl}
+                platform={bookmarkPlatform}
+                visible={isSelecting || hasNoResults}
+                onSelect={onSelectBookmark}
+              />
+            )}
           </>
         ) : (
           <>
@@ -280,19 +343,9 @@ export function FeedDiscoveryCommand({
                 <span>Enter a website, channel, or RSS feed URL.</span>
               </CenteredStateContent>
             </CommandEmpty>
-            {STATIC_FEED_SEARCH_OPTIONS.length > 0 && (
-              <CommandGroup heading="Suggested feeds">
-                {STATIC_FEED_SEARCH_OPTIONS.map((option) => (
-                  <StaticFeedResult
-                    key={`${option.label}:${option.url}`}
-                    option={option}
-                    onSelect={(selectedOption) =>
-                      onDiscover(selectedOption.url)
-                    }
-                  />
-                ))}
-              </CommandGroup>
-            )}
+            <SuggestedFeedResults
+              onSelect={(selected) => onDiscover(selected.url)}
+            />
           </>
         )}
       </CommandList>

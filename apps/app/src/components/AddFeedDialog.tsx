@@ -20,6 +20,7 @@ import { SelectableChipList } from "./ui/selectable-chip-list";
 import { Switch } from "./ui/switch";
 import { ToggleGroupItem } from "./ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   ApplicationFeed,
@@ -118,19 +119,23 @@ export function AddFeedDialog() {
     }
   };
 
-  const handleSelectFeed = async (feed: { url: string }) => {
+  const handleSelectFeed = async (feed: DiscoveredFeed) => {
     if (pendingAction || !canMutate) return;
     setPendingAction("feed");
 
     const createFeedPromise = createFeed({
       url: feed.url,
+      selection: feed,
       categoryIds: [],
       viewIds: [],
     });
     toast.promise(createFeedPromise, {
       loading: "Adding feed...",
       success: "Feed added!",
-      error: "Something went wrong adding your feed.",
+      error: (error) =>
+        error instanceof Error
+          ? error.message
+          : "Something went wrong adding your feed.",
     });
 
     try {

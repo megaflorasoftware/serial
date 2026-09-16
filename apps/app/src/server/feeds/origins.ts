@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { db as defaultDatabase } from "~/server/db";
 import type {
   DatabaseFeed,
@@ -26,6 +26,89 @@ export type FeedDatabase = Pick<
 >;
 
 export type FeedRow = { id: number; userId: string };
+
+export const FEED_ORIGIN_CONFLICT =
+  "These origins belong to different Feeds or conflict with an existing origin. No Feeds were changed.";
+
+function verifiedLocators(origin: NewFeedDetails["origins"][number]) {
+  return new Set(
+    origin.kind === FEED_ORIGIN_KIND.RSS
+      ? [origin.locator, ...(origin.alternateLocators ?? [])]
+      : [origin.locator],
+  );
+}
+
+/** Two indexed locator lookups at most; legacy duplicates of one locator keep the lowest-id match. */
+export async function findFeedForOrigins(
+  database: FeedDatabase,
+  userId: string,
+  origins: NewFeedDetails["origins"],
+) {
+  const matches = (
+    await Promise.all(
+      origins.map(async (origin) => {
+        const lowestFeedByLocator = database
+          .select({
+            feedId: sql<number>`min(${feedOrigins.feedId})`.as("feed_id"),
+            locator: feedOrigins.locator,
+          })
+          .from(feedOrigins)
+          .where(
+            and(
+              eq(feedOrigins.userId, userId),
+              eq(feedOrigins.kind, origin.kind),
+              inArray(feedOrigins.locator, [...verifiedLocators(origin)]),
+            ),
+          )
+          .groupBy(feedOrigins.locator)
+          .as("lowest_feed_by_locator");
+        const rows = await database
+          .select({ feed: feeds, locator: lowestFeedByLocator.locator })
+          .from(lowestFeedByLocator)
+          .innerJoin(feeds, eq(feeds.id, lowestFeedByLocator.feedId))
+          .where(eq(feeds.userId, userId))
+          .orderBy(asc(lowestFeedByLocator.feedId))
+          .all();
+        return rows.map((row) => row.feed);
+      }),
+    )
+  ).flat();
+  if (new Set(matches.map((feed) => feed.id)).size > 1)
+    throw new Error(FEED_ORIGIN_CONFLICT);
+  const match = matches[0];
+  if (!match) return undefined;
+  const [feed] = await withOrigins(database, [match]);
+  if (!feed) return undefined;
+  const byKind = new Map(feed.origins.map((origin) => [origin.kind, origin]));
+  for (const origin of origins) {
+    const existing = byKind.get(origin.kind);
+    if (existing && !verifiedLocators(origin).has(existing.locator))
+      throw new Error(FEED_ORIGIN_CONFLICT);
+  }
+  return feed;
+}
+
+export async function attachMissingFeedOrigins(
+  database: FeedDatabase,
+  feed: DatabaseFeedWithOrigins,
+  origins: NewFeedDetails["origins"],
+) {
+  const missing = origins.filter(
+    (origin) => !feed.origins.some((existing) => existing.kind === origin.kind),
+  );
+  if (!missing.length) return feed;
+  const inserted = await database
+    .insert(feedOrigins)
+    .values(
+      missing.map((origin) => ({
+        ...origin,
+        feedId: feed.id,
+        userId: feed.userId,
+      })),
+    )
+    .returning();
+  return { ...feed, origins: [...feed.origins, ...inserted] };
+}
 
 /** Attach origin rows to their Feed rows, preserving the Feed order given. */
 export function attachOrigins<TFeed extends { id: number }>(

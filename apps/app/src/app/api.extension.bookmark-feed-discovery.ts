@@ -1,3 +1,5 @@
+import { DISCOVERY_LIMIT } from "@serial/feed-discovery";
+import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -77,7 +79,11 @@ export async function discoverExtensionBookmarkFeeds(
         ...(feed.title ? { title: feed.title } : {}),
       })),
     );
-    return jsonResponse({ feeds });
+    const publications = z
+      .array(discoveredFeedSchema)
+      .max(DISCOVERY_LIMIT)
+      .parse(discoveredFeeds);
+    return jsonResponse({ feeds, publications });
   } catch (error) {
     captureException(error, {
       context: "extension-bookmark-feed-discovery",

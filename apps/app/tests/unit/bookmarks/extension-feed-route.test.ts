@@ -13,6 +13,10 @@ vi.mock("~/server/rss/fetchFeeds", () => ({
 }));
 vi.mock("~/server/logger", () => ({ captureException: vi.fn() }));
 vi.mock("~/server/db", () => ({ db: {} }));
+vi.mock("~/server/reconciliation/invalidation", () => ({
+  organizationInvalidationSummary: vi.fn(),
+  publishReconciliationInvalidation: vi.fn(),
+}));
 
 function request(body: unknown, contentType = "application/json") {
   return new Request("https://serial.example/api/extension/feeds", {

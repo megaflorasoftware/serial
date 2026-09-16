@@ -23,7 +23,7 @@ function createMemoryStore(entries: Record<string, unknown> = {}) {
 
 describe("IndexedDB schema gate", () => {
   it("pins the current cache schema version", () => {
-    expect(INDEXED_DB_SCHEMA_VERSION).toBe(5);
+    expect(INDEXED_DB_SCHEMA_VERSION).toBe(6);
   });
 
   it.each([

@@ -43,6 +43,9 @@ importers:
       '@atproto-labs/fetch-node':
         specifier: ^0.3.7
         version: 0.3.7
+      '@atproto-labs/identity-resolver':
+        specifier: ^0.4.7
+        version: 0.4.7
       '@atproto/oauth-client-node':
         specifier: ^0.5.3
         version: 0.5.3
@@ -166,6 +169,9 @@ importers:
       '@serial/extension-identity':
         specifier: workspace:*
         version: link:../../packages/extension-identity
+      '@serial/feed-discovery':
+        specifier: workspace:*
+        version: link:../../packages/feed-discovery
       '@serial/standard-site':
         specifier: workspace:*
         version: link:../../packages/standard-site
@@ -220,12 +226,18 @@ importers:
       drizzle-zod:
         specifier: ^0.8.3
         version: 0.8.3(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@opentelemetry/api@1.9.1)(@upstash/redis@1.38.0)(better-sqlite3@12.11.1)(kysely@0.29.3))(zod@4.4.3)
+      entities:
+        specifier: ^8.0.0
+        version: 8.0.0
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.10.1
       feedscout:
         specifier: ^1.10.0
         version: 1.10.0
+      feedsmith:
+        specifier: ^2.9.5
+        version: 2.9.5
       html-react-parser:
         specifier: ^6.1.4
         version: 6.1.4(@types/react@19.2.17)(react@19.2.7)
@@ -455,6 +467,9 @@ importers:
       '@serial/extension-identity':
         specifier: workspace:*
         version: link:../../packages/extension-identity
+      '@serial/feed-discovery':
+        specifier: workspace:*
+        version: link:../../packages/feed-discovery
       '@serial/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -613,6 +628,9 @@ importers:
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
+      '@serial/feed-discovery':
+        specifier: workspace:*
+        version: link:../feed-discovery
       dompurify:
         specifier: ^3.4.12
         version: 3.4.12
@@ -622,6 +640,16 @@ importers:
         version: 6.0.3
 
   packages/extension-identity:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/feed-discovery:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: ^6.0.3
@@ -687,6 +715,9 @@ importers:
       '@serial/bookmark-capture':
         specifier: workspace:*
         version: link:../bookmark-capture
+      '@serial/feed-discovery':
+        specifier: workspace:*
+        version: link:../feed-discovery
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

@@ -1,9 +1,17 @@
+import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import {
+  FEED_ORIGIN_CONFLICT,
+  fetchableOriginsOf,
+} from "~/server/feeds/origins";
+import {
+  organizationInvalidationSummary,
+  publishReconciliationInvalidation,
+} from "~/server/reconciliation/invalidation";
 import { authenticatedExtensionUser } from "~/server/auth/extensionRequest";
 import { createFeedsForUser } from "~/server/feeds/create";
 import { db } from "~/server/db";
-import { fetchableOriginsOf } from "~/server/feeds/origins";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import { captureException } from "~/server/logger";
 import {
@@ -14,6 +22,7 @@ import {
 
 const extensionFeedRequestSchema = z.strictObject({
   url: z.url(),
+  selection: discoveredFeedSchema.optional(),
 });
 const EXTENSION_FEED_REQUEST_BYTES = 16 * 1024;
 
@@ -32,10 +41,15 @@ export async function addExtensionFeed(request: Request) {
       database: db,
       userId: authenticatedUser.id,
       url: input.url,
+      selection: input.selection,
       categoryIds: [],
       viewIds: [],
       returnExisting: true,
     });
+    await publishReconciliationInvalidation(
+      authenticatedUser.id,
+      organizationInvalidationSummary(),
+    );
     try {
       for await (const ingestionResult of fetchAndInsertFeedData(
         { db },
@@ -56,7 +70,7 @@ export async function addExtensionFeed(request: Request) {
     }
     const message =
       error instanceof Error ? error.message : "Unable to add feed";
-    if (message === "Feed already exists") {
+    if (message === "Feed already exists" || message === FEED_ORIGIN_CONFLICT) {
       return jsonResponse({ error: message }, 409);
     }
     return jsonResponse({ error: "Unable to add the Feed" }, 400);

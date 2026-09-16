@@ -44,6 +44,7 @@ function makeFeed(id: number, name: string, url: string): ApplicationFeed {
         sourceName: null,
         sourceImageUrl: null,
         sourceDescription: null,
+        alternateLocators: null,
         createdAt: new Date("2026-01-01"),
         updatedAt: new Date("2026-01-01"),
       },
