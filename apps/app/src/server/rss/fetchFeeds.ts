@@ -4,6 +4,7 @@ import {
   FEED_ADD_MAX_DISCOVERED_FEEDS,
   FEED_INGESTION_CONCURRENCY,
 } from "@serial/bookmark-capture";
+import { runDatabaseWrite } from "../db/retry-write";
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
 import { feedItems, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
@@ -183,11 +184,13 @@ async function writeOriginFetchState(
   originId: number,
   update: FetchStateUpdate,
 ) {
-  await dbSemaphore.run(() =>
-    context.db
-      .update(feedOrigins)
-      .set(update)
-      .where(eq(feedOrigins.id, originId)),
+  await runDatabaseWrite(context.db, () =>
+    dbSemaphore.run(() =>
+      context.db
+        .update(feedOrigins)
+        .set(update)
+        .where(eq(feedOrigins.id, originId)),
+    ),
   );
 }
 
@@ -291,30 +294,32 @@ async function insertFeedItems(
   }
 
   const feedItemsList = (
-    await dbSemaphore.run(() =>
-      context.db
-        .insert(feedItems)
-        .values(changedItems)
-        .onConflictDoUpdate({
-          target: [feedItems.url, feedItems.feedId],
-          set: buildConflictUpdateColumns(feedItems, [
-            "author",
-            "content",
-            "bodySource",
-            "contentHash",
-            "contentId",
-            "contentSnippet",
-            "contentType",
-            "normalizedUrl",
-            "createdAt",
-            "orientation",
-            "postedAt",
-            "thumbnail",
-            "title",
-            "url",
-          ]),
-        })
-        .returning(),
+    await runDatabaseWrite(context.db, () =>
+      dbSemaphore.run(() =>
+        context.db
+          .insert(feedItems)
+          .values(changedItems)
+          .onConflictDoUpdate({
+            target: [feedItems.url, feedItems.feedId],
+            set: buildConflictUpdateColumns(feedItems, [
+              "author",
+              "content",
+              "bodySource",
+              "contentHash",
+              "contentId",
+              "contentSnippet",
+              "contentType",
+              "normalizedUrl",
+              "createdAt",
+              "orientation",
+              "postedAt",
+              "thumbnail",
+              "title",
+              "url",
+            ]),
+          })
+          .returning(),
+      ),
     )
   )
     .filter(Boolean)

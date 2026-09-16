@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { retryBusyWrite } from "../db/retry-write";
+import { runDatabaseWrite } from "../db/retry-write";
 import { feedOrigins, feeds } from "../db/schema";
 import type { db } from "../db";
 import type { FetchableOrigin } from "./types";
@@ -16,7 +16,7 @@ export async function refreshOriginMetadata(
     pdsUrl?: string;
   },
 ) {
-  return retryBusyWrite(() =>
+  return runDatabaseWrite(database, () =>
     dbSemaphore.run(() =>
       database.transaction(
         async (tx) => {

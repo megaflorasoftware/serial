@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { retryBusyWrite } from "../db/retry-write";
+import { runDatabaseWrite } from "../db/retry-write";
 import { feedItemAliases, feedItemObservations, feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { composeItem, rssObservation } from "./itemObservation";
@@ -55,7 +55,7 @@ export async function writeObservedItems(
   incoming: ItemObservation[],
 ) {
   if (!incoming.length) return { items: [], removedItemIds: [] as string[] };
-  return retryBusyWrite(() =>
+  return runDatabaseWrite(database, () =>
     dbSemaphore.run(() =>
       database.transaction(
         async (tx) => {

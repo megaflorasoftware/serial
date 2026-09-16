@@ -15,6 +15,7 @@ import {
   feeds,
   user,
 } from "~/server/db/schema";
+import { runDatabaseWrite } from "~/server/db/retry-write";
 import { writeObservedItems } from "~/server/rss/writeItems";
 import { rssObservation } from "~/server/rss/itemObservation";
 import { ingestAtmosphere } from "~/server/rss/ingestAtmosphere";
@@ -526,4 +527,92 @@ it("retains historical aliases when a collision winner is new in the same batch"
       url: "https://example.com/new",
     },
   ]);
+});
+
+it("continues queued origin writes after a failed transaction", async () => {
+  const results = await Promise.allSettled([
+    writeObservedItems(fixture.database, feed, [
+      rss({ publishedAt: "invalid" }),
+    ]),
+    writeObservedItems(fixture.database, feed, [document()]),
+  ]);
+  expect(results.map((result) => result.status)).toEqual([
+    "rejected",
+    "fulfilled",
+  ]);
+  expect(await fixture.database.select().from(feedItems)).toMatchObject([
+    { sourceKind: "atproto", bodySource: "atproto" },
+  ]);
+});
+
+it("commits items and bookkeeping for concurrent publication refreshes", async () => {
+  const [secondFeed] = await fixture.database
+    .insert(feeds)
+    .values({
+      userId: "reader",
+      name: "Second",
+      imageUrl: "",
+      platform: "website",
+      isActive: true,
+    })
+    .returning();
+  const secondPublication = PUB + "2";
+  const [secondOrigin] = await fixture.database
+    .insert(feedOrigins)
+    .values({
+      userId: "reader",
+      feedId: secondFeed!.id,
+      kind: "atproto",
+      locator: secondPublication,
+    })
+    .returning();
+  const remote = client([record("001", { site: secondPublication })]);
+  remote.getRecord = vi.fn(async () => ({
+    uri: secondPublication,
+    cid: "pubcid",
+    value: { name: "Second", url: "https://second.example.com" },
+  }));
+  const results = await Promise.all([
+    refresh(client([record("001")])),
+    ingestAtmosphere(
+      fixture.database,
+      { feed: secondFeed!, origin: secondOrigin! },
+      remote,
+    ),
+  ]);
+  expect(results.map((result) => result.status)).toEqual([
+    "success",
+    "success",
+  ]);
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
+  expect(await fixture.database.select().from(feedOrigins)).toMatchObject([
+    { repoRev: "rev1" },
+    { repoRev: "rev1" },
+  ]);
+  expect(await fixture.database.select().from(feedIngestState)).toMatchObject([
+    { initialized: true },
+    { initialized: true },
+  ]);
+});
+
+it("keeps remote database writers concurrent", async () => {
+  const database = { $client: { protocol: "http" } };
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started: string[] = [];
+  const first = runDatabaseWrite(database, async () => {
+    started.push("first");
+    await blocked;
+  });
+  const second = runDatabaseWrite(database, async () => {
+    started.push("second");
+  });
+  try {
+    await vi.waitFor(() => expect(started).toEqual(["first", "second"]));
+  } finally {
+    release();
+    await Promise.all([first, second]);
+  }
 });

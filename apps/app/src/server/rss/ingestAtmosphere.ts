@@ -11,6 +11,7 @@ import {
   parsePublicationUri,
   sanitizeEmbeddedHtml,
 } from "@serial/standard-site";
+import { runDatabaseWrite } from "../db/retry-write";
 import {
   feedDocumentRecords,
   feedIngestState,
@@ -94,10 +95,12 @@ export async function ingestAtmosphere(
     rev &&
     rev === origin.repoRev
   ) {
-    await database
-      .update(feedOrigins)
-      .set({ lastFetchedAt: now, nextFetchAt: calculateNextFetch({}, now) })
-      .where(eq(feedOrigins.id, origin.id));
+    await runDatabaseWrite(database, () =>
+      database
+        .update(feedOrigins)
+        .set({ lastFetchedAt: now, nextFetchAt: calculateNextFetch({}, now) })
+        .where(eq(feedOrigins.id, origin.id)),
+    );
     return { status: "skipped" as const, id: feed.id, originId: origin.id };
   }
   const publication = parsePublicationRecord(
@@ -267,22 +270,24 @@ export async function ingestAtmosphere(
     items.push(...written.items);
     removedItemIds.push(...written.removedItemIds);
     if (statuses.length) {
-      await database.transaction(async (tx) => {
-        await tx
-          .insert(feedDocumentRecords)
-          .values(statuses)
-          .onConflictDoUpdate({
-            target: [feedDocumentRecords.originId, feedDocumentRecords.uri],
-            set: { cid: sql`excluded.cid`, status: sql`excluded.status` },
-          });
-        await tx
-          .insert(feedIngestState)
-          .values({ ...state, initialCount })
-          .onConflictDoUpdate({
-            target: feedIngestState.originId,
-            set: { ...state, initialCount },
-          });
-      });
+      await runDatabaseWrite(database, () =>
+        database.transaction(async (tx) => {
+          await tx
+            .insert(feedDocumentRecords)
+            .values(statuses)
+            .onConflictDoUpdate({
+              target: [feedDocumentRecords.originId, feedDocumentRecords.uri],
+              set: { cid: sql`excluded.cid`, status: sql`excluded.status` },
+            });
+          await tx
+            .insert(feedIngestState)
+            .values({ ...state, initialCount })
+            .onConflictDoUpdate({
+              target: feedIngestState.originId,
+              set: { ...state, initialCount },
+            });
+        }),
+      );
       state.initialCount = initialCount;
     }
     return new Set(existing.map((entry) => entry.uri));
@@ -298,15 +303,17 @@ export async function ingestAtmosphere(
         return await client.getRecord(retry.uri);
       } catch (error) {
         if (error instanceof MissingPublicationRecordError) {
-          await database
-            .update(feedDocumentRecords)
-            .set({ status: "invalid" })
-            .where(
-              and(
-                eq(feedDocumentRecords.originId, origin.id),
-                eq(feedDocumentRecords.uri, retry.uri),
+          await runDatabaseWrite(database, () =>
+            database
+              .update(feedDocumentRecords)
+              .set({ status: "invalid" })
+              .where(
+                and(
+                  eq(feedDocumentRecords.originId, origin.id),
+                  eq(feedDocumentRecords.uri, retry.uri),
+                ),
               ),
-            );
+          );
           logWarning("Skipping missing publication document", {
             uri: retry.uri,
           });
@@ -378,10 +385,12 @@ export async function ingestAtmosphere(
         cursor = page.cursor;
       }
       state.cursor = cursor;
-      await database
-        .insert(feedIngestState)
-        .values(state)
-        .onConflictDoUpdate({ target: feedIngestState.originId, set: state });
+      await runDatabaseWrite(database, () =>
+        database
+          .insert(feedIngestState)
+          .values(state)
+          .onConflictDoUpdate({ target: feedIngestState.originId, set: state }),
+      );
       if (complete) break;
     }
   } catch (error) {
@@ -411,23 +420,25 @@ export async function ingestAtmosphere(
   // A cycle resumed from a cursor records only the revision from its first page.
   const completedRev = complete && !failed ? state.pendingRev : origin.repoRev;
   if (!complete && !state.newestRkey) state.newestRkey = previousNewest;
-  await database.transaction(async (tx) => {
-    await tx
-      .insert(feedIngestState)
-      .values(state)
-      .onConflictDoUpdate({ target: feedIngestState.originId, set: state });
-    await tx
-      .update(feedOrigins)
-      .set({
-        repoRev: completedRev,
-        etag: complete && !failed ? firstEtag : null,
-        lastFetchedAt: now,
-        nextFetchAt: failed
-          ? new Date(now.getTime() + 3_600_000)
-          : calculateNextFetch({}, now),
-      })
-      .where(eq(feedOrigins.id, origin.id));
-  });
+  await runDatabaseWrite(database, () =>
+    database.transaction(async (tx) => {
+      await tx
+        .insert(feedIngestState)
+        .values(state)
+        .onConflictDoUpdate({ target: feedIngestState.originId, set: state });
+      await tx
+        .update(feedOrigins)
+        .set({
+          repoRev: completedRev,
+          etag: complete && !failed ? firstEtag : null,
+          lastFetchedAt: now,
+          nextFetchAt: failed
+            ? new Date(now.getTime() + 3_600_000)
+            : calculateNextFetch({}, now),
+        })
+        .where(eq(feedOrigins.id, origin.id));
+    }),
+  );
   return {
     status: failed
       ? ("error" as const)
