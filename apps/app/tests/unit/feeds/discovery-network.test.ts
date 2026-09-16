@@ -310,6 +310,9 @@ describe("import discovery completeness", () => {
     await expect(
       discoverFeedOriginsForImport("missing-rss", "https://example.com"),
     ).rejects.toBeInstanceOf(FeedImportDeferredError);
+    await expect(
+      discoverFeedOriginsForRevalidation("https://example.com"),
+    ).rejects.toThrow("Unable to read the RSS Feed");
   });
   it("preserves the longest Retry-After across subsequent failures", async () => {
     vi.mocked(scoutFeeds).mockImplementation(async (_url, options) => {

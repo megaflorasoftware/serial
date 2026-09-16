@@ -278,7 +278,7 @@ async function discoverWebsite(
       try {
         const response = await read(row.url);
         if (!response.ok) {
-          if (strict) throw new FeedImportDeferredError();
+          if (strict) throw new Error("Unable to read the RSS Feed");
           return null;
         }
         const parsed = parseSyndicationFeed(response.text, row.url);
@@ -293,8 +293,8 @@ async function discoverWebsite(
           hasFullBody: parsed.hasFullBody,
           itemUrls: parsed.items.slice(0, 20).map((item) => item.url),
         };
-      } catch {
-        if (strict) throw new FeedImportDeferredError();
+      } catch (error) {
+        if (strict) throw error;
         return { row, hasFullBody: false, itemUrls: [] };
       }
     },
