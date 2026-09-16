@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ORPCError } from "@orpc/client";
 import type {
   ActiveFirstPageResult,
   OrganizationSnapshot,
@@ -1047,4 +1048,264 @@ describe("client reconciliation runtime", () => {
     test.runtime.stop();
     vi.useRealTimers();
   });
+});
+
+const invalidInput = () =>
+  new ORPCError("BAD_REQUEST", {
+    data: {
+      issues: [
+        { code: "too_big", path: ["selection", "pageManifest", "feedItems"] },
+      ],
+    },
+  });
+
+describe("rejected reconciliation recovery", () => {
+  it("recovers once with a full request preserving the current selection", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const test = harness((request) => {
+      if (request.reconciliationId.endsWith("-1")) throw invalidInput();
+      return completeEpoch(request.reconciliationId);
+    });
+    test.setSelection(ACTIVE_SCOPE);
+    hydrate(test.runtime);
+    test.runtime.cacheUsable();
+    test.runtime.sseConnectionChanged(true);
+    try {
+      test.runtime.start();
+      await vi.waitFor(() =>
+        expect(test.runtime.getState().trustedUpToDate).toBe(true),
+      );
+      expect(test.requests).toHaveLength(2);
+      expect(test.requests[1]?.intent).toEqual({
+        type: "full",
+        selectedScope: ACTIVE_SCOPE,
+        discardManifest: true,
+      });
+      expect(test.runtime.getState().retryPending).toBe(false);
+    } finally {
+      test.runtime.stop();
+      log.mockRestore();
+    }
+  });
+
+  it("stops after rejected recovery, discards trailing work, and permits manual recovery", async () => {
+    vi.useFakeTimers();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    let rejects = true;
+    let queueTrailing = true;
+    const test = harness((request) => {
+      if (rejects) {
+        if (queueTrailing) {
+          queueTrailing = false;
+          test.runtime.requestFull();
+        }
+        throw invalidInput();
+      }
+      return completeEpoch(request.reconciliationId);
+    });
+    test.setSelection(ACTIVE_SCOPE);
+    hydrate(test.runtime);
+    test.runtime.cacheUsable();
+    test.runtime.sseConnectionChanged(true);
+    try {
+      test.runtime.start();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(test.requests).toHaveLength(2);
+      expect(test.runtime.getState()).toMatchObject({
+        recoveryFailed: true,
+        retryPending: false,
+        inFlight: null,
+        trustedUpToDate: false,
+      });
+      rejects = false;
+      test.runtime.requestFull();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(test.requests).toHaveLength(3);
+      expect(test.requests[2]?.intent).toMatchObject({ discardManifest: true });
+      expect(test.runtime.getState()).toMatchObject({
+        recoveryFailed: false,
+        trustedUpToDate: true,
+      });
+    } finally {
+      test.runtime.stop();
+      log.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])(
+    "keeps terminal recovery stopped across SSE connections, initially connected: %s",
+    async (initiallyConnected) => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      let rejects = true;
+      const test = harness((request) => {
+        if (rejects) throw invalidInput();
+        return completeEpoch(request.reconciliationId);
+      });
+      test.setSelection(ACTIVE_SCOPE);
+      hydrate(test.runtime);
+      test.runtime.cacheUsable();
+      if (initiallyConnected) test.runtime.sseConnectionChanged(true);
+      try {
+        test.runtime.start();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(test.requests).toHaveLength(2);
+        expect(test.runtime.getState().recoveryFailed).toBe(true);
+
+        test.runtime.sseConnectionChanged(false);
+        test.runtime.sseConnectionChanged(true);
+        await vi.advanceTimersByTimeAsync(60_000);
+        test.runtime.sseConnectionChanged(false);
+        test.runtime.sseConnectionChanged(true);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(test.requests).toHaveLength(2);
+        expect(test.runtime.getState()).toMatchObject({
+          recoveryFailed: true,
+          retryPending: false,
+          inFlight: null,
+          trustedUpToDate: false,
+        });
+
+        rejects = false;
+        test.runtime.requestFull();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(test.requests).toHaveLength(3);
+        expect(test.requests[2]?.intent).toMatchObject({
+          discardManifest: true,
+        });
+        expect(test.runtime.getState().trustedUpToDate).toBe(true);
+
+        test.runtime.sseConnectionChanged(false);
+        test.runtime.sseConnectionChanged(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(test.requests).toHaveLength(4);
+        expect(test.requests[3]?.intent).toEqual({
+          type: "full",
+          selectedScope: ACTIVE_SCOPE,
+        });
+        expect(test.runtime.getState().trustedUpToDate).toBe(true);
+      } finally {
+        test.runtime.stop();
+        log.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("retains empty manifests through a transient recovery failure", async () => {
+    vi.useFakeTimers();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const test = harness((request) => {
+      if (test.requests.length === 1) throw invalidInput();
+      if (test.requests.length === 2) throw new Error("network unavailable");
+      if (test.requests.length === 3) throw invalidInput();
+      return completeEpoch(request.reconciliationId);
+    });
+    test.setSelection(ACTIVE_SCOPE);
+    hydrate(test.runtime);
+    try {
+      test.runtime.start();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(test.requests).toHaveLength(3);
+      expect(test.requests[2]?.intent).toMatchObject({
+        type: "full",
+        discardManifest: true,
+      });
+      expect(test.runtime.getState()).toMatchObject({
+        recoveryFailed: true,
+        retryPending: false,
+      });
+    } finally {
+      test.runtime.stop();
+      log.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("recovery target ownership", () => {
+  it("keeps terminal stale state after an unrelated targeted success", async () => {
+    vi.useFakeTimers();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    let rejectFull = true;
+    const test = harness((request) => {
+      if (rejectFull) throw invalidInput();
+      return completeTargetedScope(
+        request.reconciliationId,
+        INACTIVE_VIEW_SCOPE,
+      );
+    });
+    hydrate(test.runtime);
+    test.setSelection(ACTIVE_SCOPE);
+    test.runtime.cacheUsable();
+    test.runtime.sseConnectionChanged(true);
+    try {
+      test.runtime.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(test.runtime.getState().recoveryFailed).toBe(true);
+      rejectFull = false;
+      test.runtime.activateScope(INACTIVE_VIEW_SCOPE);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(test.requests).toHaveLength(3);
+      expect(test.runtime.getState()).toMatchObject({
+        recoveryFailed: true,
+        retryPending: false,
+        inFlight: null,
+        serverParityAppliedAt: null,
+      });
+    } finally {
+      test.runtime.stop();
+      log.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])(
+    "retains queued repairs when full recovery has a transient failure: %s",
+    async (transientFailure) => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const feedTarget: ReconciliationScopeTarget = {
+        ...ACTIVE_SCOPE,
+        scope: { type: "feed", feedId: 42 },
+      };
+      const test = harness(
+        (request) => {
+          if (test.requests.length === 1) {
+            test.runtime.receiveLiveEvent(["feed-changed"]);
+            throw invalidInput();
+          }
+          if (transientFailure && test.requests.length === 2)
+            throw new Error("network unavailable");
+          return request.intent.type === "full"
+            ? completeEpoch(request.reconciliationId)
+            : completeTargetedScope(request.reconciliationId, feedTarget);
+        },
+        () => [feedTarget],
+        { liveEventTargets: () => ({ targets: [feedTarget] }) },
+      );
+      hydrate(test.runtime);
+      test.setSelection(ACTIVE_SCOPE);
+      try {
+        test.runtime.start();
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(
+          test.runtime.getState().targets[
+            getReconciliationTargetKey(feedTarget)
+          ]?.status,
+        ).toBe("verified");
+        expect(test.requests.map(({ intent }) => intent.type)).toEqual(
+          transientFailure
+            ? ["full", "full", "targeted", "full"]
+            : ["full", "full", "targeted"],
+        );
+        expect(test.runtime.getState().retryPending).toBe(false);
+      } finally {
+        test.runtime.stop();
+        log.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 });

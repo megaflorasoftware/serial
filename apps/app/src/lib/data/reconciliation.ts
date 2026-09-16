@@ -46,6 +46,7 @@ import {
   getReconciliationTargetKey,
   MAX_TARGETED_RECONCILIATION_TARGETS,
 } from "~/lib/reconciliation";
+import { ITEMS_PER_PAGE } from "~/server/api/constants";
 import { DEFAULT_CONTENT_STATUS_FILTER } from "~/lib/content-status";
 
 type PersistedStore = {
@@ -114,7 +115,12 @@ function firstPageManifest(
   );
   const feedItems: ReconciliationEntityManifestEntry[] = [];
   const bookmarks: ReconciliationEntityManifestEntry[] = [];
-  for (const referenceKey of rootPage.value.referenceKeys) {
+  // Optimistic membership can exceed a server page. Omitted versions are
+  // returned as upserts; cached references and pagination remain intact.
+  for (const referenceKey of rootPage.value.referenceKeys.slice(
+    0,
+    ITEMS_PER_PAGE,
+  )) {
     const reference = referencesByKey.get(referenceKey);
     if (!reference) continue;
     if (reference.entityKind === "feed-item") {
@@ -161,7 +167,9 @@ function buildInput(
         type: "selected",
         scope: selectedScope.scope,
         contentStatus: selectedScope.contentStatus,
-        pageManifest: firstPageManifest(selectedScope),
+        pageManifest: request.intent.discardManifest
+          ? { feedItems: [], bookmarks: [] }
+          : firstPageManifest(selectedScope),
         membershipRevision: getMixedContentMembershipRevision(),
       },
     };
@@ -544,6 +552,9 @@ const runtime = createReconciliationRuntime<PublishedChunk[]>({
       });
     }
   },
+  onRecoveryFailed: () => {
+    loadingActor.send({ type: "RECONCILIATION_FAILED" });
+  },
   onFullReconciliationFailed: ({ reconciliationId }) => {
     if (reconciliationId !== supersededManualFullId) {
       rejectManualFull?.(new Error("Manual reconciliation failed"));
@@ -687,13 +698,15 @@ export function getReconciliationTargetStatus(
   return runtime.getState().targets[getReconciliationTargetKey(target)]?.status;
 }
 
-export type ReconciliationDisplayStatus = "idle" | "syncing" | "retrying";
+export type ReconciliationDisplayStatus =
+  "idle" | "syncing" | "retrying" | "stale";
 
 function reconciliationDisplayStatus(): ReconciliationDisplayStatus {
   const state = runtime.getState();
-  if (state.cacheUsableAt === null) return "idle";
+  if (state.cacheUsableAt === null && !state.recoveryFailed) return "idle";
   if (state.inFlight) return "syncing";
-  return state.retryPending ? "retrying" : "idle";
+  if (state.retryPending) return "retrying";
+  return state.recoveryFailed ? "stale" : "idle";
 }
 
 export function useReconciliationDisplayStatus() {
