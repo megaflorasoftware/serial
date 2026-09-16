@@ -4,14 +4,14 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewSection } from "~/components/feed/view-lists/useViewSections";
+import type { ApplicationBookmark } from "~/server/mixed-content/projection";
+import type { ApplicationFeedItem, ApplicationView } from "~/server/db/schema";
 import { useSoftReads } from "~/components/feed/view-lists/useSoftReads";
 import {
   getEligibleSoftReadIds,
   retainEligibleSoftReadPositions,
   retainSoftReadPositions,
 } from "~/components/feed/view-lists/softReads";
-import type { ApplicationBookmark } from "~/server/mixed-content/projection";
-import type { ApplicationFeedItem, ApplicationView } from "~/server/db/schema";
 import {
   clearRetainedEntityPins,
   getRetainedEntityPins,

@@ -6,8 +6,8 @@ import {
   retainSoftReadPositions,
   softReadSectionKey,
 } from "./softReads";
-import type { SoftReadPosition } from "./softReads";
 import { useViewSections } from "./useViewSections";
+import type { SoftReadPosition } from "./softReads";
 import type { ViewSection } from "./useViewSections";
 import type { ApplicationView } from "~/server/db/schema";
 import {
