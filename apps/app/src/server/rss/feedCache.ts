@@ -67,6 +67,12 @@ const cachedFeedResultSchema = z.union([
   z.object({
     status: z.literal("empty"),
     fetchMetadata: feedFetchMetadataSchema,
+    data: z.object({
+      title: z.string(),
+      url: z.string(),
+      imageUrl: z.string().optional(),
+      description: z.string().optional(),
+    }),
   }),
   z.object({
     status: z.literal("error"),
@@ -83,6 +89,10 @@ export type CachedFeedResult =
   | {
       status: "empty";
       fetchMetadata: FeedFetchMetadata;
+      data: Pick<
+        RSSFeedWithMetadata,
+        "title" | "url" | "imageUrl" | "description"
+      >;
     }
   | {
       status: "error";
@@ -117,7 +127,7 @@ export function normalizeFeedUrl(url: string): string {
 export function getFeedCacheKey(url: string): string {
   const normalized = normalizeFeedUrl(url);
   const hash = createHash("sha256").update(normalized).digest("hex");
-  return `feed:rss:${hash}`;
+  return `feed:rss:v2:${hash}`;
 }
 
 /**

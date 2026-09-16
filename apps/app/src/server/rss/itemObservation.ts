@@ -1,23 +1,10 @@
 import { sanitizeEmbeddedContent } from "@serial/standard-site";
 import { boundFeedItems } from "./feedBounds";
 import type { RSSContent } from "./types";
+import type { ItemObservation } from "../db/feed-item-observation";
 import { normalizeBookmarkUrl } from "~/server/bookmarks/url";
 
-export type ItemObservation = {
-  kind: "rss" | "atproto";
-  key: string;
-  url: string;
-  title: string;
-  author: string;
-  description: string;
-  thumbnail: string;
-  content: string;
-  firstParagraph: string;
-  firstImageUrl: string;
-  publishedAt: string;
-  tags: string[];
-  publicationName?: string;
-};
+export type { ItemObservation } from "../db/feed-item-observation";
 
 export function itemUrl(value: string) {
   return value.startsWith("at://") ? value : normalizeBookmarkUrl(value);

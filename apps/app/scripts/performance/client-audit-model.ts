@@ -617,10 +617,10 @@ export function runClientAuditProfile(
   let fixture = seedClientFixture(profileName);
   const profile = fixture.profile;
   const localProjectionView = fixture.views.at(-1)!;
+  const localProjectionFeedIds = new Set(localProjectionView.feedIds);
   const localProjectionFeedItemIds = fixture.feedItems
     .filter(
-      (item) =>
-        item.isWatchLater && localProjectionView.feedIds.includes(item.feedId),
+      (item) => item.isWatchLater && localProjectionFeedIds.has(item.feedId),
     )
     .map((item) => item.id);
   const localViewProjection = measure(() => {

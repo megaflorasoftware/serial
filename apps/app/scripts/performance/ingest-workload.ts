@@ -9,16 +9,14 @@ export async function createIngestWorkload(
   historySize: number,
 ) {
   const now = new Date("2026-09-15T12:00:00Z");
-  await database
-    .insert(user)
-    .values({
-      id: "ingest-benchmark",
-      name: "Ingest benchmark",
-      email: "ingest@benchmark.invalid",
-      emailVerified: true,
-      createdAt: now,
-      updatedAt: now,
-    });
+  await database.insert(user).values({
+    id: "ingest-benchmark",
+    name: "Ingest benchmark",
+    email: "ingest@benchmark.invalid",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
   const feed = (
     await database
       .insert(feeds)
@@ -46,18 +44,18 @@ export async function createIngestWorkload(
       .returning()
   )[0]!;
   for (let start = 0; start < historySize; start += 100) {
-    await database
-      .insert(feedItems)
-      .values(
-        Array.from({ length: Math.min(100, historySize - start) }, (_, i) => ({
-          feedId: feed.id,
-          contentId: `old-${start + i}`,
-          title: "Old item",
-          author: "Author",
-          url: `https://example.com/old/${start + i}`,
-          postedAt: now,
-        })),
-      );
+    // Seed bounded batches without queuing the entire history at once.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database.insert(feedItems).values(
+      Array.from({ length: Math.min(100, historySize - start) }, (_, i) => ({
+        feedId: feed.id,
+        contentId: `old-${start + i}`,
+        title: "Old item",
+        author: "Author",
+        url: `https://example.com/old/${start + i}`,
+        postedAt: now,
+      })),
+    );
   }
   let revision = 1;
   let requests = 0;

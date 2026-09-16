@@ -41,4 +41,5 @@ ALTER TABLE `serial_feed_item` ADD `source_kind` text DEFAULT 'rss' NOT NULL;-->
 ALTER TABLE `serial_feed_item` ADD `atproto_uri` text;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `body_source` text DEFAULT 'none' NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `tags` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
+CREATE INDEX `feed_item_feed_normalized_url_idx` ON `serial_feed_item` (`feed_id`,`normalized_url`);--> statement-breakpoint
 CREATE UNIQUE INDEX `feed_item_feed_atproto_uri_unique` ON `serial_feed_item` (`feed_id`,`atproto_uri`);

@@ -1,12 +1,17 @@
 import { z } from "zod";
 import {
   buildCanonicalDocumentUrl,
+  normalizePublicationUrl,
   parseAtUri,
   parseDocumentRecord,
   parsePublicationRecord,
 } from "@serial/standard-site";
 import { createHardenedFetch } from "../auth/atproto/hardened-fetch";
 import { resolvePublicPds } from "../auth/atproto/did-resolver";
+
+import { ATMOSPHERE_EMBEDDED_RECORDS_PER_REFRESH } from "./atmospherePolicy";
+
+export class MissingPublicationRecordError extends Error {}
 
 const pageSchema = z.object({
   records: z.array(z.unknown()).max(100),
@@ -25,7 +30,7 @@ export function createPublicationClient(
 ) {
   const pds = new Map<string, Promise<string>>();
   const records = new Map<string, Promise<unknown>>();
-  let embeddedReads = 0;
+  const embeddedUris = new Set<string>();
   const resolvePds = (did: string) => {
     if (!pds.has(did)) pds.set(did, dependencies.resolvePds(did));
     return pds.get(did)!;
@@ -61,8 +66,18 @@ export function createPublicationClient(
             "com.atproto.repo.getRecord",
             { repo: parts.did, collection: parts.collection, rkey: parts.rkey },
           );
-          if (!response.ok)
+          if (!response.ok) {
+            if (response.status === 404)
+              throw new MissingPublicationRecordError("Record is missing");
+            if (response.status === 400) {
+              const error = (await response.json().catch(() => null)) as {
+                error?: string;
+              } | null;
+              if (error?.error === "RecordNotFound")
+                throw new MissingPublicationRecordError("Record is missing");
+            }
             throw new Error(`Record fetch failed: ${response.status}`);
+          }
           const record: unknown = await response.json();
           if (
             !record ||
@@ -139,16 +154,24 @@ export function createPublicationClient(
         !parts ||
         !["site.standard.document", "site.standard.publication"].includes(
           parts.collection,
-        ) ||
-        embeddedReads >= 32
+        )
       )
         return null;
-      embeddedReads++;
+      if (!embeddedUris.has(uri)) {
+        if (embeddedUris.size >= ATMOSPHERE_EMBEDDED_RECORDS_PER_REFRESH)
+          throw new Error(
+            "Embedded record resolution deferred to the next refresh",
+          );
+        embeddedUris.add(uri);
+      }
       try {
         const record = await getRecord(uri);
-        const publication = parsePublicationRecord(record);
-        if (publication)
-          return { url: publication.value.url, title: publication.value.name };
+        if (parts.collection === "site.standard.publication") {
+          const publication = parsePublicationRecord(record);
+          const url =
+            publication && normalizePublicationUrl(publication.value.url);
+          return url ? { url, title: publication.value.name } : null;
+        }
         const document = parseDocumentRecord(record);
         if (!document) return null;
         const owner = parsePublicationRecord(
@@ -163,8 +186,13 @@ export function createPublicationClient(
           owner &&
           buildCanonicalDocumentUrl(owner.value.url, document.value.path);
         return url ? { url, title: document.value.title } : null;
-      } catch {
-        return null;
+      } catch (error) {
+        if (
+          error instanceof MissingPublicationRecordError ||
+          error instanceof SyntaxError
+        )
+          return null;
+        throw error;
       }
     },
   };

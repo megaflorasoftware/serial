@@ -480,7 +480,8 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
               view,
               filterIndex,
             });
-            const belongs = feedItems[itemId] !== undefined && doesItemBelongToScope(item);
+            const belongs =
+              feedItems[itemId] !== undefined && doesItemBelongToScope(item);
 
             references = references.filter(
               (reference) =>

@@ -103,17 +103,15 @@ describe("due origin page bounds", () => {
       isActive: () => true,
       nextFetchAt: () => PAST,
     });
-    await session.database
-      .insert(feedOrigins)
-      .values(
-        seeded.map(({ id }) => ({
-          feedId: id,
-          userId: "due-user",
-          kind: "atproto",
-          locator: `at://did:plc:alice/site.standard.publication/${id}`,
-          nextFetchAt: PAST,
-        })),
-      );
+    await session.database.insert(feedOrigins).values(
+      seeded.map(({ id }) => ({
+        feedId: id,
+        userId: "due-user",
+        kind: "atproto",
+        locator: `at://did:plc:alice/site.standard.publication/${id}`,
+        nextFetchAt: PAST,
+      })),
+    );
     expect(await countDueFeeds(session.database, "due-user", NOW)).toBe(51);
     session.instrumentation.reset();
     const page = await getDueFeedPage(session.database, {

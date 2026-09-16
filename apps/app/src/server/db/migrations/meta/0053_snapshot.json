@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "411ea5de-9dca-4545-98ec-ae0d88a822c6",
+  "id": "734dfeff-3b89-42ef-b1f5-9d7542d65682",
   "prevId": "bfcd4f91-33ff-4399-b977-807817041bf1",
   "tables": {
     "serial_account": {
@@ -1453,6 +1453,14 @@
         }
       },
       "indexes": {
+        "feed_item_feed_normalized_url_idx": {
+          "name": "feed_item_feed_normalized_url_idx",
+          "columns": [
+            "feed_id",
+            "normalized_url"
+          ],
+          "isUnique": false
+        },
         "feed_item_feed_id_posted_at_idx": {
           "name": "feed_item_feed_id_posted_at_idx",
           "columns": [

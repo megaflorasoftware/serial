@@ -37,6 +37,8 @@ try {
       globalThis.gc?.();
       session.instrumentation.reset();
       const started = performance.now();
+      // Each sample measures an isolated operation against the preceding revision.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       await workload.run(changed);
       const ms = performance.now() - started;
       const evidence = session.instrumentation.snapshot();

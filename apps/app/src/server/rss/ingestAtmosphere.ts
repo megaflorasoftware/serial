@@ -16,12 +16,21 @@ import {
   feedIngestState,
   feedOrigins,
 } from "../db/schema";
-import { createPublicationClient } from "./atprotoClient";
+import {
+  createPublicationClient,
+  MissingPublicationRecordError,
+} from "./atprotoClient";
 import { writeObservedItems } from "./writeItems";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { itemUrl } from "./itemObservation";
 import { calculateNextFetch } from "./calculateNextFetch";
+import {
+  ATMOSPHERE_DOCUMENT_CONCURRENCY,
+  ATMOSPHERE_DOCUMENTS_PER_REFRESH,
+  ATMOSPHERE_INITIAL_ITEMS,
+  ATMOSPHERE_PAGES_PER_REFRESH,
+} from "./atmospherePolicy";
 import type { ItemObservation } from "./itemObservation";
 import type { PublicationClient } from "./atprotoClient";
 import type { db } from "../db";
@@ -31,10 +40,12 @@ import { workerPool } from "~/lib/workerPool";
 import { logWarning } from "~/server/logger";
 import { dbSemaphore } from "~/lib/semaphore";
 
-export const ATMOSPHERE_INITIAL_ITEMS = 200;
-export const ATMOSPHERE_PAGES_PER_REFRESH = 10;
-export const ATMOSPHERE_DOCUMENT_CONCURRENCY = 4;
-export const ATMOSPHERE_DOCUMENTS_PER_REFRESH = 200;
+export {
+  ATMOSPHERE_INITIAL_ITEMS,
+  ATMOSPHERE_PAGES_PER_REFRESH,
+  ATMOSPHERE_DOCUMENT_CONCURRENCY,
+  ATMOSPHERE_DOCUMENTS_PER_REFRESH,
+} from "./atmospherePolicy";
 
 export async function ingestAtmosphere(
   database: typeof db,
@@ -45,13 +56,28 @@ export async function ingestAtmosphere(
   const publicationUri = parsePublicationUri(origin.locator);
   if (!publicationUri) throw new Error("Invalid publication URI");
   const now = new Date();
-  const saved = await dbSemaphore.run(() =>
-    database
-      .select()
-      .from(feedIngestState)
-      .where(eq(feedIngestState.originId, origin.id))
-      .get(),
-  );
+  const [saved, retries, rev] = await Promise.all([
+    dbSemaphore.run(() =>
+      database
+        .select()
+        .from(feedIngestState)
+        .where(eq(feedIngestState.originId, origin.id))
+        .get(),
+    ),
+    dbSemaphore.run(() =>
+      database
+        .select()
+        .from(feedDocumentRecords)
+        .where(
+          and(
+            eq(feedDocumentRecords.originId, origin.id),
+            eq(feedDocumentRecords.status, "retry"),
+          ),
+        )
+        .limit(100),
+    ),
+    client.latestRev(publicationUri.did),
+  ]);
   const state = saved ?? {
     originId: origin.id,
     cursor: null,
@@ -61,19 +87,6 @@ export async function ingestAtmosphere(
     initialCount: 0,
     initialized: false,
   };
-  const retries = await dbSemaphore.run(() =>
-    database
-      .select()
-      .from(feedDocumentRecords)
-      .where(
-        and(
-          eq(feedDocumentRecords.originId, origin.id),
-          eq(feedDocumentRecords.status, "retry"),
-        ),
-      )
-      .limit(100),
-  );
-  const rev = await client.latestRev(publicationUri.did);
   if (
     state.initialized &&
     !state.cursor &&
@@ -272,16 +285,41 @@ export async function ingestAtmosphere(
       });
       state.initialCount = initialCount;
     }
+    return new Set(existing.map((entry) => entry.uri));
   }
 
   // Failed records are fetched directly, even after they fall off the first repo page.
-  for (const retry of retries) {
-    try {
-      await processRecords([await client.getRecord(retry.uri)], false);
-    } catch {
-      failed = true;
-    }
+  const retryRecords: unknown[] = [];
+  for await (const record of workerPool(
+    retries,
+    ATMOSPHERE_DOCUMENT_CONCURRENCY,
+    async (retry) => {
+      try {
+        return await client.getRecord(retry.uri);
+      } catch (error) {
+        if (error instanceof MissingPublicationRecordError) {
+          await database
+            .update(feedDocumentRecords)
+            .set({ status: "invalid" })
+            .where(
+              and(
+                eq(feedDocumentRecords.originId, origin.id),
+                eq(feedDocumentRecords.uri, retry.uri),
+              ),
+            );
+          logWarning("Skipping missing publication document", {
+            uri: retry.uri,
+          });
+        } else {
+          failed = true;
+        }
+        return null;
+      }
+    },
+  )) {
+    if (record) retryRecords.push(record);
   }
+  if (retryRecords.length) await processRecords(retryRecords, false);
   let cursor: string | null = null;
   let complete = false;
   try {
@@ -318,9 +356,13 @@ export async function ingestAtmosphere(
       });
       if (pageIndex === 0 && rkeys[0]) state.newestRkey = rkeys[0];
       // Always process the entire first page, even beyond the known boundary.
-      await processRecords(page.records, true);
+      const knownUris = await processRecords(page.records, true);
       const atBoundary =
-        state.boundary && rkeys.some((rkey) => rkey <= state.boundary!);
+        state.boundary &&
+        [...knownUris].some((uri) => {
+          const rkey = parseDocumentUri(uri)?.rkey;
+          return rkey !== undefined && rkey <= state.boundary!;
+        });
       if (continuing && pageIndex === 0) {
         cursor = state.cursor;
       } else if (

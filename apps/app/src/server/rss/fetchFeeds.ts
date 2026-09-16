@@ -412,12 +412,24 @@ export async function* fetchAndInsertFeedData(
         }
 
         if (cachedResult.status === "empty") {
+          const written = await writeItems({
+            ...cachedResult.data,
+            id: feed.id,
+            items: [],
+            fetchMetadata: cachedResult.fetchMetadata,
+          });
           await writeOriginFetchState(
             context,
             origin.id,
             fetchedState(now, cachedResult.fetchMetadata),
           );
-          return { status: "empty", ...ids, fromCache: true };
+          return {
+            status: "empty",
+            ...ids,
+            fromCache: true,
+            metadataChanged:
+              "metadataChanged" in written ? written.metadataChanged : false,
+          };
         }
 
         // cached success
@@ -481,23 +493,28 @@ export async function* fetchAndInsertFeedData(
       const completedFeed = feedData as RSSFeedWithMetadata;
 
       if (!completedFeed.items.length) {
-        if (feed.platform === "website")
-          await refreshOriginMetadata(context.db, fetchable, {
-            name: completedFeed.title,
-            imageUrl: completedFeed.imageUrl,
-            description: completedFeed.description,
-            siteUrl: completedFeed.url,
-          });
+        const written = await writeItems(completedFeed);
         await setCachedFeedResult(origin.locator, {
           status: "empty",
           fetchMetadata: completedFeed.fetchMetadata,
+          data: {
+            title: completedFeed.title,
+            url: completedFeed.url,
+            imageUrl: completedFeed.imageUrl,
+            description: completedFeed.description,
+          },
         });
         await writeOriginFetchState(
           context,
           origin.id,
           fetchedState(now, completedFeed.fetchMetadata),
         );
-        return { status: "empty", ...ids };
+        return {
+          status: "empty",
+          ...ids,
+          metadataChanged:
+            "metadataChanged" in written ? written.metadataChanged : false,
+        };
       }
 
       await setCachedFeedResult(origin.locator, {

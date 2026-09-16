@@ -125,6 +125,8 @@ export async function convertDocumentContent(
   return { ...converted, html: sanitizeArticleHtml(converted.html) };
 }
 
+export const MAX_EMBEDDED_RECORDS_PER_DOCUMENT = 16;
+
 /** Only direct content references are visited; resolved records never enter this walk. */
 function embeddedRecordUris(content: unknown) {
   const uris = new Set<string>();
@@ -132,7 +134,11 @@ function embeddedRecordUris(content: unknown) {
     { value: content, depth: 0 },
   ];
   let visited = 0;
-  while (pending.length && visited++ < 50_000 && uris.size < 16) {
+  while (
+    pending.length &&
+    visited++ < 50_000 &&
+    uris.size < MAX_EMBEDDED_RECORDS_PER_DOCUMENT
+  ) {
     const { value, depth } = pending.pop()!;
     if (!value || typeof value !== "object" || depth > 64) continue;
     const record = value as Record<string, unknown>;

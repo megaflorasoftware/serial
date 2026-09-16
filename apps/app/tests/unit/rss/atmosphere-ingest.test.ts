@@ -4,6 +4,10 @@ import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { ItemObservation } from "~/server/rss/itemObservation";
 import type { PublicationClient } from "~/server/rss/atprotoClient";
 import {
+  createPublicationClient,
+  MissingPublicationRecordError,
+} from "~/server/rss/atprotoClient";
+import {
   feedDocumentRecords,
   feedIngestState,
   feedItems,
@@ -151,6 +155,11 @@ async function refresh(remote: PublicationClient) {
     .select()
     .from(feedOrigins)
     .where(eq(feedOrigins.id, origin.id))
+    .get())!;
+  feed = (await fixture.database
+    .select()
+    .from(feeds)
+    .where(eq(feeds.id, feed.id))
     .get())!;
   return ingestAtmosphere(fixture.database, { feed, origin }, remote);
 }
@@ -371,4 +380,150 @@ describe("Atmosphere polling", () => {
     await refresh(remote);
     expect(remote.list).toHaveBeenNthCalledWith(12, DID, "10", null);
   });
+});
+
+it("continues past a deleted boundary until it encounters a known document", async () => {
+  await refresh(client([record("300"), record("100")]));
+  const remote = client();
+  remote.latestRev = vi.fn(async () => "rev2");
+  remote.list = vi.fn(async (_did, cursor) => ({
+    records: cursor ? [record("100")] : [record("250"), record("200")],
+    cursor: cursor ? "older" : "next",
+    etag: null,
+    notModified: false as const,
+  }));
+  await refresh(remote);
+  expect(remote.list).toHaveBeenCalledTimes(2);
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(4);
+});
+
+it("stops retrying a deleted document while preserving its stored item", async () => {
+  await refresh(client([record("001")]));
+  await fixture.database.update(feedDocumentRecords).set({ status: "retry" });
+  const remote = client();
+  const originalGet = remote.getRecord;
+  remote.getRecord = vi.fn(async (key) => {
+    if (key === uri("001")) throw new MissingPublicationRecordError("gone");
+    return originalGet(key);
+  });
+  expect((await refresh(remote)).status).toBe("empty");
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+  expect(
+    await fixture.database.select().from(feedDocumentRecords).get(),
+  ).toMatchObject({ status: "invalid" });
+  expect((await refresh(remote)).status).toBe("skipped");
+});
+
+function linkedDocument(rkey: string, count: number) {
+  return record(rkey, {
+    content: {
+      $type: "pub.leaflet.content",
+      pages: [
+        {
+          $type: "pub.leaflet.pages.linearDocument",
+          blocks: Array.from({ length: count }, (_, i) => ({
+            block: {
+              $type: "pub.leaflet.blocks.standardSitePublication",
+              uri: `at://${DID}/site.standard.publication/ref${rkey}-${i}`,
+            },
+          })),
+        },
+      ],
+    },
+  });
+}
+
+function resolvingClient(
+  documents: Array<ReturnType<typeof record>>,
+  failReference = false,
+) {
+  const publication = {
+    uri: PUB,
+    cid: "pubcid",
+    value: { name: "Publication", url: "https://example.com" },
+  };
+  const transport = createPublicationClient({
+    resolvePds: async () => "https://pds.example.com",
+    fetch: vi.fn(async (input) => {
+      const url = new URL(String(input));
+      const key = `at://${url.searchParams.get("repo")}/${url.searchParams.get("collection")}/${url.searchParams.get("rkey")}`;
+      if (key.includes("/ref")) {
+        return failReference
+          ? new Response("temporary", { status: 503 })
+          : Response.json({ ...publication, uri: key });
+      }
+      return Response.json(
+        key === PUB ? publication : documents.find((doc) => doc.uri === key),
+      );
+    }),
+  });
+  return {
+    ...client(documents),
+    ...transport,
+    latestRev: async () => "rev1",
+    list: client(documents).list,
+  };
+}
+
+it("retries temporary embedded-link failures and then stores the canonical card", async () => {
+  const documents = [linkedDocument("001", 1)];
+  expect((await refresh(resolvingClient(documents, true))).status).toBe(
+    "error",
+  );
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(0);
+  expect((await refresh(resolvingClient(documents))).status).toBe("success");
+  expect(
+    (await fixture.database.select().from(feedItems).get())?.content,
+  ).toContain('href="https://example.com/"');
+  expect((await refresh(resolvingClient(documents))).status).toBe("skipped");
+});
+
+it("eventually completes documents that exceed the refresh reference budget", async () => {
+  const documents = Array.from({ length: 8 }, (_, i) =>
+    linkedDocument(String(100 - i), 16),
+  );
+  expect((await refresh(resolvingClient(documents))).status).toBe("error");
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(4);
+  expect((await refresh(resolvingClient(documents))).status).toBe("success");
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(8);
+  expect(
+    await fixture.database
+      .select()
+      .from(feedDocumentRecords)
+      .where(eq(feedDocumentRecords.status, "retry")),
+  ).toHaveLength(0);
+});
+
+it("combines concurrent RSS and document writes into one item", async () => {
+  await Promise.all([
+    writeObservedItems(fixture.database, feed, [rss()]),
+    writeObservedItems(fixture.database, feed, [document()]),
+  ]);
+  expect(await fixture.database.select().from(feedItems)).toMatchObject([
+    { sourceKind: "both", bodySource: "atproto" },
+  ]);
+});
+
+it("retains historical aliases when a collision winner is new in the same batch", async () => {
+  await writeObservedItems(fixture.database, feed, [
+    rss({ url: "https://example.com/old" }),
+  ]);
+  await writeObservedItems(fixture.database, feed, [
+    rss({ url: "https://example.com/new" }),
+  ]);
+  const written = await writeObservedItems(fixture.database, feed, [
+    document(),
+    document({ url: "https://example.com/new" }),
+  ]);
+  expect(written.removedItemIds).toHaveLength(1);
+  await writeObservedItems(fixture.database, feed, [
+    rss({ key: "different", url: "https://example.com/old" }),
+  ]);
+  expect(await fixture.database.select().from(feedItems)).toMatchObject([
+    {
+      id: written.items[0]!.id,
+      sourceKind: "both",
+      url: "https://example.com/new",
+    },
+  ]);
 });

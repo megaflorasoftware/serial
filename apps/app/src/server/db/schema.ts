@@ -25,7 +25,7 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
-import type { ItemObservation } from "../rss/itemObservation";
+import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
   CONTENT_PLATFORM,
@@ -445,6 +445,10 @@ export const feedItems = sqliteTable(
   },
   (example) => [
     unique().on(example.url, example.feedId),
+    index("feed_item_feed_normalized_url_idx").on(
+      example.feedId,
+      example.normalizedUrl,
+    ),
     unique("feed_item_feed_atproto_uri_unique").on(
       example.feedId,
       example.atprotoUri,
