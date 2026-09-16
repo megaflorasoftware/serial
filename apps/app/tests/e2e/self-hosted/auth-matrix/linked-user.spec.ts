@@ -14,6 +14,7 @@ import {
   seedAtprotoOnlyUser,
 } from "../../fixtures/seed-db";
 import { seedSession, signIn, signOut, signUp } from "../../fixtures/auth";
+import { openSidebar } from "../../fixtures/sidebar";
 import type { Page } from "@playwright/test";
 
 /**
@@ -26,26 +27,23 @@ import type { Page } from "@playwright/test";
  * server; the handle typeahead runs against the stub AppView.
  */
 
-async function openConnections(page: Page, userName: string) {
+/** Open the Connections dialog from the root sidebar, then its Atmosphere pane. */
+async function openAtmospherePane(page: Page) {
   // The left sidebar is offcanvas until opened, and a pre-hydration
-  // click on the toggle is swallowed — retry until the user menu is
-  // actually reachable.
-  const userButton = page
-    .getByRole("button", { name: new RegExp(userName) })
+  // click on the toggle is swallowed — retry until the item is reachable.
+  const connections = page
+    .getByRole("button", { name: "Connections", exact: true })
     .first();
-  const userButtonInViewport = async () => {
-    const box = await userButton.boundingBox();
-    return !!box && box.x >= 0;
-  };
   await expect(async () => {
-    if (!(await userButtonInViewport())) {
-      await page.getByRole("button", { name: "Menu" }).click();
-    }
-    await expect(userButton).toBeInViewport({ timeout: 2000 });
+    await openSidebar(page);
+    await expect(connections).toBeInViewport({ timeout: 2000 });
   }).toPass({ timeout: 20000, intervals: [500, 1000, 2000] });
-  await userButton.click();
-  await page.getByRole("menuitem", { name: "Connections" }).click();
+  await connections.click();
   await expect(page.getByText("Manage your connected services")).toBeVisible();
+  // Every row navigates to its subpane; its accessible name starts with
+  // the service name and carries the status line.
+  await page.getByRole("button", { name: /^Atmosphere/ }).click();
+  await expect(page.getByText("Connect your Atmosphere account")).toBeVisible();
 }
 
 test.describe("atproto connection management", () => {
@@ -79,16 +77,9 @@ test.describe("atproto connection management", () => {
       password,
     });
 
-    // Not yet linked: the Atmosphere row is configured and clickable, and
-    // opens the handle entry form.
-    await openConnections(page, "Atmosphere Tester");
-    const atmosphereRow = page
-      .locator("div")
-      .filter({ has: page.getByText("Atmosphere", { exact: true }) })
-      .filter({ hasText: "Not connected" })
-      .last();
-    await expect(atmosphereRow).toBeVisible();
-    await atmosphereRow.click();
+    // Not yet linked: the Atmosphere subpane opens on the handle entry
+    // form.
+    await openAtmospherePane(page);
     await expect(
       page.getByLabel("Connect with your Atmosphere handle"),
     ).toBeVisible();
@@ -106,23 +97,36 @@ test.describe("atproto connection management", () => {
     await signIn({ page, email: testEmail, password });
     await clearQueryCache(page);
     await page.reload();
-    await openConnections(page, "Atmosphere Tester");
+    await openAtmospherePane(page);
     // The persisted-cache restore can serve the stale "not connected"
     // status first; the on-mount refetch replaces it (slowly under
     // parallel-worker load).
-    await expect(page.getByText(handle)).toBeVisible({ timeout: 15000 });
+    const accountRow = page
+      .locator("div")
+      .filter({ has: page.getByRole("button", { name: /disconnect/i }) })
+      .last();
+    await expect(accountRow.getByText(handle)).toBeVisible({
+      timeout: 15000,
+    });
+    // Connected: the sync settings sit beneath the account, saved
+    // explicitly, so Save stays disabled until something changes and
+    // enables once it does.
+    const saveButton = page.getByRole("button", { name: "Save" });
+    await expect(saveButton).toBeDisabled();
+    await page.getByRole("radio", { name: "Import to Serial" }).click();
+    await expect(saveButton).toBeEnabled();
 
     // Disconnect: removes the sign-in method and destroys the credential
     // material even though the seeded blob is unreadable ciphertext.
     // Allowed here because the credential method remains.
-    await page
-      .getByRole("button", { name: /disconnect/i })
-      .first()
-      .click();
+    await accountRow.getByRole("button", { name: /disconnect/i }).click();
     await expect(page.getByText("Atmosphere account disconnected")).toBeVisible(
       { timeout: 10000 },
     );
-    await expect(page.getByText("Not connected").first()).toBeVisible();
+    // The subpane falls back to the handle entry form.
+    await expect(
+      page.getByLabel("Connect with your Atmosphere handle"),
+    ).toBeVisible();
 
     await expect
       .poll(async () => getAtprotoLinkState(SELF_HOSTED_TURSO_PORT, did))
@@ -146,13 +150,7 @@ test.describe("atproto connection management", () => {
       password: "password123",
     });
 
-    await openConnections(page, "Typeahead Tester");
-    await page
-      .locator("div")
-      .filter({ has: page.getByText("Atmosphere", { exact: true }) })
-      .filter({ hasText: "Not connected" })
-      .last()
-      .click();
+    await openAtmospherePane(page);
 
     // Two characters are enough to surface stub-AppView suggestions; the
     // same shared field the auth pages use drives the link form.
@@ -228,8 +226,8 @@ test.describe("atproto connection management", () => {
     });
     await page.goto("/");
 
-    await openConnections(page, "Sole Method User");
-    await expect(page.getByText("solemethod.test")).toBeVisible({
+    await openAtmospherePane(page);
+    await expect(page.getByText("solemethod.test").first()).toBeVisible({
       timeout: 15000,
     });
 

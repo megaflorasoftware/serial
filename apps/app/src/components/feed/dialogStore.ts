@@ -14,6 +14,7 @@ export type DialogType =
 
 export type SubscriptionView = "overview" | "picker";
 export type SettingsPane = "main" | "export" | "delete";
+export type ConnectionsPane = "list" | "instapaper" | "atproto";
 
 type DialogStore = {
   dialog: null | DialogType;
@@ -21,11 +22,13 @@ type DialogStore = {
   selectedBookmarkId: string | null;
   subscriptionView: SubscriptionView;
   settingsPane: SettingsPane;
+  connectionsPane: ConnectionsPane;
   launchDialog: (
     dialog: DialogType,
     options?: {
       subscriptionView?: SubscriptionView;
       settingsPane?: SettingsPane;
+      connectionsPane?: ConnectionsPane;
       selectedFeedId?: number;
       selectedBookmarkId?: string;
     },
@@ -40,30 +43,27 @@ export const useDialogStore = create<DialogStore>((set) => ({
   selectedBookmarkId: null,
   subscriptionView: "overview",
   settingsPane: "main",
+  connectionsPane: "list",
   launchDialog: (dialog, options) => {
     if (!canMutateNow()) return;
     set({
       dialog,
       subscriptionView: options?.subscriptionView ?? "overview",
       settingsPane: options?.settingsPane ?? "main",
+      connectionsPane: options?.connectionsPane ?? "list",
       selectedFeedId: options?.selectedFeedId ?? null,
       selectedBookmarkId: options?.selectedBookmarkId ?? null,
     });
   },
-  closeDialog: () =>
-    set({
-      dialog: null,
-      selectedFeedId: null,
-      selectedBookmarkId: null,
-      subscriptionView: "overview",
-      settingsPane: "main",
-    }),
-  onOpenChange: () =>
-    set({
-      dialog: null,
-      selectedFeedId: null,
-      selectedBookmarkId: null,
-      subscriptionView: "overview",
-      settingsPane: "main",
-    }),
+  closeDialog: () => set(CLOSED_STATE),
+  onOpenChange: () => set(CLOSED_STATE),
 }));
+
+const CLOSED_STATE = {
+  dialog: null,
+  selectedFeedId: null,
+  selectedBookmarkId: null,
+  subscriptionView: "overview",
+  settingsPane: "main",
+  connectionsPane: "list",
+} as const;
