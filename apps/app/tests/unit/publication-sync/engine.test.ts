@@ -6,6 +6,7 @@ import type {
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
 import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
+import { runPublicationSyncJobs } from "~/server/publication-sync/jobs";
 import {
   atprotoConnections,
   atprotoSubscriptionMirror,
@@ -356,20 +357,28 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
       );
     return details(uri);
   });
-  expect(await run()).toMatchObject({
+  const first = await run();
+  expect(first).toMatchObject({
     imported: 1,
     deferred: 1,
     failed: 0,
     status: "partial",
   });
   const rows = await fixture.database.select().from(atprotoSubscriptionMirror);
+  const retryAt = rows.find(
+    (row) => row.publicationUri === publication("limited"),
+  )!.importRetryAt;
+  // Mirror timestamps use seconds; queued deadlines retain milliseconds.
+  expect(Math.floor(first.retryAt!.getTime() / 1000) * 1000).toBe(
+    retryAt!.getTime(),
+  );
   expect(
     rows.find((row) => row.publicationUri === publication("limited")),
   ).toMatchObject({ feedId: null, importState: "pending", importFailures: 1 });
   resolveFeed
     .mockClear()
     .mockImplementation(async (_user, uri) => details(uri));
-  expect(await run()).toMatchObject({ imported: 0, deferred: 1 });
+  expect(await run()).toMatchObject({ imported: 0, deferred: 1, retryAt });
   expect(resolveFeed).not.toHaveBeenCalled();
   expect(store.list).toHaveBeenCalledTimes(1);
   await fixture.database
@@ -390,6 +399,22 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
       (row) => row.importState === null,
     ),
   ).toBe(true);
+});
+it("schedules queued import retries at their backoff deadline", async () => {
+  records = [record("pending")];
+  await method("import");
+  const retryAt = new Date(Date.now() + 600_000);
+  resolveFeed.mockRejectedValue(
+    new FeedImportDeferredError(undefined, retryAt),
+  );
+  const sync = vi.fn(() => run());
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(
+    (await fixture.database.select().from(atprotoConnections).get())
+      ?.subscriptionNextAttemptAt,
+  ).toEqual(retryAt);
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(sync).toHaveBeenCalledTimes(1);
 });
 it("reports ambiguous imports once without automatically retrying or exporting them", async () => {
   records = [record("ambiguous")];
@@ -467,4 +492,61 @@ it("retains normal upstream-deletion semantics after a deferred import succeeds"
   rev++;
   expect(await run()).toMatchObject({ removed: 1, exported: 0 });
   expect(await fixture.database.select().from(feeds)).toHaveLength(0);
+});
+
+it("persists continuation when a legacy enabled connection starts backfill during refresh", async () => {
+  const { backfillPublicationOrigins, BACKFILL_BATCH_SIZE } =
+    await import("~/server/publication-sync/backfill");
+  await method("export");
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionRequestId: null, subscriptionNextAttemptAt: null });
+  for (let i = 0; i < BACKFILL_BATCH_SIZE + 1; i++) {
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details: {
+        name: `Old feed ${i}`,
+        platform: "website",
+        siteUrl: "https://example.com",
+        origins: [{ kind: "rss", locator: `https://example.com/rss/${i}` }],
+      },
+      isActive: false,
+    });
+  }
+  const probe = vi.fn(() => Promise.resolve(null));
+  const sync: typeof syncPublicationSubscriptions = (input) =>
+    syncPublicationSubscriptions({
+      ...input,
+      dependencies: {
+        store,
+        invalidate,
+        backfill: (database, connection) =>
+          backfillPublicationOrigins(database, connection, {
+            readOriginEvidence: (origin) =>
+              Promise.resolve({
+                origin: { ...origin },
+                siteUrl: "https://example.com",
+                itemUrls: new Set(["https://example.com/article"]),
+              }),
+            readBackfillPublication: probe,
+          }),
+      },
+    });
+  await sync({ database: fixture.database, userId: "owner" });
+  expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE);
+  const pending = await fixture.database
+    .select()
+    .from(atprotoConnections)
+    .get();
+  expect(pending?.subscriptionRequestId).toEqual(expect.any(String));
+  expect(pending?.subscriptionNextAttemptAt).toBeInstanceOf(Date);
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionNextAttemptAt: new Date(0) });
+  await runPublicationSyncJobs(fixture.database, sync);
+  expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE + 1);
+  expect(
+    (await fixture.database.select().from(atprotoConnections).get())
+      ?.subscriptionNextAttemptAt,
+  ).toBeNull();
 });

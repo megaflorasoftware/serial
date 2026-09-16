@@ -24,6 +24,8 @@ const cache = new Map<
 >();
 const fetch = createHardenedFetch();
 
+export class PublicationUnavailableError extends Error {}
+
 export type ResolvedPublication = {
   uri: string;
   did: string;
@@ -83,7 +85,11 @@ async function readRecordJson(
   const response = await fetch(url, {
     signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
   });
-  if (!response.ok) throw new Error("Unable to read publication records");
+  if (!response.ok) {
+    if ([400, 401, 403, 404, 410].includes(response.status))
+      throw new PublicationUnavailableError("Publication is unavailable");
+    throw new Error("Unable to read publication records");
+  }
   return response.json();
 }
 

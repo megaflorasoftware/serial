@@ -25,6 +25,7 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
+import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
 import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
@@ -1031,58 +1032,110 @@ export const atprotoAuthState = sqliteTable(
  * the OAuth callback persisting the session and the sign-in flow binding the
  * DID to a Serial user; unbound rows are swept with expired auth state.
  */
-export const atprotoConnections = sqliteTable("atproto_connections", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  userId: text("user_id")
-    .unique()
-    .references(() => user.id, { onDelete: "cascade" }),
-  did: text("did").notNull().unique(),
-  session: text("session"),
-  /** Scope actually granted; null when the server omitted it. */
-  scopes: text("scopes"),
-  handle: text("handle"),
-  pdsUrl: text("pds_url"),
-  status: text("status")
-    .$type<"active" | "disconnected">()
-    .notNull()
-    .default("active"),
-  /**
-   * Atmosphere subscription sync settings. Both directions default off (the
-   * None method) on sign-up and link; unlink resets them because the row
-   * outlives the link and is reused when the DID is linked again.
-   */
-  importSubscriptions: integer("import_subscriptions", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  exportSubscriptions: integer("export_subscriptions", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  importAsInactive: integer("import_as_inactive", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  subscriptionSyncCursor: text("subscription_sync_cursor"),
-  subscriptionRepoRev: text("subscription_repo_rev"),
-  subscriptionImportGeneration: integer("subscription_import_generation")
-    .notNull()
-    .default(0),
-  subscriptionExportGeneration: integer("subscription_export_generation")
-    .notNull()
-    .default(0),
-  subscriptionSyncToken: text("subscription_sync_token"),
-  subscriptionSyncExpiresAt: integer("subscription_sync_expires_at", {
-    mode: "timestamp_ms",
-  }),
-  // Consent only saves the submitted draft if no newer settings save won.
-  syncSettingsVersion: integer("sync_settings_version").notNull().default(0),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .$default(() => new Date())
-    .notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .$default(() => new Date())
-    .notNull(),
-});
+export const atprotoConnections = sqliteTable(
+  "atproto_connections",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id")
+      .unique()
+      .references(() => user.id, { onDelete: "cascade" }),
+    did: text("did").notNull().unique(),
+    session: text("session"),
+    /** Scope actually granted; null when the server omitted it. */
+    scopes: text("scopes"),
+    handle: text("handle"),
+    pdsUrl: text("pds_url"),
+    status: text("status")
+      .$type<"active" | "disconnected">()
+      .notNull()
+      .default("active"),
+    /**
+     * Atmosphere subscription sync settings. Both directions default off (the
+     * None method) on sign-up and link; unlink resets them because the row
+     * outlives the link and is reused when the DID is linked again.
+     */
+    importSubscriptions: integer("import_subscriptions", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    exportSubscriptions: integer("export_subscriptions", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    importAsInactive: integer("import_as_inactive", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    subscriptionBackfillStarted: integer("subscription_backfill_started", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
+    subscriptionBackfillNextAttemptAt: integer(
+      "subscription_backfill_next_attempt_at",
+      { mode: "timestamp_ms" },
+    ),
+    subscriptionRequestId: text("subscription_request_id"),
+    subscriptionNextAttemptAt: integer("subscription_next_attempt_at", {
+      mode: "timestamp_ms",
+    }),
+    subscriptionJobToken: text("subscription_job_token"),
+    subscriptionJobExpiresAt: integer("subscription_job_expires_at", {
+      mode: "timestamp_ms",
+    }),
+    subscriptionJobProgress: text("subscription_job_progress", {
+      mode: "json",
+    }).$type<{ completed: number; total: number }>(),
+    subscriptionJobResult: text("subscription_job_result", {
+      mode: "json",
+    }).$type<PublicationSyncResult>(),
+    subscriptionSyncCursor: text("subscription_sync_cursor"),
+    subscriptionRepoRev: text("subscription_repo_rev"),
+    subscriptionImportGeneration: integer("subscription_import_generation")
+      .notNull()
+      .default(0),
+    subscriptionExportGeneration: integer("subscription_export_generation")
+      .notNull()
+      .default(0),
+    subscriptionSyncToken: text("subscription_sync_token"),
+    subscriptionSyncExpiresAt: integer("subscription_sync_expires_at", {
+      mode: "timestamp_ms",
+    }),
+    // Consent only saves the submitted draft if no newer settings save won.
+    syncSettingsVersion: integer("sync_settings_version").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("atproto_subscription_job_due_idx").on(
+      table.subscriptionNextAttemptAt,
+    ),
+  ],
+);
+export const publicationBackfillProbes = sqliteTable(
+  "publication_backfill_probes",
+  {
+    feedId: integer("feed_id")
+      .primaryKey()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    index("publication_backfill_due_idx").on(
+      table.userId,
+      table.nextAttemptAt,
+      table.feedId,
+    ),
+  ],
+);
+
 export type DatabaseAtprotoConnection = typeof atprotoConnections.$inferSelect;
 
 /** Retain absent records as tombstones so neither side resurrects an unsubscribe. */

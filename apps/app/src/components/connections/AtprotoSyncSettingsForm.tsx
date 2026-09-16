@@ -6,7 +6,6 @@ import type {
   AtprotoSyncMethod,
   AtprotoSyncPreferences,
 } from "~/lib/auth/atproto-sync-settings";
-import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
@@ -16,6 +15,7 @@ import {
   syncMethodNeedsWriteScope,
 } from "~/lib/auth/atproto-sync-settings";
 import { orpc } from "~/lib/orpc";
+import { refreshPublicationSyncProgress } from "~/lib/data/publication-sync";
 
 export const ATPROTO_PERMISSIONS_NOTICE =
   "In order to save Serial subscriptions to your PDS, we need additional permissions.";
@@ -48,7 +48,7 @@ export function useAtprotoSyncSettingsSave() {
           queryKey: orpc.atproto.getConnectionStatus.queryKey(),
         });
         toast.success("Settings saved");
-        await requestPublicationSync();
+        void refreshPublicationSyncProgress(queryClient);
       },
       onError: (error) => {
         toast.error(error.message || "Failed to save sync settings");

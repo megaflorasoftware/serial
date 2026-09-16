@@ -1859,3 +1859,19 @@ export async function prepareFeedRevalidation(
     client.close();
   }
 }
+
+/** Hold a worker lease while the browser exercises queued-sync UI against real state. */
+export async function holdAtprotoSyncWorker(tursoPort: number, did: string) {
+  const { db, client } = getDb(tursoPort);
+  try {
+    await db
+      .update(schema.atprotoConnections)
+      .set({
+        subscriptionJobToken: "e2e-held-worker",
+        subscriptionJobExpiresAt: new Date(Date.now() + 300_000),
+      })
+      .where(eq(schema.atprotoConnections.did, did));
+  } finally {
+    client.close();
+  }
+}

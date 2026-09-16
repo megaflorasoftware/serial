@@ -51,10 +51,10 @@ export default defineConfig(({ mode }) => {
       rollupConfig: { external: ["jsdom"] },
       rolldownConfig: { external: ["jsdom"] },
       scheduledTasks: {
-        ...scheduleTask(
-          { "* * * * *": ["feeds:background-refresh"] },
-          BACKGROUND_REFRESH_ENABLED,
-        ),
+        "* * * * *": [
+          "publications:sync",
+          ...(BACKGROUND_REFRESH_ENABLED ? ["feeds:background-refresh"] : []),
+        ],
         ...scheduleTask({ "0 0 * * *": ["demo:midnight-wipe"] }, isDemoBuild),
       },
     }),

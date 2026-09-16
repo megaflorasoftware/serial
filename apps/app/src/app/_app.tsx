@@ -15,7 +15,8 @@ import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
 import { GlobalImportDropzone } from "../components/feed/import/GlobalImportDropzone";
 import type React from "react";
-import { requestPublicationSync } from "~/lib/data/publication-sync";
+import { PublicationSyncProgress } from "~/components/connections/PublicationSyncProgress";
+import { refreshPublicationSyncProgress } from "~/lib/data/publication-sync";
 import FeedLoading from "~/components/loading";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { Button } from "~/components/ui/button";
@@ -244,7 +245,8 @@ function useAtprotoReturn(
 
     if (result === "success") {
       if (outcome.successMessage) toast.success(outcome.successMessage);
-      if (param === ATPROTO_CONSENT_RESULT_PARAM) void requestPublicationSync();
+      if (param === ATPROTO_CONSENT_RESULT_PARAM)
+        void refreshPublicationSyncProgress(queryClient);
     } else {
       // Own-property lookup only: `result` is an unvalidated query param, so
       // a plain `map[result]` would resolve inherited keys ("toString") to a
@@ -369,6 +371,7 @@ function RootLayout() {
       <InitialClientQueries>
         <ClientPerformanceProfiler>
           <GlobalImportDropzone />
+          <PublicationSyncProgress />
           <div className="flex h-svh flex-col overflow-hidden">
             <ImpersonationBanner />
             <DemoBanner />

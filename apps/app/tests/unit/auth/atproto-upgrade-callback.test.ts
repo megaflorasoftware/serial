@@ -41,6 +41,9 @@ vi.mock("better-auth/api", async (importOriginal) => ({
   ...(await importOriginal<typeof AuthApi>()),
   getSessionFromCtx: () => Promise.resolve({ user: { id: "user-1" } }),
 }));
+vi.mock("~/server/publication-sync/jobs", () => ({
+  wakePublicationSyncJobs: vi.fn(),
+}));
 vi.mock("~/server/logger", () => ({
   logError: vi.fn(),
   captureException: vi.fn(),
@@ -157,4 +160,28 @@ describe("upgrade callback failure cleanup", () => {
     });
     expect(revoke).not.toHaveBeenCalled();
   });
+});
+
+it("persists sync work before redirecting from successful consent", async () => {
+  await session.database.insert(atprotoConnections).values({
+    did: DID,
+    userId: "user-1",
+    session: "new-session",
+    status: "active",
+    scopes: "atproto include:site.standard.authSocial",
+  });
+  await expectCallbackRedirect("success");
+  const row = await session.database
+    .select()
+    .from(atprotoConnections)
+    .where(eq(atprotoConnections.did, DID))
+    .get();
+  expect(row).toMatchObject({
+    exportSubscriptions: true,
+    subscriptionRequestId: expect.any(String),
+    subscriptionNextAttemptAt: expect.any(Date),
+  });
+  const { wakePublicationSyncJobs } =
+    await import("~/server/publication-sync/jobs");
+  expect(wakePublicationSyncJobs).toHaveBeenCalledWith(session.database);
 });
