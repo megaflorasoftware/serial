@@ -12,29 +12,86 @@ export function useRefreshFeedItem(id: string | undefined) {
     succeeded: boolean;
   }>();
 
+  // A canceled intermediate visit must not revive an earlier visit's result.
+  if (refreshState && refreshState.id !== id) setRefreshState(undefined);
+
   useEffect(() => {
     if (!id) return;
 
     let canceled = false;
     let succeeded = false;
+    const initialItem = feedItemsStore.getState().feedItemsDict[id];
 
-    void orpcRouterClient.feedItem
-      .getById({ id })
-      .then((item) => {
-        if (canceled || !item) return;
+    const refresh = async (retry: boolean): Promise<void> => {
+      if (canceled) return;
+      const requestedItem = feedItemsStore.getState().feedItemsDict[id];
+      const item = await orpcRouterClient.feedItem.getById({ id });
+      if (canceled || !item) return;
 
-        const currentItem = feedItemsStore.getState().feedItemsDict[id];
-        const currentUpdatedAt = currentItem?.updatedAt?.getTime() ?? 0;
-        const incomingUpdatedAt = item.updatedAt?.getTime() ?? 0;
+      const currentItem = feedItemsStore.getState().feedItemsDict[id];
+      if (requestedItem && !currentItem) return;
+      const currentUpdatedAt = currentItem?.updatedAt?.getTime() ?? 0;
+      const incomingUpdatedAt = item.updatedAt?.getTime() ?? 0;
 
-        if (currentUpdatedAt > incomingUpdatedAt) return;
+      const hasConcurrentRevision =
+        currentUpdatedAt === incomingUpdatedAt &&
+        currentItem?.contentHash !== requestedItem?.contentHash &&
+        currentItem?.contentHash !== item.contentHash;
+      const hasNewerMetadata = currentUpdatedAt > incomingUpdatedAt;
+      if (
+        hasConcurrentRevision ||
+        (hasNewerMetadata &&
+          (!currentItem?.contentHash ||
+            currentItem.contentHash !== item.contentHash))
+      ) {
+        if (retry) await refresh(false);
+        return;
+      }
+      // The body still belongs to the same revision; preserve newer user choices.
+      const incoming =
+        hasNewerMetadata && currentItem
+          ? {
+              ...currentItem,
+              content: item.content,
+              contentSnippet: item.contentSnippet,
+            }
+          : item;
+      const concurrentUserState =
+        currentItem && currentItem !== initialItem
+          ? {
+              ...(currentItem.isWatched !== initialItem?.isWatched
+                ? {
+                    isWatched: currentItem.isWatched,
+                    isWatchedUpdatedAt: currentItem.isWatchedUpdatedAt,
+                  }
+                : {}),
+              ...(currentItem.isWatchLater !== initialItem?.isWatchLater
+                ? {
+                    isWatchLater: currentItem.isWatchLater,
+                    isWatchLaterUpdatedAt: currentItem.isWatchLaterUpdatedAt,
+                  }
+                : {}),
+              ...(currentItem.progress !== initialItem?.progress ||
+              currentItem.duration !== initialItem?.duration
+                ? {
+                    progress: currentItem.progress,
+                    duration: currentItem.duration,
+                  }
+                : {}),
+            }
+          : {};
 
-        feedItemsStore
-          .getState()
-          .setFeedItem(id, mergeFeedItem(currentItem, item));
-        retainLoadedFeedItemBody(id);
-        succeeded = true;
-      })
+      feedItemsStore
+        .getState()
+        .setFeedItem(
+          id,
+          mergeFeedItem(currentItem, { ...incoming, ...concurrentUserState }),
+        );
+      retainLoadedFeedItemBody(id);
+      succeeded = true;
+    };
+
+    void refresh(true)
       .catch((error) => {
         console.error("Error refreshing feed item:", error);
       })

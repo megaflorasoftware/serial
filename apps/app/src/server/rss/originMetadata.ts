@@ -45,7 +45,9 @@ export async function refreshOriginMetadata(
               updatedAt: new Date(),
             })
             .where(and(eq(feeds.id, feed.id), isNull(feeds.nameEditedAt)));
-          if (metadata.siteUrl)
+          const shouldUpdateSiteUrl =
+            !!metadata.siteUrl && (!publication || origin.kind === "atproto");
+          if (shouldUpdateSiteUrl)
             await tx
               .update(feeds)
               .set({ siteUrl: metadata.siteUrl })
@@ -54,7 +56,7 @@ export async function refreshOriginMetadata(
             metadata.name !== origin.sourceName ||
             (metadata.imageUrl ?? null) !== origin.sourceImageUrl ||
             (metadata.description ?? null) !== origin.sourceDescription ||
-            (metadata.siteUrl != null && metadata.siteUrl !== feed.siteUrl)
+            (shouldUpdateSiteUrl && metadata.siteUrl !== feed.siteUrl)
           );
         },
         { behavior: "immediate" },
