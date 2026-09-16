@@ -11,7 +11,7 @@ function waitForIdle() {
       subscription.unsubscribe();
       reject(
         new Error(
-          "Another import or refresh is still running. Try Sync now when it finishes.",
+          "Another import or refresh is still running. Subscriptions will sync on the next Feed refresh.",
         ),
       );
     }, 120_000);
@@ -29,7 +29,7 @@ export function publicationSyncMessage(result: PublicationSyncResult) {
   if (result.status === "skipped") return "Publication sync is turned off.";
   return `Subscriptions synced: ${result.imported} imported, ${result.exported} exported, ${result.inactive} added inactive, ${result.removed} removed${result.failed ? `, ${result.failed} failed` : ""}${result.deferred ? `, ${result.deferred} pending the next sync` : ""}.`;
 }
-/** One operation per browser, shared by Save, consent return, and Sync now. */
+/** One operation per browser, shared by Save and consent return. */
 export function requestPublicationSync(): Promise<void> {
   if (pending) return pending;
   pending = (async () => {

@@ -20,7 +20,7 @@ beforeEach(() => {
   loadingActor.send({ type: "RESET" });
 });
 describe("client publication sync", () => {
-  it("coalesces Save and Sync now, owns importing progress, and reports partial success", async () => {
+  it("coalesces sync requests, owns importing progress, and reports partial success", async () => {
     let finish!: (value: unknown) => void;
     mocks.sync.mockImplementation(
       () =>

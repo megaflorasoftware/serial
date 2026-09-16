@@ -385,7 +385,7 @@ export const unlinkAccount = protectedProcedure.handler(async ({ context }) => {
   return { success: true };
 });
 
-/** Settings saves, consent returns, and Sync now share this client-initiated operation. */
+/** Settings saves and consent returns share this client-initiated operation. */
 export const syncSubscriptions = protectedProcedure
   .input(z.object({ runId: z.uuid() }))
   .handler(async ({ context, input }) => {

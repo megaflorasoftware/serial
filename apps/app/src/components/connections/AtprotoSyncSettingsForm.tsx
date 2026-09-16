@@ -9,7 +9,6 @@ import type {
 import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
-import { Switch } from "~/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 import {
   ATPROTO_SYNC_METHOD_LABELS,
@@ -139,19 +138,28 @@ export function AtprotoSyncSettingsForm({
           </p>
         )}
       </div>
-      <div className="flex items-center justify-between gap-4">
-        <Label
-          htmlFor="atproto-import-as-inactive"
-          className={disabled ? "text-muted-foreground" : ""}
-        >
-          Add imported subscriptions as inactive
+      <div className="grid gap-2">
+        <Label htmlFor="atproto-import-state">
+          Add imported Atmosphere feeds as
         </Label>
-        <Switch
-          id="atproto-import-as-inactive"
-          checked={importAsInactive}
-          onCheckedChange={setImportAsInactive}
+        <ToggleGroup
+          id="atproto-import-state"
+          type="single"
+          value={importAsInactive ? "inactive" : "active"}
           disabled={disabled || saving}
-        />
+          onValueChange={(value) => {
+            if (!value) return;
+            setImportAsInactive(value === "inactive");
+          }}
+          className="flex w-fit flex-wrap justify-start gap-1"
+        >
+          <ToggleGroupItem size="sm" variant="outline" value="active">
+            Active
+          </ToggleGroupItem>
+          <ToggleGroupItem size="sm" variant="outline" value="inactive">
+            Inactive
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
       <Button type="submit" disabled={disabled || saving || !dirty}>
         {saving ? <Loader2Icon className="animate-spin" size={16} /> : "Save"}

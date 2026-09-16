@@ -8,7 +8,6 @@ import {
 import { ConnectedAccountRow } from "./ConnectedAccountRow";
 import { ConnectionListRow } from "./ConnectionListRow";
 import { useLoadingMode } from "~/lib/data/loading-machine";
-import { requestPublicationSync } from "~/lib/data/publication-sync";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
 import { Button } from "~/components/ui/button";
 import { orpc } from "~/lib/orpc";
@@ -161,15 +160,7 @@ function ConnectedAtmospherePane({
   const reconnectMutation = useAtprotoReconnect();
   const syncSettingsSave = useAtprotoSyncSettingsSave();
   const loading = useLoadingMode();
-  const queryClient = useQueryClient();
-  const syncMutation = useMutation({
-    mutationFn: requestPublicationSync,
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: orpc.atproto.getConnectionStatus.queryKey(),
-      }),
-  });
-  const syncBusy = syncMutation.isPending || loading.mode === "importing";
+  const syncBusy = loading.mode === "importing";
   // Either round trip leaves the page; neither action may start while the
   // other is under way.
   const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
@@ -198,19 +189,6 @@ function ConnectedAtmospherePane({
         saving={syncSettingsSave.busy}
         onSave={syncSettingsSave.save}
       />
-      <Button
-        variant="outline"
-        className="w-fit"
-        disabled={unavailable || status.syncPreferences.method === "none"}
-        onClick={() => syncMutation.mutate()}
-      >
-        {syncBusy ? (
-          <Loader2Icon className="animate-spin" size={16} />
-        ) : (
-          <RefreshCwIcon size={16} />
-        )}
-        <span className="ml-1.5">Sync now</span>
-      </Button>
     </div>
   );
 }
