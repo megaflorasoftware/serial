@@ -251,7 +251,12 @@ function AccountOnboarding({ userId }: { userId: string }) {
         orpcRouterClient.onboarding.saveProgress({ ...next, step: next.step! }),
       userId,
     );
-  }, [progress.data, progress.isFetchedAfterMount, progress.isFetching]);
+  }, [
+    progress.data,
+    progress.isFetchedAfterMount,
+    progress.isFetching,
+    userId,
+  ]);
   useEffect(() => {
     if (state.instruction === "add-feed" && dialog === "add-feed")
       guideOnboarding("find-feed");

@@ -48,6 +48,15 @@ type ChipComboboxProps = {
   guidance?: boolean;
 };
 
+function guidancePopupProps(enabled: boolean) {
+  return {
+    "data-guidance-popup": enabled || undefined,
+    collisionPadding: enabled
+      ? { top: 8, bottom: 64, left: 8, right: 8 }
+      : undefined,
+  };
+}
+
 /** Max visible rows of badges before pagination kicks in. */
 const MAX_ROWS = 5;
 /**
@@ -256,10 +265,7 @@ export function ChipCombobox({
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              data-guidance-popup={guidance || undefined}
-              collisionPadding={
-                guidance ? { top: 8, bottom: 64, left: 8, right: 8 } : undefined
-              }
+              {...guidancePopupProps(guidance)}
               className="w-[250px] p-0"
               align="start"
             >

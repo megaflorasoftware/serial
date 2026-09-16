@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Button } from "~/components/ui/button";
 
 const POPUP_SELECTOR =
@@ -49,47 +49,17 @@ const EMPTY: Position = {
   viewportTop: 0,
 };
 
-/** Presentation only. The caller owns instructions, advancement, and persistence. */
-export function Guidance({
-  instructionKey,
-  selector,
-  children,
-  next,
-  explanation = false,
-  onNext,
-  onSkip,
-  confirming,
-  onCancelSkip,
-  onConfirmSkip,
-}: {
-  instructionKey: string;
-  selector?: string;
-  children?: ReactNode;
-  next?: boolean;
-  explanation?: boolean;
-  onNext?: () => void;
-  onSkip: () => void;
-  confirming: boolean;
-  onCancelSkip: () => void;
-  onConfirmSkip: () => void;
-}) {
-  useLayoutEffect(() => {
-    document.body.dataset.guidanceActive = "true";
-    return () => {
-      delete document.body.dataset.guidanceActive;
-    };
-  }, []);
+function useGuidanceTarget(
+  selector: string | undefined,
+  instructionKey: string,
+  confirming: boolean,
+  helper: RefObject<HTMLDivElement | null>,
+  layer: RefObject<HTMLDivElement | null>,
+) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState(EMPTY);
   const [helperHeight, setHelperHeight] = useState(150);
-  const layer = useRef<HTMLDivElement>(null);
-  const helper = useRef<HTMLDivElement>(null);
   const targetRef = useRef<HTMLElement | null>(null);
-  const callbacks = useRef({ onSkip, onCancelSkip });
-  useLayoutEffect(() => {
-    callbacks.current = { onSkip, onCancelSkip };
-  });
-
   useLayoutEffect(() => {
     let frame = 0;
     let focused: HTMLElement | null = null;
@@ -188,7 +158,48 @@ export function Guidance({
       window.visualViewport?.removeEventListener("resize", schedule);
       window.visualViewport?.removeEventListener("scroll", schedule);
     };
-  }, [selector, instructionKey, confirming]);
+  }, [selector, instructionKey, confirming, helper, layer]);
+  return { host, position, helperHeight, setHelperHeight, targetRef };
+}
+
+/** Presentation only. The caller owns instructions, advancement, and persistence. */
+export function Guidance({
+  instructionKey,
+  selector,
+  children,
+  next,
+  explanation = false,
+  onNext,
+  onSkip,
+  confirming,
+  onCancelSkip,
+  onConfirmSkip,
+}: {
+  instructionKey: string;
+  selector?: string;
+  children?: ReactNode;
+  next?: boolean;
+  explanation?: boolean;
+  onNext?: () => void;
+  onSkip: () => void;
+  confirming: boolean;
+  onCancelSkip: () => void;
+  onConfirmSkip: () => void;
+}) {
+  useLayoutEffect(() => {
+    document.body.dataset.guidanceActive = "true";
+    return () => {
+      delete document.body.dataset.guidanceActive;
+    };
+  }, []);
+  const layer = useRef<HTMLDivElement>(null);
+  const helper = useRef<HTMLDivElement>(null);
+  const { host, position, helperHeight, setHelperHeight, targetRef } =
+    useGuidanceTarget(selector, instructionKey, confirming, helper, layer);
+  const callbacks = useRef({ onSkip, onCancelSkip });
+  useLayoutEffect(() => {
+    callbacks.current = { onSkip, onCancelSkip };
+  });
 
   useLayoutEffect(() => {
     const node = layer.current;
@@ -202,7 +213,7 @@ export function Guidance({
     return () => {
       if (node.isConnected) node.hidePopover();
     };
-  }, [host, confirming, next, explanation, instructionKey]);
+  }, [host, confirming, next, explanation, instructionKey, setHelperHeight]);
 
   useLayoutEffect(() => {
     const allowed = (node: Node) =>
@@ -292,7 +303,7 @@ export function Guidance({
       document.removeEventListener("click", blockOutside, true);
       document.removeEventListener("keydown", keyboard, true);
     };
-  }, [selector, host, confirming]);
+  }, [selector, host, confirming, targetRef]);
 
   if (!host) return null;
   const { x, y, width, height, viewportWidth, viewportHeight, viewportTop } =
@@ -333,6 +344,9 @@ export function Guidance({
         <div className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/60 p-4">
           <div
             ref={helper}
+            // Guidance traps Tab and Escape inside this existing Radix modal.
+            // A second native modal would make its highlighted controls inert.
+            // react-doctor-disable-next-line react-doctor/prefer-html-dialog
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="skip-onboarding-title"
