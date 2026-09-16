@@ -10,6 +10,7 @@ import {
   rssAttemptSummary,
 } from "~/server/rss/stats";
 import { publisher } from "~/server/api/publisher";
+import { refreshOriginMetadata } from "~/server/rss/originMetadata";
 import { getCachedFeedResult } from "~/server/rss/feedCache";
 
 vi.mock("~/server/api/publisher", () => ({
@@ -138,4 +139,61 @@ it("carries metadata changes in the attempt summary without starting a separate 
       .mocked(publisher.publish)
       .mock.calls.map(([, payload]) => payload.source),
   ).toEqual(["rss"]);
+});
+
+it("keeps the publication website through RSS refreshes and accepts later publication URL changes", async () => {
+  const rss = await reader("combined");
+  const [publication] = await fixture.database
+    .insert(feedOrigins)
+    .values({
+      userId: "combined",
+      feedId: rss.feed.id,
+      kind: "atproto",
+      locator: "at://did:plc:alice/site.standard.publication/blog",
+    })
+    .returning();
+  const atmosphere = { feed: rss.feed, origin: publication! };
+  await refreshOriginMetadata(fixture.database, atmosphere, {
+    name: "Publication",
+    siteUrl: "https://example.com/blog",
+  });
+  await refreshOriginMetadata(fixture.database, rss, {
+    name: "RSS",
+    siteUrl: "https://feeds.example.com/",
+  });
+  expect(await fixture.database.select().from(feeds)).toMatchObject([
+    { name: "Publication", siteUrl: "https://example.com/blog" },
+  ]);
+  const currentOrigins = await fixture.database.select().from(feedOrigins);
+  const currentFeed = (await fixture.database.select().from(feeds))[0]!;
+  expect(
+    await refreshOriginMetadata(
+      fixture.database,
+      {
+        feed: currentFeed,
+        origin: currentOrigins.find((origin) => origin.kind === "rss")!,
+      },
+      { name: "RSS", siteUrl: "https://feeds.example.com/" },
+    ),
+  ).toBe(false);
+  await refreshOriginMetadata(fixture.database, atmosphere, {
+    name: "Publication",
+    siteUrl: "https://example.com/renamed",
+  });
+  expect(await fixture.database.select().from(feeds)).toMatchObject([
+    { siteUrl: "https://example.com/renamed" },
+  ]);
+  const rssOnly = await reader("rss-only");
+  await refreshOriginMetadata(fixture.database, rssOnly, {
+    name: "RSS only",
+    siteUrl: "https://rss.example.com/new-home",
+  });
+  expect(await fixture.database.select().from(feeds)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: rssOnly.feed.id,
+        siteUrl: "https://rss.example.com/new-home",
+      }),
+    ]),
+  );
 });

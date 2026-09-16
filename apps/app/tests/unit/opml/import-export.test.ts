@@ -1,3 +1,4 @@
+import { XMLParser } from "fast-xml-parser";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -108,6 +109,49 @@ function makeView(
 }
 
 describe("OPML import/export", () => {
+  it("exports Atmosphere-only and combined Feeds with website URLs, tags, and groups", () => {
+    const publication = makeFeed(1, 'My "Publication"', "");
+    publication.siteUrl = "https://example.com/publication?a=1&b=2";
+    publication.origins[0]!.kind = "atproto";
+    publication.origins[0]!.locator =
+      "at://did:plc:alice/site.standard.publication/blog";
+    const combined = makeFeed(2, "Combined", "https://example.com/feed.xml");
+    combined.siteUrl = "https://example.com/blog";
+    combined.origins.push({ ...publication.origins[0]!, id: 201, feedId: 2 });
+    const opml = buildViewOPML({
+      feeds: [publication, combined],
+      views: [
+        makeView(1, "Reading", {
+          categoryIds: [],
+          feedIds: [1],
+          viewSections: [],
+        }),
+      ],
+      contentCategories: [makeCategory(1, "Writing & ideas")],
+      feedCategories: [{ feedId: 1, categoryId: 1 }],
+      viewFeeds: [{ viewId: 1, feedId: 1 }],
+    });
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(opml);
+    const outlines = parsed.opml.body.outline;
+    expect(outlines[0]).toMatchObject({
+      "@_title": "Combined",
+      "@_type": "rss",
+      "@_xmlUrl": "https://example.com/feed.xml",
+      "@_htmlUrl": combined.siteUrl,
+    });
+    expect(outlines[1].outline).toMatchObject({
+      "@_title": publication.name,
+      "@_htmlUrl": publication.siteUrl,
+      "@_category": "Writing & ideas",
+    });
+    expect(outlines[1].outline).not.toHaveProperty("@_xmlUrl");
+    expect(outlines[1].outline).not.toHaveProperty("@_type");
+    expect(opml).not.toContain("at://");
+    const imported = getInitialFeedDataFromOPMLInput(opml);
+    expect(imported.success).toBe(true);
+    if (imported.success) expect(imported.data).toHaveLength(1);
+  });
+
   it("exports nested groups", () => {
     const opml = buildOPML({
       ungroupedFeeds: [],
