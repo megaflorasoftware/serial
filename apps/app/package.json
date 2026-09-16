@@ -71,7 +71,8 @@
     "benchmark:inventory": "node --import=tsx scripts/performance/inventory-app-queries.ts",
     "benchmark:inventory:check": "node --import=tsx scripts/performance/inventory-app-queries.ts --check",
     "benchmark:ingest": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-ingest-benchmark.ts",
-    "benchmark:client:browser": "SERIAL_RUN_CLIENT_PERFORMANCE=1 pnpm test:e2e:self-hosted client-performance-audit.spec.ts"
+    "benchmark:client:browser": "SERIAL_RUN_CLIENT_PERFORMANCE=1 pnpm test:e2e:self-hosted client-performance-audit.spec.ts",
+    "benchmark:publication-sync": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-publication-sync-benchmark.ts"
   },
   "dependencies": {
     "@atproto-labs/fetch-node": "^0.3.7",

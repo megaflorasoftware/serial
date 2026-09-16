@@ -7,6 +7,7 @@ import {
 } from "./AtprotoSyncSettingsForm";
 import { ConnectedAccountRow } from "./ConnectedAccountRow";
 import { ConnectionListRow } from "./ConnectionListRow";
+import { useLoadingMode } from "~/lib/data/loading-machine";
 import { AtprotoHandleField } from "~/components/auth/AtprotoHandleField";
 import { Button } from "~/components/ui/button";
 import { orpc } from "~/lib/orpc";
@@ -129,13 +130,6 @@ export function AtprotoConnectionPane() {
     isFetching,
     refetch,
   } = useAtprotoConnectionStatus();
-  const unlinkMutation = useAtprotoUnlink();
-  const reconnectMutation = useAtprotoReconnect();
-  const syncSettingsSave = useAtprotoSyncSettingsSave();
-  // Either round trip leaves the page; neither action may start while the
-  // other is under way.
-  const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
-
   // A later poll that fails keeps whatever status already rendered; only
   // a pane with nothing to show falls back to the retry card.
   if (!status) {
@@ -154,11 +148,30 @@ export function AtprotoConnectionPane() {
     return <AtprotoConnectionForm />;
   }
 
+  return <ConnectedAtmospherePane status={status} />;
+}
+
+function ConnectedAtmospherePane({
+  status,
+}: {
+  status: NonNullable<ReturnType<typeof useAtprotoConnectionStatus>["data"]>;
+}) {
+  const unlinkMutation = useAtprotoUnlink();
+  const reconnectMutation = useAtprotoReconnect();
+  const syncSettingsSave = useAtprotoSyncSettingsSave();
+  const loading = useLoadingMode();
+  const syncBusy = loading.mode === "importing";
+  // Either round trip leaves the page; neither action may start while the
+  // other is under way.
+  const accountBusy = unlinkMutation.isPending || reconnectMutation.isPending;
+  const busy = accountBusy || syncSettingsSave.busy || syncBusy;
+  const unavailable = status.needsReconnect || busy;
+
   return (
     <div className="grid gap-6">
       <ConnectedAccountRow
         label={status.handle ?? "Connected"}
-        disabled={accountBusy || syncSettingsSave.busy}
+        disabled={busy}
         disconnecting={unlinkMutation.isPending}
         onDisconnect={() => unlinkMutation.mutate(undefined)}
         onReconnect={
@@ -172,7 +185,7 @@ export function AtprotoConnectionPane() {
         key={JSON.stringify(status.syncPreferences)}
         savedPreferences={status.syncPreferences}
         hasWriteScope={status.hasWriteScope}
-        disabled={status.needsReconnect || accountBusy}
+        disabled={unavailable}
         saving={syncSettingsSave.busy}
         onSave={syncSettingsSave.save}
       />

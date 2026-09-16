@@ -305,3 +305,36 @@ export function fetchableOriginsOf(
     origins.map((origin) => ({ origin, feed })),
   );
 }
+
+/** Creation and sync share ownership, origin conflict, and existing-Feed preservation rules. */
+export async function createOrReuseFeed(
+  database: FeedDatabase,
+  input: {
+    userId: string;
+    details: NewFeedDetails;
+    isActive: boolean;
+  },
+) {
+  const existing = await findFeedForOrigins(
+    database,
+    input.userId,
+    input.details.origins,
+  );
+  if (existing) {
+    const attached = existing.origins.length < input.details.origins.length;
+    return {
+      feed: await attachMissingFeedOrigins(
+        database,
+        existing,
+        input.details.origins,
+      ),
+      created: false,
+      attached,
+    };
+  }
+  return {
+    feed: await insertFeedWithOrigins(database, input),
+    created: true,
+    attached: false,
+  };
+}

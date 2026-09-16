@@ -10,7 +10,10 @@ import { logError } from "~/server/logger";
 
 type DB = typeof Database;
 
-export async function getActiveFeedCount(db: DB, userId: string) {
+export async function getActiveFeedCount(
+  db: Pick<DB, "select">,
+  userId: string,
+) {
   const result = await db
     .select({ count: count() })
     .from(feeds)

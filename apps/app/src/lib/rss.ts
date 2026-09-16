@@ -26,6 +26,7 @@ export type RssAttemptSummary = RssAttemptCounts & {
 };
 
 export type RssPublishedChunk =
+  | { type: "refresh-progress"; total: number; completed: number }
   | {
       type: "refresh-start";
       totalFeeds: number;

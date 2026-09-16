@@ -393,6 +393,13 @@
       "when": 1789537012223,
       "tag": "0055_milky_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1789539602106,
+      "tag": "0056_purple_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

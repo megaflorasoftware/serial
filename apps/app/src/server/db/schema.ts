@@ -1062,6 +1062,18 @@ export const atprotoConnections = sqliteTable("atproto_connections", {
   importAsInactive: integer("import_as_inactive", { mode: "boolean" })
     .notNull()
     .default(false),
+  subscriptionSyncCursor: text("subscription_sync_cursor"),
+  subscriptionRepoRev: text("subscription_repo_rev"),
+  subscriptionImportGeneration: integer("subscription_import_generation")
+    .notNull()
+    .default(0),
+  subscriptionExportGeneration: integer("subscription_export_generation")
+    .notNull()
+    .default(0),
+  subscriptionSyncToken: text("subscription_sync_token"),
+  subscriptionSyncExpiresAt: integer("subscription_sync_expires_at", {
+    mode: "timestamp_ms",
+  }),
   // Consent only saves the submitted draft if no newer settings save won.
   syncSettingsVersion: integer("sync_settings_version").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" })
@@ -1072,6 +1084,53 @@ export const atprotoConnections = sqliteTable("atproto_connections", {
     .notNull(),
 });
 export type DatabaseAtprotoConnection = typeof atprotoConnections.$inferSelect;
+
+/** Retain absent records as tombstones so neither side resurrects an unsubscribe. */
+export const atprotoSubscriptionMirror = sqliteTable(
+  "atproto_subscription_mirror",
+  {
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => atprotoConnections.id, { onDelete: "cascade" }),
+    publicationUri: text("publication_uri").notNull(),
+    recordUri: text("record_uri").notNull(),
+    recordCid: text("record_cid"),
+    // No Feed FK: a deleted Feed must remain observable until sync processes it.
+    feedId: integer("feed_id"),
+    provenance: text("provenance").$type<"serial" | "imported">().notNull(),
+    visibility: text("visibility")
+      .$type<"public" | "private">()
+      .notNull()
+      .default("public"),
+    remotePresent: integer("remote_present", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    importGeneration: integer("import_generation").notNull().default(0),
+    exportGeneration: integer("export_generation").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.connectionId,
+        table.publicationUri,
+        table.recordUri,
+        table.visibility,
+      ],
+    }),
+    index("atproto_subscription_mirror_publication_idx").on(
+      table.connectionId,
+      table.publicationUri,
+    ),
+  ],
+);
+export type DatabaseSubscriptionMirror =
+  typeof atprotoSubscriptionMirror.$inferSelect;
 
 // === App Config (app-wide settings) ===
 

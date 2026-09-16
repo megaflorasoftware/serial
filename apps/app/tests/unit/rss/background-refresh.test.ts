@@ -300,3 +300,57 @@ describe("runBackgroundFeedRefresh", () => {
     expect(refreshFeedPage).not.toHaveBeenCalled();
   });
 });
+
+it("syncs an enabled connection with no due Feeds, then refreshes its new imports", async () => {
+  const { atprotoConnections } = await import("~/server/db/schema");
+  const { emptyPublicationSyncCounts } =
+    await import("~/lib/auth/publication-sync");
+  const now = new Date();
+  await testDatabase.database.insert(user).values({
+    id: "sync-only",
+    name: "Sync",
+    email: "sync@example.com",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await testDatabase.database.insert(atprotoConnections).values({
+    userId: "sync-only",
+    did: "did:plc:abcdefghijklmnopqrstuvwx",
+    session: "test",
+    importSubscriptions: true,
+  });
+  const claimUser = vi.fn(() =>
+    Promise.resolve({
+      eligible: true as const,
+      nextRefreshAt: new Date(now.getTime() + 60_000),
+    }),
+  );
+  const refreshFeedPage = vi.fn(() => Promise.resolve(EMPTY_REFRESH_STATS));
+  const syncSubscriptions = vi.fn(async () => {
+    expect(claimUser).toHaveBeenCalledTimes(1);
+    await seedFeedsWithRssOrigins(testDatabase.database, [
+      {
+        userId: "sync-only",
+        name: "Imported",
+        url: "https://example.com/rss",
+        platform: "website",
+        openLocation: "serial",
+        isActive: true,
+      },
+    ]);
+    return { ...emptyPublicationSyncCounts(), status: "completed" as const };
+  });
+  await runBackgroundFeedRefresh({
+    db: testDatabase.database,
+    now,
+    billingEnabled: false,
+    claimUser,
+    refreshFeedPage,
+    syncSubscriptions,
+    publish: () => Promise.resolve(),
+  });
+  expect(syncSubscriptions).toHaveBeenCalledTimes(1);
+  expect(refreshFeedPage).toHaveBeenCalledTimes(1);
+  expect(refreshFeedPage.mock.calls[0]).toBeDefined();
+});
