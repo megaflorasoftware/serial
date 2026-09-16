@@ -110,6 +110,7 @@ export function ResponsiveDropdown({
 }
 
 interface ControlledResponsiveDialogProps {
+  previewDrawer?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
@@ -124,6 +125,7 @@ interface ControlledResponsiveDialogProps {
   onOpenAutoFocus?: (event: Event) => void;
 }
 export function ControlledResponsiveDialog({
+  previewDrawer = false,
   open,
   onOpenChange,
   children,
@@ -140,7 +142,7 @@ export function ControlledResponsiveDialog({
   const isDesktop = useMediaQuery("(min-width: 640px)");
   const drawerRef = React.useRef<HTMLDivElement>(null);
 
-  if (isDesktop) {
+  if (isDesktop && !previewDrawer) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
@@ -206,6 +208,7 @@ export function ControlledResponsiveDialog({
 
   return (
     <Drawer
+      shouldScaleBackground={!previewDrawer}
       open={open}
       onOpenChange={onOpenChange}
       onRelease={(_event, staysOpen) => {
@@ -228,7 +231,15 @@ export function ControlledResponsiveDialog({
         });
       }}
     >
-      <DrawerContent ref={drawerRef} className="max-h-[calc(100dvh-6rem)]">
+      <DrawerContent
+        ref={drawerRef}
+        overlayClassName={previewDrawer ? "bg-transparent" : undefined}
+        className={cn(
+          "max-h-[calc(100dvh-6rem)]",
+          previewDrawer && "mx-auto w-full max-w-3xl pb-14",
+        )}
+        onOpenAutoFocus={onOpenAutoFocus}
+      >
         <DrawerHeader className="shrink-0 text-left">
           {onBack && (
             <button

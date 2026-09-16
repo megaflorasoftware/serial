@@ -9,6 +9,9 @@ import {
 } from "../fixtures/ports";
 import type { Page } from "@playwright/test";
 
+// Network stubs must intercept requests before a service worker handles them.
+test.use({ serviceWorkers: "block" });
+
 let email = "";
 async function start(page: Page, step = "introduction") {
   const fixture = await seedArticleData(
@@ -151,7 +154,26 @@ for (const mobile of [false, true]) {
       await expect(name).toHaveValue("My reading");
       await expect(name).toBeInViewport();
     }
-    await guide(page).getByRole("button", { name: "Next" }).click();
+    // A dimmed control blurs the name without activating that control.
+    await name.fill("");
+    await page.mouse.click(
+      page.viewportSize()!.width - 8,
+      page.viewportSize()!.height / 2,
+    );
+    await expect(name).not.toBeFocused();
+    await expect(guide(page)).toContainText("Give your View a name");
+    await expect(
+      page.getByRole("tab", { name: "Content", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await name.fill("My reading");
+    await page.mouse.click(
+      page.viewportSize()!.width - 8,
+      page.viewportSize()!.height / 2,
+    );
+    await expect(guide(page)).toContainText("Click +");
+    await expect(
+      page.getByRole("tab", { name: "Content", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
     await page.getByRole("button", { name: "Add feeds", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(page.getByPlaceholder("Search feeds...")).toHaveCount(0);
@@ -182,6 +204,10 @@ for (const mobile of [false, true]) {
     await expect
       .poll(async () => (await savedProgress())?.onboarding_step)
       .toBe("2026-09-16-atmosphere-sync-setup");
+    await expect(guide(page)).toContainText("Use these chips");
+    await expect(page.locator('[data-onboarding="view-chips"]')).toContainText(
+      "My reading",
+    );
     await guide(page).getByRole("button", { name: "Next" }).click();
     await expect(
       page.getByRole("heading", { name: "Ready to explore" }),
@@ -189,6 +215,65 @@ for (const mobile of [false, true]) {
     await expect
       .poll(async () => (await savedProgress())?.onboarding_complete)
       .toBe(1);
+  });
+}
+
+for (const mobile of [false, true]) {
+  test(`default colors and manual Feed menu entry ${mobile ? "mobile" : "desktop"}`, async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+    );
+    await start(page, "choose-colors");
+    await page.getByRole("button", { name: "Amber", exact: true }).click();
+    await page.getByRole("button", { name: "Default", exact: true }).click();
+    const themeSave = page.waitForRequest("**/api/rpc/userConfig/setThemePair");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    expect((await themeSave).postDataJSON().json).toEqual({
+      light: [60, 10, 100],
+      dark: [60, 10, 15],
+    });
+    await expect(
+      page.getByRole("textbox", { name: "Feed website" }),
+    ).toHaveValue("www.serial.tube");
+    await page.reload();
+    await expect(
+      page.getByRole("textbox", { name: "Feed website" }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        return ["light", "dark"].map((mode) =>
+          ["hue", "sat", "lgt"].map((part) =>
+            parseFloat(style.getPropertyValue(`--${mode}-${part}`)),
+          ),
+        );
+      }),
+    ).toEqual([
+      [60, 10, 100],
+      [60, 10, 15],
+    ]);
+    await page.getByRole("button", { name: "Copy website address" }).click();
+    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      "www.serial.tube",
+    );
+    await page
+      .locator(
+        mobile
+          ? '[data-onboarding="open-feed-menu"]'
+          : '[data-onboarding="open-menu"]',
+      )
+      .click();
+    await expect(guide(page)).toContainText("Add a Feed to bring");
+    await page
+      .locator('[data-onboarding="add-feed"]')
+      .filter({ visible: true })
+      .click();
+    await expect(guide(page)).toContainText("Paste www.serial.tube");
   });
 }
 
@@ -280,6 +365,6 @@ test("a pending theme save cannot reopen onboarding after confirmed skip", async
     .poll(async () => (await savedProgress())?.onboarding_complete)
     .toBe(1);
   await expect(
-    page.getByRole("button", { name: "Copy www.serial.tube" }),
+    page.getByRole("button", { name: "Copy website address" }),
   ).toHaveCount(0);
 });

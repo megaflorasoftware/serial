@@ -21,6 +21,7 @@ import {
 import { orpc, orpcRouterClient } from "~/lib/orpc";
 import { ControlledResponsiveDialog } from "~/components/ui/responsive-dropdown";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import {
@@ -34,6 +35,10 @@ const INSTRUCTIONS: Record<
   OnboardingInstruction,
   { selector: string; text: string; next?: boolean }
 > = {
+  "open-feed-menu": {
+    selector: '[data-onboarding="open-menu"]',
+    text: "Open the menu to find Add Feed.",
+  },
   "add-feed": {
     selector: '[data-onboarding="add-feed"]',
     text: "Add a Feed to bring its new posts into Serial.",
@@ -47,7 +52,7 @@ const INSTRUCTIONS: Record<
     text: "Save your Feed to finish adding it.",
   },
   "feed-added": {
-    selector: "[data-onboarding-feed]",
+    selector: '[data-onboarding="feed-content"]',
     text: "Your Feed is ready. New posts will appear here.",
     next: true,
   },
@@ -81,23 +86,37 @@ const INSTRUCTIONS: Record<
     selector: '[data-onboarding="save-view"]',
     text: "Save your View when you are ready.",
   },
-  "view-added": {
-    selector: '[data-onboarding="open-menu"]',
-    text: "Your View is ready. You can find it in the menu.",
+  "view-chips": {
+    selector: '[data-onboarding="view-chips"]',
+    text: "Use these chips to choose which View appears here. Switch Views anytime.",
     next: true,
   },
 };
 
-const PRESETS = [
-  { name: "Rose", hue: 350, saturation: 35 },
-  { name: "Amber", hue: 35, saturation: 45 },
-  { name: "Olive", hue: 70, saturation: 30 },
-  { name: "Forest", hue: 145, saturation: 30 },
-  { name: "Teal", hue: 185, saturation: 35 },
-  { name: "Blue", hue: 220, saturation: 40 },
-  { name: "Violet", hue: 275, saturation: 35 },
-  { name: "Slate", hue: 220, saturation: 8 },
+const PRESETS: Array<{
+  name: string;
+  light: [number, number, number];
+  dark: [number, number, number];
+}> = [
+  { name: "Default", light: [60, 10, 100], dark: [60, 10, 15] },
+  ...[
+    { name: "Amber", hue: 35, saturation: 45 },
+    { name: "Olive", hue: 70, saturation: 30 },
+    { name: "Forest", hue: 145, saturation: 30 },
+    { name: "Teal", hue: 185, saturation: 35 },
+    { name: "Blue", hue: 220, saturation: 40 },
+    { name: "Violet", hue: 275, saturation: 35 },
+    { name: "Slate", hue: 220, saturation: 8 },
+  ].map(({ name, hue, saturation }) => ({
+    name,
+    light: [hue, saturation, 96] as [number, number, number],
+    dark: [hue, saturation, 12] as [number, number, number],
+  })),
 ];
+
+function themeColor([hue, saturation, lightness]: [number, number, number]) {
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
+}
 
 function ThemePicker() {
   const run = useOnboarding((state) => state.run);
@@ -114,18 +133,16 @@ function ThemePicker() {
   function choose(index: number) {
     setSelected(index);
     const choice = PRESETS[index]!;
-    for (const mode of ["light", "dark"]) {
-      document.documentElement.style.setProperty(
-        `--${mode}-hue`,
-        `${choice.hue}`,
-      );
+    for (const mode of ["light", "dark"] as const) {
+      const [hue, saturation, lightness] = choice[mode];
+      document.documentElement.style.setProperty(`--${mode}-hue`, `${hue}`);
       document.documentElement.style.setProperty(
         `--${mode}-sat`,
-        `${choice.saturation}%`,
+        `${saturation}%`,
       );
       document.documentElement.style.setProperty(
         `--${mode}-lgt`,
-        mode === "light" ? "96%" : "12%",
+        `${lightness}%`,
       );
     }
   }
@@ -147,10 +164,10 @@ function ThemePicker() {
             className="focus-visible:ring-ring grid gap-2 rounded-md p-1 text-xs focus-visible:ring-2"
           >
             <span
-              className="block aspect-square rounded-md border aria-selected:ring-2"
+              className="block h-12 rounded-md border aria-selected:ring-2"
               aria-selected={index === selected}
               style={{
-                background: `linear-gradient(135deg, hsl(${choice.hue} ${choice.saturation}% 96%) 50%, hsl(${choice.hue} ${choice.saturation}% 12%) 50%)`,
+                background: `linear-gradient(135deg, ${themeColor(choice.light)} 50%, ${themeColor(choice.dark)} 50%)`,
                 outline:
                   index === selected ? "2px solid currentColor" : undefined,
                 outlineOffset: 3,
@@ -165,8 +182,8 @@ function ThemePicker() {
         onClick={() => {
           choose(selected);
           save.mutate({
-            light: [preset.hue, preset.saturation, 96],
-            dark: [preset.hue, preset.saturation, 12],
+            light: preset.light,
+            dark: preset.dark,
           });
         }}
       >
@@ -258,6 +275,11 @@ function AccountOnboarding({ userId }: { userId: string }) {
     userId,
   ]);
   useEffect(() => {
+    if (
+      state.instruction === "open-feed-menu" &&
+      (sidebar.isMobile ? sidebar.openRightMobile : sidebar.open)
+    )
+      guideOnboarding("add-feed");
     if (state.instruction === "add-feed" && dialog === "add-feed")
       guideOnboarding("find-feed");
     if (state.instruction === "add-view" && dialog === "add-view") {
@@ -270,7 +292,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
     )
       guideOnboarding("add-view");
     if (state.instruction === "feed-added" && sidebar.isMobile)
-      sidebar.setOpenRightMobile(true);
+      sidebar.setOpenRightMobile(false);
   }, [state.instruction, dialog, sidebar]);
   useEffect(() => {
     if (state.step !== "atmosphere-sync-setup" || !state.consentResult) return;
@@ -301,7 +323,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
       case "explore-display":
         guideOnboarding("save-view");
         break;
-      case "view-added":
+      case "view-chips":
         useOnboarding.setState({ instruction: null });
         break;
     }
@@ -321,6 +343,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
   return (
     <>
       <ControlledResponsiveDialog
+        previewDrawer={state.step === "choose-colors"}
         open={!instruction}
         onOpenChange={(open) => {
           if (!open) close();
@@ -354,20 +377,32 @@ function AccountOnboarding({ userId }: { userId: string }) {
                 Let&apos;s follow Serial Releases. Copy the website address,
                 then paste it into Add Feed.
               </p>
-              <Button
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText("www.serial.tube");
-                    guideOnboarding("add-feed");
-                    if (sidebar.isMobile) sidebar.setOpenRightMobile(true);
-                  } catch {
-                    toast.error("Couldn't copy the address. Please try again.");
-                  }
-                }}
-              >
-                <CopyIcon size={16} />
-                <span className="pl-1.5">Copy www.serial.tube</span>
-              </Button>
+              <div className="flex gap-2">
+                <Input
+                  aria-label="Feed website"
+                  value="www.serial.tube"
+                  readOnly
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="Copy website address"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText("www.serial.tube");
+                      guideOnboarding("open-feed-menu");
+                    } catch {
+                      toast.error(
+                        "Couldn't copy the address. Please try again.",
+                      );
+                    }
+                  }}
+                >
+                  <CopyIcon size={16} />
+                </Button>
+              </div>
             </>
           )}
           {state.step === "atmosphere-sync-setup" && <SyncSlide />}
@@ -412,14 +447,14 @@ function AccountOnboarding({ userId }: { userId: string }) {
         <Guidance
           instructionKey={state.instruction ?? state.step}
           selector={
-            state.instruction === "feed-added" && state.feedId
-              ? `[data-onboarding-feed="${state.feedId}"]`
+            state.instruction === "open-feed-menu" && sidebar.isMobile
+              ? '[data-onboarding="open-feed-menu"]'
               : instruction?.selector
           }
           next={instruction?.next}
           explanation={
             state.instruction === "feed-added" ||
-            state.instruction === "view-added"
+            state.instruction === "view-chips"
           }
           onNext={nextInstruction}
           onSkip={requestOnboardingSkip}

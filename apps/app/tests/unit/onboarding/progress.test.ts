@@ -86,7 +86,7 @@ describe("onboarding progress", () => {
     viewSavedDuringOnboarding();
     expect(useOnboarding.getState()).toMatchObject({
       step: "atmosphere-sync-setup",
-      instruction: "view-added",
+      instruction: "view-chips",
     });
   });
   it("pauses blur advancement during skip confirmation and advances a helper exactly once", () => {

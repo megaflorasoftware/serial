@@ -203,7 +203,7 @@ export function Guidance({
 
   useLayoutEffect(() => {
     const node = layer.current;
-    if (!node) return;
+    if (!node?.isConnected) return;
     node.showPopover();
     if (helper.current) {
       setHelperHeight(helper.current.offsetHeight);
@@ -226,7 +226,7 @@ export function Guidance({
       if (!selector && !confirming) return;
       event.preventDefault();
       // Let Vaul track a drag from the current drawer's handle or background,
-      // but prevent default focus changes from advancing an input on blur.
+      // but defer blur until a click so a dismiss swipe preserves the draft.
       if (
         event.type === "pointerdown" &&
         !confirming &&
@@ -243,6 +243,12 @@ export function Guidance({
           ?.textContent?.trim() === "Close"
       )
         callbacks.current.onSkip();
+      else if (
+        event.type === "click" &&
+        !confirming &&
+        document.activeElement instanceof HTMLElement
+      )
+        document.activeElement.blur();
     };
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -336,7 +342,7 @@ export function Guidance({
           className="pointer-events-none fixed inset-0 h-full w-full"
         >
           <path
-            fill="rgb(0 0 0 / 0.65)"
+            fill="rgb(0 0 0 / 0.35)"
             fillRule="evenodd"
             d={`M0 0H${innerWidth}V${innerHeight}H0Z M${x} ${y}H${x + width}V${y + height}H${x}Z`}
           />

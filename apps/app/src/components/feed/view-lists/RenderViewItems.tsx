@@ -3,7 +3,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { CheckIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState, FeedEmptyState } from "./EmptyStates";
+import { EmptyState } from "./EmptyStates";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
 import {
@@ -375,16 +375,6 @@ export function RenderViewItems() {
 
   if (!hasInitialData) {
     return <FeedLoading />;
-  }
-
-  if (
-    paginationState.isLoaded &&
-    hasFetchedFeeds &&
-    !feeds.length &&
-    filteredFeedItemsOrder.length === 0 &&
-    Object.keys(bookmarksStore.getState().snapshot()).length === 0
-  ) {
-    return <FeedEmptyState />;
   }
 
   // Show skeletons while feed items are being fetched

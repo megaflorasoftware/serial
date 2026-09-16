@@ -7,6 +7,7 @@ import {
 import type { OnboardingProgress, OnboardingStep } from "./progress";
 
 export type OnboardingInstruction =
+  | "open-feed-menu"
   | "add-feed"
   | "find-feed"
   | "save-feed"
@@ -18,7 +19,7 @@ export type OnboardingInstruction =
   | "open-display"
   | "explore-display"
   | "save-view"
-  | "view-added";
+  | "view-chips";
 
 type State = {
   run: number;
@@ -111,7 +112,7 @@ export function feedSavedDuringOnboarding() {
 }
 export function viewSavedDuringOnboarding() {
   if (useOnboarding.getState().instruction === "save-view")
-    advanceOnboarding("atmosphere-sync-setup", "view-added");
+    advanceOnboarding("atmosphere-sync-setup", "view-chips");
 }
 
 export function stopOnboarding() {
