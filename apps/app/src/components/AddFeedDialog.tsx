@@ -42,6 +42,7 @@ import {
   useCreateFeedMutation,
   useDeleteFeedMutation,
   useEditFeedMutation,
+  useIsFeedRevalidating,
   useRevalidateFeedMutation,
   useSetFeedActiveMutation,
 } from "~/lib/data/feeds/mutations";
@@ -775,8 +776,8 @@ export function EditFeedDialog({
     onClose,
   });
 
-  const { mutate: revalidateFeed, isPending: isRevalidating } =
-    useRevalidateFeedMutation();
+  const { mutate: revalidateFeed } = useRevalidateFeedMutation();
+  const isRevalidating = useIsFeedRevalidating(selectedFeedId);
   const isFormDisabled = !name || isRevalidating;
 
   return (

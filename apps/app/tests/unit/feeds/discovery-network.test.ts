@@ -51,6 +51,12 @@ function response(url: string, text: string, ok = true) {
     headers: new Headers(),
   };
 }
+function statusResponse(url: string, status: number) {
+  return {
+    ...response(url, "", status >= 200 && status < 300),
+    status,
+  };
+}
 describe("publication website discovery", () => {
   it.each(["link", "well-known"])(
     "discovers a subpath publication from the origin root through %s",
@@ -145,6 +151,90 @@ it("fails revalidation when the website cannot be read", async () => {
     discoverFeedOriginsForRevalidation("https://example.com/"),
   ).rejects.toThrow("Unable to read");
 });
+it.each([
+  ["network", 0],
+  ["rate limit", 429],
+  ["server", 503],
+] as const)(
+  "fails revalidation when well-known publication discovery has a %s failure",
+  async (failure, status) => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+      if (url.includes("/.well-known/")) {
+        if (failure === "network") throw new Error("well-known unavailable");
+        return statusResponse(url, status);
+      }
+      return response(url, "<html></html>");
+    });
+    await expect(
+      discoverFeedOriginsForRevalidation("https://example.com/"),
+    ).rejects.toThrow(
+      failure === "network" ? "well-known unavailable" : String(status),
+    );
+  },
+);
+it("allows an absent well-known publication during revalidation", async () => {
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    url.includes("/.well-known/")
+      ? statusResponse(url, 404)
+      : response(url, "<html></html>"),
+  );
+  expect(
+    await discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).toEqual([]);
+});
+it("fails when feedscout catches a failed advertised RSS request", async () => {
+  const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+    "feedscout",
+  );
+  vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+  vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+    if (url === "https://example.com/feed.xml")
+      throw new Error("advertised RSS unavailable");
+    if (url.includes("/.well-known/")) return statusResponse(url, 404);
+    return response(
+      url,
+      '<link rel="alternate" type="application/rss+xml" href="/feed.xml">',
+    );
+  });
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("advertised RSS unavailable");
+});
+it("fails when an advertised RSS request is rate limited", async () => {
+  const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+    "feedscout",
+  );
+  vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+  vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+    if (url === "https://example.com/feed.xml") return statusResponse(url, 429);
+    if (url.includes("/.well-known/")) return statusResponse(url, 404);
+    return response(
+      url,
+      '<link rel="alternate" type="application/rss+xml" href="/feed.xml">',
+    );
+  });
+  await expect(
+    discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).rejects.toThrow("429");
+});
+it("ignores failed speculative RSS guesses", async () => {
+  vi.mocked(scoutFeeds).mockResolvedValueOnce([
+    {
+      url: "https://example.com/feed.xml",
+      isValid: false,
+      method: "guess",
+      error: new Error("guess unavailable"),
+    },
+  ]);
+  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+    url.includes("/.well-known/")
+      ? statusResponse(url, 404)
+      : response(url, "<html></html>"),
+  );
+  expect(
+    await discoverFeedOriginsForRevalidation("https://example.com/"),
+  ).toEqual([]);
+});
 it("succeeds with no candidates when the website has no source links", async () => {
   vi.mocked(readFeedHttp).mockImplementation(async (url) =>
     response(url, "<html></html>"),
@@ -168,6 +258,7 @@ it("caps discovery transport reads and publication candidates", async () => {
     ),
   );
   vi.mocked(scoutFeeds).mockImplementationOnce(async (_url, options) => {
+    await Promise.resolve();
     await Promise.allSettled(
       Array.from({ length: 100 }, (_, i) =>
         options!.fetchFn!(`https://www.example.com/candidate-${i}`, {}),

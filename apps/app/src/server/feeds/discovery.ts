@@ -70,6 +70,7 @@ async function discoverYouTubeFeeds(url: string, read: typeof readFeedHttp) {
 async function discoverFeedsWithoutLimits(
   url: string,
   read: typeof readFeedHttp,
+  strict = false,
 ): Promise<DiscoveredFeed[]> {
   const [youtubeResult, feedscoutResult] = await Promise.allSettled([
     discoverYouTubeFeeds(url, read),
@@ -77,11 +78,19 @@ async function discoverFeedsWithoutLimits(
       methods: ["platform", "html", "headers", "guess"],
       concurrency: 2,
       maxUris: 8,
+      includeInvalid: strict,
       fetchFn: async (targetUrl, options) => {
         const response = await read(targetUrl, {
           headers: options?.headers,
           method: options?.method,
         });
+        if (
+          strict &&
+          !response.ok &&
+          response.status !== 404 &&
+          response.status !== 410
+        )
+          throw new Error(`Feed discovery request failed: ${response.status}`);
         return {
           headers: response.headers,
           body: response.text,
@@ -104,10 +113,19 @@ async function discoverFeedsWithoutLimits(
   }
 
   if (feedscoutResult.status === "fulfilled") {
+    if (strict) {
+      const failedAdvertisedSource = feedscoutResult.value.find(
+        (feed) =>
+          !feed.isValid && feed.method !== "guess" && feed.error !== undefined,
+      );
+      if (failedAdvertisedSource && !failedAdvertisedSource.isValid)
+        throw failedAdvertisedSource.error;
+    }
     discoveredFeeds.push(
       ...feedscoutResult.value.filter((feed) => feed.isValid),
     );
   } else {
+    if (strict) throw feedscoutResult.reason;
     captureException(feedscoutResult.reason, {
       context: "feed-discovery-feedscout",
       url,
@@ -159,16 +177,12 @@ async function websitePublications(
   if (page?.status === "fulfilled" && page.value.ok) {
     const finalTarget = new URL(page.value.url);
     if (finalTarget.origin !== target.origin) {
-      responses.push(
-        ...(await Promise.allSettled([
-          read(
-            new URL(
-              STANDARD_SITE_WELL_KNOWN_PATH,
-              finalTarget.origin,
-            ).toString(),
-          ),
-        ])),
-      );
+      const [redirectedWellKnown] = await Promise.allSettled([
+        read(
+          new URL(STANDARD_SITE_WELL_KNOWN_PATH, finalTarget.origin).toString(),
+        ),
+      ]);
+      if (redirectedWellKnown) responses.push(redirectedWellKnown);
     }
     target = finalTarget;
   }
@@ -197,9 +211,19 @@ async function websitePublications(
     document.window.close();
   }
   for (const wellKnown of responses.slice(1)) {
+    if (strict && wellKnown.status === "rejected") throw wellKnown.reason;
     if (wellKnown.status === "fulfilled" && wellKnown.value.ok) {
       const uri = wellKnown.value.text.trim();
       if (uri.length <= 1024 && uri.startsWith("at://")) uris.add(uri);
+    } else if (
+      strict &&
+      wellKnown.status === "fulfilled" &&
+      wellKnown.value.status !== 404 &&
+      wellKnown.value.status !== 410
+    ) {
+      throw new Error(
+        `Publication discovery request failed: ${wellKnown.value.status}`,
+      );
     }
   }
   const rows: DiscoveredFeed[] = [];
@@ -236,7 +260,7 @@ async function discoverWebsite(
   strict = false,
 ) {
   const [feeds, publications] = await Promise.all([
-    discoverFeedsWithoutLimits(url, read),
+    discoverFeedsWithoutLimits(url, read, strict),
     websitePublications(url, read, signal, strict),
   ]);
   const candidates = new Map<string, SyndicationCandidate>();
