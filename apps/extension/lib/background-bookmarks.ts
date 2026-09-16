@@ -1,4 +1,4 @@
-import { parseDiscoveredFeeds } from "@serial/feed-discovery";
+import { parseDiscoveredFeeds } from "@serial/feed-discovery/validation";
 import {
   EXTENSION_FEED_ADD_REQUEST_TIMEOUT_MS,
   parseExtensionBookmark,

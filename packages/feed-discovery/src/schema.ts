@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { discoveredFeedSchema as contract } from "./index";
+import { discoveredFeedSchema as contract } from "./validation";
 
 /** Adapt the shared extension-safe contract for the server's Zod 4 inputs. */
 export const discoveredFeedSchema = z.unknown().transform((input, context) => {

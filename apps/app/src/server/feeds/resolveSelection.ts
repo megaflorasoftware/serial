@@ -1,4 +1,4 @@
-import { discoveredFeedSchema } from "@serial/feed-discovery";
+import { discoveredFeedSchema } from "@serial/feed-discovery/validation";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import { discoverFeeds } from "./discovery";
 import { resolvePublication } from "./publications";

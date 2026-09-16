@@ -8,7 +8,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./validation": "./src/validation.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

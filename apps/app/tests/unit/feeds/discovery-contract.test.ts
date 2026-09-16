@@ -1,9 +1,9 @@
+import { parseDiscoveredFeeds } from "@serial/feed-discovery/validation";
 import { describe, expect, it } from "vitest";
 import {
   classifyDiscoveryInput,
   collapseSyndicationAlternates,
   combinePublicationRows,
-  parseDiscoveredFeeds,
 } from "@serial/feed-discovery";
 import type {
   DiscoveredFeed,
