@@ -5,8 +5,8 @@ import {
   CircleSmall,
   Edit2Icon,
   MinusIcon,
-  PauseIcon,
   OrbitIcon,
+  PauseIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";

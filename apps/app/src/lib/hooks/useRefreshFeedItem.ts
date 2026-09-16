@@ -9,12 +9,14 @@ export function useRefreshFeedItem(id: string | undefined) {
   const [refreshState, setRefreshState] = useState<{
     id: string;
     complete: boolean;
+    succeeded: boolean;
   }>();
 
   useEffect(() => {
     if (!id) return;
 
     let canceled = false;
+    let succeeded = false;
 
     void orpcRouterClient.feedItem
       .getById({ id })
@@ -31,12 +33,13 @@ export function useRefreshFeedItem(id: string | undefined) {
           .getState()
           .setFeedItem(id, mergeFeedItem(currentItem, item));
         retainLoadedFeedItemBody(id);
+        succeeded = true;
       })
       .catch((error) => {
         console.error("Error refreshing feed item:", error);
       })
       .finally(() => {
-        if (!canceled) setRefreshState({ id, complete: true });
+        if (!canceled) setRefreshState({ id, complete: true, succeeded });
       });
 
     return () => {
@@ -44,5 +47,8 @@ export function useRefreshFeedItem(id: string | undefined) {
     };
   }, [id]);
 
-  return refreshState ? refreshState.id === id && refreshState.complete : false;
+  return {
+    complete: refreshState?.id === id && !!refreshState?.complete,
+    succeeded: refreshState?.id === id && !!refreshState?.succeeded,
+  };
 }

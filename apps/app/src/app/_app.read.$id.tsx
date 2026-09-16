@@ -1,8 +1,6 @@
 "use client";
 
 import { httpUrl } from "@serial/feed-discovery";
-import { getFeedWebsiteUrl } from "~/lib/feeds/origins";
-import { getOriginActionLabel } from "~/lib/content/capabilities";
 
 import clsx from "clsx";
 
@@ -15,6 +13,8 @@ import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 import { useZoom } from "../components/feed/watch/[id]/useZoom";
 import { ContentActions } from "../components/feed/watch/[id]/ContentActions";
+import { getOriginActionLabel } from "~/lib/content/capabilities";
+import { getFeedWebsiteUrl } from "~/lib/feeds/origins";
 import { useFeeds } from "~/lib/data/feeds";
 import { barsHiddenAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
@@ -71,9 +71,7 @@ function ReadPage() {
   const params = Route.useParams();
   const bookmark = useBookmarkValue(params.id);
   const feedItem = useFeedItemValue(params.id);
-  const hasRefreshedFeedItem = useRefreshFeedItem(
-    bookmark ? undefined : params.id,
-  );
+  const feedItemRefresh = useRefreshFeedItem(bookmark ? undefined : params.id);
   const resolution = resolveContentItem({ bookmark, feedItem });
   if (resolution.status === "ambiguous") {
     return <p className="p-6 text-center">This content ID is ambiguous.</p>;
@@ -89,7 +87,11 @@ function ReadPage() {
     return <BookmarkReader id={params.id} />;
   }
   return (
-    <FeedReader id={params.id} hasRefreshedFeedItem={hasRefreshedFeedItem} />
+    <FeedReader
+      id={params.id}
+      hasRefreshedFeedItem={feedItemRefresh.complete}
+      hasLoadedFeedItem={feedItemRefresh.succeeded}
+    />
   );
 }
 
@@ -118,9 +120,11 @@ function useReaderBars() {
 function FeedReader({
   id,
   hasRefreshedFeedItem,
+  hasLoadedFeedItem,
 }: {
   id: string;
   hasRefreshedFeedItem: boolean;
+  hasLoadedFeedItem: boolean;
 }) {
   const canMutate = useCanMutate();
   useRetentionPin("feed-item", id);
@@ -178,7 +182,7 @@ function FeedReader({
     { feed, feedItem, canMutate },
   );
 
-  if (hasRefreshedFeedItem && feedItem && !content.trim()) {
+  if (hasLoadedFeedItem && feedItem && !content.trim()) {
     const originalUrl =
       httpUrl(feedItem.url) ?? (feed && getFeedWebsiteUrl(feed));
     if (originalUrl) {
