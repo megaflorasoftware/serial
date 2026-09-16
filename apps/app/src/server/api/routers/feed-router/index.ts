@@ -3,26 +3,20 @@ import { DISCOVERY_QUERY_LIMIT } from "@serial/feed-discovery";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  insertFeedWithCategories,
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
 } from "./utils";
 import { revalidateFeed } from "~/server/feeds/revalidate";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { deleteUserFeeds } from "~/server/feeds/delete";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
-import {
-  findFeedByRssUrl,
-  insertFeedWithOrigins,
-  loadUserFeedsWithOrigins,
-  withOrigins,
-} from "~/server/feeds/origins";
+import { loadUserFeedsWithOrigins, withOrigins } from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 import { prepareArrayChunks } from "~/lib/iterators";
 import { dbSemaphore } from "~/lib/semaphore";
 import {
-  contentCategories,
   feedCategories,
   feeds,
   feedsSchema,
@@ -30,7 +24,8 @@ import {
   viewFeeds,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
-import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
+import { prepareRssFeedImport } from "~/server/feeds/imports";
+import { runDatabaseWrite } from "~/server/db/retry-write";
 import {
   canActivateFeed,
   getFeedsActivationBudget,
@@ -103,121 +98,51 @@ export const createFromSubscriptionImport = protectedProcedure
     }
 
     // Check activation budget upfront and pre-calculate which feeds should be active
-    const { remainingSlots } = await getFeedsActivationBudget(
+    const { maxActiveFeeds } = await getFeedsActivationBudget(
       context.db,
       context.user.id,
     );
 
-    // Pre-calculate which feeds should be active BEFORE any parallel processing
-    const feedsWithActivation = input.feeds.map((feed, index) => ({
-      ...feed,
-      shouldBeActive: index < remainingSlots,
-    }));
-
     // Process feeds in small batches to avoid overwhelming the database
     const BATCH_SIZE = 4;
-    const feedChunks = prepareArrayChunks(feedsWithActivation, BATCH_SIZE);
+    const feedChunks = prepareArrayChunks(input.feeds, BATCH_SIZE);
     const allResults: BulkImportFromFileResult[] = [];
     const userId = context.user.id;
 
     for (const chunk of feedChunks) {
       const promiseResults = await Promise.allSettled(
         chunk.map(async (feed) => {
-          return await dbSemaphore.run(() =>
-            context.db.transaction(async (tx) => {
-              const newFeedDetails = await fetchNewFeedDetails(feed.feedUrl);
-              const newFeed = newFeedDetails[0];
-              const newFeedUrl = newFeed ? getFeedRssUrl(newFeed) : "";
-
-              if (!newFeed || !newFeedUrl) {
-                return {
-                  feedUrl: feed.feedUrl,
-                  success: false as const,
-                  error: "Unsupported feed URL",
-                };
-              }
-
-              const existingFeed = await findFeedByRssUrl(tx, {
-                feedUrl: newFeedUrl,
-                userId,
-              });
-
-              if (existingFeed) {
-                return {
-                  feedUrl: newFeedUrl,
-                  success: false as const,
-                  error: "Feed already exists",
-                };
-              }
-
-              const newFeedRow = await insertFeedWithOrigins(tx, {
-                userId,
-                details: newFeed,
-                isActive: feed.shouldBeActive,
-              });
-
-              const matchingCategories = await tx
-                .select()
-                .from(contentCategories)
-                .where(
-                  and(
-                    inArray(contentCategories.name, feed.categories),
-                    eq(contentCategories.userId, userId),
-                  ),
-                )
-                .all();
-              const matchingCategoryNames = matchingCategories.map(
-                (category) => category.name,
-              );
-              const matchingCategoryNameSet = new Set(matchingCategoryNames);
-
-              const nonMatchingCategories = feed.categories.filter(
-                (category) => !matchingCategoryNameSet.has(category),
-              );
-
-              const matchingCategoryPromises = matchingCategories.map(
-                async (matchingCategory) => {
-                  const categoryId = matchingCategory.id;
-
-                  return await tx.insert(feedCategories).values({
-                    feedId: newFeedRow.id,
-                    categoryId: categoryId,
-                  });
-                },
-              );
-
-              const nonMatchingCategoryPromises = nonMatchingCategories.map(
-                async (nonMatchingCategory) => {
-                  const newContentCategoryList = await tx
-                    .insert(contentCategories)
-                    .values({
-                      name: nonMatchingCategory,
-                      userId,
-                    })
-                    .returning();
-                  const newContentCategory = newContentCategoryList[0];
-
-                  if (!newContentCategory?.id) return;
-
-                  await tx.insert(feedCategories).values({
-                    feedId: newFeedRow.id,
-                    categoryId: newContentCategory.id,
-                  });
-                },
-              );
-
-              await Promise.allSettled([
-                ...matchingCategoryPromises,
-                ...nonMatchingCategoryPromises,
-              ]);
-
-              return {
-                feedUrl: newFeedUrl,
-                feedId: newFeedRow.id,
-                success: true as const,
-              };
-            }),
+          const prepared = await prepareRssFeedImport(
+            context.db,
+            userId,
+            feed.feedUrl,
           );
+          const result = await dbSemaphore.run(() =>
+            runDatabaseWrite(context.db, () =>
+              context.db.transaction(
+                (tx) =>
+                  insertFeedWithCategories(
+                    tx,
+                    userId,
+                    feed,
+                    prepared,
+                    maxActiveFeeds,
+                  ),
+                { behavior: "immediate" },
+              ),
+            ),
+          );
+          return result.success
+            ? {
+                feedUrl: feed.feedUrl,
+                feedId: result.feedId,
+                success: true as const,
+              }
+            : {
+                feedUrl: feed.feedUrl,
+                success: false as const,
+                error: result.error,
+              };
         }),
       );
 

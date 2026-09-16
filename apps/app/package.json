@@ -73,7 +73,8 @@
     "benchmark:ingest": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-ingest-benchmark.ts",
     "benchmark:client:browser": "SERIAL_RUN_CLIENT_PERFORMANCE=1 pnpm test:e2e:self-hosted client-performance-audit.spec.ts",
     "benchmark:publication-sync": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-publication-sync-benchmark.ts",
-    "benchmark:feed-revalidation": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-feed-revalidation-benchmark.ts"
+    "benchmark:feed-revalidation": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-feed-revalidation-benchmark.ts",
+    "benchmark:feed-import": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-feed-import-benchmark.ts"
   },
   "dependencies": {
     "@atproto-labs/fetch-node": "^0.3.7",

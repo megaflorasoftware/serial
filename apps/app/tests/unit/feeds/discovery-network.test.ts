@@ -1,9 +1,12 @@
 import { discoverFeeds as scoutFeeds } from "feedscout";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  discoverFeedOriginsForImport,
   discoverFeedOriginsForRevalidation,
   discoverFeeds,
 } from "~/server/feeds/discovery";
+import { captureLimiter } from "~/server/bookmarks/limits";
+import { FeedImportDeferredError } from "~/server/feeds/importErrors";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import {
   resolvePublication,
@@ -273,4 +276,60 @@ it("caps discovery transport reads and publication candidates", async () => {
     expect(options?.maxBodyBytes).toBe(1024 * 1024);
     expect(options?.totalDurationMs).toBeLessThanOrEqual(5000);
   }
+});
+
+describe("import discovery completeness", () => {
+  it("allows completed empty discovery when optional endpoints do not exist", async () => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+      response(url, "<html></html>", !url.includes("/.well-known/")),
+    );
+    expect(
+      await discoverFeedOriginsForImport(
+        "complete-empty",
+        "https://example.com",
+      ),
+    ).toEqual([]);
+  });
+  it("does not convert a blocked or unavailable site into empty discovery", async () => {
+    vi.mocked(readFeedHttp).mockRejectedValue(new Error("Network timed out"));
+    await expect(
+      discoverFeedOriginsForImport("offline", "https://example.com"),
+    ).rejects.toBeInstanceOf(FeedImportDeferredError);
+  });
+  it("propagates a discovery denial with a retry time", async () => {
+    const acquire = vi
+      .spyOn(captureLimiter, "acquire")
+      .mockReturnValueOnce({ ok: false, reason: "rate_limited" });
+    await expect(
+      discoverFeedOriginsForImport("limited", "https://example.com"),
+    ).rejects.toMatchObject({ retryAt: expect.any(Date) });
+    acquire.mockRestore();
+    expect(readFeedHttp).not.toHaveBeenCalled();
+  });
+  it("does not treat failure of the publication identity endpoint as absence", async () => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+      url.includes("/.well-known/")
+        ? { ...response(url, "", false), status: 503 }
+        : response(url, "<html></html>"),
+    );
+    await expect(
+      discoverFeedOriginsForImport("incomplete-hint", "https://example.com"),
+    ).rejects.toBeInstanceOf(FeedImportDeferredError);
+  });
+  it("honors Retry-After when a server asks discovery to wait", async () => {
+    vi.mocked(readFeedHttp).mockResolvedValue({
+      ...response("https://example.com", "", false),
+      status: 429,
+      headers: new Headers({ "retry-after": "900" }),
+    });
+    const before = Date.now();
+    try {
+      await discoverFeedOriginsForImport("retry-after", "https://example.com");
+      expect.unreachable();
+    } catch (error) {
+      expect(
+        (error as FeedImportDeferredError).retryAt.getTime(),
+      ).toBeGreaterThanOrEqual(before + 900_000);
+    }
+  });
 });

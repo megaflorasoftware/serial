@@ -5,12 +5,18 @@ import {
   resolveFeedSelection,
   resolvePublicationFeed,
 } from "~/server/feeds/resolveSelection";
-import { discoverFeeds } from "~/server/feeds/discovery";
+import {
+  discoverFeedOriginsForImport,
+  discoverFeeds,
+} from "~/server/feeds/discovery";
 import { resolvePublication } from "~/server/feeds/publications";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { newRssFeedDetails } from "~/server/rss/types";
 
-vi.mock("~/server/feeds/discovery", () => ({ discoverFeeds: vi.fn() }));
+vi.mock("~/server/feeds/discovery", () => ({
+  discoverFeeds: vi.fn(),
+  discoverFeedOriginsForImport: vi.fn(),
+}));
 vi.mock("~/server/feeds/publications", async (original) => ({
   ...(await original<typeof Publications>()),
   resolvePublication: vi.fn(),
@@ -40,6 +46,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(resolvePublication).mockResolvedValue(publication);
   vi.mocked(discoverFeeds).mockResolvedValue([]);
+  vi.mocked(discoverFeedOriginsForImport).mockResolvedValue([]);
 });
 
 describe("resolving a selected publication", () => {
@@ -147,8 +154,40 @@ it("resolves a subscription URI once before discovering the publication's RSS or
     expect.objectContaining({ kind: "atproto", locator: publicationUri }),
   ]);
   expect(resolvePublication).toHaveBeenCalledExactlyOnceWith(publicationUri);
-  expect(discoverFeeds).toHaveBeenCalledExactlyOnceWith(
+  expect(discoverFeedOriginsForImport).toHaveBeenCalledExactlyOnceWith(
     "user",
     publication.siteUrl,
+  );
+});
+
+it("combines a known imported publication with RSS without requiring a website publication backlink", async () => {
+  const rssUrl = "https://example.com/rss";
+  vi.mocked(discoverFeedOriginsForImport).mockResolvedValue([
+    {
+      url: rssUrl,
+      siteUrl: publication.siteUrl,
+      origins: [{ kind: "rss", locator: rssUrl }],
+    },
+  ]);
+  vi.mocked(fetchNewFeedDetails).mockResolvedValue([
+    newRssFeedDetails({
+      name: "RSS",
+      platform: "website",
+      siteUrl: publication.siteUrl,
+      url: rssUrl,
+    }),
+  ]);
+  const [details] = await resolvePublicationFeed("user", publicationUri);
+  expect(details?.origins.map((origin) => origin.kind)).toEqual([
+    "rss",
+    "atproto",
+  ]);
+});
+it("leaves an import unresolved when discovery cannot finish", async () => {
+  vi.mocked(discoverFeedOriginsForImport).mockRejectedValue(
+    new Error("Discovery throttled"),
+  );
+  await expect(resolvePublicationFeed("user", publicationUri)).rejects.toThrow(
+    "Discovery throttled",
   );
 });
