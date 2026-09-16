@@ -1105,6 +1105,9 @@ export const atprotoSubscriptionMirror = sqliteTable(
     remotePresent: integer("remote_present", { mode: "boolean" })
       .notNull()
       .default(true),
+    importState: text("import_state").$type<"pending" | "skipped">(),
+    importRetryAt: integer("import_retry_at", { mode: "timestamp" }),
+    importFailures: integer("import_failures").notNull().default(0),
     importGeneration: integer("import_generation").notNull().default(0),
     exportGeneration: integer("export_generation").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })

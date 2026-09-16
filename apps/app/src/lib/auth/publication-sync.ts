@@ -4,6 +4,7 @@ export type PublicationSyncCounts = {
   inactive: number;
   removed: number;
   failed: number;
+  skipped: number;
   deferred: number;
 };
 export type PublicationSyncResult = PublicationSyncCounts & {
@@ -20,5 +21,6 @@ export const emptyPublicationSyncCounts = (): PublicationSyncCounts => ({
   inactive: 0,
   removed: 0,
   failed: 0,
+  skipped: 0,
   deferred: 0,
 });

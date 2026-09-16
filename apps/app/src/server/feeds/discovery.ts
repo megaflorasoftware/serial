@@ -13,6 +13,7 @@ import {
   STANDARD_SITE_LINK_REL,
   STANDARD_SITE_WELL_KNOWN_PATH,
 } from "@serial/standard-site";
+import { FeedImportDeferredError } from "./importErrors";
 import {
   publicationRow,
   resolvePublication,
@@ -116,10 +117,16 @@ async function discoverFeedsWithoutLimits(
     if (strict) {
       const failedAdvertisedSource = feedscoutResult.value.find(
         (feed) =>
-          !feed.isValid && feed.method !== "guess" && feed.error !== undefined,
+          !feed.isValid &&
+          (feed.method === "html" ||
+            feed.method === "headers" ||
+            (feed.method !== "guess" && feed.error !== undefined)),
       );
       if (failedAdvertisedSource && !failedAdvertisedSource.isValid)
-        throw failedAdvertisedSource.error;
+        throw (
+          failedAdvertisedSource.error ??
+          new Error("Unable to read the advertised Feed")
+        );
     }
     discoveredFeeds.push(
       ...feedscoutResult.value.filter((feed) => feed.isValid),
@@ -270,7 +277,10 @@ async function discoverWebsite(
     async (row) => {
       try {
         const response = await read(row.url);
-        if (!response.ok) return null;
+        if (!response.ok) {
+          if (strict) throw new Error("Unable to read the RSS Feed");
+          return null;
+        }
         const parsed = parseSyndicationFeed(response.text, row.url);
         return {
           row: {
@@ -283,7 +293,8 @@ async function discoverWebsite(
           hasFullBody: parsed.hasFullBody,
           itemUrls: parsed.items.slice(0, 20).map((item) => item.url),
         };
-      } catch {
+      } catch (error) {
+        if (strict) throw error;
         return { row, hasFullBody: false, itemUrls: [] };
       }
     },
@@ -374,4 +385,71 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
   const response = await read(url, undefined);
   if (!response.ok) throw new Error("Unable to read the Feed website");
   return discoverWebsite(url, read, signal, true);
+}
+
+/** Imports require completed discovery; an unavailable source is never evidence of absence. */
+export async function discoverFeedOriginsForImport(
+  userId: string,
+  url: string,
+) {
+  const lease = captureLimiter.acquire(userId, "discovery");
+  if (!lease.ok) {
+    throw new FeedImportDeferredError(
+      undefined,
+      new Date(
+        Date.now() + (lease.reason === "rate_limited" ? 600_000 : 60_000),
+      ),
+    );
+  }
+  try {
+    const request = requestReader();
+    let incomplete: FeedImportDeferredError | undefined;
+    const read: typeof readFeedHttp = async (target, options) => {
+      try {
+        const response = await request(target, options);
+        // Missing guessed endpoints are normal. Other HTTP failures leave discovery incomplete.
+        if (
+          !response.ok &&
+          response.status !== 404 &&
+          response.status !== 410
+        ) {
+          const retryAfter = response.headers.get("retry-after");
+          const seconds = retryAfter === null ? NaN : Number(retryAfter);
+          const retryAt = Number.isFinite(seconds)
+            ? Date.now() + Math.max(0, seconds) * 1000
+            : Date.parse(retryAfter ?? "");
+          incomplete = new FeedImportDeferredError(
+            undefined,
+            new Date(
+              Math.max(
+                Date.now() + 60_000,
+                Number.isFinite(retryAt) ? retryAt : 0,
+                incomplete?.retryAt.getTime() ?? 0,
+              ),
+            ),
+          );
+        }
+        return response;
+      } catch (error) {
+        incomplete ??= new FeedImportDeferredError();
+        throw error;
+      }
+    };
+    const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
+    const page = await read(url);
+    if (!page.ok) throw incomplete ?? new FeedImportDeferredError();
+    const rows = await discoverWebsite(url, read, signal, true).catch(
+      (error: unknown) => {
+        throw incomplete ?? error;
+      },
+    );
+    if (incomplete || signal.aborted)
+      throw incomplete ?? new FeedImportDeferredError();
+    return rows;
+  } catch (error) {
+    if (error instanceof FeedImportDeferredError) throw error;
+    throw new FeedImportDeferredError();
+  } finally {
+    lease.release();
+  }
 }

@@ -8,6 +8,7 @@ export function planPublicationSync(input: {
   importEnabled: boolean;
   exportEnabled: boolean;
   importBaseline: boolean;
+  retryImport?: boolean;
   exportBaseline: boolean;
 }): "import" | "export" | "remove-local" | "remove-remote" | "observe" {
   const localRemoved =
@@ -32,7 +33,10 @@ export function planPublicationSync(input: {
     input.remotePresent &&
     input.localFeedId === null &&
     input.importEnabled &&
-    (input.importBaseline || !input.known || !input.previousRemotePresent)
+    (input.retryImport ||
+      input.importBaseline ||
+      !input.known ||
+      !input.previousRemotePresent)
   )
     return "import";
   if (

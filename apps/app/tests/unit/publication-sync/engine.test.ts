@@ -12,6 +12,10 @@ import {
   feeds,
   user,
 } from "~/server/db/schema";
+import {
+  FeedImportDeferredError,
+  FeedImportSkippedError,
+} from "~/server/feeds/importErrors";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { persistAtprotoSyncSettings } from "~/server/auth/atproto/sync-settings";
 
@@ -225,9 +229,12 @@ describe("publication subscription sync", () => {
     expect(await run()).toMatchObject({
       status: "partial",
       imported: 1,
-      failed: 1,
+      deferred: 1,
     });
     resolveFeed.mockImplementation(async (_user, uri) => details(uri));
+    await fixture.database
+      .update(atprotoSubscriptionMirror)
+      .set({ importRetryAt: new Date(0) });
     expect(await run()).toMatchObject({ status: "completed", imported: 1 });
     expect(await fixture.database.select().from(feeds)).toHaveLength(2);
   });
@@ -313,7 +320,7 @@ it("does not replay a successful baseline when another publication retries", asy
   await run();
   records = [record("bad")];
   rev++;
-  expect(await run()).toMatchObject({ removed: 1, failed: 1 });
+  expect(await run()).toMatchObject({ removed: 1, deferred: 1 });
   expect(await fixture.database.select().from(feeds)).toHaveLength(0);
 });
 it("keeps a direction's deletion history when only the inactive preference changes", async () => {
@@ -335,5 +342,129 @@ it("aborts imported writes if the connection is unlinked during discovery", asyn
     return details(uri);
   });
   expect(await run()).toMatchObject({ imported: 0, failed: 1 });
+  expect(await fixture.database.select().from(feeds)).toHaveLength(0);
+});
+
+it("persists throttled imports, honors backoff, and retries with an unchanged PDS revision", async () => {
+  records = [record("limited"), record("good")];
+  await method("import");
+  resolveFeed.mockImplementation(async (_user, uri) => {
+    if (uri === publication("limited"))
+      throw new FeedImportDeferredError(
+        undefined,
+        new Date(Date.now() + 600_000),
+      );
+    return details(uri);
+  });
+  expect(await run()).toMatchObject({
+    imported: 1,
+    deferred: 1,
+    failed: 0,
+    status: "partial",
+  });
+  const rows = await fixture.database.select().from(atprotoSubscriptionMirror);
+  expect(
+    rows.find((row) => row.publicationUri === publication("limited")),
+  ).toMatchObject({ feedId: null, importState: "pending", importFailures: 1 });
+  resolveFeed
+    .mockClear()
+    .mockImplementation(async (_user, uri) => details(uri));
+  expect(await run()).toMatchObject({ imported: 0, deferred: 1 });
+  expect(resolveFeed).not.toHaveBeenCalled();
+  expect(store.list).toHaveBeenCalledTimes(1);
+  await fixture.database
+    .update(atprotoSubscriptionMirror)
+    .set({ importRetryAt: new Date(0) });
+  expect(await run()).toMatchObject({
+    imported: 1,
+    deferred: 0,
+    status: "completed",
+  });
+  expect(resolveFeed).toHaveBeenCalledExactlyOnceWith(
+    "owner",
+    publication("limited"),
+  );
+  expect(store.list).toHaveBeenCalledTimes(1);
+  expect(
+    (await fixture.database.select().from(atprotoSubscriptionMirror)).every(
+      (row) => row.importState === null,
+    ),
+  ).toBe(true);
+});
+it("reports ambiguous imports once without automatically retrying or exporting them", async () => {
+  records = [record("ambiguous")];
+  await method("bidirectional");
+  resolveFeed.mockRejectedValue(new FeedImportSkippedError());
+  expect(await run()).toMatchObject({
+    skipped: 1,
+    imported: 0,
+    failed: 0,
+    deferred: 0,
+    status: "partial",
+  });
+  expect(await fixture.database.select().from(feeds)).toHaveLength(0);
+  expect(await run()).toMatchObject({
+    skipped: 1,
+    imported: 0,
+    exported: 0,
+    status: "partial",
+  });
+  expect(resolveFeed).toHaveBeenCalledTimes(1);
+  expect(store.create).not.toHaveBeenCalled();
+  expect(store.remove).not.toHaveBeenCalled();
+  records = [{ ...records[0]!, cid: "updated-cid" }];
+  rev++;
+  expect(await run()).toMatchObject({ skipped: 1, status: "partial" });
+  expect(
+    await fixture.database.select().from(atprotoSubscriptionMirror),
+  ).toMatchObject([{ importState: "skipped", recordCid: "updated-cid" }]);
+  expect(await run()).toMatchObject({ skipped: 1, status: "partial" });
+  expect(resolveFeed).toHaveBeenCalledTimes(1);
+});
+it("drops a pending import when its upstream subscription disappears", async () => {
+  records = [record("pending")];
+  await method("import");
+  resolveFeed.mockRejectedValue(new FeedImportDeferredError());
+  await run();
+  records = [];
+  rev++;
+  expect(await run()).toMatchObject({ imported: 0, deferred: 0 });
+  expect(resolveFeed).toHaveBeenCalledTimes(1);
+  expect(
+    await fixture.database.select().from(atprotoSubscriptionMirror),
+  ).toMatchObject([{ importState: null, remotePresent: false }]);
+});
+it("tombstones a removed duplicate while the remaining import is in backoff", async () => {
+  records = [record("pending", "first"), record("pending", "second")];
+  await method("import");
+  resolveFeed.mockRejectedValue(new FeedImportDeferredError());
+  await run();
+  records = records.slice(1);
+  rev++;
+  await run();
+  expect(resolveFeed).toHaveBeenCalledTimes(1);
+  const rows = await fixture.database.select().from(atprotoSubscriptionMirror);
+  expect(rows.find((row) => row.recordUri.endsWith("/first"))).toMatchObject({
+    remotePresent: false,
+    importState: null,
+  });
+  expect(rows.find((row) => row.recordUri.endsWith("/second"))).toMatchObject({
+    remotePresent: true,
+    importState: "pending",
+    importFailures: 1,
+  });
+});
+it("retains normal upstream-deletion semantics after a deferred import succeeds", async () => {
+  records = [record("pending")];
+  await method("bidirectional");
+  resolveFeed.mockRejectedValueOnce(new FeedImportDeferredError());
+  await run();
+  await fixture.database
+    .update(atprotoSubscriptionMirror)
+    .set({ importRetryAt: new Date(0) });
+  expect(await run()).toMatchObject({ imported: 1 });
+  records = [];
+  rev++;
+  expect(await run()).toMatchObject({ removed: 1, exported: 0 });
   expect(await fixture.database.select().from(feeds)).toHaveLength(0);
 });

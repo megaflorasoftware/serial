@@ -1,7 +1,7 @@
 import { discoveredFeedSchema } from "@serial/feed-discovery/validation";
 import { combinePublicationRows } from "@serial/feed-discovery";
 import { normalizePublicationUrl } from "@serial/standard-site";
-import { discoverFeeds } from "./discovery";
+import { discoverFeedOriginsForImport, discoverFeeds } from "./discovery";
 import {
   publicationOrigin,
   publicationRow,
@@ -74,18 +74,29 @@ export async function resolvePublicationFeed(
 ) {
   const publication = await resolvePublication(publicationUri);
   if (!publication) throw new Error("Unable to read the selected publication");
-  return resolveSelectedFeed(userId, publicationRow(publication), publication);
+  return resolveSelectedFeed(
+    userId,
+    publicationRow(publication),
+    publication,
+    true,
+  );
 }
 
 async function resolveSelectedFeed(
   userId: string,
   selected: DiscoveredFeed,
   publication: Awaited<ReturnType<typeof resolvePublication>>,
+  importing = false,
 ) {
   let rss = selected.origins?.find((origin) => origin.kind === "rss");
   let publicationDiscovery: DiscoveredFeed[] | undefined;
   if (publication && !rss) {
-    publicationDiscovery = await discoverFeeds(userId, publication.siteUrl);
+    publicationDiscovery = importing
+      ? combinePublicationRows(
+          await discoverFeedOriginsForImport(userId, publication.siteUrl),
+          [publicationRow(publication)],
+        )
+      : await discoverFeeds(userId, publication.siteUrl);
     const matching = publicationDiscovery.find((row) =>
       row.origins?.some(
         (origin) =>

@@ -27,7 +27,7 @@ export function publicationSyncMessage(result: PublicationSyncResult) {
   if (result.status === "busy")
     return "Publication sync is already running. Try again when it finishes.";
   if (result.status === "skipped") return "Publication sync is turned off.";
-  return `Subscriptions synced: ${result.imported} imported, ${result.exported} exported, ${result.inactive} added inactive, ${result.removed} removed${result.failed ? `, ${result.failed} failed` : ""}${result.deferred ? `, ${result.deferred} pending the next sync` : ""}.`;
+  return `Subscriptions synced: ${result.imported} imported, ${result.exported} exported, ${result.inactive} added inactive, ${result.removed} removed${result.skipped ? `, ${result.skipped} skipped` : ""}${result.failed ? `, ${result.failed} failed` : ""}${result.deferred ? `, ${result.deferred} pending the next sync` : ""}.`;
 }
 /** One operation per browser, shared by Save and consent return. */
 export function requestPublicationSync(): Promise<void> {

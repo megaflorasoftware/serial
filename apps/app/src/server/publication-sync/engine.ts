@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { planPublicationSync } from "./plan";
+import { saveSubscriptionObservation } from "./observation";
 import {
   createPublicSubscriptionStore,
   MAX_SUBSCRIPTION_RECORDS,
@@ -17,18 +18,22 @@ import type {
 } from "./record-store";
 import type { db as Database } from "~/server/db";
 import type { DatabaseSubscriptionMirror } from "~/server/db/schema";
-import type { NewFeedDetails } from "~/server/rss/types";
 import type {
   PublicationSyncProgress,
   PublicationSyncResult,
 } from "~/lib/auth/publication-sync";
+import type { PreparedFeedImport } from "~/server/feeds/imports";
 import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
 import {
   atprotoConnections,
   feedOrigins,
   atprotoSubscriptionMirror as mirror,
 } from "~/server/db/schema";
-import { createOrReuseFeed } from "~/server/feeds/origins";
+import { commitFeedImport, prepareFeedImport } from "~/server/feeds/imports";
+import {
+  FeedImportDeferredError,
+  FeedImportSkippedError,
+} from "~/server/feeds/importErrors";
 import { deleteUserFeeds } from "~/server/feeds/delete";
 import {
   getActiveFeedCount,
@@ -100,6 +105,7 @@ export async function syncPublicationSubscriptions(input: {
   let changedFeeds = false;
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
+  let observedCompleteSnapshot = true;
   let lastProgressAt = 0;
   const progress = async (completed: number, total: number) => {
     if (completed > 0 && completed < total && Date.now() - lastProgressAt < 100)
@@ -194,7 +200,8 @@ export async function syncPublicationSubscriptions(input: {
     const deadline = Date.now() + 60_000;
     for (const [index, publicationUri] of publications.entries()) {
       if (Date.now() > deadline) {
-        counts.deferred = publications.length - index;
+        counts.deferred += publications.length - index;
+        observedCompleteSnapshot = false;
         break;
       }
       cursor = publicationUri;
@@ -206,7 +213,61 @@ export async function syncPublicationSubscriptions(input: {
       const old = previousByPublication.get(publicationUri) ?? [];
       const previousFeedId = old[0]?.feedId ?? null;
       const localFeedId = localByPublication.get(publicationUri) ?? null;
+      const priorImport = old.find((row) => row.remotePresent) ?? old[0];
+      const pendingImport =
+        priorImport?.importState === "pending" &&
+        priorImport.importGeneration ===
+          connection.subscriptionImportGeneration &&
+        connection.importSubscriptions &&
+        localFeedId === null &&
+        records.length > 0;
+      const skippedImport =
+        priorImport?.importState === "skipped" &&
+        priorImport.importGeneration ===
+          connection.subscriptionImportGeneration &&
+        connection.importSubscriptions &&
+        localFeedId === null &&
+        records.length > 0;
+      if (skippedImport) counts.skipped++;
+      if (
+        pendingImport &&
+        priorImport?.importRetryAt &&
+        priorImport.importRetryAt > new Date()
+      ) {
+        if (
+          !observationUnchanged(
+            old,
+            records,
+            localFeedId,
+            connection.subscriptionImportGeneration,
+            connection.subscriptionExportGeneration,
+          )
+        ) {
+          await renewSubscriptionSync(database, connection);
+          await database.transaction(async (tx) => {
+            await assertSubscriptionSyncCurrent(tx, connection);
+            await saveSubscriptionObservation(tx, {
+              connection,
+              publicationUri,
+              visibility: store.visibility,
+              previous: old,
+              records,
+              feedId: null,
+              imported: true,
+              failure: {
+                state: "pending",
+                retryAt: priorImport.importRetryAt,
+                attempts: priorImport.importFailures,
+              },
+            });
+          });
+        }
+        counts.deferred++;
+        await progress(index + 1, publications.length);
+        continue;
+      }
       const action = planPublicationSync({
+        retryImport: pendingImport,
         localFeedId,
         previousFeedId,
         remotePresent: records.length > 0,
@@ -237,12 +298,13 @@ export async function syncPublicationSubscriptions(input: {
           continue;
         }
         await renewSubscriptionSync(database, connection);
-        let details: NewFeedDetails | undefined;
+        let prepared: PreparedFeedImport | undefined;
         let maxActiveFeeds = 0;
         if (action === "import") {
-          details = await (
+          const details = await (
             input.dependencies?.resolveFeed ?? resolveImportedFeed
           )(userId, publicationUri);
+          prepared = await prepareFeedImport(database, userId, details);
           const budget = await (
             input.dependencies?.activationBudget ?? getFeedsActivationBudget
           )(database, userId);
@@ -285,14 +347,14 @@ export async function syncPublicationSubscriptions(input: {
           let imported = 0,
             inactive = 0,
             removed = 0;
-          if (details) {
+          if (prepared) {
             const activeCount = await getActiveFeedCount(tx, userId);
-            const created = await createOrReuseFeed(tx, {
+            const created = await commitFeedImport(
+              tx,
               userId,
-              details,
-              isActive:
-                !connection.importAsInactive && activeCount < maxActiveFeeds,
-            });
+              prepared,
+              !connection.importAsInactive && activeCount < maxActiveFeeds,
+            );
             feedId = created.feed.id;
             imported = Number(created.created || created.attached);
             inactive = Number(created.created && !created.feed.isActive);
@@ -301,46 +363,22 @@ export async function syncPublicationSubscriptions(input: {
             removed = (await deleteUserFeeds(tx, userId, [feedId])).length;
             feedId = null;
           }
-          // A tombstone keeps the last record URI even when all duplicates disappeared.
-          const byUri = new Map(records.map((record) => [record.uri, record]));
-          const uris = new Set([
-            ...old.map((row) => row.recordUri),
-            ...byUri.keys(),
-          ]);
-          for (const recordUri of uris) {
-            const record = byUri.get(recordUri);
-            const values = {
-              connectionId: connection.id,
-              publicationUri,
-              recordUri,
-              recordCid: record?.cid ?? null,
-              feedId,
-              provenance:
-                old[0]?.provenance ??
-                (action === "import"
-                  ? ("imported" as const)
-                  : ("serial" as const)),
-              visibility: store.visibility,
-              remotePresent: !!record,
-              importGeneration: connection.subscriptionImportGeneration,
-              exportGeneration: connection.subscriptionExportGeneration,
-              updatedAt: new Date(),
-            };
-            // Writes share one transaction and commit the publication observation together.
-            // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            await tx
-              .insert(mirror)
-              .values(values)
-              .onConflictDoUpdate({
-                target: [
-                  mirror.connectionId,
-                  mirror.publicationUri,
-                  mirror.recordUri,
-                  mirror.visibility,
-                ],
-                set: values,
-              });
-          }
+          await saveSubscriptionObservation(tx, {
+            connection,
+            publicationUri,
+            visibility: store.visibility,
+            previous: old,
+            records,
+            feedId,
+            imported: action === "import",
+            failure: skippedImport
+              ? {
+                  state: "skipped",
+                  retryAt: null,
+                  attempts: priorImport?.importFailures ?? 1,
+                }
+              : undefined,
+          });
           return { imported, inactive, removed };
         });
         counts.imported += result.imported;
@@ -349,12 +387,55 @@ export async function syncPublicationSubscriptions(input: {
         counts.exported += Number(action === "export");
         changedFeeds ||= result.imported > 0 || result.removed > 0;
       } catch (error) {
-        counts.failed++;
-        logError(
-          "[publication-sync] publication failed",
-          publicationUri,
-          error,
-        );
+        if (
+          action === "import" &&
+          !(error instanceof SubscriptionSyncChangedError)
+        ) {
+          const skipped = error instanceof FeedImportSkippedError;
+          const attempts = (priorImport?.importFailures ?? 0) + 1;
+          const backoff = Math.min(
+            600_000,
+            60_000 * 2 ** Math.min(attempts - 1, 4),
+          );
+          const retryAt = skipped
+            ? null
+            : new Date(
+                Math.max(
+                  Date.now() + backoff,
+                  error instanceof FeedImportDeferredError
+                    ? error.retryAt.getTime()
+                    : 0,
+                ),
+              );
+          await database.transaction(async (tx) => {
+            await assertSubscriptionSyncCurrent(tx, connection);
+            await saveSubscriptionObservation(tx, {
+              connection,
+              publicationUri,
+              visibility: store.visibility,
+              previous: old,
+              records,
+              feedId: null,
+              imported: true,
+              failure: {
+                state: skipped ? "skipped" : "pending",
+                retryAt,
+                attempts,
+              },
+            });
+          });
+          if (skipped) counts.skipped++;
+          else counts.deferred++;
+        } else counts.failed++;
+        if (
+          !(error instanceof FeedImportSkippedError) &&
+          !(error instanceof FeedImportDeferredError)
+        )
+          logError(
+            "[publication-sync] publication failed",
+            publicationUri,
+            error,
+          );
         if (error instanceof SubscriptionSyncChangedError) break;
       }
       await progress(index + 1, publications.length);
@@ -364,7 +445,9 @@ export async function syncPublicationSubscriptions(input: {
       .set({
         subscriptionSyncCursor: cursor,
         subscriptionRepoRev:
-          counts.failed || counts.deferred || wroteRecords ? null : rev,
+          counts.failed || !observedCompleteSnapshot || wroteRecords
+            ? null
+            : rev,
       })
       .where(syncClaimCondition(connection));
   } catch (error) {
@@ -390,7 +473,10 @@ export async function syncPublicationSubscriptions(input: {
   }
   return {
     ...counts,
-    status: counts.failed || counts.deferred ? "partial" : "completed",
+    status:
+      counts.failed || counts.deferred || counts.skipped
+        ? "partial"
+        : "completed",
   };
 }
 
@@ -407,6 +493,8 @@ function observationUnchanged(
     return false;
   return old.every(
     (row) =>
+      (row.importState !== "pending" ||
+        (feedId === null && row.remotePresent)) &&
       row.feedId === feedId &&
       row.importGeneration === importGeneration &&
       row.exportGeneration === exportGeneration &&

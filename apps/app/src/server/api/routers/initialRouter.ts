@@ -24,6 +24,8 @@ import {
   VIEW_LAYOUT_ITEM_TYPE,
 } from "~/server/db/constants";
 import { dbSemaphore } from "~/lib/semaphore";
+import { prepareRssFeedImport } from "~/server/feeds/imports";
+import { runDatabaseWrite } from "~/server/db/retry-write";
 import { workerPool } from "~/lib/workerPool";
 import {
   contentCategories,
@@ -394,18 +396,12 @@ export const streamingImport = protectedProcedure
     const feedsToInsert = feedsToImport.filter((feed) => !feed.ownedFeed);
 
     // Check activation budget upfront
-    const { remainingSlots, maxActiveFeeds } = await getFeedsActivationBudget(
+    const { maxActiveFeeds } = await getFeedsActivationBudget(
       context.db,
       context.user.id,
     );
-    const deactivatedCount = Math.max(0, feedsToInsert.length - remainingSlots);
-
-    const feedsWithActivation = feedsToInsert.map((feed, index) => ({
-      feedUrl: feed.feedUrl,
-      categories: feed.categories,
-      categoryPaths: feed.categoryPaths,
-      shouldBeActive: index < remainingSlots,
-    }));
+    let deactivatedCount = 0;
+    const feedsWithActivation = feedsToInsert;
 
     // Publish import start with total feeds count (must come before
     // import-limit-warning so the client's loading machine is initialized first)
@@ -413,15 +409,6 @@ export const streamingImport = protectedProcedure
       type: "import-start",
       totalFeeds: input.feeds.length,
     } satisfies ImportProgressChunk;
-
-    // Publish warning if some feeds will be inactive
-    if (deactivatedCount > 0) {
-      yield {
-        type: "import-limit-warning",
-        deactivatedCount,
-        maxActiveFeeds,
-      } satisfies ImportProgressChunk;
-    }
 
     const publishOrganizationInvalidation = () =>
       publisher.publish(channel, {
@@ -687,9 +674,6 @@ export const streamingImport = protectedProcedure
     async function insertFeed(
       feedInput: (typeof feedsWithActivation)[0],
     ): Promise<ImportProgressChunk[]> {
-      // Once the timeout fires the feed is reported as an error, so the
-      // abandoned insert must not register the feed for the fetch phase or
-      // emit a second terminal chunk.
       let timedOut = false;
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -730,11 +714,13 @@ export const streamingImport = protectedProcedure
           ];
         }
 
+        if (!insertResult.reused && !insertResult.feed.isActive)
+          deactivatedCount++;
         insertedFeeds.push({
           inputFeedUrl: feedInput.feedUrl,
           feedId: insertResult.feedId,
           feed: insertResult.feed,
-          categoryPaths: feedInput.categoryPaths,
+          categoryPaths: insertResult.reused ? [] : feedInput.categoryPaths,
         });
 
         return [
@@ -747,57 +733,77 @@ export const streamingImport = protectedProcedure
         ];
       };
 
-      const insertPromise = (async () => {
-        const insertResult = await dbSemaphore.run(() =>
-          context.db.transaction(async (tx) => {
-            const result = await insertFeedWithCategories(
-              tx,
-              context.user.id,
-              feedInput,
-              feedInput.shouldBeActive,
-            );
-
-            const linkableFeedId = result.success
-              ? result.feedId
-              : result.existingFeed?.id;
-            if (linkableFeedId) {
-              const { viewFeedRows, feedCategoryRows } = collectViewLinkRows(
-                feedInput.categoryPaths,
-                linkableFeedId,
-              );
-
-              await runInChunks(viewFeedRows, (rowChunk) =>
-                tx.insert(viewFeeds).values(rowChunk).onConflictDoNothing(),
-              );
-              await runInChunks(feedCategoryRows, (rowChunk) =>
-                tx
-                  .insert(feedCategories)
-                  .values(rowChunk)
-                  .onConflictDoNothing(),
-              );
-              // A duplicate resolved during insert skipped the tag block in
-              // insertFeedWithCategories; apply its exported tags here.
-              if (!result.success && feedInput.categories.length > 0) {
-                await applyFeedCategories(tx, context.user.id, [
-                  {
-                    feedId: linkableFeedId,
-                    categories: feedInput.categories,
-                  },
-                ]);
-              }
-            }
-
-            return result;
-          }),
-        );
-
-        // The timer flips `timedOut` while the insert is in flight, so the
-        // check only means something once the transaction has settled.
-        return timedOut ? [] : reportInsertResult(insertResult);
-      })();
-
       try {
-        return await Promise.race([insertPromise, timeoutPromise]);
+        const preparationPromise = prepareRssFeedImport(
+          context.db,
+          context.user.id,
+          feedInput.feedUrl,
+        );
+        const prepared = await Promise.race([
+          preparationPromise,
+          timeoutPromise,
+        ]);
+        const insertResult = await Promise.race([
+          dbSemaphore.run(() => {
+            if (timedOut) throw new Error("Import timed out");
+            // Once the write starts, report its real result. Returning a timeout
+            // while this transaction commits would leave the import state ahead
+            // of the progress stream.
+            clearTimeout(timeoutTimer);
+            return runDatabaseWrite(context.db, () =>
+              context.db.transaction(
+                async (tx) => {
+                  const result = await insertFeedWithCategories(
+                    tx,
+                    context.user.id,
+                    feedInput,
+                    prepared,
+                    maxActiveFeeds,
+                  );
+
+                  const linkableFeedId = result.success
+                    ? result.feedId
+                    : result.existingFeed?.id;
+                  if (linkableFeedId && !(result.success && result.reused)) {
+                    const { viewFeedRows, feedCategoryRows } =
+                      collectViewLinkRows(
+                        feedInput.categoryPaths,
+                        linkableFeedId,
+                      );
+
+                    await runInChunks(viewFeedRows, (rowChunk) =>
+                      tx
+                        .insert(viewFeeds)
+                        .values(rowChunk)
+                        .onConflictDoNothing(),
+                    );
+                    await runInChunks(feedCategoryRows, (rowChunk) =>
+                      tx
+                        .insert(feedCategories)
+                        .values(rowChunk)
+                        .onConflictDoNothing(),
+                    );
+                    // A duplicate resolved during insert skipped the tag block in
+                    // insertFeedWithCategories; apply its exported tags here.
+                    if (!result.success && feedInput.categories.length > 0) {
+                      await applyFeedCategories(tx, context.user.id, [
+                        {
+                          feedId: linkableFeedId,
+                          categories: feedInput.categories,
+                        },
+                      ]);
+                    }
+                  }
+
+                  return result;
+                },
+                { behavior: "immediate" },
+              ),
+            );
+          }),
+          timeoutPromise,
+        ]);
+        return reportInsertResult(insertResult);
       } catch (error) {
         captureException(error);
         return [
@@ -828,6 +834,14 @@ export const streamingImport = protectedProcedure
         lastMembershipPublishAt = Date.now();
         await publishOrganizationInvalidation();
       }
+    }
+
+    if (deactivatedCount > 0) {
+      yield {
+        type: "import-limit-warning",
+        deactivatedCount,
+        maxActiveFeeds,
+      } satisfies ImportProgressChunk;
     }
 
     // Nested folders become ordered view sections. Feed-type sections need

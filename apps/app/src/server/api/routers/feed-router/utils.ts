@@ -4,14 +4,11 @@ import type { ResultSet } from "@libsql/client";
 import type { SQLiteTransaction } from "drizzle-orm/sqlite-core";
 
 import type { ApplicationFeed } from "~/server/db/schema";
+import type { PreparedFeedImport } from "~/server/feeds/imports";
 import * as schema from "~/server/db/schema";
-import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
-import { getFeedRssUrl } from "~/lib/feeds/origins";
-import {
-  findFeedByRssUrl,
-  insertFeedWithOrigins,
-} from "~/server/feeds/origins";
+import { commitFeedImport } from "~/server/feeds/imports";
+import { getActiveFeedCount } from "~/server/subscriptions/helpers";
 
 type SerialSchema = typeof schema;
 
@@ -186,6 +183,7 @@ export type InsertFeedWithCategoriesSuccess = {
   success: true;
   feedId: number;
   feed: ApplicationFeed;
+  reused: boolean;
 };
 
 export type InsertFeedWithCategoriesError = {
@@ -206,51 +204,28 @@ export async function insertFeedWithCategories(
   db: Transaction,
   userId: string,
   feedInput: { feedUrl: string; categories: string[] },
-  isActive: boolean = true,
+  prepared: PreparedFeedImport,
+  maxActiveFeeds: number,
 ): Promise<InsertFeedWithCategoriesResult> {
-  const newFeedDetails = await fetchNewFeedDetails(feedInput.feedUrl);
-  const newFeed = newFeedDetails[0];
-  const newFeedUrl = newFeed ? getFeedRssUrl(newFeed) : "";
-
-  if (!newFeed || !newFeedUrl) {
-    return {
-      success: false,
-      error: "Unsupported feed URL",
-    };
-  }
-
-  const existingFeed = await findFeedByRssUrl(db, {
-    feedUrl: newFeedUrl,
+  const created = await commitFeedImport(
+    db,
     userId,
-  });
-
-  if (existingFeed) {
-    const [existingApplicationFeed] = parseArrayOfSchema(
-      [existingFeed],
-      schema.feedsSchema,
-    );
-    if (!existingApplicationFeed) {
-      return {
-        success: false,
-        error: "Couldn't read the existing feed",
-      };
-    }
+    prepared,
+    !prepared.target && (await getActiveFeedCount(db, userId)) < maxActiveFeeds,
+  );
+  const newFeedRow = created.feed;
+  if (!created.created && !created.attached) {
     return {
       success: false,
       error: "Feed already exists",
-      existingFeed: existingApplicationFeed,
+      existingFeed: schema.feedsSchema.parse(newFeedRow),
     };
   }
-
-  const newFeedRow = await insertFeedWithOrigins(db, {
-    userId,
-    details: newFeed,
-    isActive,
-  });
-
-  await applyFeedCategories(db, userId, [
-    { feedId: newFeedRow.id, categories: feedInput.categories },
-  ]);
+  if (created.created) {
+    await applyFeedCategories(db, userId, [
+      { feedId: newFeedRow.id, categories: feedInput.categories },
+    ]);
+  }
 
   // Parse the feed to ApplicationFeed format
   const [applicationFeed] = parseArrayOfSchema(
@@ -262,5 +237,6 @@ export async function insertFeedWithCategories(
     success: true,
     feedId: newFeedRow.id,
     feed: applicationFeed!,
+    reused: !created.created,
   };
 }
