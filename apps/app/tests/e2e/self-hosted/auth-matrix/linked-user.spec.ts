@@ -169,6 +169,8 @@ test.describe("atproto connection management", () => {
       page.getByText("You can keep using Serial or close the app."),
     ).toBeVisible();
     await page.keyboard.press("Escape");
+    // Reload from server state without racing the query cache's throttled persistence.
+    await clearQueryCache(page);
     await page.reload();
     await expect(
       page.getByText("You can keep using Serial or close the app."),
