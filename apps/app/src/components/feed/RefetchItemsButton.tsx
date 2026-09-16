@@ -36,44 +36,15 @@ function formatRelativeTime(targetMs: number, now: number): string {
   return `${diffHr}h`;
 }
 
-export function RefetchItemsButton() {
-  const location = useLocation();
-  const fetchNewData = useFetchNewData();
-  const loading = useLoadingMode();
+function useRefreshCooldown(active: boolean) {
   const nextRefreshAt = useNextRefreshAt();
-  const reconciliationStatus = useReconciliationDisplayStatus();
-
-  // Track current time in state so the cooldown check is pure during render.
-  // Only updated via the timeout callback (async) to satisfy the lint rule.
   const [now, setNow] = useState(() => Date.now());
-
-  const isMachineActive = useIsLoadingActive();
-  const isRateLimited = nextRefreshAt !== null && nextRefreshAt > now;
-
-  const isReconciling = reconciliationStatus !== "idle";
-  const isRefreshing = isMachineActive || reconciliationStatus === "syncing";
-  const isDisabled =
-    isRefreshing ||
-    reconciliationStatus === "retrying" ||
-    isRateLimited ||
-    loading.mode === "initialLoad" ||
-    loading.mode === "backgroundRefresh";
-
-  // Show check icon when the user is up to date (cooldown active),
-  // refresh icon when they can refresh again (cooldown expired/absent).
-  const showCheck = isRateLimited && !isMachineActive && !isReconciling;
-  const statusLabel =
-    reconciliationStatus === "syncing"
-      ? "Syncing"
-      : reconciliationStatus === "retrying"
-        ? "Retrying"
-        : "Refresh";
 
   // Tick `now` so the tooltip text updates live and the button re-enables
   // when the cooldown expires. Chained timeouts stop at expiry and use fewer
   // updates for longer cooldowns.
   useEffect(() => {
-    if (nextRefreshAt === null || location.pathname !== "/") return;
+    if (nextRefreshAt === null || !active) return;
 
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -97,7 +68,44 @@ export function RefetchItemsButton() {
     scheduleTick();
 
     return () => clearTimeout(timeout);
-  }, [location.pathname, nextRefreshAt]);
+  }, [active, nextRefreshAt]);
+
+  return {
+    isRateLimited: nextRefreshAt !== null && nextRefreshAt > now,
+    remainingTime:
+      nextRefreshAt === null ? null : formatRelativeTime(nextRefreshAt, now),
+  };
+}
+
+export function RefetchItemsButton() {
+  const location = useLocation();
+  const fetchNewData = useFetchNewData();
+  const loading = useLoadingMode();
+  const reconciliationStatus = useReconciliationDisplayStatus();
+
+  const isMachineActive = useIsLoadingActive();
+  const { isRateLimited, remainingTime } = useRefreshCooldown(
+    location.pathname === "/",
+  );
+
+  const isReconciling = reconciliationStatus !== "idle";
+  const isRefreshing = isMachineActive || reconciliationStatus === "syncing";
+  const isDisabled =
+    isRefreshing ||
+    reconciliationStatus === "retrying" ||
+    isRateLimited ||
+    loading.mode === "initialLoad" ||
+    loading.mode === "backgroundRefresh";
+
+  // Show check icon when the user is up to date (cooldown active),
+  // refresh icon when they can refresh again (cooldown expired/absent).
+  const showCheck = isRateLimited && !isMachineActive && !isReconciling;
+  const statusLabel =
+    reconciliationStatus === "syncing"
+      ? "Syncing"
+      : reconciliationStatus === "retrying"
+        ? "Retrying"
+        : "Refresh";
 
   const onClick = useCallback(async () => {
     if (isDisabled) return;
@@ -144,9 +152,7 @@ export function RefetchItemsButton() {
           ) : (
             <>
               Refresh available in{" "}
-              <span className="font-mono">
-                {formatRelativeTime(nextRefreshAt!, now)}
-              </span>
+              <span className="font-mono">{remainingTime}</span>
             </>
           )}
         </TooltipContent>

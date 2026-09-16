@@ -46,6 +46,7 @@ afterEach(() => {
   unmount();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function mount() {
@@ -93,5 +94,19 @@ describe("Refresh after rejected recovery", () => {
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(
       "Data may be stale. Refresh to try again.",
     );
+  });
+  it("allows recovery when the existing cooldown expires", async () => {
+    vi.useFakeTimers();
+    state.nextRefreshAt = Date.now() + 1_000;
+    const button = mount();
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(button.disabled).toBe(false);
+    await act(async () => {
+      button.click();
+    });
+    expect(state.refresh).toHaveBeenCalledTimes(1);
   });
 });
