@@ -306,24 +306,20 @@ it("syncs an enabled connection with no due Feeds, then refreshes its new import
   const { emptyPublicationSyncCounts } =
     await import("~/lib/auth/publication-sync");
   const now = new Date();
-  await testDatabase.database
-    .insert(user)
-    .values({
-      id: "sync-only",
-      name: "Sync",
-      email: "sync@example.com",
-      emailVerified: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-  await testDatabase.database
-    .insert(atprotoConnections)
-    .values({
-      userId: "sync-only",
-      did: "did:plc:abcdefghijklmnopqrstuvwx",
-      session: "test",
-      importSubscriptions: true,
-    });
+  await testDatabase.database.insert(user).values({
+    id: "sync-only",
+    name: "Sync",
+    email: "sync@example.com",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await testDatabase.database.insert(atprotoConnections).values({
+    userId: "sync-only",
+    did: "did:plc:abcdefghijklmnopqrstuvwx",
+    session: "test",
+    importSubscriptions: true,
+  });
   const claimUser = vi.fn(() =>
     Promise.resolve({
       eligible: true as const,
