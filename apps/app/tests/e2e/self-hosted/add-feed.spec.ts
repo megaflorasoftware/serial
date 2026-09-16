@@ -167,7 +167,7 @@ test.describe("add feed manually", () => {
       name: /Retry finding feeds/,
     });
     await expect(retryFeedDiscovery).toBeVisible();
-    await expect(retryFeedDiscovery).toContainText("No feeds found for URL.");
+    await expect(retryFeedDiscovery).toContainText("No feeds found.");
     await expect(dialog.getByRole("option").first()).toContainText(
       "Retry finding feeds",
     );
