@@ -1830,3 +1830,17 @@ export async function verifyUserCleanup(tursoPort: number, email: string) {
     );
   }
 }
+
+export async function prepareFeedRevalidation(tursoPort: number, feedItemId: string) {
+  const { db, client } = getDb(tursoPort);
+  try {
+    const item = await db.select().from(schema.feedItems).where(eq(schema.feedItems.id, feedItemId)).get();
+    if (!item) throw new Error("Article not found");
+    await db.update(schema.feedOrigins).set({
+      locator: `http://127.0.0.1:${SELF_HOSTED_RSS_SERVER_PORT}/feed/test-blog`,
+      sourceName: "Old Feed name",
+    }).where(eq(schema.feedOrigins.feedId, item.feedId));
+    await db.update(schema.feeds).set({ name: "Old Feed name" }).where(eq(schema.feeds.id, item.feedId));
+    return item.feedId;
+  } finally { client.close(); }
+}

@@ -1,5 +1,11 @@
 import { ToggleGroup } from "@radix-ui/react-toggle-group";
-import { CheckIcon, ExternalLinkIcon, LinkIcon, XIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ExternalLinkIcon,
+  LinkIcon,
+  RefreshCwIcon,
+  XIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "@tanstack/react-router";
@@ -37,6 +43,7 @@ import {
   useDeleteFeedMutation,
   useEditFeedMutation,
   useSetFeedActiveMutation,
+  useRevalidateFeedMutation,
 } from "~/lib/data/feeds/mutations";
 import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
 import { useShortcut } from "~/lib/hooks/useShortcut";
@@ -326,6 +333,7 @@ function useEditFeedForm(selectedFeedId: null | number) {
   const [selectedOpenLocation, setSelectedOpenLocation] =
     useState<FeedOpenLocation>("serial");
   const initializedFeedIdRef = useRef<number | null>(null);
+  const previousFeedNameRef = useRef<string>("");
 
   const { feeds } = useFeeds();
   const { feedCategories } = useFeedCategories();
@@ -336,10 +344,15 @@ function useEditFeedForm(selectedFeedId: null | number) {
       initializedFeedIdRef.current = null;
       return;
     }
-    if (initializedFeedIdRef.current === selectedFeedId) return;
-
     const feed = feeds.find((v) => v.id === selectedFeedId);
     if (!feed) return;
+    if (initializedFeedIdRef.current === selectedFeedId) {
+      const previousName = previousFeedNameRef.current;
+      setName((draft) => (draft === previousName ? feed.name : draft));
+      previousFeedNameRef.current = feed.name;
+      return;
+    }
+    previousFeedNameRef.current = feed.name;
 
     const _feedCategories = feedCategories
       .filter((category) => category.feedId === feed.id)
@@ -762,7 +775,9 @@ export function EditFeedDialog({
     onClose,
   });
 
-  const isFormDisabled = !name;
+  const { mutate: revalidateFeed, isPending: isRevalidating } =
+    useRevalidateFeedMutation();
+  const isFormDisabled = !name || isRevalidating;
 
   return (
     <ControlledResponsiveDialog
@@ -770,11 +785,41 @@ export function EditFeedDialog({
       onOpenChange={onClose}
       title="Edit Feed"
       headerRight={
-        <FeedActiveSwitch
-          canMutate={canMutate}
-          feed={feed}
-          selectedFeedId={selectedFeedId}
-        />
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                aria-label="Revalidate Feed"
+                aria-busy={isRevalidating}
+                disabled={
+                  !canMutate ||
+                  !feed ||
+                  isRevalidating ||
+                  actions.isUpdatingFeed ||
+                  actions.isDeletingFeed
+                }
+                onClick={() => {
+                  if (selectedFeedId !== null)
+                    revalidateFeed({ feedId: selectedFeedId });
+                }}
+              >
+                <RefreshCwIcon
+                  size={16}
+                  className={isRevalidating ? "animate-spin" : undefined}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Revalidate Feed</TooltipContent>
+          </Tooltip>
+          <FeedActiveSwitch
+            canMutate={canMutate}
+            feed={feed}
+            selectedFeedId={selectedFeedId}
+          />
+        </div>
       }
       footer={
         <EditFeedDialogFooter

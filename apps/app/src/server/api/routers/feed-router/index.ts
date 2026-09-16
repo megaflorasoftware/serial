@@ -1,3 +1,5 @@
+import { captureLimiter } from "~/server/bookmarks/limits";
+import { revalidateFeed } from "~/server/feeds/revalidate";
 import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
 import { DISCOVERY_QUERY_LIMIT } from "@serial/feed-discovery";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
@@ -317,6 +319,7 @@ export const update = protectedProcedure
         .set({
           openLocation: input.openLocation,
           name: input.name,
+          nameEditedAt: sql`case when ${feeds.name} <> ${input.name} then ${Math.floor(Date.now() / 1000)} else ${feeds.nameEditedAt} end`,
         })
         .where(
           and(eq(feeds.userId, context.user.id), eq(feeds.id, input.feedId)),
@@ -509,3 +512,25 @@ export const discoverFeeds = protectedProcedure
   .handler(({ input, context }) =>
     discoverFeedsForUrl(context.user.id, input.url),
   );
+
+export const revalidate = protectedProcedure
+  .input(z.object({ feedId: z.number().int().positive() }))
+  .handler(async ({ context, input }) => {
+    const lease = captureLimiter.acquire(context.user.id, "revalidation");
+    if (!lease.ok)
+      throw new Error("Please wait before revalidating a Feed again");
+    try {
+      const result = await revalidateFeed(
+        context.db,
+        context.user.id,
+        input.feedId,
+      );
+      await publishReconciliationInvalidation(
+        context.user.id,
+        organizationInvalidationSummary(),
+      );
+      return result;
+    } finally {
+      lease.release();
+    }
+  });

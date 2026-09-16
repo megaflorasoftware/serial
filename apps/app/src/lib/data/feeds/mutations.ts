@@ -5,6 +5,7 @@ import { useFetchViewFeeds } from "../view-feeds/store";
 import { useFetchViews, useRemoveFeedReferences } from "../views/store";
 import { feedItemsStore, useFetchFeedItemsForFeed } from "../store";
 import {
+  feedsStore,
   useAddFeed,
   useFetchFeeds,
   useRemoveFeed,
@@ -199,6 +200,36 @@ export function useBulkSetActiveMutation() {
           queryKey: orpc.subscription.getStatus.queryOptions().queryKey,
         });
       },
+    }),
+  );
+}
+
+export function useRevalidateFeedMutation() {
+  const updateFeed = useUpdateFeed();
+  return useMutation(
+    orpc.feed.revalidate.mutationOptions({
+      onMutate: ({ feedId }) => feedsStore.getState().feedsDict[feedId],
+      onSuccess: async (feed, _input, baseline) => {
+        const current = feedsStore.getState().feedsDict[feed.id];
+        if (current && baseline) {
+          updateFeed(feed.id, {
+            origins: feed.origins,
+            ...(current.name === baseline.name &&
+            current.nameEditedAt === baseline.nameEditedAt
+              ? { name: feed.name, nameEditedAt: feed.nameEditedAt }
+              : {}),
+            ...(current.imageUrl === baseline.imageUrl
+              ? { imageUrl: feed.imageUrl }
+              : {}),
+            ...(current.siteUrl === baseline.siteUrl
+              ? { siteUrl: feed.siteUrl }
+              : {}),
+          });
+        }
+        await refreshNavigationSnapshotSafely();
+        toast.success("Feed revalidated");
+      },
+      onError: () => toast.error("Couldn't revalidate Feed. Please try again."),
     }),
   );
 }

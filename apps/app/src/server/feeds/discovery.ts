@@ -339,3 +339,12 @@ export async function discoverFeeds(
     lease.release();
   }
 }
+
+/** Explicit revalidation must distinguish an unavailable site from an empty discovery. */
+export async function discoverFeedOriginsForRevalidation(url: string) {
+  const read = requestReader();
+  const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
+  const response = await read(url, undefined);
+  if (!response.ok) throw new Error("Unable to read the Feed website");
+  return discoverWebsite(url, read, signal);
+}
