@@ -131,10 +131,13 @@ for (const mobile of [false, true]) {
       const drawer = page.locator("[data-vaul-drawer]").last();
       await expect(drawer).toBeInViewport();
       const bounds = (await drawer.boundingBox())!;
-      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 20);
+      // The helper can cover the centered handle. Swipe from the exposed edge
+      // of the drawer so this tests dismissal rather than dragging the helper.
+      const swipeX = bounds.x + bounds.width - 12;
+      await page.mouse.move(swipeX, bounds.y + 20);
       await page.mouse.down();
       await page.mouse.move(
-        bounds.x + bounds.width / 2,
+        swipeX,
         Math.min(830, bounds.y + 420),
         { steps: 12 },
       );

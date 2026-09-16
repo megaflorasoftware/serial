@@ -299,9 +299,32 @@ export async function signIn({
 
 /** Most feature tests begin after onboarding. Onboarding tests opt into the real journey. */
 export async function completeTestOnboarding(page: Page) {
-  const result = await page.request.post("/api/rpc/onboarding/saveProgress", {
-    data: { json: { complete: true, step: savedOnboardingStep("next-steps") } },
+  const progressResponse = await page.request.post(
+    "/api/rpc/onboarding/getProgress",
+    { data: { json: {} } },
+  );
+  expect(progressResponse.ok()).toBe(true);
+  const progressEnvelope = (await progressResponse.json()) as {
+    json?: { complete?: boolean };
+    complete?: boolean;
+  };
+  const progress = progressEnvelope.json ?? progressEnvelope;
+  if (progress.complete) return;
+
+  const skip = page.getByRole("button", {
+    name: "Skip Onboarding",
+    exact: true,
   });
-  expect(result.ok()).toBe(true);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(skip).toBeVisible({ timeout: 10000 });
+  await skip.click();
+  const saveProgress = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/rpc/onboarding/saveProgress") &&
+      response.request().method() === "POST",
+  );
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Skip onboarding", exact: true })
+    .click();
+  expect((await saveProgress).ok()).toBe(true);
 }

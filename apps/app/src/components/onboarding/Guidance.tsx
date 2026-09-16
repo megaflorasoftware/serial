@@ -326,6 +326,8 @@ export function Guidance({
       ref={layer}
       popover="manual"
       data-guidance-layer
+      data-vaul-no-drag
+      onPointerDown={(event) => event.stopPropagation()}
       className="pointer-events-none fixed inset-0 m-0 h-full max-h-none w-full max-w-none overflow-visible border-0 bg-transparent p-0 text-inherit"
     >
       {selector && (
