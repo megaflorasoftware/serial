@@ -121,6 +121,86 @@ const BOOKMARK_ACTION_LABEL: Record<ContentPlatform, string> = {
   nebula: "Bookmark video to watch later",
 };
 
+function FeedResults({
+  query,
+  visible,
+  retry,
+  feeds,
+  onDiscover,
+  onSelect,
+}: {
+  query: string;
+  visible: boolean;
+  retry: boolean;
+  feeds: DiscoveredFeed[];
+  onDiscover: () => void;
+  onSelect: (feed: DiscoveredFeed) => void;
+}) {
+  return (
+    <CommandGroup heading="Feeds" className={visible ? undefined : "hidden"}>
+      {retry && (
+        <CommandItem
+          className="gap-2"
+          value={`Retry finding feeds ${query}`}
+          onSelect={onDiscover}
+        >
+          <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded">
+            <RefreshCwIcon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate">Retry finding feeds</p>
+            <p className="text-muted-foreground truncate text-xs">
+              No feeds found.
+            </p>
+          </div>
+        </CommandItem>
+      )}
+      {feeds.map((feed) => (
+        <CommandItem
+          className="gap-2"
+          key={feedDiscoveryKey(feed)}
+          value={`${feed.title ?? ""} ${feedDiscoveryKey(feed)}`}
+          onSelect={() => onSelect(feed)}
+        >
+          <PublicationRowContent feed={feed} />
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
+function BookmarkResult({
+  url,
+  platform,
+  visible,
+  onSelect,
+}: {
+  url: string;
+  platform: ContentPlatform;
+  visible: boolean;
+  onSelect: (url: string) => void;
+}) {
+  return (
+    <CommandGroup heading="Bookmark" className={visible ? undefined : "hidden"}>
+      {visible && (
+        <CommandItem
+          className="gap-2"
+          value={`${BOOKMARK_ACTION_LABEL[platform]} ${url}`}
+          onSelect={() => onSelect(url)}
+        >
+          <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
+            <BookmarkIcon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate">{BOOKMARK_ACTION_LABEL[platform]}</p>
+            <p className="text-muted-foreground truncate text-xs">{url}</p>
+          </div>
+        </CommandItem>
+      )}
+    </CommandGroup>
+  );
+}
+
 export function FeedDiscoveryCommand({
   url,
   onUrlChange,
@@ -246,63 +326,21 @@ export function FeedDiscoveryCommand({
                 onSelect={(selected) => onDiscover(selected.url)}
               />
             )}
-            <CommandGroup
-              heading="Feeds"
-              className={isSelecting || hasNoResults ? undefined : "hidden"}
-            >
-              {hasNoResults && (
-                <CommandItem
-                  className="gap-2"
-                  value={`Retry finding feeds ${normalizedUrl}`}
-                  onSelect={() => onDiscover()}
-                >
-                  <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded">
-                    <RefreshCwIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate">Retry finding feeds</p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      No feeds found.
-                    </p>
-                  </div>
-                </CommandItem>
-              )}
-              {discoveredFeeds.map((feed) => (
-                <CommandItem
-                  className="gap-2"
-                  key={feedDiscoveryKey(feed)}
-                  value={`${feed.title ?? ""} ${feedDiscoveryKey(feed)}`}
-                  onSelect={() => onSelectFeed(feed)}
-                >
-                  <PublicationRowContent feed={feed} />
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            <FeedResults
+              query={normalizedUrl}
+              visible={isSelecting || hasNoResults}
+              retry={hasNoResults}
+              feeds={discoveredFeeds}
+              onDiscover={() => onDiscover()}
+              onSelect={onSelectFeed}
+            />
             {bookmarkUrl && (
-              <CommandGroup
-                heading="Bookmark"
-                className={isSelecting || hasNoResults ? undefined : "hidden"}
-              >
-                {(isSelecting || hasNoResults) && (
-                  <CommandItem
-                    className="gap-2"
-                    value={`${BOOKMARK_ACTION_LABEL[bookmarkPlatform]} ${bookmarkUrl}`}
-                    onSelect={() => onSelectBookmark(bookmarkUrl)}
-                  >
-                    <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
-                      <BookmarkIcon className="size-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate">
-                        {BOOKMARK_ACTION_LABEL[bookmarkPlatform]}
-                      </p>
-                      <p className="text-muted-foreground truncate text-xs">
-                        {bookmarkUrl}
-                      </p>
-                    </div>
-                  </CommandItem>
-                )}
-              </CommandGroup>
+              <BookmarkResult
+                url={bookmarkUrl}
+                platform={bookmarkPlatform}
+                visible={isSelecting || hasNoResults}
+                onSelect={onSelectBookmark}
+              />
             )}
           </>
         ) : (
