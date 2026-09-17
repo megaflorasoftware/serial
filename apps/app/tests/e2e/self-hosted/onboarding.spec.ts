@@ -84,18 +84,18 @@ test("advances despite a failed progress write and resumes the last saved step",
   ).toBeVisible();
   await page.unroute("**/api/rpc/onboarding/saveProgress");
   await page
-    .getByRole("button", { name: "Skip Onboarding", exact: true })
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
     .click();
   await page
     .getByRole("alertdialog")
-    .getByRole("button", { name: "Skip onboarding", exact: true })
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
     .click();
   await expect
     .poll(async () => (await savedProgress())?.onboarding_complete)
     .toBe(1);
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Skip Onboarding", exact: true }),
+    page.getByRole("button", { name: "Skip Tutorial", exact: true }),
   ).toHaveCount(0);
 });
 
@@ -133,7 +133,7 @@ for (const mobile of [false, true]) {
       await page.setViewportSize({ width: 390, height: 844 });
     }
     await page
-      .getByRole("button", { name: "Skip Onboarding", exact: true })
+      .getByRole("button", { name: "Skip Tutorial", exact: true })
       .click();
     await expect(page.getByRole("alertdialog")).toBeVisible();
     await page.getByRole("button", { name: "Keep going" }).click();
@@ -364,7 +364,7 @@ for (const mobile of [false, true]) {
     await expect(result).toBeVisible({ timeout: 15000 });
     await expect(guide(page)).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Skip Onboarding", exact: true }),
+      page.getByRole("button", { name: "Skip Tutorial", exact: true }),
     ).toBeVisible();
     await search.fill("");
     await expect(guide(page)).toContainText("Enter a website address");
@@ -448,11 +448,11 @@ test("a pending theme save cannot reopen onboarding after confirmed skip", async
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("button", { name: "Saving..." })).toBeVisible();
   await page
-    .getByRole("button", { name: "Skip Onboarding", exact: true })
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
     .click();
   await page
     .getByRole("alertdialog")
-    .getByRole("button", { name: "Skip onboarding", exact: true })
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
     .click();
   const saved = page.waitForResponse("**/api/rpc/userConfig/setThemePair");
   release();

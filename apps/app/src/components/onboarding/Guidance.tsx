@@ -457,7 +457,7 @@ export function Guidance({
             className="bg-background grid w-full max-w-sm gap-4 rounded-lg border p-6 shadow-lg"
           >
             <h2 id="skip-onboarding-title" className="text-lg font-semibold">
-              Skip onboarding?
+              Skip Tutorial?
             </h2>
             <p
               id="skip-onboarding-description"
@@ -468,7 +468,7 @@ export function Guidance({
             <Button variant="outline" onClick={onCancelSkip}>
               Keep going
             </Button>
-            <Button onClick={onConfirmSkip}>Skip onboarding</Button>
+            <Button onClick={onConfirmSkip}>Skip Tutorial</Button>
           </div>
         </div>
       ) : (
@@ -524,7 +524,7 @@ export function Guidance({
             onPointerDown={onSkip}
             onClick={onSkip}
           >
-            Skip Onboarding
+            Skip Tutorial
           </Button>
         </>
       )}
