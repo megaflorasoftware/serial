@@ -29,6 +29,8 @@ async function insertInChunks<T>(
   insert: (chunk: T[]) => Promise<unknown>,
 ) {
   for (let index = 0; index < values.length; index += FIXTURE_BATCH_SIZE) {
+    // Keep fixture writes bounded to one batch at a time.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await insert(values.slice(index, index + FIXTURE_BATCH_SIZE));
   }
 }
