@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PersistStorage, StorageValue } from "zustand/middleware";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import { bookmarkCapturesStore } from "~/lib/data/bookmarks/capture-store";
@@ -177,6 +178,64 @@ describe("planPageBodyHydration", () => {
 });
 
 describe("hydrateOfflineBodiesForPage", () => {
+  it("uses persisted captures before deciding to fetch them again", async () => {
+    const entity = bookmark();
+    bookmarksStore.getState().upsert(entity);
+    type Cache = Pick<
+      ReturnType<typeof bookmarkCapturesStore.getState>,
+      "capturesDict"
+    >;
+    const { persist: persistence } =
+      bookmarkCapturesStore as typeof bookmarkCapturesStore & {
+        persist: {
+          getOptions: () => { storage?: PersistStorage<Cache> };
+          setOptions: (options: { storage?: PersistStorage<Cache> }) => void;
+          rehydrate: () => Promise<void>;
+        };
+      };
+    const previousStorage = persistence.getOptions().storage;
+    let finishRead!: (value: StorageValue<Cache>) => void;
+    const read = new Promise<StorageValue<Cache>>((resolve) => {
+      finishRead = resolve;
+    });
+    persistence.setOptions({
+      storage: { getItem: () => read, setItem: () => {}, removeItem: () => {} },
+    });
+    const diskHydration = persistence.rehydrate();
+    mocks.getCaptures.mockResolvedValue([]);
+    const pageHydration = hydrateOfflineBodiesForPage({
+      feedItems: [],
+      bookmarks: [entity],
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(mocks.getCaptures).not.toHaveBeenCalled();
+    } finally {
+      finishRead({
+        state: {
+          capturesDict: {
+            [entity.id]: {
+              bookmarkId: entity.id,
+              contentHtml: "<p>Cached capture</p>",
+              contentHash: "capture-hash",
+              captureSource: "server-static-fetch",
+              extractorVersion: "test",
+              sanitizerPolicyVersion: 1,
+              capturedAt: now,
+            },
+          },
+        },
+      });
+      await diskHydration;
+      await pageHydration;
+      persistence.setOptions({ storage: previousStorage });
+    }
+    expect(mocks.getCaptures).not.toHaveBeenCalled();
+    expect(
+      bookmarkCapturesStore.getState().capturesDict[entity.id]?.contentHtml,
+    ).toBe("<p>Cached capture</p>");
+  });
+
   it("retries a failed capture fetch on a page that no longer carries it", async () => {
     const entity = bookmark();
     bookmarksStore.getState().upsert(entity);

@@ -407,6 +407,10 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       profile,
       coldLoad,
       warmHydration,
+      coldWarmSamples: {
+        coldLoad: coldSamples,
+        warmHydration: warmSamples,
+      },
       coldWarmPercentiles: {
         coldUsableContentMs: summarizePercentiles(
           coldSamples.flatMap(({ usableContentMs }) =>
@@ -452,13 +456,32 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       "utf8",
     );
     if (productionProfile) {
-      const violations = Object.keys(CLIENT_BROWSER_BUDGETS).flatMap(
-        (scenario) =>
+      const repeatedLoadViolations = [
+        ...coldSamples.flatMap((metrics, index) =>
+          evaluateClientBrowserScenario("coldLoad", metrics).map(
+            (violation) => `coldLoad sample ${index + 1}: ${violation}`,
+          ),
+        ),
+        ...warmSamples.flatMap((metrics, index) =>
+          evaluateClientBrowserScenario("warmHydration", metrics).map(
+            (violation) => `warmHydration sample ${index + 1}: ${violation}`,
+          ),
+        ),
+      ];
+      const singleScenarioViolations = Object.keys(CLIENT_BROWSER_BUDGETS)
+        .filter(
+          (scenario) => scenario !== "coldLoad" && scenario !== "warmHydration",
+        )
+        .flatMap((scenario) =>
           evaluateClientBrowserScenario(
             scenario as keyof typeof CLIENT_BROWSER_BUDGETS,
             artifact[scenario as keyof typeof CLIENT_BROWSER_BUDGETS],
           ).map((violation) => `${scenario}: ${violation}`),
-      );
+        );
+      const violations = [
+        ...repeatedLoadViolations,
+        ...singleScenarioViolations,
+      ];
       expect(violations, "production browser performance budgets").toEqual([]);
     }
   } finally {

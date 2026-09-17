@@ -1,7 +1,10 @@
 "use client";
 
 import { orpcRouterClient } from "../orpc";
-import { bookmarkCapturesStore } from "./bookmarks/capture-store";
+import {
+  bookmarkCapturesStore,
+  waitForBookmarkCaptureHydration,
+} from "./bookmarks/capture-store";
 import {
   bookmarksStore,
   isBookmarkCaptureRetainableNow,
@@ -191,8 +194,16 @@ async function hydrateFeedItemBodies(itemIds: string[], epoch: number) {
 }
 
 async function hydrateBookmarkCaptures(bookmarkIds: string[], epoch: number) {
-  for (let index = 0; index < bookmarkIds.length; index += CAPTURE_BATCH_SIZE) {
-    const batch = bookmarkIds.slice(index, index + CAPTURE_BATCH_SIZE);
+  if (bookmarkIds.length === 0) return;
+  await waitForBookmarkCaptureHydration();
+  if (epoch !== hydrationEpoch) return;
+  const missingIds = bookmarkIds.filter(
+    (id) =>
+      bookmarkCapturesStore.getState().capturesDict[id] === undefined &&
+      isBookmarkCaptureRetainableNow(id),
+  );
+  for (let index = 0; index < missingIds.length; index += CAPTURE_BATCH_SIZE) {
+    const batch = missingIds.slice(index, index + CAPTURE_BATCH_SIZE);
     try {
       const captures = await orpcRouterClient.bookmark.getCaptures(
         { bookmarkIds: batch },
