@@ -19,6 +19,7 @@ import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 
 const FULLTEXT_BATCH_SIZE = 500;
 const CAPTURE_BATCH_SIZE = 100;
+const CAPTURE_BATCH_WINDOW_MS = 100;
 
 // Failed requests retry on the next page application even when that page no
 // longer carries the entity (the active target diffs to `unchanged`, so a
@@ -201,10 +202,24 @@ async function hydrateBookmarkCaptures(bookmarkIds: string[], epoch: number) {
   if (bookmarkIds.length === 0) return;
   await waitForBookmarkCaptureHydration();
   if (epoch !== hydrationEpoch) return;
-  const missingIds = bookmarkIds.filter(
-    (id) =>
-      bookmarkCapturesStore.getState().capturesDict[id] === undefined &&
-      isBookmarkCaptureRetainableNow(id),
+  // Fixed window: later streamed pages join without postponing the deadline.
+  // Explicit reader capture requests do not use this background queue.
+  await new Promise<void>((resolve) =>
+    setTimeout(resolve, CAPTURE_BATCH_WINDOW_MS),
+  );
+  if (epoch !== hydrationEpoch) return;
+  const candidateIds = [...bookmarkIds, ...pendingBookmarks.keys()];
+  pendingBookmarks.clear();
+  const missingIds = filterUnavailable(
+    candidateIds.filter(
+      (id) =>
+        Boolean(bookmarksStore.getState().getBookmark(id)?.captureHash) &&
+        bookmarkCapturesStore.getState().capturesDict[id] === undefined &&
+        isBookmarkCaptureRetainableNow(id),
+    ),
+    unavailableCaptures,
+    failedBookmarkIds,
+    (id) => bookmarksStore.getState().getBookmark(id)?.captureHash ?? null,
   );
   for (let index = 0; index < missingIds.length; index += CAPTURE_BATCH_SIZE) {
     const batch = missingIds.slice(index, index + CAPTURE_BATCH_SIZE);

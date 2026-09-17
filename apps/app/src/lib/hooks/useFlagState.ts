@@ -2,7 +2,7 @@
 
 import { atom, useAtom } from "jotai";
 import { focusAtom } from "jotai-optics";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import { z } from "zod";
 
 const LOCAL_STORAGE_FLAGS = {
@@ -68,10 +68,23 @@ const flagsAtom = atom({
     parseFlagLocalStorageValue("ARTICLE_TABLE_OF_CONTENTS") ?? "hover",
 } as FlagsState);
 
+function createFlagAtom<TKey extends FlagName>(key: TKey) {
+  return focusAtom(flagsAtom, (optic) => optic.prop(key));
+}
+
+// All readers of a flag share its derived value and subscription graph.
+const flagAtoms: {
+  [TKey in FlagName]: ReturnType<typeof createFlagAtom<TKey>>;
+} = {
+  CUSTOM_VIDEO_PLAYER: createFlagAtom("CUSTOM_VIDEO_PLAYER"),
+  INLINE_SHORTCUTS: createFlagAtom("INLINE_SHORTCUTS"),
+  ARTICLE_STYLE: createFlagAtom("ARTICLE_STYLE"),
+  ARTICLE_FOOTNOTES: createFlagAtom("ARTICLE_FOOTNOTES"),
+  ARTICLE_TABLE_OF_CONTENTS: createFlagAtom("ARTICLE_TABLE_OF_CONTENTS"),
+};
+
 export function useFlagState<TKey extends FlagName>(key: TKey) {
-  const experimentAtom = useMemo(() => {
-    return focusAtom(flagsAtom, (optic) => optic.prop(key));
-  }, [key]);
+  const experimentAtom = flagAtoms[key];
 
   const [value, setStateValue] = useAtom(experimentAtom);
 

@@ -57,6 +57,15 @@ async function installObservers(page: Page) {
   const diagnosticsEnabled =
     process.env.SERIAL_CLIENT_PERFORMANCE_DIAGNOSTICS === "1";
   await page.addInitScript((collectDiagnostics) => {
+    // React's profiling bundle emits per-component DevTools tracks whenever
+    // this is a function. Ordinary production has no such instrumentation;
+    // keep onRender durations while reserving tracks for diagnostic runs.
+    if (!collectDiagnostics) {
+      Object.defineProperty(console, "timeStamp", {
+        value: undefined,
+        configurable: true,
+      });
+    }
     const metrics = {
       longTasks: [] as number[],
       indexedDb: {
@@ -413,6 +422,9 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       process.env.SERIAL_CLIENT_PERFORMANCE_PRODUCTION === "1";
     const artifact = {
       generatedAt: new Date().toISOString(),
+      reactProfiling: diagnosticsEnabled
+        ? "durations-and-component-tracks"
+        : "durations-only",
       environment: productionProfile
         ? "local-self-hosted-production-chromium"
         : "local-self-hosted-development-chromium",
@@ -468,6 +480,12 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       "utf8",
     );
     if (productionProfile) {
+      for (const metrics of [...coldSamples, ...warmSamples]) {
+        expect(
+          metrics.commits.length,
+          "React onRender measurements must remain enabled",
+        ).toBeGreaterThan(0);
+      }
       const repeatedLoadViolations = [
         ...coldSamples.flatMap((metrics, index) =>
           evaluateClientBrowserScenario("coldLoad", metrics).map(
