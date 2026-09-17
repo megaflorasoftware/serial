@@ -154,8 +154,6 @@ export function AddFeedDialog() {
         }),
       );
     toast.promise(createFeedPromise, {
-      loading: "Adding feed...",
-      success: "Feed added!",
       error: (error) =>
         error instanceof Error
           ? error.message

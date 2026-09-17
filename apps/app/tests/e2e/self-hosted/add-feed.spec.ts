@@ -239,14 +239,15 @@ test.describe("add feed manually", () => {
     await expect(feedSearch).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(loadingState).toContainText("Adding feed…");
+    await expect(page.getByText("Adding feed...", { exact: true })).toHaveCount(
+      0,
+    );
 
     // Selecting a result creates it, then opens its Edit Feed modal.
     await expect(
       dialog.getByRole("heading", { name: "Edit Feed" }),
     ).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Feed added!")).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(page.getByText("Feed added!", { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("heading", { name: "Add Feed" })).toHaveCount(
       0,
     );
