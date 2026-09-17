@@ -39,9 +39,7 @@ test.describe("publication Feed surfaces", () => {
         .filter({ has: page.getByText("My renamed Feed", { exact: true }) });
       await expect(row).toBeVisible();
       if (rss) {
-        await expect(
-          row.locator('svg[aria-label="Atmosphere"]'),
-        ).toBeVisible();
+        await expect(row.locator('svg[aria-label="Atmosphere"]')).toBeVisible();
         await row.locator('svg[aria-label="Atmosphere"]').hover();
         await expect(page.getByRole("tooltip")).toHaveText("Atmosphere");
       } else {
