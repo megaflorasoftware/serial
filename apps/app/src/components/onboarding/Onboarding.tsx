@@ -385,7 +385,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
     "add-feed": "Follow your first Feed",
     "create-view": "Create a View",
     "atmosphere-sync-setup": "Your Atmosphere subscriptions",
-    "next-steps": "Ready to explore",
+    "next-steps": "Next steps",
   };
   const close = () => {
     if (state.step === "next-steps") finishOnboarding();
@@ -407,6 +407,14 @@ function AccountOnboarding({ userId }: { userId: string }) {
           if (!open) close();
         }}
         title={titles[state.step]}
+        description={
+          state.step === "next-steps" ? (
+            <span className="text-base">
+              That&apos;s it! Add our extension to save bookmarks as you browse
+              the web, or import feeds from YouTube or your previous RSS reader.
+            </span>
+          ) : undefined
+        }
         headerRight={
           state.step === "choose-colors" ? (
             <div className="shrink-0">
@@ -433,10 +441,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
           {state.step === "atmosphere-sync-setup" && <SyncSlide />}
           {state.step === "next-steps" && (
             <>
-              <p className="text-muted-foreground">
-                Bring your favorite Feeds with you, or save something new to
-                read.
-              </p>
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   variant="outline"

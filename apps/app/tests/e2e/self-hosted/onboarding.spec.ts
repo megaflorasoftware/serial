@@ -257,7 +257,7 @@ for (const mobile of [false, true]) {
     );
     await guide(page).getByRole("button", { name: "Next" }).click();
     await expect(
-      page.getByRole("heading", { name: "Ready to explore" }),
+      page.getByRole("heading", { name: "Next steps" }),
     ).toBeVisible();
     await expect
       .poll(async () => (await savedProgress())?.onboarding_complete)
@@ -388,9 +388,7 @@ test("saves unchanged sync preferences and stays on the slide after a failure", 
     route.fulfill({ json: { json: { saved: true } } }),
   );
   await next.click();
-  await expect(
-    page.getByRole("heading", { name: "Ready to explore" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Next steps" })).toBeVisible();
 });
 
 for (const result of ["denied", "success"]) {
@@ -406,9 +404,7 @@ for (const result of ["denied", "success"]) {
     await expect(
       page.getByRole("heading", {
         name:
-          result === "success"
-            ? "Ready to explore"
-            : "Your Atmosphere subscriptions",
+          result === "success" ? "Next steps" : "Your Atmosphere subscriptions",
       }),
     ).toBeVisible();
     await expect(
