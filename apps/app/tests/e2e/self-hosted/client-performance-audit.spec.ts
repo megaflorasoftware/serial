@@ -422,6 +422,7 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       process.env.SERIAL_CLIENT_PERFORMANCE_PRODUCTION === "1";
     const artifact = {
       generatedAt: new Date().toISOString(),
+      budgets: CLIENT_BROWSER_BUDGETS,
       reactProfiling: diagnosticsEnabled
         ? "durations-and-component-tracks"
         : "durations-only",

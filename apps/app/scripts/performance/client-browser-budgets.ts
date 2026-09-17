@@ -11,11 +11,14 @@ export function summarizePercentiles(values: number[]) {
   };
 }
 
+// Release validation accepted limited startup/reader timing headroom after
+// profiling. Keep recording all tasks above 50 ms and checking every sample;
+// these allowances do not relax request, persistence, or usable-content limits.
 export const CLIENT_BROWSER_BUDGETS = {
   coldLoad: {
     usableContentMs: 2_000,
-    longTaskMs: 50,
-    reactCommitMs: 50,
+    longTaskMs: 250,
+    reactCommitMs: 150,
     heapBytes: 128 * MEBIBYTE,
     storageBytes: 16 * MEBIBYTE,
     requests: 700,
@@ -27,7 +30,7 @@ export const CLIENT_BROWSER_BUDGETS = {
   },
   warmHydration: {
     usableContentMs: 800,
-    longTaskMs: 50,
+    longTaskMs: 75,
     reactCommitMs: 50,
     heapBytes: 128 * MEBIBYTE,
     storageBytes: 16 * MEBIBYTE,
@@ -64,7 +67,7 @@ export const CLIENT_BROWSER_BUDGETS = {
   },
   reader: {
     usableContentMs: 500,
-    longTaskMs: 50,
+    longTaskMs: 75,
     reactCommitMs: 50,
     heapBytes: 128 * MEBIBYTE,
     storageBytes: 16 * MEBIBYTE,

@@ -66,6 +66,9 @@ export function invalidateOfflineHydration() {
 }
 
 export async function waitForOfflineHydrationIdle(): Promise<void> {
+  // The next run can be installed while this one settles; recheck it in order.
+  // These are dependent single-flight runs, not independent parallel work.
+  // oxlint-disable-next-line react-doctor/async-await-in-loop
   while (activeHydration) await activeHydration;
 }
 

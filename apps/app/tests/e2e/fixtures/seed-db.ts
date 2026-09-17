@@ -244,22 +244,26 @@ export async function seedClientPerformanceData(
     profileName,
     userId,
   });
-  const pageCaptureBookmarkId = `${userId}-bookmark-000202`;
-  await db
-    .update(schema.pageCaptures)
-    .set({ contentHtml: PAGE_CAPTURE_READER_HTML })
-    .where(eq(schema.pageCaptures.bookmarkId, pageCaptureBookmarkId));
-  await db
-    .update(schema.bookmarks)
-    .set({
-      title: "Fixture page capture",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(schema.bookmarks.id, pageCaptureBookmarkId));
-  await db
-    .insert(schema.bookmarkViews)
-    .values({ bookmarkId: pageCaptureBookmarkId, viewId: allContentViewId });
+  // The representative browser audit opens this large Page capture. Small
+  // topology/ownership fixtures do not contain Bookmark 202.
+  if (profileName === "representative") {
+    const pageCaptureBookmarkId = `${userId}-bookmark-000202`;
+    await db
+      .update(schema.pageCaptures)
+      .set({ contentHtml: PAGE_CAPTURE_READER_HTML })
+      .where(eq(schema.pageCaptures.bookmarkId, pageCaptureBookmarkId));
+    await db
+      .update(schema.bookmarks)
+      .set({
+        title: "Fixture page capture",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.bookmarks.id, pageCaptureBookmarkId));
+    await db
+      .insert(schema.bookmarkViews)
+      .values({ bookmarkId: pageCaptureBookmarkId, viewId: allContentViewId });
+  }
   const hashedPassword = await hashPassword(password);
   const now = new Date();
   await db.insert(schema.account).values({
