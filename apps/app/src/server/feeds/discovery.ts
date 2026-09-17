@@ -1,5 +1,3 @@
-import { discoverFeeds as discoverFeedsFromUrl } from "feedscout";
-
 import { JSDOM } from "jsdom";
 import {
   classifyDiscoveryInput,
@@ -14,6 +12,12 @@ import {
   STANDARD_SITE_WELL_KNOWN_PATH,
 } from "@serial/standard-site";
 import { FeedImportDeferredError } from "./importErrors";
+import { discoverRssFeeds } from "./discoverRss";
+import {
+  DISCOVERY_PRIMARY_REQUEST_MS,
+  DISCOVERY_PUBLICATION_HINT_MS,
+  withDiscoveryReadBudget,
+} from "./discoveryBudgets";
 import {
   publicationRow,
   resolvePublication,
@@ -75,32 +79,7 @@ async function discoverFeedsWithoutLimits(
 ): Promise<DiscoveredFeed[]> {
   const [youtubeResult, feedscoutResult] = await Promise.allSettled([
     discoverYouTubeFeeds(url, read),
-    discoverFeedsFromUrl(url, {
-      methods: ["platform", "html", "headers", "guess"],
-      concurrency: 2,
-      maxUris: 8,
-      includeInvalid: strict,
-      fetchFn: async (targetUrl, options) => {
-        const response = await read(targetUrl, {
-          headers: options?.headers,
-          method: options?.method,
-        });
-        if (
-          strict &&
-          !response.ok &&
-          response.status !== 404 &&
-          response.status !== 410
-        )
-          throw new Error(`Feed discovery request failed: ${response.status}`);
-        return {
-          headers: response.headers,
-          body: response.text,
-          url: response.url,
-          status: response.status,
-          statusText: response.statusText,
-        };
-      },
-    }),
+    discoverRssFeeds(url, read, strict),
   ]);
   const discoveredFeeds: DiscoveredFeed[] = [];
 
@@ -161,7 +140,11 @@ function requestReader() {
     const value = readFeedHttp(url, {
       ...options,
       maxBodyBytes: 1024 * 1024,
-      totalDurationMs: Math.min(5_000, deadline - Date.now()),
+      totalDurationMs: Math.min(
+        options?.totalDurationMs ?? DISCOVERY_PRIMARY_REQUEST_MS,
+        DISCOVERY_PRIMARY_REQUEST_MS,
+        deadline - Date.now(),
+      ),
     });
     requests.set(key, value);
     return value;
@@ -175,9 +158,12 @@ async function websitePublications(
   strict = false,
 ) {
   let target = new URL(url);
+  const readHint = strict
+    ? read
+    : withDiscoveryReadBudget(read, DISCOVERY_PUBLICATION_HINT_MS);
   const responses = await Promise.allSettled([
     read(url),
-    read(new URL(STANDARD_SITE_WELL_KNOWN_PATH, target.origin).toString()),
+    readHint(new URL(STANDARD_SITE_WELL_KNOWN_PATH, target.origin).toString()),
   ]);
   const uris = new Set<string>();
   const page = responses[0];
@@ -185,7 +171,7 @@ async function websitePublications(
     const finalTarget = new URL(page.value.url);
     if (finalTarget.origin !== target.origin) {
       const [redirectedWellKnown] = await Promise.allSettled([
-        read(
+        readHint(
           new URL(STANDARD_SITE_WELL_KNOWN_PATH, finalTarget.origin).toString(),
         ),
       ]);
