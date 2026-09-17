@@ -48,6 +48,7 @@ export async function createIngestWorkload(
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await database.insert(feedItems).values(
       Array.from({ length: Math.min(100, historySize - start) }, (_, i) => ({
+        id: `ingest-history-${start + i}`,
         feedId: feed.id,
         contentId: `old-${start + i}`,
         title: "Old item",
