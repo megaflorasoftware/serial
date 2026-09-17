@@ -76,10 +76,11 @@ async function discoverFeedsWithoutLimits(
   url: string,
   read: typeof readFeedHttp,
   strict = false,
+  onFeed?: (feed: DiscoveredFeed) => Promise<void>,
 ): Promise<DiscoveredFeed[]> {
   const [youtubeResult, feedscoutResult] = await Promise.allSettled([
     discoverYouTubeFeeds(url, read),
-    discoverRssFeeds(url, read, strict),
+    discoverRssFeeds(url, read, strict, onFeed),
   ]);
   const discoveredFeeds: DiscoveredFeed[] = [];
 
@@ -128,10 +129,11 @@ async function discoverFeedsWithoutLimits(
   });
 }
 
-function requestReader() {
+function requestReader(signal?: AbortSignal) {
   const requests = new Map<string, ReturnType<typeof readFeedHttp>>();
   const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
   return ((url, options) => {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     const key = `${options?.method ?? "GET"}:${url}`;
     const existing = requests.get(key);
     if (existing) return existing;
@@ -139,6 +141,7 @@ function requestReader() {
       return Promise.reject(new Error("Discovery request budget reached"));
     const value = readFeedHttp(url, {
       ...options,
+      signal,
       maxBodyBytes: 1024 * 1024,
       totalDurationMs: Math.min(
         options?.totalDurationMs ?? DISCOVERY_PRIMARY_REQUEST_MS,
@@ -156,11 +159,13 @@ async function websitePublications(
   read: typeof readFeedHttp,
   signal: AbortSignal,
   strict = false,
+  onUpdate?: (rows: DiscoveredFeed[]) => void,
 ) {
   let target = new URL(url);
-  const readHint = strict
-    ? read
-    : withDiscoveryReadBudget(read, DISCOVERY_PUBLICATION_HINT_MS);
+  const readHint =
+    strict || onUpdate
+      ? read
+      : withDiscoveryReadBudget(read, DISCOVERY_PUBLICATION_HINT_MS);
   const responses = await Promise.allSettled([
     read(url),
     readHint(new URL(STANDARD_SITE_WELL_KNOWN_PATH, target.origin).toString()),
@@ -241,6 +246,7 @@ async function websitePublications(
         target.pathname.startsWith(`${site.pathname.replace(/\/$/, "")}/`))
     ) {
       rows.push(publicationRow(result));
+      onUpdate?.(rows);
     }
   }
   return rows;
@@ -251,116 +257,249 @@ async function discoverWebsite(
   read: typeof readFeedHttp,
   signal: AbortSignal,
   strict = false,
+  onUpdate?: (rows: DiscoveredFeed[]) => void,
 ) {
-  const [feeds, publications] = await Promise.all([
-    discoverFeedsWithoutLimits(url, read, strict),
-    websitePublications(url, read, signal, strict),
-  ]);
   const candidates = new Map<string, SyndicationCandidate>();
-  for await (const candidate of workerPool(
-    feeds.slice(0, 8),
-    2,
-    async (row) => {
-      try {
-        const response = await read(row.url);
-        if (!response.ok) {
-          if (strict) throw new Error("Unable to read the RSS Feed");
-          return null;
-        }
-        const parsed = parseSyndicationFeed(response.text, row.url);
-        return {
-          row: {
-            ...row,
-            title: parsed.title || row.title,
-            format: parsed.format,
-            siteUrl: parsed.siteUrl,
-            imageUrl: parsed.imageUrl,
-          },
-          hasFullBody: parsed.hasFullBody,
-          itemUrls: parsed.items.slice(0, 20).map((item) => item.url),
-        };
-      } catch (error) {
-        if (strict) throw error;
-        return { row, hasFullBody: false, itemUrls: [] };
+  let publications: DiscoveredFeed[] = [];
+  const snapshot = () =>
+    combinePublicationRows(
+      collapseSyndicationAlternates([...candidates.values()], url),
+      publications,
+    );
+  const addCandidate = async (row: DiscoveredFeed) => {
+    if (signal.aborted) {
+      if (strict) signal.throwIfAborted();
+      return;
+    }
+    if (candidates.has(row.url)) return;
+    try {
+      const response = await read(row.url);
+      if (!response.ok) {
+        if (strict) throw new Error("Unable to read the RSS Feed");
+        return;
       }
-    },
-  ))
-    if (candidate) candidates.set(candidate.row.url, candidate);
-  const ranked = collapseSyndicationAlternates(
-    feeds.flatMap((row) =>
-      candidates.get(row.url) ? [candidates.get(row.url)!] : [],
+      const parsed = parseSyndicationFeed(response.text, row.url);
+      candidates.set(row.url, {
+        row: {
+          ...row,
+          title: parsed.title || row.title,
+          format: parsed.format,
+          siteUrl: parsed.siteUrl,
+          imageUrl: parsed.imageUrl,
+        },
+        hasFullBody: parsed.hasFullBody,
+        itemUrls: parsed.items.slice(0, 20).map((item) => item.url),
+      });
+    } catch (error) {
+      if (strict) throw error;
+      candidates.set(row.url, { row, hasFullBody: false, itemUrls: [] });
+    }
+    if (!signal.aborted) onUpdate?.(snapshot());
+  };
+  const [feeds] = await Promise.all([
+    discoverFeedsWithoutLimits(
+      url,
+      read,
+      strict,
+      onUpdate ? addCandidate : undefined,
     ),
-    url,
-  );
-  return combinePublicationRows(ranked, publications);
+    websitePublications(
+      url,
+      read,
+      signal,
+      strict,
+      onUpdate
+        ? (rows) => {
+            publications = rows;
+            onUpdate(snapshot());
+          }
+        : undefined,
+    ).then((rows) => {
+      publications = rows;
+    }),
+  ]);
+  for await (const result of workerPool(feeds.slice(0, 8), 2, addCandidate)) {
+    void result;
+  }
+  if (strict) signal.throwIfAborted();
+  return snapshot();
 }
 
-export async function discoverFeeds(
+type DiscoveryUpdate = (rows: DiscoveredFeed[]) => void;
+
+async function runDiscovery(
   userId: string,
   query: string,
+  onUpdate?: DiscoveryUpdate,
+  callerSignal?: AbortSignal,
 ): Promise<DiscoveredFeed[]> {
   const input = classifyDiscoveryInput(query);
-  if (!input) return [];
+  if (!input || callerSignal?.aborted) return [];
   const lease = captureLimiter.acquire(userId, "discovery");
   if (!lease.ok) return [];
-  try {
-    const read = requestReader();
-    const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
-    if (input.publicationUri) {
-      const publication = await resolvePublication(
-        input.publicationUri,
-        signal,
-      );
-      if (!publication) return [];
-      const rows = await discoverWebsite(publication.siteUrl, read, signal);
-      return combinePublicationRows(rows, [publicationRow(publication)]).slice(
-        0,
-        DISCOVERY_LIMIT,
-      );
-    }
-    const [websites, publications] = await Promise.allSettled([
-      input.websiteUrl
-        ? discoverWebsite(input.websiteUrl, read, signal)
-        : Promise.resolve([]),
-      input.actorQuery
-        ? searchPublications(input.actorQuery, signal)
-        : Promise.resolve([]),
-    ]);
-    const websiteRows = websites.status === "fulfilled" ? websites.value : [];
-    const actorRows =
-      publications.status === "fulfilled"
-        ? publications.value.slice(0, DISCOVERY_LIMIT).map(publicationRow)
-        : [];
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    DISCOVERY_TOTAL_BUDGET_MS,
+  );
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, controller.signal])
+    : controller.signal;
+  const read = requestReader(signal);
+  let latest: DiscoveredFeed[] = [];
+  let wakeOnAbort: () => void = () => {};
+  const aborted = new Promise<void>((resolve) => {
+    wakeOnAbort = resolve;
+  });
+  signal.addEventListener("abort", wakeOnAbort, { once: true });
+  const websiteRows = new Map<string, DiscoveredFeed[]>();
+  const websites = new Map<string, Promise<DiscoveredFeed[]>>();
+  let actors: DiscoveredFeed[] = [];
+  const publish = () => {
+    if (signal.aborted) return;
     const enriched = new Map<string, DiscoveredFeed>();
-    const sites = [...new Set(actorRows.map((row) => row.siteUrl!))];
-    for await (const result of workerPool(sites, 2, async (siteUrl) => {
-      try {
-        return { siteUrl, rows: await discoverWebsite(siteUrl, read, signal) };
-      } catch {
-        return { siteUrl, rows: [] };
-      }
-    })) {
-      for (const row of combinePublicationRows(
-        result.rows,
-        actorRows.filter((actor) => actor.siteUrl === result.siteUrl),
-      )) {
+    for (const site of new Set(actors.map((actor) => actor.siteUrl!))) {
+      const rows = combinePublicationRows(
+        websiteRows.get(site) ?? [],
+        actors.filter((actor) => actor.siteUrl === site),
+      );
+      for (const row of rows) {
         const uri = row.origins?.find(
           (origin) => origin.kind === "atproto",
         )?.locator;
         if (uri) enriched.set(uri, row);
       }
     }
-    return combinePublicationRows(
-      websiteRows,
-      actorRows.map((row) => enriched.get(row.origins![0]!.locator) ?? row),
+    latest = combinePublicationRows(
+      websiteRows.get(input.websiteUrl ?? "") ?? [],
+      actors.map((actor) => enriched.get(actor.origins![0]!.locator) ?? actor),
     )
       .filter((row) => httpUrl(row.url))
       .slice(0, DISCOVERY_LIMIT);
+    onUpdate?.(latest);
+  };
+  const website = (url: string) => {
+    const existing = websites.get(url);
+    if (existing) return existing;
+    if (signal.aborted) return Promise.resolve([]);
+    const update = (rows: DiscoveredFeed[]) => {
+      if (signal.aborted) return;
+      websiteRows.set(url, rows);
+      publish();
+    };
+    const pending = discoverWebsite(
+      url,
+      read,
+      signal,
+      false,
+      onUpdate ? update : undefined,
+    )
+      .then((rows) => {
+        update(rows);
+        return rows;
+      })
+      .catch(() => websiteRows.get(url) ?? []);
+    websites.set(url, pending);
+    return pending;
+  };
+  const work = async () => {
+    if (input.publicationUri) {
+      const publication = await resolvePublication(
+        input.publicationUri,
+        signal,
+      );
+      if (!publication || signal.aborted) return;
+      actors = [publicationRow(publication)];
+      publish();
+      await website(publication.siteUrl);
+    } else {
+      await Promise.allSettled([
+        input.websiteUrl ? website(input.websiteUrl) : Promise.resolve([]),
+        (async () => {
+          if (!input.actorQuery) return;
+          const publications = await searchPublications(
+            input.actorQuery,
+            signal,
+          );
+          if (signal.aborted) return;
+          actors = publications.slice(0, DISCOVERY_LIMIT).map(publicationRow);
+          publish();
+          const sites = [...new Set(actors.map((row) => row.siteUrl!))];
+          for await (const result of workerPool(sites, 2, website)) {
+            void result;
+          }
+        })(),
+      ]);
+    }
+    publish();
+  };
+  try {
+    await Promise.race([work(), aborted]);
+    return latest;
   } catch (error) {
-    captureException(error, { context: "publication-discovery" });
-    return [];
+    if (!signal.aborted)
+      captureException(error, { context: "publication-discovery" });
+    return latest;
   } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", wakeOnAbort);
+    controller.abort();
     lease.release();
+  }
+}
+
+/** Completed-array consumers retain the short interactive probing budgets. */
+export function discoverFeeds(userId: string, query: string) {
+  return runDiscovery(userId, query);
+}
+
+/** Finite request-scoped SSE; coalesce snapshots for slow consumers. */
+export async function* streamDiscoverFeeds(
+  userId: string,
+  query: string,
+  callerSignal?: AbortSignal,
+) {
+  const controller = new AbortController();
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, controller.signal])
+    : controller.signal;
+  let latest: DiscoveredFeed[] = [];
+  let changed = false;
+  let done = false;
+  let wake: (() => void) | undefined;
+  let serialized = "";
+  const pending = runDiscovery(
+    userId,
+    query,
+    (rows) => {
+      const next = JSON.stringify(rows);
+      if (serialized === next) return;
+      serialized = next;
+      latest = rows;
+      changed = true;
+      wake?.();
+    },
+    signal,
+  ).then((rows) => {
+    latest = rows;
+    done = true;
+    wake?.();
+  });
+  try {
+    while (!done) {
+      if (changed) {
+        changed = false;
+        yield { feeds: latest, complete: false };
+      }
+      if (!done && !changed)
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+    }
+    if (!signal.aborted) yield { feeds: latest, complete: true };
+  } finally {
+    controller.abort();
+    await pending;
   }
 }
 

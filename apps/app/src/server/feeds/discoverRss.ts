@@ -1,11 +1,12 @@
 import { discoverFeeds as scoutFeeds } from "feedscout";
-import { defaultGuessOptions } from "feedscout/feeds";
+import { defaultExtractFn, defaultGuessOptions } from "feedscout/feeds";
 import { discoverUrisFromGuess } from "feedscout/methods";
 import {
   DISCOVERY_GUESS_REQUEST_MS,
   DISCOVERY_GUESS_TOTAL_MS,
   withDiscoveryReadBudget,
 } from "./discoveryBudgets";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { readFeedHttp } from "~/server/rss/feedHttp";
 
 const MAX_CANDIDATES = 8;
@@ -37,8 +38,14 @@ export async function discoverRssFeeds(
   url: string,
   read: typeof readFeedHttp,
   strict: boolean,
+  onFeed?: (feed: DiscoveredFeed) => Promise<void>,
 ) {
   const fetchFn = scoutFetcher(read, strict);
+  const extractFn: typeof defaultExtractFn = async (input) => {
+    const result = await defaultExtractFn(input);
+    if (result.isValid) await onFeed?.(result);
+    return result;
+  };
   if (strict)
     return scoutFeeds(url, {
       methods: ["platform", "html", "headers", "guess"],
@@ -56,6 +63,7 @@ export async function discoverRssFeeds(
     concurrency: 2,
     maxUris: MAX_CANDIDATES,
     fetchFn,
+    extractFn,
     onProgress: ({ current }) => attempted.add(current),
   });
   const remaining = MAX_CANDIDATES - attempted.size;
@@ -76,15 +84,19 @@ export async function discoverRssFeeds(
 
   const guesses = await scoutFeeds(input, {
     methods: { guess: { uris } },
-    // Eight one-second guesses must fit in two waves without starving later URLs.
-    concurrency: 4,
+    // Streaming probes retain the full read allowance. Start every bounded
+    // candidate so slow misses cannot hold a later valid Feed behind them.
+    concurrency: onFeed ? MAX_CANDIDATES : 4,
     maxUris: remaining,
+    extractFn,
     fetchFn: scoutFetcher(
-      withDiscoveryReadBudget(
-        read,
-        DISCOVERY_GUESS_TOTAL_MS,
-        DISCOVERY_GUESS_REQUEST_MS,
-      ),
+      onFeed
+        ? read
+        : withDiscoveryReadBudget(
+            read,
+            DISCOVERY_GUESS_TOTAL_MS,
+            DISCOVERY_GUESS_REQUEST_MS,
+          ),
       false,
     ),
   }).catch(() => []);

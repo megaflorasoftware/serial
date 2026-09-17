@@ -160,7 +160,10 @@ function atprotoLocator(feed: DiscoveredFeed) {
   return feed.origins?.find((origin) => origin.kind === "atproto")?.locator;
 }
 
-function isDuplicate(left: DiscoveredFeed, right: DiscoveredFeed) {
+export function matchesDiscoveredFeed(
+  left: DiscoveredFeed,
+  right: DiscoveredFeed,
+) {
   const leftAtproto = atprotoLocator(left);
   return (
     sharesRssLocator(left, right) ||
@@ -180,7 +183,8 @@ export function mergeCapturedDiscoveryFeeds(
     (feed) => rssLocators(feed).size === 0,
   );
   for (const feed of [...remoteWebsite, ...captured, ...remoteAtmosphere]) {
-    if (merged.some((existing) => isDuplicate(existing, feed))) continue;
+    if (merged.some((existing) => matchesDiscoveredFeed(existing, feed)))
+      continue;
     merged.push(feed);
     if (merged.length >= limit) break;
   }

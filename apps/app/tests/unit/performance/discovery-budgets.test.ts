@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import {
   discoverFeedOriginsForImport,
   discoverFeedOriginsForRevalidation,
   discoverFeeds,
+  streamDiscoverFeeds,
 } from "~/server/feeds/discovery";
+import {
+  publicationRow,
+  resolvePublication,
+  searchPublications,
+} from "~/server/feeds/publications";
+import { captureLimiter } from "~/server/bookmarks/limits";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 
 vi.mock("~/server/rss/feedHttp", () => ({ readFeedHttp: vi.fn() }));
@@ -29,9 +37,21 @@ function responses(fixture: (url: string) => ResponseFixture) {
   vi.mocked(readFeedHttp).mockImplementation(async (url, options) => {
     const value = fixture(url);
     const budget = options?.totalDurationMs ?? 15000;
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.min(value.ms, budget)),
-    );
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        reject(new Error("Aborted"));
+      };
+      const timer = setTimeout(
+        () => {
+          options?.signal?.removeEventListener("abort", abort);
+          resolve();
+        },
+        Math.min(value.ms, budget),
+      );
+      options?.signal?.addEventListener("abort", abort, { once: true });
+      if (options?.signal?.aborted) abort();
+    });
     if (value.ms > budget)
       throw new Error("Feed request exceeded its duration");
     const status = value.status ?? 200;
@@ -196,4 +216,157 @@ it("does not spend speculative capacity when eight advertised candidates already
   expect(vi.mocked(readFeedHttp).mock.calls.some(([url]) => url === rss)).toBe(
     false,
   );
+});
+
+async function measureStream(query: string) {
+  const start = Date.now();
+  const events: Array<{
+    ms: number;
+    feeds: DiscoveredFeed[];
+    complete: boolean;
+  }> = [];
+  const pending = (async () => {
+    for await (const event of streamDiscoverFeeds(`stream-${query}`, query))
+      events.push({ ...event, ms: Date.now() - start });
+  })();
+  await vi.runAllTimersAsync();
+  await pending;
+  return events;
+}
+
+it("streams RSS before a slow hint, then combines the late Atmosphere origin", async () => {
+  const uri = "at://did:plc:example/site.standard.publication/one";
+  vi.mocked(resolvePublication).mockResolvedValueOnce({
+    uri,
+    siteUrl: site,
+    name: "Published name",
+    did: "did:plc:example",
+    rkey: "one",
+    pdsUrl: "https://pds.example.com",
+  });
+  vi.mocked(publicationRow).mockReturnValueOnce({
+    url: site,
+    siteUrl: site,
+    title: "Published name",
+    origins: [{ kind: "atproto", locator: uri }],
+  });
+  responses((url) =>
+    url === rss ? { ms: 80, text: xml } : { ms: 3000, text: uri },
+  );
+  const events = await measureStream(rss);
+  const first = events.find((event) => event.feeds.length > 0)!;
+  expect(first.ms).toBe(80);
+  expect(first.complete).toBe(false);
+  expect(first.feeds[0]?.url).toBe(rss);
+  expect(
+    first.feeds[0]?.origins?.some((origin) => origin.kind === "atproto"),
+  ).not.toBe(true);
+  expect(events.at(-1)).toMatchObject({
+    complete: true,
+    ms: 3000,
+    feeds: [
+      {
+        title: "Published name",
+        origins: [{ kind: "rss" }, { kind: "atproto", locator: uri }],
+      },
+    ],
+  });
+});
+
+it("retains a slow guessed feed while faster guesses are already visible", async () => {
+  responses((url) => {
+    if (url === site) return { ms: 20, text: "<html></html>" };
+    if (url === rss) return { ms: 2500, text: xml };
+    if (url === `${site}feed`)
+      return { ms: 80, text: xml.replaceAll("Example", "Separate") };
+    return { ms: 5000, status: 404 };
+  });
+  const events = await measureStream(site);
+  expect(events.find((event) => event.feeds.length)?.ms).toBeLessThanOrEqual(
+    100,
+  );
+  expect(events.at(-1)?.feeds.map((feed) => feed.url)).toContain(rss);
+  expect(events.at(-1)?.ms).toBeLessThanOrEqual(5020);
+  expect(readFeedHttp).toHaveBeenCalledTimes(10);
+});
+
+it("stops at the overall deadline and preserves verified results when actor lookup stalls", async () => {
+  vi.mocked(searchPublications).mockImplementationOnce(
+    () => new Promise(() => {}),
+  );
+  responses((url) =>
+    url === site ? { ms: 80, text: xml } : { ms: 10, status: 404 },
+  );
+  const events = await measureStream("example.com");
+  expect(events.find((event) => event.feeds.length)?.ms).toBe(80);
+  expect(events.at(-1)).toMatchObject({
+    ms: 12000,
+    complete: true,
+    feeds: [{ url: site }],
+  });
+});
+
+it("cancels obsolete reads and releases the discovery lease", async () => {
+  const release = vi.fn();
+  const acquire = vi
+    .spyOn(captureLimiter, "acquire")
+    .mockReturnValueOnce({ ok: true, release });
+  responses((url) =>
+    url === rss ? { ms: 80, text: xml } : { ms: 5000, status: 404 },
+  );
+  const controller = new AbortController();
+  const events: unknown[] = [];
+  const pending = (async () => {
+    for await (const event of streamDiscoverFeeds(
+      "cancel",
+      rss,
+      controller.signal,
+    ))
+      events.push(event);
+  })();
+  await vi.advanceTimersByTimeAsync(100);
+  const count = events.length;
+  controller.abort();
+  await pending;
+  expect(events).toHaveLength(count);
+  expect(release).toHaveBeenCalledOnce();
+  expect(
+    vi
+      .mocked(readFeedHttp)
+      .mock.calls.every(([, options]) => options?.signal?.aborted),
+  ).toBe(true);
+  acquire.mockRestore();
+});
+
+it("assigns a shared site's RSS origin to only one of its Publications", async () => {
+  const publications = ["one", "two"].map((rkey) => ({
+    uri: `at://did:plc:example/site.standard.publication/${rkey}`,
+    siteUrl: site,
+    name: rkey,
+    did: "did:plc:example",
+    rkey,
+    pdsUrl: "https://pds.example.com",
+  }));
+  vi.mocked(searchPublications).mockResolvedValueOnce(publications);
+  vi.mocked(publicationRow).mockImplementation((publication) => ({
+    url: site,
+    siteUrl: site,
+    title: publication.name,
+    origins: [{ kind: "atproto", locator: publication.uri }],
+  }));
+  responses((url) =>
+    url === site ? { ms: 80, text: xml } : { ms: 10, status: 404 },
+  );
+  const events = await measureStream("@example.com");
+  const rows = events.at(-1)!.feeds;
+  expect(rows).toHaveLength(2);
+  expect(
+    rows.filter((row) => row.origins?.some((origin) => origin.kind === "rss")),
+  ).toHaveLength(1);
+  expect(
+    rows.map(
+      (row) =>
+        row.origins?.find((origin) => origin.kind === "atproto")?.locator,
+    ),
+  ).toEqual(publications.map((publication) => publication.uri));
 });

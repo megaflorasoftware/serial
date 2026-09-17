@@ -1,6 +1,7 @@
 import {
   classifyDiscoveryInput,
   feedDiscoveryKey,
+  matchesDiscoveredFeed,
 } from "@serial/feed-discovery";
 import { PublicationRowContent } from "@serial/ui";
 import {
@@ -159,7 +160,7 @@ function FeedResults({
         <CommandItem
           className="gap-2"
           key={feedDiscoveryKey(feed)}
-          value={`${feed.title ?? ""} ${feedDiscoveryKey(feed)}`}
+          value={feedDiscoveryKey(feed)}
           onSelect={() => onSelect(feed)}
         >
           <PublicationRowContent feed={feed} />
@@ -237,12 +238,22 @@ export function FeedDiscoveryCommand({
   loadingLabel = "Adding feed…",
 }: FeedDiscoveryCommandProps) {
   const commandRef = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<{
+    value: string;
+    feed?: DiscoveredFeed;
+  }>({ value: "" });
+  const selectedFeed = selection.feed
+    ? discoveredFeeds.find((feed) =>
+        matchesDiscoveredFeed(feed, selection.feed!),
+      )
+    : undefined;
   const normalizedUrl = classifyDiscoveryInput(url) ? url.trim() : null;
   const bookmarkUrl = normalizeFeedSearchUrl(url);
   const isAddingFeed = state === "adding";
   const isDiscovering = state === "discovering";
   const hasNoResults = state === "no-results";
-  const isSelecting = state === "select";
+  const isSelecting =
+    state === "select" || (isDiscovering && discoveredFeeds.length > 0);
   const { isPending: isAutoDiscoveryPending, reset: resetAutoDiscovery } =
     useAutomaticDiscovery(normalizedUrl, state, onDiscover);
 
@@ -261,6 +272,15 @@ export function FeedDiscoveryCommand({
   return (
     <Command
       ref={commandRef}
+      value={selectedFeed ? feedDiscoveryKey(selectedFeed) : selection.value}
+      onValueChange={(value) =>
+        setSelection({
+          value,
+          feed: discoveredFeeds.find(
+            (feed) => feedDiscoveryKey(feed) === value,
+          ),
+        })
+      }
       className="h-full min-h-0 rounded-none border-0 sm:h-auto [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:pr-10 sm:[&_[cmdk-input]]:pr-0 [&_[cmdk-item]]:pointer-events-auto [&_[cmdk-item]]:opacity-100"
       shouldFilter={
         !isAddingFeed &&
@@ -297,7 +317,9 @@ export function FeedDiscoveryCommand({
       <CommandList className="relative flex max-h-none min-h-0 flex-1 flex-col sm:max-h-[min(60dvh,32rem,calc(100dvh-5.5rem))] sm:min-h-[min(20rem,60dvh,calc(100dvh-5.5rem))] sm:flex-none">
         {normalizedUrl ? (
           <>
-            {(isAddingFeed || isDiscovering || isAutoDiscoveryPending) && (
+            {(isAddingFeed ||
+              (isDiscovering && !isSelecting) ||
+              isAutoDiscoveryPending) && (
               <div
                 className={CENTERED_STATE_CLASS_NAME}
                 role="status"
@@ -326,6 +348,15 @@ export function FeedDiscoveryCommand({
               onDiscover={() => onDiscover()}
               onSelect={onSelectFeed}
             />
+            {isDiscovering && isSelecting && (
+              <div
+                className="text-muted-foreground flex items-center gap-2 px-4 py-2 text-xs"
+                role="status"
+              >
+                <Loader2Icon className="size-4 animate-spin" />
+                <span>Finding feeds…</span>
+              </div>
+            )}
             {bookmarkUrl && (
               <BookmarkResult
                 url={bookmarkUrl}
