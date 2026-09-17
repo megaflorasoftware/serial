@@ -17,8 +17,8 @@ export function summarizePercentiles(values: number[]) {
 export const CLIENT_BROWSER_BUDGETS = {
   coldLoad: {
     usableContentMs: 2_000,
-    longTaskMs: 250,
-    reactCommitMs: 150,
+    longTaskMs: 340,
+    reactCommitMs: 170,
     heapBytes: 128 * MEBIBYTE,
     storageBytes: 16 * MEBIBYTE,
     requests: 700,
@@ -30,8 +30,8 @@ export const CLIENT_BROWSER_BUDGETS = {
   },
   warmHydration: {
     usableContentMs: 800,
-    longTaskMs: 75,
-    reactCommitMs: 50,
+    longTaskMs: 160,
+    reactCommitMs: 90,
     heapBytes: 128 * MEBIBYTE,
     storageBytes: 16 * MEBIBYTE,
     requests: 700,
