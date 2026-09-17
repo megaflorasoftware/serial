@@ -228,8 +228,8 @@ function ThemePicker() {
         ))}
       </div>
       <p className="text-muted-foreground">
-        Pick a theme to get started. Don&apos;t worry about getting it perfect
-        now, as it&apos;s fully customizable later
+        Pick a theme to get started! Don&apos;t worry about getting it perfect
+        now, as it&apos;s fully customizable later.
       </p>
       <Button
         disabled={save.isPending}
