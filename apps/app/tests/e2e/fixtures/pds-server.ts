@@ -1,7 +1,8 @@
 /** Loopback OAuth authorization server, PLC directory and PDS for release tests. */
-import { createServer, type IncomingMessage } from "node:http";
-import { z } from "zod";
+import { createServer } from "node:http";
 import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
+import { z } from "zod";
+import type { IncomingMessage } from "node:http";
 
 const port = Number(process.argv[2]);
 if (!Number.isInteger(port) || port < 1)

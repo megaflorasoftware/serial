@@ -1,20 +1,21 @@
 import { randomBytes } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   readPublicationConnection as connection,
+  fillPublicationQuota,
+  localPublicationOrigins,
   pdsControl,
+  readPublicationUser,
+  resumePublicationOnboarding,
+  seedLocalPublication,
   seedPublication,
   seedRemoteSubscription,
-  seedLocalPublication,
-  localPublicationOrigins,
   SUBSCRIPTION_COLLECTION,
-  fillPublicationQuota,
-  resumePublicationOnboarding,
-  readPublicationUser,
 } from "../fixtures/publication-sync";
 import { signUp } from "../fixtures/auth";
 import { openSidebar } from "../fixtures/sidebar";
 import { PUBLICATIONS_APP_PORT } from "../fixtures/ports";
+import type { Page } from "@playwright/test";
 
 async function openAtmosphere(page: Page) {
   await page.goto("/");

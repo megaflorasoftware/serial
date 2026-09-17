@@ -273,6 +273,10 @@ describe("hydrateOfflineBodiesForPage", () => {
     });
     expect(secondRun).toBe(firstRun);
     await firstRun;
+    expect(mocks.getCaptures).toHaveBeenCalledTimes(1);
+    expect(mocks.getCaptures.mock.calls[0]?.[0]).toEqual({
+      bookmarkIds: [first.id, second.id],
+    });
     expect(
       bookmarkCapturesStore.getState().capturesDict[first.id],
     ).toBeDefined();

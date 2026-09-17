@@ -227,9 +227,6 @@ async function hydratePendingEntities(page: {
   bookmarks: readonly ApplicationBookmark[];
 }) {
   const epoch = hydrationEpoch;
-  // Hydration must not lengthen the page-application task it follows.
-  await yieldToNextTask();
-  if (epoch !== hydrationEpoch) return;
   const plan = planPageBodyHydration({
     feedItems: [...page.feedItems, ...takeFeedItemRetries()],
     bookmarks: [...page.bookmarks, ...takeBookmarkRetries()],
@@ -279,6 +276,10 @@ export function hydrateOfflineBodiesForPage(page: {
       // The epoch condition stops a severed run from resurrecting after
       // invalidation and sweeping concurrently with the newly admitted run.
       while (pendingRun && hydrationEpoch === startEpoch) {
+        // Yield before collecting so page updates arriving in this task share
+        // the same request, without lengthening the page-application task.
+        await yieldToNextTask();
+        if (hydrationEpoch !== startEpoch) return;
         pendingRun = false;
         const feedItems = [...pendingFeedItems.values()];
         const bookmarks = [...pendingBookmarks.values()];

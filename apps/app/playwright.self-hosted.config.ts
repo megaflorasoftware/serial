@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 import { baseConfig } from "./playwright.config";
 import {
   PUBLICATIONS_APP_PORT,
-  PUBLICATIONS_TURSO_PORT,
   PUBLICATIONS_PDS_PORT,
+  PUBLICATIONS_TURSO_PORT,
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_APPVIEW_SERVER_PORT,
   SELF_HOSTED_BOOTSTRAP_APP_PORT,
