@@ -424,25 +424,29 @@ export function Guidance({
       onPointerDown={(event) => event.stopPropagation()}
       className="pointer-events-none fixed inset-0 m-0 h-full max-h-none w-full max-w-none overflow-visible border-0 bg-transparent p-0 text-inherit"
     >
-      {selector && dimmed && (
-        <svg
-          aria-hidden="true"
-          className="pointer-events-none fixed inset-0 h-full w-full"
-        >
-          <path
-            className="fill-black/35 dark:fill-black/65"
-            fillRule="evenodd"
-            d={[
-              `M0 0H${innerWidth}V${innerHeight}H0Z`,
-              `M${highlightX + radius} ${highlightY}`,
-              `H${highlightX + highlightWidth - radius}Q${highlightX + highlightWidth} ${highlightY} ${highlightX + highlightWidth} ${highlightY + radius}`,
-              `V${highlightY + highlightHeight - radius}Q${highlightX + highlightWidth} ${highlightY + highlightHeight} ${highlightX + highlightWidth - radius} ${highlightY + highlightHeight}`,
-              `H${highlightX + radius}Q${highlightX} ${highlightY + highlightHeight} ${highlightX} ${highlightY + highlightHeight - radius}`,
-              `V${highlightY + radius}Q${highlightX} ${highlightY} ${highlightX + radius} ${highlightY}Z`,
-            ].join(" ")}
-          />
-        </svg>
-      )}
+      {selector &&
+        dimmed &&
+        host === document.body &&
+        !confirming &&
+        highlightWidth > 0 && (
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 h-full w-full"
+          >
+            <path
+              className="fill-black/10"
+              fillRule="evenodd"
+              d={[
+                `M0 0H${innerWidth}V${innerHeight}H0Z`,
+                `M${highlightX + radius} ${highlightY}`,
+                `H${highlightX + highlightWidth - radius}Q${highlightX + highlightWidth} ${highlightY} ${highlightX + highlightWidth} ${highlightY + radius}`,
+                `V${highlightY + highlightHeight - radius}Q${highlightX + highlightWidth} ${highlightY + highlightHeight} ${highlightX + highlightWidth - radius} ${highlightY + highlightHeight}`,
+                `H${highlightX + radius}Q${highlightX} ${highlightY + highlightHeight} ${highlightX} ${highlightY + highlightHeight - radius}`,
+                `V${highlightY + radius}Q${highlightX} ${highlightY} ${highlightX + radius} ${highlightY}Z`,
+              ].join(" ")}
+            />
+          </svg>
+        )}
       {confirming ? (
         <div className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/60 p-4">
           <div

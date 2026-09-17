@@ -41,15 +41,18 @@ const INSTRUCTIONS: Record<
     hideWhenSelector?: string;
     text: string | string[];
     next?: boolean;
+    dimmed?: boolean;
     highlightDialog?: boolean;
     interactiveDialog?: boolean;
   }
 > = {
   "open-feed-menu": {
+    dimmed: true,
     selector: '[data-onboarding="open-menu"]',
     text: "Let's start by adding your first feed. Open the menu to add one.",
   },
   "add-feed": {
+    dimmed: true,
     selector: '[data-onboarding="add-feed"]',
     text: "Here's where you add a feed. Feeds are the parts of the web that you want to bring into Serial.",
   },
@@ -72,10 +75,12 @@ const INSTRUCTIONS: Record<
     next: true,
   },
   "open-menu": {
+    dimmed: true,
     selector: '[data-onboarding="open-menu"]',
     text: "Open the menu to create a view.",
   },
   "add-view": {
+    dimmed: true,
     selector: '[data-onboarding="add-view"]',
     text: [
       "You can add views here.",
@@ -487,7 +492,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
           hideWhenSelector={instruction?.hideWhenSelector}
           highlightDialog={instruction?.highlightDialog}
           interactiveDialog={instruction?.interactiveDialog}
-          dimmed={false}
+          dimmed={instruction?.dimmed ?? false}
           next={instruction?.next}
           explanation={
             state.instruction === "feed-added" ||

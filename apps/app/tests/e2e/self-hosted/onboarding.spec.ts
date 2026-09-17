@@ -54,6 +54,11 @@ async function savedProgress() {
 }
 const guide = (page: Page) =>
   page.getByRole("region", { name: "Onboarding guidance" });
+async function expectSubtleButtonDimming(page: Page) {
+  const dim = page.locator("[data-guidance-layer] > svg path");
+  await expect(dim).toBeVisible();
+  await expect(dim).toHaveCSS("fill", "oklab(0 0 0 / 0.1)");
+}
 async function expectNormalBackdrop(page: Page) {
   await expect(page.locator("[data-guidance-layer] > svg")).toHaveCount(0);
   for (const overlay of await page
@@ -178,7 +183,11 @@ for (const mobile of [false, true]) {
     await expect(guide(page)).toContainText("Open the menu", {
       timeout: 30000,
     });
+    await expectSubtleButtonDimming(page);
     await page.locator('[data-onboarding="open-menu"]').click();
+    await expect(guide(page)).toContainText("You can add views here.");
+    if (mobile) await expectNormalBackdrop(page);
+    else await expectSubtleButtonDimming(page);
     await page.getByRole("button", { name: "Add View", exact: true }).click();
     const name = page.locator('[data-onboarding="name-view"]');
     await expect(name).toBeFocused();
@@ -351,7 +360,12 @@ for (const mobile of [false, true]) {
     await expect(guide(page)).toContainText(
       "Let's start by adding your first feed",
     );
-    await expectNormalBackdrop(page);
+    await expectSubtleButtonDimming(page);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expectSubtleButtonDimming(page);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveClass(/light/);
     await expect(
       page.getByRole("textbox", { name: "Suggested website" }),
     ).toHaveCount(0);
@@ -359,7 +373,7 @@ for (const mobile of [false, true]) {
     await expect(guide(page)).toContainText(
       "Let's start by adding your first feed",
     );
-    await expectNormalBackdrop(page);
+    await expectSubtleButtonDimming(page);
     expect(
       await page.evaluate(() => {
         const style = getComputedStyle(document.documentElement);
@@ -381,6 +395,8 @@ for (const mobile of [false, true]) {
       )
       .click();
     await expect(guide(page)).toContainText("Here's where you add a feed");
+    if (mobile) await expectNormalBackdrop(page);
+    else await expectSubtleButtonDimming(page);
     const addFeed = page
       .locator('[data-onboarding="add-feed"]')
       .filter({ visible: true });
@@ -407,6 +423,7 @@ for (const mobile of [false, true]) {
       .filter({ visible: true })
       .click();
     await expect(guide(page)).toContainText("Enter a website address");
+    await expectNormalBackdrop(page);
     await expect(
       guide(page).getByRole("textbox", { name: "Suggested website" }),
     ).toHaveValue("www.serial.tube");
