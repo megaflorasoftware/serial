@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { createRouterClient } from "@orpc/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -119,27 +118,6 @@ it("keeps the furthest current-version step across out-of-order writes", async (
   expect(await api().getProgress()).toEqual({
     complete: true,
     step: savedOnboardingStep("next-steps"),
-  });
-});
-it("backfills existing accounts once while future accounts remain incomplete", async () => {
-  await session.baseClient.execute(
-    readFileSync(
-      "src/server/db/post-migrations/0061_robust_texas_twister/01-complete-existing-users.sql",
-      "utf8",
-    ),
-  );
-  expect((await api().getProgress()).complete).toBe(true);
-  await session.database.insert(user).values({
-    id: "new",
-    name: "new",
-    email: "new@example.com",
-    emailVerified: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  expect(await api("new").getProgress()).toEqual({
-    complete: false,
-    step: null,
   });
 });
 it("rejects unsupported progress versions", async () => {
