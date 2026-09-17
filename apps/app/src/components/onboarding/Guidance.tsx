@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { ReactNode, RefObject } from "react";
-import { Button } from "~/components/ui/button";
+import { GuidanceLayer } from "./GuidanceLayer";
+import type { GuidancePosition } from "./GuidanceLayer";
 
 const POPUP_SELECTOR =
   '[data-guidance-popup], [data-slot="popover-content"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"]';
@@ -53,22 +53,15 @@ function boundsOf(elements: Array<HTMLElement | null>) {
     : null;
 }
 
-type Position = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  highlightX: number;
-  highlightY: number;
-  highlightWidth: number;
-  highlightHeight: number;
-  viewportWidth: number;
-  viewportHeight: number;
-  viewportTop: number;
-  bottomDrawerOpen: boolean;
-  helperHidden: boolean;
-};
-const EMPTY: Position = {
+function naturalHelperHeight(element: HTMLDivElement) {
+  const content = element.querySelector<HTMLElement>("[data-guidance-content]");
+  return (
+    element.offsetHeight +
+    (content ? content.scrollHeight - content.clientHeight : 0)
+  );
+}
+
+const EMPTY: GuidancePosition = {
   x: 0,
   y: 0,
   width: 0,
@@ -80,6 +73,9 @@ const EMPTY: Position = {
   viewportWidth: 0,
   viewportHeight: 0,
   viewportTop: 0,
+  layoutWidth: 0,
+  layoutHeight: 0,
+  bodyHost: false,
   bottomDrawerOpen: false,
   helperHidden: false,
 };
@@ -102,7 +98,7 @@ function useGuidanceTarget(
     let frame = 0;
     let focused: HTMLElement | null = null;
     const measure = () => {
-      if (helper.current) setHelperHeight(helper.current.offsetHeight);
+      if (helper.current) setHelperHeight(naturalHelperHeight(helper.current));
       const dialogs = openDialogs();
       const activeHost = dialogs.at(-1) ?? document.body;
       setHost((old) => (old === activeHost ? old : activeHost));
@@ -135,7 +131,7 @@ function useGuidanceTarget(
       ) {
         focusedInput.scrollIntoView({ block: "center", behavior: "instant" });
       }
-      const updated: Position = {
+      const updated: GuidancePosition = {
         helperHidden:
           !!hideWhenSelector && !!document.querySelector(hideWhenSelector),
         x: Math.max(0, (rect?.x ?? 0) - 5),
@@ -149,6 +145,9 @@ function useGuidanceTarget(
         viewportWidth: viewport?.width ?? innerWidth,
         viewportHeight: viewport?.height ?? innerHeight,
         viewportTop: viewport?.offsetTop ?? 0,
+        layoutWidth: innerWidth,
+        layoutHeight: innerHeight,
+        bodyHost: activeHost === document.body,
         bottomDrawerOpen: dialogs.some((dialog) =>
           dialog.matches('[data-vaul-drawer-direction="bottom"]'),
         ),
@@ -156,7 +155,8 @@ function useGuidanceTarget(
       setPosition((old) =>
         Object.keys(updated).every(
           (key) =>
-            old[key as keyof Position] === updated[key as keyof Position],
+            old[key as keyof GuidancePosition] ===
+            updated[key as keyof GuidancePosition],
         )
           ? old
           : updated,
@@ -216,72 +216,29 @@ function useGuidanceTarget(
   return { host, position, helperHeight, setHelperHeight, targetRef };
 }
 
-/** Presentation only. The caller owns instructions, advancement, and persistence. */
-export function Guidance({
-  instructionKey,
+function useGuidanceInteractions({
   selector,
-  anchorSelector,
-  hideWhenSelector,
-  highlightDialog = false,
-  interactiveDialog = false,
-  dimmed = true,
-  children,
-  next,
-  explanation = false,
-  onNext,
-  onSkip,
+  host,
   confirming,
+  targetRef,
+  layer,
+  interactiveDialog,
+  onSkip,
   onCancelSkip,
-  onConfirmSkip,
 }: {
-  instructionKey: string;
   selector?: string;
-  anchorSelector?: string;
-  hideWhenSelector?: string;
-  highlightDialog?: boolean;
-  interactiveDialog?: boolean;
-  dimmed?: boolean;
-  children?: ReactNode;
-  next?: boolean;
-  explanation?: boolean;
-  onNext?: () => void;
-  onSkip: () => void;
+  host: HTMLElement | null;
   confirming: boolean;
+  targetRef: RefObject<HTMLElement | null>;
+  layer: RefObject<HTMLDivElement | null>;
+  interactiveDialog: boolean;
+  onSkip: () => void;
   onCancelSkip: () => void;
-  onConfirmSkip: () => void;
 }) {
-  const layer = useRef<HTMLDivElement>(null);
-  const helper = useRef<HTMLDivElement>(null);
-  const { host, position, helperHeight, setHelperHeight, targetRef } =
-    useGuidanceTarget(
-      selector,
-      instructionKey,
-      anchorSelector,
-      hideWhenSelector,
-      highlightDialog,
-      confirming,
-      helper,
-      layer,
-    );
   const callbacks = useRef({ onSkip, onCancelSkip });
   useLayoutEffect(() => {
     callbacks.current = { onSkip, onCancelSkip };
   });
-
-  useLayoutEffect(() => {
-    const node = layer.current;
-    if (!node?.isConnected) return;
-    node.showPopover();
-    if (helper.current) {
-      setHelperHeight(helper.current.offsetHeight);
-    }
-    if (confirming || (next && explanation))
-      helper.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-    return () => {
-      if (node.isConnected) node.hidePopover();
-    };
-  }, [host, confirming, next, explanation, instructionKey, setHelperHeight]);
-
   useLayoutEffect(() => {
     const interactiveRoot = () =>
       interactiveDialog
@@ -331,7 +288,6 @@ export function Guidance({
           callbacks.current.onCancelSkip();
           return;
         }
-        // An expanded selector owns the first Escape. Its enclosing dialog also guards that event.
         if (
           document.querySelector(
             `${POPUP_SELECTOR}, [role="combobox"][aria-expanded="true"], [data-escape-dismisses="true"]`,
@@ -382,157 +338,98 @@ export function Guidance({
       document.removeEventListener("click", blockOutside, true);
       document.removeEventListener("keydown", keyboard, true);
     };
-  }, [selector, host, confirming, targetRef, interactiveDialog]);
+  }, [selector, host, confirming, targetRef, layer, interactiveDialog]);
+}
+
+/** Presentation only. The caller owns instructions, advancement, and persistence. */
+export function Guidance({
+  instructionKey,
+  selector,
+  anchorSelector,
+  hideWhenSelector,
+  highlightDialog = false,
+  interactiveDialog = false,
+  dimmed = true,
+  children,
+  next,
+  explanation = false,
+  onNext,
+  onSkip,
+  confirming,
+  onCancelSkip,
+  onConfirmSkip,
+}: {
+  instructionKey: string;
+  selector?: string;
+  anchorSelector?: string;
+  hideWhenSelector?: string;
+  highlightDialog?: boolean;
+  interactiveDialog?: boolean;
+  dimmed?: boolean;
+  children?: ReactNode;
+  next?: boolean;
+  explanation?: boolean;
+  onNext?: () => void;
+  onSkip: () => void;
+  confirming: boolean;
+  onCancelSkip: () => void;
+  onConfirmSkip: () => void;
+}) {
+  const layer = useRef<HTMLDivElement>(null);
+  const helper = useRef<HTMLDivElement>(null);
+  const { host, position, helperHeight, setHelperHeight, targetRef } =
+    useGuidanceTarget(
+      selector,
+      instructionKey,
+      anchorSelector,
+      hideWhenSelector,
+      highlightDialog,
+      confirming,
+      helper,
+      layer,
+    );
+  useLayoutEffect(() => {
+    const node = layer.current;
+    if (!node?.isConnected) return;
+    node.showPopover();
+    if (helper.current) {
+      setHelperHeight(naturalHelperHeight(helper.current));
+    }
+    if (confirming || (next && explanation))
+      helper.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    return () => {
+      if (node.isConnected) node.hidePopover();
+    };
+  }, [host, confirming, next, explanation, instructionKey, setHelperHeight]);
+  useGuidanceInteractions({
+    selector,
+    host,
+    confirming,
+    targetRef,
+    layer,
+    interactiveDialog,
+    onSkip,
+    onCancelSkip,
+  });
 
   if (!host) return null;
-  const { x, y, width, height, viewportWidth, viewportHeight, viewportTop } =
-    position;
-  const helperWidth = Math.min(300, viewportWidth - 32);
-  const { highlightX, highlightY, highlightWidth, highlightHeight } = position;
-  const radius = Math.min(6, highlightWidth / 2, highlightHeight / 2);
-
-  const bottom = viewportTop + viewportHeight;
-  const minTop = viewportTop + (position.bottomDrawerOpen ? 64 : 12);
-  const maxBottom = bottom - (position.bottomDrawerOpen ? 12 : 64);
-  const clampLeft = (value: number) =>
-    Math.max(16, Math.min(value, viewportWidth - helperWidth - 16));
-  const clampTop = (value: number) =>
-    Math.max(minTop, Math.min(value, maxBottom - helperHeight));
-  const candidates = [
-    { side: "right", left: x + width + 12, top: clampTop(y) },
-    { side: "left", left: x - helperWidth - 12, top: clampTop(y) },
-    { side: "top", left: clampLeft(x), top: y - helperHeight - 12 },
-    { side: "bottom", left: clampLeft(x), top: y + height + 12 },
-  ];
-  const { side, left, top } = candidates.find(
-    (candidate) =>
-      candidate.left >= 16 &&
-      candidate.left + helperWidth <= viewportWidth - 16 &&
-      candidate.top >= minTop &&
-      candidate.top + helperHeight <= maxBottom,
-  ) ?? { side: "bottom", left: clampLeft(x), top: clampTop(y + height + 12) };
-  const arrowX =
-    Math.max(16, Math.min(x + width / 2 - left, helperWidth - 16)) - 5;
-  const arrowY =
-    Math.max(16, Math.min(y + height / 2 - top, helperHeight - 16)) - 5;
-  return createPortal(
-    <div
-      ref={layer}
-      popover="manual"
-      data-guidance-layer
-      data-vaul-no-drag
-      onPointerDown={(event) => event.stopPropagation()}
-      className="pointer-events-none fixed inset-0 m-0 h-full max-h-none w-full max-w-none overflow-visible border-0 bg-transparent p-0 text-inherit"
+  return (
+    <GuidanceLayer
+      host={host}
+      layer={layer}
+      helper={helper}
+      position={position}
+      helperHeight={helperHeight}
+      selector={selector}
+      dimmed={dimmed}
+      confirming={confirming}
+      next={!!next}
+      onNext={onNext}
+      onSkip={onSkip}
+      onCancelSkip={onCancelSkip}
+      onConfirmSkip={onConfirmSkip}
     >
-      {selector &&
-        dimmed &&
-        host === document.body &&
-        !confirming &&
-        highlightWidth > 0 && (
-          <svg
-            aria-hidden="true"
-            className="pointer-events-none fixed inset-0 h-full w-full"
-          >
-            <path
-              className="fill-black/10"
-              fillRule="evenodd"
-              d={[
-                `M0 0H${innerWidth}V${innerHeight}H0Z`,
-                `M${highlightX + radius} ${highlightY}`,
-                `H${highlightX + highlightWidth - radius}Q${highlightX + highlightWidth} ${highlightY} ${highlightX + highlightWidth} ${highlightY + radius}`,
-                `V${highlightY + highlightHeight - radius}Q${highlightX + highlightWidth} ${highlightY + highlightHeight} ${highlightX + highlightWidth - radius} ${highlightY + highlightHeight}`,
-                `H${highlightX + radius}Q${highlightX} ${highlightY + highlightHeight} ${highlightX} ${highlightY + highlightHeight - radius}`,
-                `V${highlightY + radius}Q${highlightX} ${highlightY} ${highlightX + radius} ${highlightY}Z`,
-              ].join(" ")}
-            />
-          </svg>
-        )}
-      {confirming ? (
-        <div className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/60 p-4">
-          <div
-            ref={helper}
-            // Guidance traps Tab and Escape inside this existing Radix modal.
-            // A second native modal would make its highlighted controls inert.
-            // react-doctor-disable-next-line react-doctor/prefer-html-dialog
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="skip-onboarding-title"
-            aria-describedby="skip-onboarding-description"
-            className="bg-background grid w-full max-w-sm gap-4 rounded-lg border p-6 shadow-lg"
-          >
-            <h2 id="skip-onboarding-title" className="text-lg font-semibold">
-              Skip Tutorial?
-            </h2>
-            <p
-              id="skip-onboarding-description"
-              className="text-muted-foreground text-sm"
-            >
-              Your saved feeds, views, and settings will stay as they are.
-            </p>
-            <Button variant="outline" onClick={onCancelSkip}>
-              Keep going
-            </Button>
-            <Button onClick={onConfirmSkip}>Skip Tutorial</Button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {children && !position.helperHidden && (
-            <div
-              ref={helper}
-              role="region"
-              aria-label="Onboarding guidance"
-              className="bg-popover text-popover-foreground pointer-events-auto fixed grid gap-3 rounded-lg border p-4 text-sm shadow-lg"
-              style={{ left, top, width: helperWidth }}
-            >
-              {selector && width > 0 && (
-                <span
-                  aria-hidden="true"
-                  data-guidance-caret
-                  data-side={side}
-                  className="bg-popover pointer-events-none absolute size-2.5 rotate-45 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:border-r data-[side=top]:border-b"
-                  style={{
-                    left:
-                      side === "right"
-                        ? -6
-                        : side === "left"
-                          ? undefined
-                          : arrowX,
-                    right: side === "left" ? -6 : undefined,
-                    top:
-                      side === "bottom"
-                        ? -6
-                        : side === "top"
-                          ? undefined
-                          : arrowY,
-                    bottom: side === "top" ? -6 : undefined,
-                  }}
-                />
-              )}
-              {children}
-              {next && (
-                <Button size="sm" onClick={onNext}>
-                  Next
-                </Button>
-              )}
-            </div>
-          )}
-          <Button
-            variant="secondary"
-            className="pointer-events-auto fixed left-1/2 -translate-x-1/2 shadow-sm"
-            style={{
-              top: position.bottomDrawerOpen
-                ? `calc(${viewportTop + 16}px + env(safe-area-inset-top, 0px))`
-                : bottom - 52,
-            }}
-            onPointerDown={onSkip}
-            onClick={onSkip}
-          >
-            Skip Tutorial
-          </Button>
-        </>
-      )}
-    </div>,
-    host,
+      {children}
+    </GuidanceLayer>
   );
 }

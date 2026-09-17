@@ -4,11 +4,11 @@ import { Link } from "@tanstack/react-router";
 import { CopyIcon, DownloadIcon, ImportIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Guidance } from "./Guidance";
+import { OnboardingSyncSlide } from "./OnboardingSyncSlide";
 import { WelcomeDrawing } from "./WelcomeDrawing";
+import type { OnboardingStep } from "~/lib/onboarding/progress";
 import type { OnboardingInstruction } from "~/lib/onboarding/store";
 import { ColorModeToggleGroup } from "~/components/color-theme/ColorModeToggleGroup";
-import { useAtprotoReconnect } from "~/components/connections/AtprotoConnection";
-import { ReconnectBanner } from "~/components/connections/ConnectedAccountRow";
 import {
   advanceInstruction,
   advanceOnboarding,
@@ -26,12 +26,17 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useDialogStore } from "~/components/feed/dialogStore";
-import {
-  AtprotoSyncSettingsForm,
-  useAtprotoSyncSettingsSave,
-} from "~/components/connections/AtprotoSyncSettingsForm";
 import { authClient } from "~/lib/auth-client";
 import { useCanMutate } from "~/lib/data/offline-mutations";
+
+const ONBOARDING_TITLES = {
+  introduction: "Welcome to Serial!",
+  "choose-colors": "Customize appearance",
+  "add-feed": "Follow your first feed",
+  "create-view": "Create a view",
+  "atmosphere-sync-setup": "Your Atmosphere subscriptions",
+  "next-steps": "That's it!",
+};
 
 const INSTRUCTIONS: Record<
   OnboardingInstruction,
@@ -263,46 +268,6 @@ function ThemePicker() {
   );
 }
 
-function SyncSlide() {
-  const run = useOnboarding((state) => state.run);
-  const status = useQuery(orpc.atproto.getConnectionStatus.queryOptions());
-  const reconnect = useAtprotoReconnect();
-  const save = useAtprotoSyncSettingsSave(() =>
-    advanceSavedOnboardingStep(run, "atmosphere-sync-setup", "next-steps"),
-  );
-  useEffect(() => {
-    if (status.data && !status.data.isConnected && !status.data.needsReconnect)
-      advanceOnboarding("next-steps");
-  }, [status.data]);
-  if (status.isError)
-    return (
-      <div className="grid gap-4">
-        <p>Couldn&apos;t load your Atmosphere connection.</p>
-        <Button onClick={() => void status.refetch()}>Retry</Button>
-      </div>
-    );
-  if (!status.data) return <p>Loading your connection...</p>;
-  return (
-    <div className="grid gap-6">
-      {status.data.needsReconnect && (
-        <ReconnectBanner
-          disabled={reconnect.isPending}
-          reconnecting={reconnect.isPending}
-          onReconnect={() => reconnect.mutate(undefined)}
-        />
-      )}
-      <AtprotoSyncSettingsForm
-        onboarding
-        savedPreferences={status.data.syncPreferences}
-        hasWriteScope={status.data.hasWriteScope}
-        disabled={status.data.needsReconnect}
-        saving={save.busy}
-        onSave={save.save}
-      />
-    </div>
-  );
-}
-
 export function Onboarding() {
   const { data: session } = authClient.useSession();
   return session?.user.id ? (
@@ -376,6 +341,49 @@ function AccountOnboarding({ userId }: { userId: string }) {
   const instruction = state.instruction
     ? INSTRUCTIONS[state.instruction]
     : null;
+
+  const close = () => {
+    if (state.step === "next-steps") finishOnboarding();
+    else requestOnboardingSkip();
+  };
+  const bookend = state.step === "introduction" || state.step === "next-steps";
+  return (
+    <>
+      <ControlledResponsiveDialog
+        hideClose={bookend}
+        titleClassName={bookend ? "text-xl" : undefined}
+        headerClassName={bookend ? "text-center sm:text-center" : undefined}
+        previewDrawer={state.step === "choose-colors"}
+        open={!instruction}
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+        title={ONBOARDING_TITLES[state.step]}
+        headerRight={
+          state.step === "choose-colors" ? (
+            <div className="shrink-0">
+              <ColorModeToggleGroup />
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="grid gap-6 py-2">
+          <OnboardingSlide step={state.step} run={state.run} userId={userId} />
+        </div>
+      </ControlledResponsiveDialog>
+      {state.step !== "next-steps" && (
+        <OnboardingInstructions step={state.step} />
+      )}
+    </>
+  );
+}
+
+function OnboardingInstructions({ step }: { step: OnboardingStep }) {
+  const state = useOnboarding();
+  const sidebar = useSidebar();
+  const instruction = state.instruction
+    ? INSTRUCTIONS[state.instruction]
+    : null;
   const nextInstruction = () => {
     switch (state.instruction) {
       case "feed-added":
@@ -395,132 +403,110 @@ function AccountOnboarding({ userId }: { userId: string }) {
         break;
     }
   };
-  const titles = {
-    introduction: "Welcome to Serial!",
-    "choose-colors": "Customize appearance",
-    "add-feed": "Follow your first feed",
-    "create-view": "Create a view",
-    "atmosphere-sync-setup": "Your Atmosphere subscriptions",
-    "next-steps": "That's it!",
-  };
-  const close = () => {
-    if (state.step === "next-steps") finishOnboarding();
-    else requestOnboardingSkip();
-  };
-  const bookend = state.step === "introduction" || state.step === "next-steps";
+  return (
+    <Guidance
+      instructionKey={state.instruction ?? step}
+      selector={
+        state.instruction === "open-feed-menu" && sidebar.isMobile
+          ? '[data-onboarding="open-feed-menu"]'
+          : instruction?.selector
+      }
+      anchorSelector={instruction?.anchorSelector}
+      hideWhenSelector={instruction?.hideWhenSelector}
+      highlightDialog={instruction?.highlightDialog}
+      interactiveDialog={instruction?.interactiveDialog}
+      dimmed={instruction?.dimmed ?? false}
+      next={instruction?.next}
+      explanation={
+        state.instruction === "feed-added" || state.instruction === "view-chips"
+      }
+      onNext={nextInstruction}
+      onSkip={requestOnboardingSkip}
+      confirming={state.confirmingSkip}
+      onCancelSkip={() => useOnboarding.setState({ confirmingSkip: false })}
+      onConfirmSkip={() => {
+        finishOnboarding();
+        useDialogStore.getState().closeDialog();
+      }}
+    >
+      {instruction && (
+        <>
+          <div className="grid gap-3">
+            {(Array.isArray(instruction.text)
+              ? instruction.text
+              : [instruction.text]
+            ).map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+          {state.instruction === "find-feed" && <SuggestedWebsite />}
+        </>
+      )}
+    </Guidance>
+  );
+}
+
+function OnboardingSlide({
+  step,
+  run,
+  userId,
+}: {
+  step: OnboardingStep;
+  run: number;
+  userId: string;
+}) {
   return (
     <>
-      <ControlledResponsiveDialog
-        hideClose={bookend}
-        titleClassName={bookend ? "text-xl" : undefined}
-        headerClassName={bookend ? "text-center sm:text-center" : undefined}
-        previewDrawer={state.step === "choose-colors"}
-        open={!instruction}
-        onOpenChange={(open) => {
-          if (!open) close();
-        }}
-        title={titles[state.step]}
-        headerRight={
-          state.step === "choose-colors" ? (
-            <div className="shrink-0">
-              <ColorModeToggleGroup />
-            </div>
-          ) : undefined
-        }
-      >
-        <div className="grid gap-6 py-2">
-          {state.step === "introduction" && (
-            <>
-              <WelcomeDrawing />
-              <p className="text-center text-lg">
-                Serial lets you follow RSS feeds, subscribe to Atmosphere
-                publications, and save bookmarks from anywhere on the web.
-              </p>
-              <Button onClick={() => advanceOnboarding("choose-colors")}>
-                Get started
-              </Button>
-            </>
-          )}
-          {state.step === "choose-colors" && <ThemePicker />}
-          {state.step === "atmosphere-sync-setup" && <SyncSlide />}
-          {state.step === "next-steps" && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col gap-2 py-4"
-                  asChild
-                >
-                  <a
-                    href="https://www.serial.tube/downloads"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <DownloadIcon size={20} />
-                    Get the extension
-                  </a>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col gap-2 py-4"
-                  asChild
-                >
-                  <Link to="/import" onClick={finishOnboarding}>
-                    <ImportIcon size={20} />
-                    Import feeds
-                  </Link>
-                </Button>
-              </div>
-              <p className="text-center text-base">
-                Next, add our extension to save bookmarks as you browse the web,
-                or import feeds from YouTube or your previous RSS reader.
-              </p>
-              <Button onClick={finishOnboarding}>Done</Button>
-            </>
-          )}
-        </div>
-      </ControlledResponsiveDialog>
-      {state.step !== "next-steps" && (
-        <Guidance
-          instructionKey={state.instruction ?? state.step}
-          selector={
-            state.instruction === "open-feed-menu" && sidebar.isMobile
-              ? '[data-onboarding="open-feed-menu"]'
-              : instruction?.selector
-          }
-          anchorSelector={instruction?.anchorSelector}
-          hideWhenSelector={instruction?.hideWhenSelector}
-          highlightDialog={instruction?.highlightDialog}
-          interactiveDialog={instruction?.interactiveDialog}
-          dimmed={instruction?.dimmed ?? false}
-          next={instruction?.next}
-          explanation={
-            state.instruction === "feed-added" ||
-            state.instruction === "view-chips"
-          }
-          onNext={nextInstruction}
-          onSkip={requestOnboardingSkip}
-          confirming={state.confirmingSkip}
-          onCancelSkip={() => useOnboarding.setState({ confirmingSkip: false })}
-          onConfirmSkip={() => {
-            finishOnboarding();
-            useDialogStore.getState().closeDialog();
-          }}
-        >
-          {instruction && (
-            <>
-              <div className="grid gap-3">
-                {(Array.isArray(instruction.text)
-                  ? instruction.text
-                  : [instruction.text]
-                ).map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-              {state.instruction === "find-feed" && <SuggestedWebsite />}
-            </>
-          )}
-        </Guidance>
+      {step === "introduction" && (
+        <>
+          <WelcomeDrawing />
+          <p className="text-center text-lg">
+            Serial lets you follow RSS feeds, subscribe to Atmosphere
+            publications, and save bookmarks from anywhere on the web.
+          </p>
+          <Button onClick={() => advanceOnboarding("choose-colors")}>
+            Get started
+          </Button>
+        </>
+      )}
+      {step === "choose-colors" && <ThemePicker />}
+      {step === "atmosphere-sync-setup" && (
+        <OnboardingSyncSlide run={run} userId={userId} />
+      )}
+      {step === "next-steps" && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              asChild
+            >
+              <a
+                href="https://www.serial.tube/downloads"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <DownloadIcon size={20} />
+                Get the extension
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              asChild
+            >
+              <Link to="/import" onClick={finishOnboarding}>
+                <ImportIcon size={20} />
+                Import feeds
+              </Link>
+            </Button>
+          </div>
+          <p className="text-center text-base">
+            Next, add our extension to save bookmarks as you browse the web, or
+            import feeds from YouTube or your previous RSS reader.
+          </p>
+          <Button onClick={finishOnboarding}>Done</Button>
+        </>
       )}
     </>
   );

@@ -74,6 +74,53 @@ it("uses bounded point reads and writes, keeps accounts isolated, and never reop
   });
   expect((await api().getProgress()).complete).toBe(true);
 });
+it("keeps the furthest current-version step across out-of-order writes", async () => {
+  await api().saveProgress({
+    complete: false,
+    step: savedOnboardingStep("atmosphere-sync-setup"),
+  });
+  await api().saveProgress({
+    complete: false,
+    step: savedOnboardingStep("create-view"),
+  });
+  expect(await api().getProgress()).toEqual({
+    complete: false,
+    step: savedOnboardingStep("atmosphere-sync-setup"),
+  });
+
+  await session.database
+    .update(user)
+    .set({ onboardingStep: "2025-01-01-next-steps" });
+  await api().saveProgress({
+    complete: false,
+    step: savedOnboardingStep("choose-colors"),
+  });
+  expect((await api().getProgress()).step).toBe(
+    savedOnboardingStep("choose-colors"),
+  );
+
+  await session.database.update(user).set({ onboardingStep: null });
+  await api().saveProgress({
+    complete: false,
+    step: savedOnboardingStep("introduction"),
+  });
+  expect((await api().getProgress()).step).toBe(
+    savedOnboardingStep("introduction"),
+  );
+
+  await api().saveProgress({
+    complete: true,
+    step: savedOnboardingStep("next-steps"),
+  });
+  await api().saveProgress({
+    complete: false,
+    step: savedOnboardingStep("atmosphere-sync-setup"),
+  });
+  expect(await api().getProgress()).toEqual({
+    complete: true,
+    step: savedOnboardingStep("next-steps"),
+  });
+});
 it("backfills existing accounts once while future accounts remain incomplete", async () => {
   await session.baseClient.execute(
     readFileSync(

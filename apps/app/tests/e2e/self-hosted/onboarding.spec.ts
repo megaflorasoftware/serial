@@ -104,6 +104,53 @@ test("advances despite a failed progress write and resumes the last saved step",
   ).toHaveCount(0);
 });
 
+test("keeps feed-entry guidance clear of its input with a short mobile keyboard viewport", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page, "add-feed");
+  await expect(guide(page)).toContainText("adding your first feed", {
+    timeout: 30_000,
+  });
+  await page.locator('[data-onboarding="open-feed-menu"]').click();
+  await page
+    .locator('[data-onboarding="add-feed"]')
+    .filter({ visible: true })
+    .click();
+  const input = page.locator('[data-onboarding="find-feed"] [cmdk-input]');
+  await expect(input).toBeVisible();
+  for (const height of [350, 300, 844]) {
+    await page.evaluate((height) => {
+      Object.defineProperty(window.visualViewport, "height", {
+        value: height,
+        configurable: true,
+      });
+      window.visualViewport?.dispatchEvent(new Event("resize"));
+    }, height);
+    await expect
+      .poll(async () => {
+        const target = (await input.boundingBox())!;
+        const helper = (await guide(page).boundingBox())!;
+        return (
+          helper.y >= target.y + target.height &&
+          helper.y + helper.height <= height - 64
+        );
+      })
+      .toBe(true);
+    await input.click({ position: { x: 50, y: 50 } });
+    await expect(input).toBeFocused();
+    await input.fill("my reading");
+    await expect(input).toHaveValue("my reading");
+    await input.fill("");
+    await page
+      .getByRole("button", { name: "Skip Tutorial", exact: true })
+      .click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.getByRole("button", { name: "Keep going" }).click();
+  }
+});
+
 test("mobile view sheet restores space after keyboard height changes and blur", async ({
   page,
 }) => {

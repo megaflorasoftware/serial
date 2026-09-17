@@ -41,6 +41,7 @@ import {
   feedCreatedDuringOnboarding,
   feedSavedDuringOnboarding,
   requestOnboardingSkip,
+  useOnboarding,
 } from "~/lib/onboarding/store";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
@@ -180,6 +181,7 @@ export function AddFeedDialog() {
     setPendingAction("bookmark");
     try {
       const result = await saveBookmark({ sourceUrl });
+      if (useDialogStore.getState().dialog !== "add-feed") return;
       setBookmarkFeedback(
         result as BookmarkSaveResult<ApplicationBookmark> & {
           bookmark: ApplicationBookmark;
@@ -195,6 +197,15 @@ export function AddFeedDialog() {
   const isOpen = dialog === "add-feed";
 
   const dialogContentRef = useVisualViewport(isOpen);
+
+  const handleBookmarkEditorClose = () => {
+    if (useOnboarding.getState().instruction === "find-feed") {
+      setBookmarkFeedback(null);
+      discovery.reset();
+      return;
+    }
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={isOpen && canMutate} onOpenChange={onOpenChange}>
@@ -219,7 +230,7 @@ export function AddFeedDialog() {
           <BookmarkOrganizationEditor
             bookmarkId={bookmarkFeedback.bookmark.id}
             feedback={bookmarkFeedback}
-            onClose={() => onOpenChange(false)}
+            onClose={handleBookmarkEditorClose}
           />
         ) : (
           <FeedDiscoveryCommand

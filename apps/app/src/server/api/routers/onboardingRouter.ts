@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, notInArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "~/server/orpc/base";
 import { user } from "~/server/db/schema";
@@ -27,10 +27,27 @@ export const saveProgress = protectedProcedure
     }),
   )
   .handler(async ({ context, input }) => {
+    const stepIndex = ONBOARDING_STEPS.findIndex(
+      (step) => savedOnboardingStep(step) === input.step,
+    );
+    const laterSteps = ONBOARDING_STEPS.slice(stepIndex + 1).map(
+      savedOnboardingStep,
+    );
+    const monotonicProgressGuard =
+      input.complete || laterSteps.length === 0
+        ? undefined
+        : or(
+            isNull(user.onboardingStep),
+            notInArray(user.onboardingStep, laterSteps),
+          );
     await context.db
       .update(user)
       .set({ onboardingComplete: input.complete, onboardingStep: input.step })
       .where(
-        and(eq(user.id, context.user.id), eq(user.onboardingComplete, false)),
+        and(
+          eq(user.id, context.user.id),
+          eq(user.onboardingComplete, false),
+          monotonicProgressGuard,
+        ),
       );
   });
