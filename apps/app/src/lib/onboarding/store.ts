@@ -43,6 +43,14 @@ const initial: State = {
 export const useOnboarding = create<State>(() => initial);
 let persist: ReturnType<typeof createProgressWriter> | undefined;
 
+function initialInstruction(
+  step: OnboardingStep | null,
+): OnboardingInstruction | null {
+  if (step === "create-view") return "open-menu";
+  if (step === "add-feed") return "open-feed-menu";
+  return null;
+}
+
 export function startOnboarding(
   progress: OnboardingProgress,
   write: (progress: OnboardingProgress) => Promise<unknown>,
@@ -63,13 +71,13 @@ export function startOnboarding(
     consentResult: keepConsentResult ? current.consentResult : null,
     consentResultUserId: keepConsentResult ? (userId ?? null) : null,
     step,
-    instruction: step === "create-view" ? "open-menu" : null,
+    instruction: initialInstruction(step),
   });
   if (step === "next-steps") advanceOnboarding(step);
 }
 export function advanceOnboarding(
   step: OnboardingStep,
-  instruction: OnboardingInstruction | null = null,
+  instruction: OnboardingInstruction | null = initialInstruction(step),
 ) {
   if (!useOnboarding.getState().step) return;
   useOnboarding.setState({ step, instruction });

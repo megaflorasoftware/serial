@@ -85,6 +85,7 @@ const EMPTY: Position = {
 function useGuidanceTarget(
   selector: string | undefined,
   instructionKey: string,
+  anchorSelector: string | undefined,
   highlightDialog: boolean,
   confirming: boolean,
   helper: RefObject<HTMLDivElement | null>,
@@ -107,13 +108,19 @@ function useGuidanceTarget(
       const popups = Array.from(
         document.querySelectorAll(POPUP_SELECTOR),
       ).filter(visible);
-      const rect = boundsOf([target, ...popups]);
+      const anchors = anchorSelector
+        ? Array.from(document.querySelectorAll(anchorSelector)).filter(visible)
+        : [];
+      const activePopup = popups.at(-1);
+      const rect = boundsOf(
+        activePopup ? [activePopup] : anchors.length ? anchors : [target],
+      );
       const highlightedDialog = highlightDialog
         ? target?.closest<HTMLElement>('[role="dialog"][data-state="open"]')
         : null;
       const highlight = highlightedDialog
         ? boundsOf([highlightedDialog, ...popups])
-        : rect;
+        : boundsOf([target, ...popups]);
       const viewport = window.visualViewport;
       const focusedInput = target?.matches("input, textarea") ? target : null;
       if (
@@ -191,7 +198,15 @@ function useGuidanceTarget(
       window.visualViewport?.removeEventListener("resize", schedule);
       window.visualViewport?.removeEventListener("scroll", schedule);
     };
-  }, [selector, instructionKey, highlightDialog, confirming, helper, layer]);
+  }, [
+    selector,
+    instructionKey,
+    anchorSelector,
+    highlightDialog,
+    confirming,
+    helper,
+    layer,
+  ]);
   return { host, position, helperHeight, setHelperHeight, targetRef };
 }
 
@@ -199,6 +214,7 @@ function useGuidanceTarget(
 export function Guidance({
   instructionKey,
   selector,
+  anchorSelector,
   highlightDialog = false,
   interactiveDialog = false,
   dimmed = true,
@@ -213,6 +229,7 @@ export function Guidance({
 }: {
   instructionKey: string;
   selector?: string;
+  anchorSelector?: string;
   highlightDialog?: boolean;
   interactiveDialog?: boolean;
   dimmed?: boolean;
@@ -231,6 +248,7 @@ export function Guidance({
     useGuidanceTarget(
       selector,
       instructionKey,
+      anchorSelector,
       highlightDialog,
       confirming,
       helper,
@@ -358,22 +376,36 @@ export function Guidance({
   }, [selector, host, confirming, targetRef, interactiveDialog]);
 
   if (!host) return null;
-  const { x, y, width, viewportWidth, viewportHeight, viewportTop } = position;
+  const { x, y, width, height, viewportWidth, viewportHeight, viewportTop } =
+    position;
   const helperWidth = Math.min(300, viewportWidth - 32);
   const { highlightX, highlightY, highlightWidth, highlightHeight } = position;
   const radius = Math.min(6, highlightWidth / 2, highlightHeight / 2);
 
   const bottom = viewportTop + viewportHeight;
-  const beside = x + width + helperWidth + 24 < viewportWidth;
-  const above = y - helperHeight - 16 >= viewportTop + 12;
-  const left = beside
-    ? x + width + 12
-    : Math.max(16, Math.min(x, viewportWidth - helperWidth - 16));
-  const top = beside
-    ? Math.max(viewportTop + 12, Math.min(y, bottom - helperHeight - 64))
-    : above
-      ? y - helperHeight - 12
-      : Math.max(viewportTop + 12, bottom - helperHeight - 64);
+  const minTop = viewportTop + (position.bottomDrawerOpen ? 64 : 12);
+  const maxBottom = bottom - (position.bottomDrawerOpen ? 12 : 64);
+  const clampLeft = (value: number) =>
+    Math.max(16, Math.min(value, viewportWidth - helperWidth - 16));
+  const clampTop = (value: number) =>
+    Math.max(minTop, Math.min(value, maxBottom - helperHeight));
+  const candidates = [
+    { side: "right", left: x + width + 12, top: clampTop(y) },
+    { side: "left", left: x - helperWidth - 12, top: clampTop(y) },
+    { side: "top", left: clampLeft(x), top: y - helperHeight - 12 },
+    { side: "bottom", left: clampLeft(x), top: y + height + 12 },
+  ];
+  const { side, left, top } = candidates.find(
+    (candidate) =>
+      candidate.left >= 16 &&
+      candidate.left + helperWidth <= viewportWidth - 16 &&
+      candidate.top >= minTop &&
+      candidate.top + helperHeight <= maxBottom,
+  ) ?? { side: "bottom", left: clampLeft(x), top: clampTop(y + height + 12) };
+  const arrowX =
+    Math.max(16, Math.min(x + width / 2 - left, helperWidth - 16)) - 5;
+  const arrowY =
+    Math.max(16, Math.min(y + height / 2 - top, helperHeight - 16)) - 5;
   return createPortal(
     <div
       ref={layer}
@@ -440,6 +472,30 @@ export function Guidance({
               className="bg-popover text-popover-foreground pointer-events-auto fixed grid gap-3 rounded-lg border p-4 text-sm shadow-lg"
               style={{ left, top, width: helperWidth }}
             >
+              {selector && width > 0 && (
+                <span
+                  aria-hidden="true"
+                  data-guidance-caret
+                  data-side={side}
+                  className="bg-popover pointer-events-none absolute size-2.5 rotate-45 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:border-r data-[side=top]:border-b"
+                  style={{
+                    left:
+                      side === "right"
+                        ? -6
+                        : side === "left"
+                          ? undefined
+                          : arrowX,
+                    right: side === "left" ? -6 : undefined,
+                    top:
+                      side === "bottom"
+                        ? -6
+                        : side === "top"
+                          ? undefined
+                          : arrowY,
+                    bottom: side === "top" ? -6 : undefined,
+                  }}
+                />
+              )}
               {children}
               {next && (
                 <Button size="sm" onClick={onNext}>

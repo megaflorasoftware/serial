@@ -62,12 +62,13 @@ test("advances despite a failed progress write and resumes the last saved step",
   page,
 }) => {
   await start(page);
+  await expect(guide(page)).toHaveCount(0);
   await page.route("**/api/rpc/onboarding/saveProgress", (route) =>
     route.abort(),
   );
   await page.getByRole("button", { name: "Get started", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Make yourself at home" }),
+    page.getByRole("heading", { name: "Customize appearance" }),
   ).toBeVisible();
   await page.reload();
   await expect(
@@ -175,6 +176,20 @@ for (const mobile of [false, true]) {
       page.getByRole("tab", { name: "Content", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     await page.getByRole("button", { name: "Add feeds", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const popup = (await page
+          .getByRole("option", { name: "Weekend reading", exact: true })
+          .boundingBox())!;
+        const helper = (await guide(page).boundingBox())!;
+        return (
+          helper.x + helper.width <= popup.x ||
+          popup.x + popup.width <= helper.x ||
+          helper.y + helper.height <= popup.y ||
+          popup.y + popup.height <= helper.y
+        );
+      })
+      .toBeTruthy();
     await page.keyboard.press("Escape");
     await expect(page.getByPlaceholder("Search feeds...")).toHaveCount(0);
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
@@ -251,7 +266,7 @@ for (const mobile of [false, true]) {
 }
 
 for (const mobile of [false, true]) {
-  test(`default colors, optional URL copying, and manual Feed menu entry ${mobile ? "mobile" : "desktop"}`, async ({
+  test(`default colors, contextual URL copying, and adjacent Feed guidance ${mobile ? "mobile" : "desktop"}`, async ({
     page,
     context,
   }) => {
@@ -268,13 +283,12 @@ for (const mobile of [false, true]) {
       light: [60, 10, 100],
       dark: [60, 10, 15],
     });
+    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
     await expect(
       page.getByRole("textbox", { name: "Suggested website" }),
-    ).toHaveValue("www.serial.tube");
+    ).toHaveCount(0);
     await page.reload();
-    await expect(
-      page.getByRole("textbox", { name: "Suggested website" }),
-    ).toBeVisible();
+    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
     expect(
       await page.evaluate(() => {
         const style = getComputedStyle(document.documentElement);
@@ -288,6 +302,43 @@ for (const mobile of [false, true]) {
       [60, 10, 100],
       [60, 10, 15],
     ]);
+    await page
+      .locator(
+        mobile
+          ? '[data-onboarding="open-feed-menu"]'
+          : '[data-onboarding="open-menu"]',
+      )
+      .click();
+    await expect(guide(page)).toContainText("Add a Feed to bring");
+    const addFeed = page
+      .locator('[data-onboarding="add-feed"]')
+      .filter({ visible: true });
+    await expect
+      .poll(async () => {
+        const target = (await addFeed.boundingBox())!;
+        const helper = (await guide(page).boundingBox())!;
+        const dx = Math.max(
+          0,
+          target.x - helper.x - helper.width,
+          helper.x - target.x - target.width,
+        );
+        const dy = Math.max(
+          0,
+          target.y - helper.y - helper.height,
+          helper.y - target.y - target.height,
+        );
+        return Math.hypot(dx, dy);
+      })
+      .toBeLessThanOrEqual(24);
+    await expect(guide(page).locator("[data-guidance-caret]")).toBeVisible();
+    await page
+      .locator('[data-onboarding="add-feed"]')
+      .filter({ visible: true })
+      .click();
+    await expect(guide(page)).toContainText("Enter a website address");
+    await expect(
+      guide(page).getByRole("textbox", { name: "Suggested website" }),
+    ).toHaveValue("www.serial.tube");
     await page.getByRole("button", { name: "Copy website address" }).click();
     await expect(
       page.getByText("Website address copied.", { exact: true }),
@@ -298,24 +349,12 @@ for (const mobile of [false, true]) {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       "www.serial.tube",
     );
-    // Next also works on a fresh slide without copying the suggestion.
-    await page.reload();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
-    await page
-      .locator(
-        mobile
-          ? '[data-onboarding="open-feed-menu"]'
-          : '[data-onboarding="open-menu"]',
-      )
-      .click();
-    await expect(guide(page)).toContainText("Add a Feed to bring");
-    await page
-      .locator('[data-onboarding="add-feed"]')
-      .filter({ visible: true })
-      .click();
     await expect(guide(page)).toContainText("Enter a website address");
-    const search = page.locator('[data-onboarding="find-feed"] input');
+    await expect(guide(page).getByRole("button", { name: "Next" })).toHaveCount(
+      0,
+    );
+
+    const search = page.locator('[data-onboarding="find-feed"] [cmdk-input]');
     await search.fill("https://example.com/my-favorite-site");
     await expect(search).toHaveValue("https://example.com/my-favorite-site");
   });

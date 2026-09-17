@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { CopyIcon, DownloadIcon, ImportIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Guidance } from "./Guidance";
+import { WelcomeDrawing } from "./WelcomeDrawing";
 import type { OnboardingInstruction } from "~/lib/onboarding/store";
 import { ColorModeToggleGroup } from "~/components/color-theme/ColorModeToggleGroup";
 import { useAtprotoReconnect } from "~/components/connections/AtprotoConnection";
@@ -36,6 +37,7 @@ const INSTRUCTIONS: Record<
   OnboardingInstruction,
   {
     selector: string;
+    anchorSelector?: string;
     text: string;
     next?: boolean;
     highlightDialog?: boolean;
@@ -52,14 +54,18 @@ const INSTRUCTIONS: Record<
     text: "Add a Feed to bring its new posts into Serial.",
   },
   "find-feed": {
+    anchorSelector:
+      '[data-onboarding="find-feed"] [cmdk-input], [data-onboarding="find-feed"] [role="option"]',
     selector: '[data-onboarding="find-feed"]',
     text: "Enter a website address, then choose a Feed to follow.",
   },
   "save-feed": {
+    highlightDialog: true,
     selector: '[data-onboarding="save-feed"]',
     text: "Save your Feed to finish adding it.",
   },
   "feed-added": {
+    dimmed: false,
     selector: '[data-onboarding="feed-content"]',
     text: "Your Feed is ready. New posts will appear here.",
     next: true,
@@ -89,6 +95,7 @@ const INSTRUCTIONS: Record<
     text: "Open Display to explore how your View looks.",
   },
   "explore-display": {
+    anchorSelector: '[role="dialog"]:has([data-onboarding="open-display"])',
     highlightDialog: true,
     interactiveDialog: true,
     selector: '[data-onboarding="open-display"]',
@@ -101,6 +108,40 @@ const INSTRUCTIONS: Record<
     next: true,
   },
 };
+
+function SuggestedWebsite() {
+  return (
+    <>
+      <p className="text-muted-foreground">
+        Not sure where to start? Try following Serial.
+      </p>
+      <div className="flex gap-2">
+        <Input
+          aria-label="Suggested website"
+          value="www.serial.tube"
+          readOnly
+          className="flex-1"
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          aria-label="Copy website address"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText("www.serial.tube");
+              toast.success("Website address copied.");
+            } catch {
+              toast.error("Couldn't copy the address. Please try again.");
+            }
+          }}
+        >
+          <CopyIcon size={16} />
+        </Button>
+      </div>
+    </>
+  );
+}
 
 const PRESETS: Array<{
   name: string;
@@ -186,6 +227,10 @@ function ThemePicker() {
           </button>
         ))}
       </div>
+      <p className="text-muted-foreground">
+        Pick a theme to get started. Don&apos;t worry about getting it perfect
+        now, as it&apos;s fully customizable later
+      </p>
       <Button
         disabled={save.isPending}
         onClick={() => {
@@ -335,8 +380,8 @@ function AccountOnboarding({ userId }: { userId: string }) {
     }
   };
   const titles = {
-    introduction: "Welcome to Serial",
-    "choose-colors": "Make yourself at home",
+    introduction: "Welcome to Serial!",
+    "choose-colors": "Customize appearance",
     "add-feed": "Follow your first Feed",
     "create-view": "Create a View",
     "atmosphere-sync-setup": "Your Atmosphere subscriptions",
@@ -349,6 +394,13 @@ function AccountOnboarding({ userId }: { userId: string }) {
   return (
     <>
       <ControlledResponsiveDialog
+        hideClose={state.step === "introduction"}
+        titleClassName={state.step === "introduction" ? "text-xl" : undefined}
+        headerClassName={
+          state.step === "introduction"
+            ? "text-center sm:text-center"
+            : undefined
+        }
         previewDrawer={state.step === "choose-colors"}
         open={!instruction}
         onOpenChange={(open) => {
@@ -366,63 +418,18 @@ function AccountOnboarding({ userId }: { userId: string }) {
         <div className="grid gap-6 py-2">
           {state.step === "introduction" && (
             <>
-              <p className="text-muted-foreground">
-                Serial is your reader for the old and new web. Follow RSS Feeds
-                and Atmosphere publications, and save Bookmarks from anywhere.
+              <WelcomeDrawing />
+              <p className="text-center text-lg">
+                Serial is a reader for the old and new web. Follow RSS feeds and
+                Atmosphere publications, and save bookmarks from anywhere on the
+                web.
               </p>
               <Button onClick={() => advanceOnboarding("choose-colors")}>
                 Get started
               </Button>
             </>
           )}
-          {state.step === "choose-colors" && (
-            <>
-              <p className="text-muted-foreground">
-                Choose colors for light and dark mode. You can change them in
-                Appearance anytime.
-              </p>
-              <ThemePicker />
-            </>
-          )}
-          {state.step === "add-feed" && (
-            <>
-              <p className="text-muted-foreground">
-                Follow a website you enjoy to see its new posts in Serial.
-              </p>
-              <p className="text-muted-foreground">
-                Not sure where to start? Try following Serial.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  aria-label="Suggested website"
-                  value="www.serial.tube"
-                  readOnly
-                  className="flex-1"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="shrink-0"
-                  aria-label="Copy website address"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText("www.serial.tube");
-                      toast.success("Website address copied.");
-                    } catch {
-                      toast.error(
-                        "Couldn't copy the address. Please try again.",
-                      );
-                    }
-                  }}
-                >
-                  <CopyIcon size={16} />
-                </Button>
-              </div>
-              <Button onClick={() => guideOnboarding("open-feed-menu")}>
-                Next
-              </Button>
-            </>
-          )}
+          {state.step === "choose-colors" && <ThemePicker />}
           {state.step === "atmosphere-sync-setup" && <SyncSlide />}
           {state.step === "next-steps" && (
             <>
@@ -469,6 +476,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
               ? '[data-onboarding="open-feed-menu"]'
               : instruction?.selector
           }
+          anchorSelector={instruction?.anchorSelector}
           highlightDialog={instruction?.highlightDialog}
           interactiveDialog={instruction?.interactiveDialog}
           dimmed={instruction?.dimmed}
@@ -486,7 +494,12 @@ function AccountOnboarding({ userId }: { userId: string }) {
             useDialogStore.getState().closeDialog();
           }}
         >
-          {instruction?.text}
+          {instruction && (
+            <>
+              {instruction.text}
+              {state.instruction === "find-feed" && <SuggestedWebsite />}
+            </>
+          )}
         </Guidance>
       )}
     </>

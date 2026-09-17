@@ -110,6 +110,7 @@ export function ResponsiveDropdown({
 }
 
 interface ControlledResponsiveDialogProps {
+  hideClose?: boolean;
   previewDrawer?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -118,6 +119,7 @@ interface ControlledResponsiveDialogProps {
   description?: React.ReactNode;
   className?: string;
   headerClassName?: string;
+  titleClassName?: string;
   onBack?: () => void;
   headerRight?: React.ReactNode;
   footer?: React.ReactNode;
@@ -125,6 +127,7 @@ interface ControlledResponsiveDialogProps {
   onOpenAutoFocus?: (event: Event) => void;
 }
 export function ControlledResponsiveDialog({
+  hideClose = false,
   previewDrawer = false,
   open,
   onOpenChange,
@@ -135,6 +138,7 @@ export function ControlledResponsiveDialog({
   headerRight,
   className,
   headerClassName,
+  titleClassName,
   footer,
   footerBorder = false,
   onOpenAutoFocus,
@@ -182,13 +186,17 @@ export function ControlledResponsiveDialog({
               </button>
             )}
             <div className="relative flex items-center justify-between">
-              <DialogTitle className="flex-1">{title}</DialogTitle>
+              <DialogTitle className={cn("flex-1", titleClassName)}>
+                {title}
+              </DialogTitle>
               <div className="absolute right-0 flex items-center gap-3">
                 {headerRight}
-                <DialogClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
-                  <XIcon className="h-4 w-4" />
-                  <span className="sr-only">Close</span>
-                </DialogClose>
+                {!hideClose && (
+                  <DialogClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
+                    <XIcon className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                  </DialogClose>
+                )}
               </div>
             </div>
             <DialogDescription>{description}</DialogDescription>
@@ -240,7 +248,7 @@ export function ControlledResponsiveDialog({
         )}
         onOpenAutoFocus={onOpenAutoFocus}
       >
-        <DrawerHeader className="shrink-0 text-left">
+        <DrawerHeader className={cn("shrink-0 text-left", headerClassName)}>
           {onBack && (
             <button
               type="button"
@@ -252,7 +260,9 @@ export function ControlledResponsiveDialog({
             </button>
           )}
           <div className="flex items-center justify-between">
-            <DrawerTitle>{title}</DrawerTitle>
+            <DrawerTitle className={cn("flex-1", titleClassName)}>
+              {title}
+            </DrawerTitle>
             {headerRight}
           </div>
           <DrawerDescription>{description}</DrawerDescription>

@@ -61,6 +61,7 @@ describe("onboarding progress", () => {
       { complete: false, step: savedOnboardingStep("add-feed") },
       write,
     );
+    expect(useOnboarding.getState().instruction).toBe("open-feed-menu");
     useOnboarding.setState({ instruction: "find-feed" });
     feedCreatedDuringOnboarding(123);
     expect(write).not.toHaveBeenCalled();
