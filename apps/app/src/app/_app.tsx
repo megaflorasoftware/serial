@@ -376,7 +376,7 @@ function RootLayout() {
         <ClientPerformanceProfiler>
           <GlobalImportDropzone />
           <PublicationSyncProgress />
-          <div className="flex h-svh flex-col overflow-hidden">
+          <div className="flex h-dvh flex-col overflow-hidden">
             <ImpersonationBanner />
             <DemoBanner />
             <OfflineBanner />
