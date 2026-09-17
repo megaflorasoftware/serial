@@ -1,4 +1,10 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createClient } from "@libsql/client";
@@ -6,9 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIRECTORY = "src/server/db/migrations";
 const POST_MIGRATIONS_DIRECTORY = "src/server/db/post-migrations";
-const CREATE_ORIGINS_TAG = "0049_dapper_miss_america";
-const DROP_COLUMNS_TAG = "0050_unknown_vampiro";
-const BACKFILL_FILE = "001_backfill_rss_feed_origins.sql";
+const FEATURE_TAG = "0049_publication_subscriptions";
 
 type Journal = { entries: Array<{ idx: number; tag: string }> };
 
@@ -35,30 +39,21 @@ async function applyJournalRange(
   for (const entry of entries.filter(
     ({ idx }) => idx >= from && idx <= through,
   )) {
-    for (const statement of statements(
+    const migrationStatements = statements(
       readFileSync(`${MIGRATIONS_DIRECTORY}/${entry.tag}.sql`, "utf8"),
-    )) {
-      await client.execute(statement);
-    }
-    if (!options.withPostMigrations) continue;
-    let postFiles: string[];
-    try {
-      postFiles = readdirSync(`${POST_MIGRATIONS_DIRECTORY}/${entry.tag}`)
+    );
+    const postDirectory = `${POST_MIGRATIONS_DIRECTORY}/${entry.tag}`;
+    if (options.withPostMigrations && existsSync(postDirectory)) {
+      for (const file of readdirSync(postDirectory)
         .filter((file) => file.endsWith(".sql"))
-        .sort();
-    } catch {
-      continue;
-    }
-    for (const file of postFiles) {
-      for (const statement of statements(
-        readFileSync(
-          `${POST_MIGRATIONS_DIRECTORY}/${entry.tag}/${file}`,
-          "utf8",
-        ),
-      )) {
-        await client.execute(statement);
+        .sort()) {
+        migrationStatements.push(
+          ...statements(readFileSync(`${postDirectory}/${file}`, "utf8")),
+        );
       }
     }
+    // Match production's atomic schema + data transaction for each journal entry.
+    await client.batch(migrationStatements, "write");
   }
 }
 
@@ -71,7 +66,7 @@ async function columnNames(
   );
 }
 
-describe("feed origins migration", () => {
+describe("publication subscriptions migration", () => {
   const cleanupDirectories: string[] = [];
 
   afterEach(() => {
@@ -86,27 +81,35 @@ describe("feed origins migration", () => {
     return createClient({ url: `file:${directory}/database.sqlite` });
   }
 
-  it("keeps the backfill on the create migration and the drop in a second file", () => {
+  it("keeps one migration and final snapshot without separate backfills", () => {
     const journal = readJournal();
-    const tags = journal.entries.map(({ tag }) => tag);
-    expect(tags.indexOf(DROP_COLUMNS_TAG)).toBe(
-      tags.indexOf(CREATE_ORIGINS_TAG) + 1,
-    );
+    expect(journal.entries.filter(({ idx }) => idx >= 49)).toEqual([
+      expect.objectContaining({ idx: 49, tag: FEATURE_TAG }),
+    ]);
     expect(
-      readdirSync(`${POST_MIGRATIONS_DIRECTORY}/${CREATE_ORIGINS_TAG}`).filter(
-        (file) => file.endsWith(".sql"),
+      readdirSync(POST_MIGRATIONS_DIRECTORY).filter(
+        (name) => Number(name.slice(0, 4)) >= 49,
       ),
-    ).toEqual([BACKFILL_FILE]);
-    expect(() =>
-      readdirSync(`${POST_MIGRATIONS_DIRECTORY}/${DROP_COLUMNS_TAG}`),
-    ).toThrow();
+    ).toEqual([]);
+    expect(
+      readdirSync(`${MIGRATIONS_DIRECTORY}/meta`).filter((name) =>
+        /^00(49|5[0-9]|6[01])_snapshot/.test(name),
+      ),
+    ).toEqual(["0049_snapshot.json"]);
+    const snapshot = JSON.parse(
+      readFileSync(`${MIGRATIONS_DIRECTORY}/meta/0049_snapshot.json`, "utf8"),
+    ) as { prevId: string };
+    const previous = JSON.parse(
+      readFileSync(`${MIGRATIONS_DIRECTORY}/meta/0048_snapshot.json`, "utf8"),
+    ) as { id: string };
+    expect(snapshot.prevId).toBe(previous.id);
   });
 
   it("moves legacy fetch state onto one RSS origin per feed and drops the columns", async () => {
     const client = openFreshClient();
     const journal = readJournal();
     const createIndex = journal.entries.find(
-      ({ tag }) => tag === CREATE_ORIGINS_TAG,
+      ({ tag }) => tag === FEATURE_TAG,
     )!.idx;
 
     try {
@@ -132,9 +135,39 @@ describe("feed origins migration", () => {
           (2, 'legacy-user', 'Never fetched', 'https://example.com/b.xml', '',
            'youtube', 'serial', ?, ?, NULL, NULL, 0, NULL, NULL),
           (3, 'legacy-user', 'Duplicate', 'https://example.com/a.xml', '',
-           'website', 'serial', ?, ?, NULL, NULL, 1, NULL, NULL)`,
-        args: [now, now, now - 60, now + 3600, now, now, now, now],
+           'website', 'serial', ?, ?, NULL, NULL, 1, NULL, NULL),
+          (4, 'legacy-user', '', '', '',
+           'website', 'serial', ?, ?, NULL, NULL, 0, NULL, NULL)`,
+        args: [now, now, now - 60, now + 3600, now, now, now, now, now, now],
       });
+
+      await client.execute(`INSERT INTO serial_atproto_connections
+        (id, user_id, did, created_at, updated_at)
+        VALUES ('connection', 'legacy-user', 'did:plc:legacy', ${now}, ${now})`);
+      for (const [id, feedId, content] of [
+        ["body", 1, "<p>Article</p>"],
+        ["empty", 1, ""],
+        ["whitespace", 3, " "],
+        ["video", 2, "Video description"],
+      ] as const) {
+        await client.execute({
+          sql: `INSERT INTO serial_feed_item
+            (id, feed_id, content_id, title, author, url, content, posted_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'Author', ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            feedId,
+            id,
+            id,
+            `https://example.com/${id}`,
+            content,
+            now,
+            now,
+            now,
+          ],
+        });
+      }
+      const beforeMigration = Math.floor(Date.now() / 1000);
 
       await applyJournalRange(
         client,
@@ -153,14 +186,14 @@ describe("feed origins migration", () => {
            FROM serial_feed_origin ORDER BY feed_id`,
         )
       ).rows;
-      expect(origins).toHaveLength(3);
+      expect(origins).toHaveLength(4);
       expect(origins[0]).toMatchObject({
         feed_id: 1,
         user_id: "legacy-user",
         kind: "rss",
         locator: "https://example.com/a.xml",
-        etag: '"etag-a"',
-        last_modified_header: "Mon, 01 Jan 2024 00:00:00 GMT",
+        etag: null,
+        last_modified_header: null,
         last_fetched_at: now - 60,
         next_fetch_at: now + 3600,
         source_name: "Fetched",
@@ -180,35 +213,147 @@ describe("feed origins migration", () => {
         locator: "https://example.com/a.xml",
       });
 
-      // Re-running the backfill is idempotent.
-      for (const statement of statements(
-        readFileSync(
-          `${POST_MIGRATIONS_DIRECTORY}/${CREATE_ORIGINS_TAG}/${BACKFILL_FILE}`,
-          "utf8",
-        ),
-      )) {
-        await client.execute(statement);
+      expect(origins[3]).toMatchObject({
+        feed_id: 4,
+        locator: "",
+        source_name: "",
+      });
+      const legacyFeeds = (
+        await client.execute(
+          "SELECT id, name, name_edited_at, site_url, is_active, created_at, updated_at FROM serial_feed ORDER BY id",
+        )
+      ).rows;
+      for (const feed of legacyFeeds.slice(0, 3)) {
+        expect(Number(feed.name_edited_at)).toBeGreaterThanOrEqual(
+          beforeMigration,
+        );
+        expect(Number(feed.name_edited_at)).toBeLessThanOrEqual(
+          Math.floor(Date.now() / 1000),
+        );
+        expect(feed).toMatchObject({
+          site_url: null,
+          created_at: now,
+          updated_at: now,
+        });
       }
+      expect(legacyFeeds[1]).toMatchObject({
+        name: "Never fetched",
+        is_active: 0,
+      });
+      expect(legacyFeeds[3]).toMatchObject({
+        name: "",
+        name_edited_at: null,
+        is_active: 0,
+      });
       expect(
         (
           await client.execute(
-            "SELECT count(*) AS value FROM serial_feed_origin",
+            "SELECT id, body_source, source_kind, atproto_uri, tags FROM serial_feed_item ORDER BY id",
           )
-        ).rows[0]?.value,
-      ).toBe(3);
-
-      const feedColumnsBeforeDrop = await columnNames(client, "serial_feed");
-      expect(feedColumnsBeforeDrop).toContain("url");
-      expect(feedColumnsBeforeDrop).toContain("site_url");
-      expect(feedColumnsBeforeDrop).toContain("name_edited_at");
-
-      await applyJournalRange(
-        client,
-        journal.entries,
-        createIndex + 1,
-        journal.entries.at(-1)!.idx,
-        { withPostMigrations: true },
-      );
+        ).rows,
+      ).toEqual([
+        {
+          id: "body",
+          body_source: "rss",
+          source_kind: "rss",
+          atproto_uri: null,
+          tags: "[]",
+        },
+        {
+          id: "empty",
+          body_source: "none",
+          source_kind: "rss",
+          atproto_uri: null,
+          tags: "[]",
+        },
+        {
+          id: "video",
+          body_source: "rss",
+          source_kind: "rss",
+          atproto_uri: null,
+          tags: "[]",
+        },
+        {
+          id: "whitespace",
+          body_source: "rss",
+          source_kind: "rss",
+          atproto_uri: null,
+          tags: "[]",
+        },
+      ]);
+      expect(
+        (
+          await client.execute(
+            "SELECT item_id, feed_id, page_url, image_url, next_check_at FROM serial_feed_item_page_image ORDER BY item_id",
+          )
+        ).rows,
+      ).toEqual([
+        {
+          item_id: "body",
+          feed_id: 1,
+          page_url: "https://example.com/body",
+          image_url: null,
+          next_check_at: 0,
+        },
+        {
+          item_id: "empty",
+          feed_id: 1,
+          page_url: "https://example.com/empty",
+          image_url: null,
+          next_check_at: 0,
+        },
+        {
+          item_id: "whitespace",
+          feed_id: 3,
+          page_url: "https://example.com/whitespace",
+          image_url: null,
+          next_check_at: 0,
+        },
+      ]);
+      expect(
+        (
+          await client.execute(
+            "SELECT onboarding_complete, onboarding_step FROM serial_user",
+          )
+        ).rows,
+      ).toEqual([{ onboarding_complete: 1, onboarding_step: null }]);
+      expect(
+        (
+          await client.execute(
+            "SELECT import_subscriptions, export_subscriptions, import_as_inactive, sync_settings_version, subscription_backfill_started FROM serial_atproto_connections",
+          )
+        ).rows,
+      ).toEqual([
+        {
+          import_subscriptions: 0,
+          export_subscriptions: 0,
+          import_as_inactive: 0,
+          sync_settings_version: 0,
+          subscription_backfill_started: 0,
+        },
+      ]);
+      // New accounts and Feeds retain their ordinary defaults after the upgrade.
+      await client.execute(`INSERT INTO serial_user (id, name, email, email_verified, created_at, updated_at)
+        VALUES ('new', 'New', 'new@example.com', 0, ${now}, ${now})`);
+      expect(
+        (
+          await client.execute(
+            "SELECT onboarding_complete, onboarding_step FROM serial_user WHERE id = 'new'",
+          )
+        ).rows,
+      ).toEqual([{ onboarding_complete: 0, onboarding_step: null }]);
+      await client.execute(`INSERT INTO serial_feed (user_id, name, platform, created_at, updated_at)
+        VALUES ('new', 'New feed', 'website', ${now}, ${now})`);
+      expect(
+        (
+          await client.execute(
+            "SELECT name_edited_at FROM serial_feed WHERE user_id = 'new'",
+          )
+        ).rows,
+      ).toEqual([{ name_edited_at: null }]);
+      await client.execute(`INSERT INTO serial_atproto_subscription_mirror
+        (connection_id, publication_uri, record_uri, feed_id, provenance, created_at, updated_at)
+        VALUES ('connection', 'at://publication', 'at://subscription', 1, 'serial', ${now}, ${now})`);
 
       const feedColumns = await columnNames(client, "serial_feed");
       for (const dropped of [
@@ -222,7 +367,7 @@ describe("feed origins migration", () => {
       }
       expect(feedColumns).toContain("is_active");
 
-      // Deleting a Feed removes its origins.
+      // Feed children cascade, while the mirror retains its deletion bookkeeping.
       await client.execute("DELETE FROM serial_feed WHERE id = 1");
       expect(
         (
@@ -231,6 +376,63 @@ describe("feed origins migration", () => {
           )
         ).rows[0]?.value,
       ).toBe(0);
+      expect(
+        (
+          await client.execute(
+            "SELECT feed_id, import_state, import_retry_at, import_failures FROM serial_atproto_subscription_mirror",
+          )
+        ).rows,
+      ).toEqual([
+        {
+          feed_id: 1,
+          import_state: null,
+          import_retry_at: null,
+          import_failures: 0,
+        },
+      ]);
+      expect(
+        (
+          await client.execute(
+            "SELECT item_id FROM serial_feed_item_page_image WHERE feed_id = 1",
+          )
+        ).rows,
+      ).toEqual([]);
+      expect((await client.execute("PRAGMA foreign_key_check")).rows).toEqual(
+        [],
+      );
+    } finally {
+      client.close();
+    }
+  });
+
+  it("rolls back schema and data together if the migration fails", async () => {
+    const client = openFreshClient();
+    try {
+      await applyJournalRange(client, readJournal().entries, 0, 48, {
+        withPostMigrations: true,
+      });
+      await client.execute(`INSERT INTO serial_user
+        (id, name, email, email_verified, created_at, updated_at)
+        VALUES ('legacy', 'Legacy', 'legacy@example.com', 0, 1, 1)`);
+      const migration = statements(
+        readFileSync(`${MIGRATIONS_DIRECTORY}/${FEATURE_TAG}.sql`, "utf8"),
+      );
+      await expect(
+        client.batch(
+          [...migration, "INSERT INTO missing_table VALUES (1)"],
+          "write",
+        ),
+      ).rejects.toThrow("missing_table");
+      expect(await columnNames(client, "serial_feed")).toContain("url");
+      expect(await columnNames(client, "serial_user")).not.toContain(
+        "onboarding_complete",
+      );
+      expect(await columnNames(client, "serial_feed_origin")).toEqual([]);
+      await client.batch(migration, "write");
+      expect(
+        (await client.execute("SELECT onboarding_complete FROM serial_user"))
+          .rows,
+      ).toEqual([{ onboarding_complete: 1 }]);
     } finally {
       client.close();
     }

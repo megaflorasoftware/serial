@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
@@ -249,12 +248,11 @@ it("rejects a discovered alternate RSS URL already belonging to another Feed", a
 
 it("protects uncertain legacy names even when migration copied them into source metadata", async () => {
   const feed = await seed([{ ...rss.origin, sourceName: "Original" }]);
-  await fixture.client.execute(
-    readFileSync(
-      "src/server/db/migrations/0057_preserve_feed_names.sql",
-      "utf8",
-    ),
-  );
+  // The migration marks legacy names; revalidation must respect that marker.
+  await fixture.database
+    .update(feeds)
+    .set({ nameEditedAt: new Date() })
+    .where(eq(feeds.id, feed.id));
   expect(await run(feed.id)).toMatchObject({
     name: "Original",
     imageUrl: publication.origin.sourceImageUrl,
