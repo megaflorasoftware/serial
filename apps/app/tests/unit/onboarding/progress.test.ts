@@ -82,7 +82,7 @@ describe("onboarding progress", () => {
       instruction: "open-menu",
       feedId: null,
     });
-    useOnboarding.setState({ instruction: "save-view" });
+    useOnboarding.setState({ instruction: "explore-display" });
     viewSavedDuringOnboarding();
     expect(useOnboarding.getState()).toMatchObject({
       step: "atmosphere-sync-setup",

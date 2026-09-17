@@ -18,7 +18,6 @@ export type OnboardingInstruction =
   | "choose-feed"
   | "open-display"
   | "explore-display"
-  | "save-view"
   | "view-chips";
 
 type State = {
@@ -111,7 +110,7 @@ export function feedSavedDuringOnboarding() {
     advanceOnboarding("create-view", "feed-added");
 }
 export function viewSavedDuringOnboarding() {
-  if (useOnboarding.getState().instruction === "save-view")
+  if (useOnboarding.getState().instruction === "explore-display")
     advanceOnboarding("atmosphere-sync-setup", "view-chips");
 }
 

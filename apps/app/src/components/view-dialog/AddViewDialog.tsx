@@ -93,7 +93,7 @@ export function AddViewDialog() {
           return "Something went wrong adding your view.";
         },
       });
-      if (useOnboarding.getState().instruction === "save-view") {
+      if (useOnboarding.getState().instruction === "explore-display") {
         await addViewPromise;
         viewSavedDuringOnboarding();
       }

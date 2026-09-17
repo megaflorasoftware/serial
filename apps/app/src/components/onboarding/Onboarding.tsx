@@ -34,7 +34,14 @@ import { useCanMutate } from "~/lib/data/offline-mutations";
 
 const INSTRUCTIONS: Record<
   OnboardingInstruction,
-  { selector: string; text: string; next?: boolean; highlightDialog?: boolean }
+  {
+    selector: string;
+    text: string;
+    next?: boolean;
+    highlightDialog?: boolean;
+    interactiveDialog?: boolean;
+    dimmed?: boolean;
+  }
 > = {
   "open-feed-menu": {
     selector: '[data-onboarding="open-menu"]',
@@ -83,16 +90,12 @@ const INSTRUCTIONS: Record<
   },
   "explore-display": {
     highlightDialog: true,
-    selector: '[data-onboarding="explore-display"]',
-    text: "Choose a layout, or add sections organized by Feed or Tag. Try the controls, or keep the defaults.",
-    next: true,
-  },
-  "save-view": {
-    highlightDialog: true,
-    selector: '[data-onboarding="save-view"]',
-    text: "Save your View when you are ready.",
+    interactiveDialog: true,
+    selector: '[data-onboarding="open-display"]',
+    text: "Choose a layout, or add sections organized by Feed or Tag. Save your View when you are ready.",
   },
   "view-chips": {
+    dimmed: false,
     selector: '[data-onboarding="view-chips"]',
     text: "Use these chips to choose which View appears here. Switch Views anytime.",
     next: true,
@@ -326,9 +329,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
         )
           advanceInstruction("name-view", "choose-feed");
         break;
-      case "explore-display":
-        guideOnboarding("save-view");
-        break;
       case "view-chips":
         useOnboarding.setState({ instruction: null });
         break;
@@ -470,6 +470,8 @@ function AccountOnboarding({ userId }: { userId: string }) {
               : instruction?.selector
           }
           highlightDialog={instruction?.highlightDialog}
+          interactiveDialog={instruction?.interactiveDialog}
+          dimmed={instruction?.dimmed}
           next={instruction?.next}
           explanation={
             state.instruction === "feed-added" ||

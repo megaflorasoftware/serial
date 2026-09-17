@@ -184,7 +184,38 @@ for (const mobile of [false, true]) {
       .click();
     await expect(page.getByPlaceholder("Search feeds...")).toHaveCount(0);
     await page.getByRole("tab", { name: "Display", exact: true }).click();
-    await guide(page).getByRole("button", { name: "Next" }).click();
+    await expect(guide(page).getByRole("button", { name: "Next" })).toHaveCount(
+      0,
+    );
+    await page.getByRole("tab", { name: "Content", exact: true }).click();
+    await page.locator('[data-onboarding="name-view"]').fill("My reading");
+    await page.getByRole("tab", { name: "Display", exact: true }).click();
+    await page.getByRole("button", { name: "Large List", exact: true }).click();
+    const layoutPopup = page.locator('[data-slot="popover-content"]').filter({
+      has: page.getByRole("button", { name: "Large Grid", exact: true }),
+    });
+    await expect(layoutPopup).toBeVisible();
+    await expect
+      .poll(async () => {
+        const bounds = (await layoutPopup.boundingBox())!;
+        return page
+          .locator("[data-guidance-layer] svg path")
+          .evaluate((path, box) => {
+            const shape = path as SVGPathElement;
+            const point = new DOMPoint(
+              box.x + 12,
+              box.y + box.height - 12,
+            ).matrixTransform(shape.getScreenCTM()!.inverse());
+            return shape.isPointInFill(point);
+          }, bounds);
+      })
+      .toBe(false);
+    await page.getByRole("button", { name: "Large Grid", exact: true }).click();
+    await expect(layoutPopup).toHaveCount(0);
+    await page.getByRole("button", { name: "Large Grid", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(layoutPopup).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
     let unblock!: () => void;
     const pending = new Promise<void>((resolve) => {
       unblock = resolve;
@@ -205,6 +236,7 @@ for (const mobile of [false, true]) {
       .poll(async () => (await savedProgress())?.onboarding_step)
       .toBe("2026-09-16-atmosphere-sync-setup");
     await expect(guide(page)).toContainText("Use these chips");
+    await expect(page.locator("[data-guidance-layer] svg")).toHaveCount(0);
     await expect(page.locator('[data-onboarding="view-chips"]')).toContainText(
       "My reading",
     );

@@ -4,7 +4,7 @@ import type { ReactNode, RefObject } from "react";
 import { Button } from "~/components/ui/button";
 
 const POPUP_SELECTOR =
-  '[data-guidance-popup], [role="menu"][data-state="open"], [role="listbox"][data-state="open"]';
+  '[data-guidance-popup], [data-slot="popover-content"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"]';
 const FOCUSABLE =
   'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]';
 function visible(element: Element): element is HTMLElement {
@@ -14,15 +14,20 @@ function visible(element: Element): element is HTMLElement {
     element.getBoundingClientRect().height > 0
   );
 }
+function openDialogs() {
+  return Array.from(
+    document.querySelectorAll('[role="dialog"][data-state="open"]'),
+  ).filter(
+    (element): element is HTMLElement =>
+      visible(element) && !element.matches(POPUP_SELECTOR),
+  );
+}
+
 function guidanceTarget(selector: string) {
   const candidates = Array.from(document.querySelectorAll(selector)).filter(
     visible,
   );
-  const modal = Array.from(
-    document.querySelectorAll('[role="dialog"][data-state="open"]'),
-  )
-    .filter(visible)
-    .at(-1);
+  const modal = openDialogs().at(-1);
   return (
     candidates.find((element) => modal?.contains(element)) ??
     candidates[0] ??
@@ -94,20 +99,20 @@ function useGuidanceTarget(
     let focused: HTMLElement | null = null;
     const measure = () => {
       if (helper.current) setHelperHeight(helper.current.offsetHeight);
-      const dialogs = Array.from(
-        document.querySelectorAll('[role="dialog"][data-state="open"]'),
-      ).filter(visible);
+      const dialogs = openDialogs();
       const activeHost = dialogs.at(-1) ?? document.body;
       setHost((old) => (old === activeHost ? old : activeHost));
       const target = selector ? guidanceTarget(selector) : null;
       targetRef.current = target;
-      const popup = guidanceTarget(POPUP_SELECTOR);
-      const rect = boundsOf([target, popup]);
+      const popups = Array.from(
+        document.querySelectorAll(POPUP_SELECTOR),
+      ).filter(visible);
+      const rect = boundsOf([target, ...popups]);
       const highlightedDialog = highlightDialog
         ? target?.closest<HTMLElement>('[role="dialog"][data-state="open"]')
         : null;
       const highlight = highlightedDialog
-        ? boundsOf([highlightedDialog, popup])
+        ? boundsOf([highlightedDialog, ...popups])
         : rect;
       const viewport = window.visualViewport;
       const focusedInput = target?.matches("input, textarea") ? target : null;
@@ -195,6 +200,8 @@ export function Guidance({
   instructionKey,
   selector,
   highlightDialog = false,
+  interactiveDialog = false,
+  dimmed = true,
   children,
   next,
   explanation = false,
@@ -207,6 +214,8 @@ export function Guidance({
   instructionKey: string;
   selector?: string;
   highlightDialog?: boolean;
+  interactiveDialog?: boolean;
+  dimmed?: boolean;
   children?: ReactNode;
   next?: boolean;
   explanation?: boolean;
@@ -247,10 +256,16 @@ export function Guidance({
   }, [host, confirming, next, explanation, instructionKey, setHelperHeight]);
 
   useLayoutEffect(() => {
+    const interactiveRoot = () =>
+      interactiveDialog
+        ? targetRef.current?.closest<HTMLElement>(
+            '[role="dialog"][data-state="open"]',
+          )
+        : targetRef.current;
     const allowed = (node: Node) =>
       layer.current?.contains(node) ||
       (!confirming &&
-        (targetRef.current?.contains(node) ||
+        (interactiveRoot()?.contains(node) ||
           (node instanceof Element && !!node.closest(POPUP_SELECTOR))));
     const blockOutside = (event: Event) => {
       if (!(event.target instanceof Node) || allowed(event.target)) return;
@@ -305,7 +320,7 @@ export function Guidance({
       const roots = confirming
         ? [layer.current]
         : [
-            targetRef.current,
+            interactiveRoot(),
             ...document.querySelectorAll<HTMLElement>(POPUP_SELECTOR),
             layer.current,
           ];
@@ -340,7 +355,7 @@ export function Guidance({
       document.removeEventListener("click", blockOutside, true);
       document.removeEventListener("keydown", keyboard, true);
     };
-  }, [selector, host, confirming, targetRef]);
+  }, [selector, host, confirming, targetRef, interactiveDialog]);
 
   if (!host) return null;
   const { x, y, width, viewportWidth, viewportHeight, viewportTop } = position;
@@ -368,13 +383,13 @@ export function Guidance({
       onPointerDown={(event) => event.stopPropagation()}
       className="pointer-events-none fixed inset-0 m-0 h-full max-h-none w-full max-w-none overflow-visible border-0 bg-transparent p-0 text-inherit"
     >
-      {selector && (
+      {selector && dimmed && (
         <svg
           aria-hidden="true"
           className="pointer-events-none fixed inset-0 h-full w-full"
         >
           <path
-            fill="rgb(0 0 0 / 0.35)"
+            className="fill-black/35 dark:fill-black/65"
             fillRule="evenodd"
             d={[
               `M0 0H${innerWidth}V${innerHeight}H0Z`,
