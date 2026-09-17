@@ -68,7 +68,7 @@ const INSTRUCTIONS: Record<
   },
   "feed-added": {
     selector: '[data-onboarding="feed-content"]',
-    text: "Your feed is added! Everything you have in Serial is viewable through this main pane.",
+    text: "Your feed is added! Your content in Serial is viewable through this main pane.",
     next: true,
   },
   "open-menu": {
