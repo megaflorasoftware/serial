@@ -315,7 +315,11 @@ async function writeNormalized<T>(input: {
  * therefore write one entity instead of structured-cloning the whole cache.
  */
 export function createNormalizedIDBStorage<T>(
-  options: NormalizedStorageOptions,
+  options: NormalizedStorageOptions & {
+    // Apply expensive retention/projection once per throttled write, not on
+    // every store mutation. The result must contain only persistable fields.
+    prepareWrite?: (state: T) => T;
+  },
 ): PersistStorage<T> {
   if (typeof window === "undefined") {
     return {
@@ -370,6 +374,17 @@ export function createNormalizedIDBStorage<T>(
     const current = pending;
     pending = null;
     if (!current) return;
+    // Project before yielding: dictionaries may mutate in place while page
+    // metadata is replaced. Both must come from the same store snapshot.
+    let value: StorageValue<T>;
+    try {
+      value = options.prepareWrite
+        ? { ...current.value, state: options.prepareWrite(current.value.state) }
+        : current.value;
+    } catch (error) {
+      reportWriteError(current.name, error);
+      return;
+    }
     writeChain = writeChain
       .then(() =>
         withCurrentIndexedDbSchema(async () => {
@@ -384,7 +399,7 @@ export function createNormalizedIDBStorage<T>(
           await writeNormalized({
             name: current.name,
             previous: staleKeysPossible ? null : lastValue,
-            next: current.value,
+            next: value,
             options,
             recordSnapshots,
           });
@@ -392,7 +407,7 @@ export function createNormalizedIDBStorage<T>(
           // rewrite can itself orphan records, so the next flush must sweep
           // again.
           staleKeysPossible = false;
-          lastValue = current.value;
+          lastValue = value;
         }),
       )
       .catch((error: unknown) => reportWriteError(current.name, error));

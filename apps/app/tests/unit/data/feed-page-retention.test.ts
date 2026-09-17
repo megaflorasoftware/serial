@@ -79,6 +79,27 @@ afterEach(() => {
 });
 
 describe("Feed-item page retention", () => {
+  it("does not enumerate the library while applying one progress update", () => {
+    const item = makeItem(0, 0);
+    let enumerations = 0;
+    const items = new Proxy(
+      { [item.id]: item },
+      {
+        ownKeys(target) {
+          enumerations++;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    feedItemsStore.setState({ feedItemsDict: items });
+    enumerations = 0;
+    feedItemsStore.getState().setFeedItem(item.id, { ...item, progress: 0.5 });
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.progress).toBe(
+      0.5,
+    );
+    expect(enumerations).toBe(0);
+  });
+
   it("retains entity identity when reconciliation repeats an unchanged page", () => {
     const items = Array.from({ length: 300 }, (_, index) => makeItem(0, index));
     feedItemsStore.getState().setFeedItems(items);

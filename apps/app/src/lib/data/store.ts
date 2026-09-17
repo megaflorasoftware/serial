@@ -111,7 +111,23 @@ export type ApplicationStore = {
   scheduleFulltextFetch: () => void;
 };
 
-function getPersistedApplicationState(state: ApplicationStore) {
+function selectApplicationCache(state: ApplicationStore) {
+  return {
+    feedItemsDict: state.feedItemsDict,
+    feedItemsOrder: state.feedItemsOrder,
+    scopeFeedItemIds: state.scopeFeedItemIds,
+    retainedFeedPages: state.retainedFeedPages,
+    retainedFeedPageBytes: state.retainedFeedPageBytes,
+    pageOwnedFeedItemIds: state.pageOwnedFeedItemIds,
+    retainedFeedItemBodyIds: state.retainedFeedItemBodyIds,
+    viewFeedIds: state.viewFeedIds,
+    hasInitialData: state.hasInitialData,
+  };
+}
+
+function getPersistedApplicationState(
+  state: ReturnType<typeof selectApplicationCache>,
+) {
   const retainedState = getPersistedFeedItemRetentionState(state);
   return {
     ...retainedState,
@@ -508,9 +524,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       storage: createNormalizedIDBStorage({
         recordFields: ["feedItemsDict", "retainedFeedItemBodyIds"],
         arrayFields: ["feedItemsOrder"],
+        prepareWrite: getPersistedApplicationState,
       }),
       version: 1,
-      partialize: getPersistedApplicationState,
+      partialize: selectApplicationCache,
       merge: (persisted, current) => {
         const persistedState =
           (persisted as Partial<ApplicationStore> | undefined) ?? {};

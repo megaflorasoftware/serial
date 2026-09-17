@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setMany } from "idb-keyval";
 import { createNormalizedIDBStorage } from "~/lib/data/normalized-idb-storage";
 
 const indexedDb = vi.hoisted(() => ({
@@ -46,6 +47,115 @@ afterEach(() => {
 });
 
 describe("normalized IndexedDB in-place record updates", () => {
+  it("projects a queued flush before its mutable source can change", async () => {
+    type Cache = {
+      records: Record<string, { id: string }>;
+      retainedIds: string[];
+    };
+    const records = { first: { id: "first" } } as Cache["records"];
+    const prepareWrite = vi.fn((state: Cache): Cache => ({
+      records: Object.fromEntries(
+        Object.entries(state.records).filter(([id]) =>
+          state.retainedIds.includes(id),
+        ),
+      ),
+      retainedIds: state.retainedIds,
+    }));
+    let releaseFirstWrite!: () => void;
+    const firstWriteBlocked = new Promise<void>((resolve) => {
+      releaseFirstWrite = resolve;
+    });
+    let markFirstWriteStarted!: () => void;
+    const firstWriteStarted = new Promise<void>((resolve) => {
+      markFirstWriteStarted = resolve;
+    });
+    vi.mocked(setMany).mockImplementationOnce(async (entries) => {
+      markFirstWriteStarted();
+      await firstWriteBlocked;
+      for (const [key, value] of entries) {
+        indexedDb.entries.set(key, cloneStoredValue(value));
+      }
+    });
+    const storage = createNormalizedIDBStorage<Cache>({
+      recordFields: ["records"],
+      prepareWrite,
+    });
+
+    storage.setItem("queued-projection", {
+      state: { records, retainedIds: ["first"] },
+    });
+    window.dispatchEvent(new Event("pagehide"));
+    await firstWriteStarted;
+
+    records.second = { id: "second" };
+    storage.setItem("queued-projection", {
+      state: { records, retainedIds: ["second"] },
+    });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(prepareWrite).toHaveBeenCalledTimes(2);
+
+    delete records.second;
+    releaseFirstWrite();
+    await vi.waitFor(async () =>
+      expect(await storage.getItem("queued-projection")).toEqual({
+        state: {
+          records: { second: { id: "second" } },
+          retainedIds: ["second"],
+        },
+        version: undefined,
+      }),
+    );
+  });
+
+  it("projects only the latest pending state when flushing and cancels removed writes", async () => {
+    type Cache = {
+      records: Record<string, { id: string; archived: boolean }>;
+    };
+    const prepareWrite = vi.fn((state: Cache): Cache => ({
+      records: Object.fromEntries(
+        Object.entries(state.records).filter(([, item]) => !item.archived),
+      ),
+    }));
+    const storage = createNormalizedIDBStorage<Cache>({
+      recordFields: ["records"],
+      prepareWrite,
+    });
+    storage.setItem("projected", {
+      state: { records: { old: { id: "old", archived: false } } },
+    });
+    storage.setItem("projected", {
+      state: {
+        records: {
+          latest: { id: "latest", archived: false },
+          removed: { id: "removed", archived: true },
+        },
+      },
+    });
+    expect(prepareWrite).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("pagehide"));
+    await vi.waitFor(() =>
+      expect(indexedDb.entries.has("projected::normalized:v1::root")).toBe(
+        true,
+      ),
+    );
+    expect(prepareWrite).toHaveBeenCalledTimes(1);
+    expect(await storage.getItem("projected")).toEqual({
+      state: {
+        records: { latest: { id: "latest", archived: false } },
+      },
+      version: undefined,
+    });
+    storage.setItem("projected", {
+      state: {
+        records: { canceled: { id: "canceled", archived: false } },
+      },
+    });
+    await storage.removeItem("projected");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(prepareWrite).toHaveBeenCalledTimes(1);
+    expect(await storage.getItem("projected")).toBeNull();
+  });
+
   it("persists a replaced entity from a stable dictionary", async () => {
     const records = { item: { id: "item", archived: false } };
     const storage = createNormalizedIDBStorage<{

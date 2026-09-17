@@ -53,7 +53,9 @@ type NetworkMetrics = {
 };
 
 async function installObservers(page: Page) {
-  await page.addInitScript(() => {
+  const diagnosticsEnabled =
+    process.env.SERIAL_CLIENT_PERFORMANCE_DIAGNOSTICS === "1";
+  await page.addInitScript((collectDiagnostics) => {
     const metrics = {
       longTasks: [] as number[],
       indexedDb: {
@@ -78,17 +80,22 @@ async function installObservers(page: Page) {
       metrics.indexedDb.reads++;
       return get.apply(this, args);
     };
-    objectStore.put = function (...args) {
-      metrics.indexedDb.writes++;
-      const store = String(args[1]).replace(
-        /(::record:[^:]+:|::array:[^:]+:).*$/,
-        "$1",
-      );
-      metrics.indexedDb.writesByStore[store] =
-        (metrics.indexedDb.writesByStore[store] ?? 0) + 1;
-      return put.apply(this, args);
-    };
-  });
+    objectStore.put = collectDiagnostics
+      ? function (this: IDBObjectStore, ...args) {
+          metrics.indexedDb.writes++;
+          const store = String(args[1]).replace(
+            /(::record:[^:]+:|::array:[^:]+:).*$/,
+            "$1",
+          );
+          metrics.indexedDb.writesByStore[store] =
+            (metrics.indexedDb.writesByStore[store] ?? 0) + 1;
+          return put.apply(this, args);
+        }
+      : function (this: IDBObjectStore, ...args) {
+          metrics.indexedDb.writes++;
+          return put.apply(this, args);
+        };
+  }, diagnosticsEnabled);
 }
 
 async function resetBrowserMetrics(page: Page) {
@@ -248,6 +255,8 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
 
   const client = await page.context().newCDPSession(page);
   await client.send("Network.enable");
+  const diagnosticsEnabled =
+    process.env.SERIAL_CLIENT_PERFORMANCE_DIAGNOSTICS === "1";
   const network = {
     requests: 0,
     transferBytes: 0,
@@ -260,7 +269,9 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
     network.requests++;
     if (request.url.includes("/api/rpc")) {
       network.rpcRequests++;
-      network.rpcPaths.push(new URL(request.url).pathname);
+      if (diagnosticsEnabled) {
+        network.rpcPaths.push(new URL(request.url).pathname);
+      }
       rpcRequestIds.add(requestId);
     }
   });
