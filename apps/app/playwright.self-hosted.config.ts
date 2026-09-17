@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 import { baseConfig } from "./playwright.config";
 import {
+  PUBLICATIONS_APP_PORT,
+  PUBLICATIONS_PDS_PORT,
+  PUBLICATIONS_TURSO_PORT,
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_APPVIEW_SERVER_PORT,
   SELF_HOSTED_BOOTSTRAP_APP_PORT,
@@ -34,13 +37,15 @@ function isolatedInstanceServer({
   tursoPort,
   appPort,
   extraEnvironment = {},
+  hostname = "localhost",
 }: {
   dbFile: string;
   tursoPort: number;
   appPort: number;
   extraEnvironment?: Record<string, string>;
+  hostname?: string;
 }) {
-  const baseUrl = `http://localhost:${appPort}`;
+  const baseUrl = `http://${hostname}:${appPort}`;
   const productionServer =
     `./node_modules/.bin/concurrently --kill-others ` +
     `"turso dev --db-file ${dbFile} --port ${tursoPort}" ` +
@@ -105,6 +110,14 @@ export default defineConfig({
         baseURL: `http://localhost:${SELF_HOSTED_APP_PORT}`,
       },
     },
+    {
+      ...isolatedProject("self-hosted-publications", PUBLICATIONS_APP_PORT),
+      use: {
+        ...baseConfig.use,
+        ...devices["Desktop Chrome"],
+        baseURL: `http://127.0.0.1:${PUBLICATIONS_APP_PORT}`,
+      },
+    },
     isolatedProject("self-hosted-bootstrap", SELF_HOSTED_BOOTSTRAP_APP_PORT),
     // Serially-run instance for every spec that sets and asserts a
     // specific enabled-provider set: nothing else mutates its database,
@@ -118,6 +131,26 @@ export default defineConfig({
     ),
   ],
   webServer: [
+    isolatedInstanceServer({
+      dbFile: "serial-test-publications.db",
+      tursoPort: PUBLICATIONS_TURSO_PORT,
+      appPort: PUBLICATIONS_APP_PORT,
+      hostname: "127.0.0.1",
+      extraEnvironment: {
+        ATPROTO_PLC_DIRECTORY_URL: `http://127.0.0.1:${PUBLICATIONS_PDS_PORT}`,
+        // Main-instance limits with billing disabled give the real Pro quota.
+        VITE_PUBLIC_IS_MAIN_INSTANCE: "true",
+        POLAR_ACCESS_TOKEN: "",
+        BACKGROUND_REFRESH_ENABLED: "false",
+      },
+    }),
+    {
+      command: supervisedWebServerCommand(
+        `node --import=tsx tests/e2e/fixtures/pds-server.ts ${PUBLICATIONS_PDS_PORT}`,
+      ),
+      url: `http://127.0.0.1:${PUBLICATIONS_PDS_PORT}`,
+      reuseExistingServer: false,
+    },
     {
       command: supervisedWebServerCommand(
         process.env.SERIAL_CLIENT_PERFORMANCE_PRODUCTION === "1"

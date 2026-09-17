@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { createSelectorHooks } from "./createSelectorHooks";
+import { retainEqualEntity } from "./entity-equality";
 import {
   applyFeedItemPageRetention,
   getPersistedFeedItemRetentionState,
@@ -110,7 +111,23 @@ export type ApplicationStore = {
   scheduleFulltextFetch: () => void;
 };
 
-function getPersistedApplicationState(state: ApplicationStore) {
+function selectApplicationCache(state: ApplicationStore) {
+  return {
+    feedItemsDict: state.feedItemsDict,
+    feedItemsOrder: state.feedItemsOrder,
+    scopeFeedItemIds: state.scopeFeedItemIds,
+    retainedFeedPages: state.retainedFeedPages,
+    retainedFeedPageBytes: state.retainedFeedPageBytes,
+    pageOwnedFeedItemIds: state.pageOwnedFeedItemIds,
+    retainedFeedItemBodyIds: state.retainedFeedItemBodyIds,
+    viewFeedIds: state.viewFeedIds,
+    hasInitialData: state.hasInitialData,
+  };
+}
+
+function getPersistedApplicationState(
+  state: ReturnType<typeof selectApplicationCache>,
+) {
   const retainedState = getPersistedFeedItemRetentionState(state);
   return {
     ...retainedState,
@@ -161,7 +178,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       setFeedItem: (id, item) => {
         const state = get();
         const previousItem = state.feedItemsDict[id];
-        const retainedItem = retainEligibleFeedBody(previousItem, item);
+        const retainedItem = retainEqualEntity(
+          previousItem,
+          retainEligibleFeedBody(previousItem, item),
+        );
         const retainedFeedItemBodyIds = {
           ...state.retainedFeedItemBodyIds,
         };
@@ -203,9 +223,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         };
 
         for (const item of items) {
-          const retainedItem = retainEligibleFeedBody(
+          const retainedItem = retainEqualEntity(
             state.feedItemsDict[item.id],
-            item,
+            retainEligibleFeedBody(state.feedItemsDict[item.id], item),
           );
           if (
             hasFeedItemListProjectionChanged(
@@ -504,9 +524,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       storage: createNormalizedIDBStorage({
         recordFields: ["feedItemsDict", "retainedFeedItemBodyIds"],
         arrayFields: ["feedItemsOrder"],
+        prepareWrite: getPersistedApplicationState,
       }),
       version: 1,
-      partialize: getPersistedApplicationState,
+      partialize: selectApplicationCache,
       merge: (persisted, current) => {
         const persistedState =
           (persisted as Partial<ApplicationStore> | undefined) ?? {};

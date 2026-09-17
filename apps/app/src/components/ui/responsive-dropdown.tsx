@@ -124,6 +124,8 @@ interface ControlledResponsiveDialogProps {
   titleClassName?: string;
   onBack?: () => void;
   headerRight?: React.ReactNode;
+  headerContent?: React.ReactNode;
+  wrapContent?: (content: React.ReactNode) => React.ReactNode;
   footer?: React.ReactNode;
   footerBorder?: boolean;
   onOpenAutoFocus?: (event: Event) => void;
@@ -136,6 +138,13 @@ type ResolvedControlledDialogProps = ControlledResponsiveDialogProps & {
   footerBorder: boolean;
 };
 
+function DialogContentWrapper({
+  children,
+  wrapContent,
+}: Pick<ControlledResponsiveDialogProps, "children" | "wrapContent">) {
+  return wrapContent ? wrapContent(children) : children;
+}
+
 function ControlledDesktopDialog({
   hideClose,
   open,
@@ -145,6 +154,8 @@ function ControlledDesktopDialog({
   description,
   onBack,
   headerRight,
+  headerContent,
+  wrapContent,
   className,
   headerClassName,
   titleClassName,
@@ -179,41 +190,44 @@ function ControlledDesktopDialog({
           }
         }}
       >
-        <DialogHeader className={cn("shrink-0", headerClassName)}>
-          {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="text-muted-foreground hover:text-foreground mb-4 flex w-fit items-center gap-1 text-sm transition-colors"
-            >
-              <ArrowLeftIcon size={16} />
-              <span>Back</span>
-            </button>
-          )}
-          <div className="relative flex items-center justify-between">
-            <DialogTitle className={cn("flex-1", titleClassName)}>
-              {title}
-            </DialogTitle>
-            <div className="absolute right-0 flex items-center gap-3">
-              {headerRight}
-              {!hideClose && (
-                <DialogClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
-                  <XIcon className="h-4 w-4" />
-                  <span className="sr-only">Close</span>
-                </DialogClose>
-              )}
+        <DialogContentWrapper wrapContent={wrapContent}>
+          <DialogHeader className={cn("shrink-0", headerClassName)}>
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="text-muted-foreground hover:text-foreground mb-4 flex w-fit items-center gap-1 text-sm transition-colors"
+              >
+                <ArrowLeftIcon size={16} />
+                <span>Back</span>
+              </button>
+            )}
+            <div className="relative flex items-center justify-between">
+              <DialogTitle className={cn("flex-1", titleClassName)}>
+                {title}
+              </DialogTitle>
+              <div className="absolute right-0 flex items-center gap-3">
+                {headerRight}
+                {!hideClose && (
+                  <DialogClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
+                    <XIcon className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                  </DialogClose>
+                )}
+              </div>
             </div>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          {headerContent && <div className="shrink-0">{headerContent}</div>}
+          <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6 py-1">
+            {children}
           </div>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6 py-1">
-          {children}
-        </div>
-        {footer && (
-          <div className={cn("shrink-0 pt-4", footerBorder && "border-t")}>
-            {footer}
-          </div>
-        )}
+          {footer && (
+            <div className={cn("shrink-0 pt-4", footerBorder && "border-t")}>
+              {footer}
+            </div>
+          )}
+        </DialogContentWrapper>
       </DialogContent>
     </Dialog>
   );
@@ -230,6 +244,8 @@ function ControlledMobileDrawer({
   description,
   onBack,
   headerRight,
+  headerContent,
+  wrapContent,
   headerClassName,
   titleClassName,
   footer,
@@ -283,39 +299,44 @@ function ControlledMobileDrawer({
         )}
         onOpenAutoFocus={onOpenAutoFocus}
       >
-        <DrawerHeader className={cn("shrink-0 text-left", headerClassName)}>
-          {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="text-muted-foreground hover:text-foreground mb-2 flex w-fit items-center gap-1 text-sm transition-colors"
-            >
-              <ArrowLeftIcon size={16} />
-              <span>Back</span>
-            </button>
-          )}
-          <div className="flex items-center justify-between">
-            <DrawerTitle className={cn("flex-1", titleClassName)}>
-              {title}
-            </DrawerTitle>
-            {headerRight}
-          </div>
-          <DrawerDescription>{description}</DrawerDescription>
-        </DrawerHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-1">
-          {children}
-        </div>
-        {footer && (
-          <div
-            className={cn(
-              "shrink-0 px-4 pt-4 pb-4",
-              footerBorder && "border-t",
+        <DialogContentWrapper wrapContent={wrapContent}>
+          <DrawerHeader className={cn("shrink-0 text-left", headerClassName)}>
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="text-muted-foreground hover:text-foreground mb-2 flex w-fit items-center gap-1 text-sm transition-colors"
+              >
+                <ArrowLeftIcon size={16} />
+                <span>Back</span>
+              </button>
             )}
-          >
-            {footer}
+            <div className="flex items-center justify-between">
+              <DrawerTitle className={cn("flex-1", titleClassName)}>
+                {title}
+              </DrawerTitle>
+              {headerRight}
+            </div>
+            <DrawerDescription>{description}</DrawerDescription>
+          </DrawerHeader>
+          {headerContent && (
+            <div className="shrink-0 px-4 pb-4">{headerContent}</div>
+          )}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-1">
+            {children}
           </div>
-        )}
-        {!footer && <div className="pb-4" />}
+          {footer && (
+            <div
+              className={cn(
+                "shrink-0 px-4 pt-4 pb-4",
+                footerBorder && "border-t",
+              )}
+            >
+              {footer}
+            </div>
+          )}
+          {!footer && <div className="pb-4" />}
+        </DialogContentWrapper>
       </DrawerContent>
     </Drawer>
   );
@@ -332,6 +353,8 @@ export function ControlledResponsiveDialog({
   description,
   onBack,
   headerRight,
+  headerContent,
+  wrapContent,
   className,
   headerClassName,
   titleClassName,
@@ -351,6 +374,8 @@ export function ControlledResponsiveDialog({
     description,
     onBack,
     headerRight,
+    headerContent,
+    wrapContent,
     className,
     headerClassName,
     titleClassName,

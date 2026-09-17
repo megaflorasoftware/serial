@@ -33,20 +33,20 @@ export function PublicationRowContent({ feed }: { feed: DiscoveredFeed }) {
         </p>
       </div>
       <span className="text-muted-foreground ml-auto flex shrink-0 items-center gap-2">
-        {hasRss && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Rss size={16} aria-label="RSS" />
-            </TooltipTrigger>
-            <TooltipContent>RSS</TooltipContent>
-          </Tooltip>
-        )}
         {hasAtmosphere && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Orbit size={16} aria-label="Atmosphere" />
             </TooltipTrigger>
             <TooltipContent>Atmosphere</TooltipContent>
+          </Tooltip>
+        )}
+        {hasRss && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Rss size={16} aria-label="RSS" />
+            </TooltipTrigger>
+            <TooltipContent>RSS</TooltipContent>
           </Tooltip>
         )}
       </span>

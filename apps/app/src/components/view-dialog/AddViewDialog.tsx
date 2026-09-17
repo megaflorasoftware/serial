@@ -111,67 +111,70 @@ export function AddViewDialog() {
       open={dialog === "add-view"}
       onOpenChange={onOpenChange}
       title="Add View"
-      onOpenAutoFocus={(event) => {
-        event.preventDefault();
-        nameInputRef.current?.focus();
-      }}
-    >
-      <Tabs
-        activationMode={guided ? "manual" : "automatic"}
-        defaultValue="content"
-        className="w-full"
-        onValueChange={(value) => {
-          if (value === "display")
-            advanceInstruction("open-display", "explore-display");
-        }}
-      >
+      wrapContent={(content) => (
+        <Tabs
+          activationMode={guided ? "manual" : "automatic"}
+          defaultValue="content"
+          className="contents"
+          onValueChange={(value) => {
+            if (value === "display")
+              advanceInstruction("open-display", "explore-display");
+          }}
+        >
+          {content}
+        </Tabs>
+      )}
+      headerContent={
         <TabsList className="w-full">
           <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger data-onboarding="open-display" value="display">
             Display
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="content" className="mt-4">
-          <ContentTab
-            name={name}
-            setName={setName}
-            nameInputRef={nameInputRef}
-            selectedCategories={selectedCategories}
-            setSelectedCategories={setSelectedCategories}
-            selectedFeedIds={selectedFeedIds}
-            setSelectedFeedIds={setSelectedFeedIds}
-            daysTimeWindow={daysTimeWindow}
-            setDaysTimeWindow={setDaysTimeWindow}
-            contentFilter={contentFilter}
-            setContentFilter={setContentFilter}
-          />
-        </TabsContent>
-        <TabsContent
-          data-onboarding="explore-display"
-          value="display"
-          className="mt-4"
-        >
-          <DisplayTab
-            items={viewSections}
-            selectedFeedIds={selectedFeedIds}
-            selectedCategories={selectedCategories}
-            baseLayout={layout}
-            onReorder={setViewSections}
-            onRemove={(id) =>
-              setViewSections((prev) => prev.filter((i) => i.id !== id))
-            }
-            onAdd={(item) => setViewSections((prev) => [...prev, item])}
-            onLayoutChange={(id, newLayout) =>
-              setViewSections((prev) =>
-                prev.map((i) =>
-                  i.id === id ? { ...i, layout: newLayout } : i,
-                ),
-              )
-            }
-            onBaseLayoutChange={setLayout}
-          />
-        </TabsContent>
-      </Tabs>
+      }
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        nameInputRef.current?.focus();
+      }}
+    >
+      <TabsContent value="content" className="mt-0">
+        <ContentTab
+          name={name}
+          setName={setName}
+          nameInputRef={nameInputRef}
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+          selectedFeedIds={selectedFeedIds}
+          setSelectedFeedIds={setSelectedFeedIds}
+          daysTimeWindow={daysTimeWindow}
+          setDaysTimeWindow={setDaysTimeWindow}
+          contentFilter={contentFilter}
+          setContentFilter={setContentFilter}
+        />
+      </TabsContent>
+      <TabsContent
+        data-onboarding="explore-display"
+        value="display"
+        className="mt-0"
+      >
+        <DisplayTab
+          items={viewSections}
+          selectedFeedIds={selectedFeedIds}
+          selectedCategories={selectedCategories}
+          baseLayout={layout}
+          onReorder={setViewSections}
+          onRemove={(id) =>
+            setViewSections((prev) => prev.filter((i) => i.id !== id))
+          }
+          onAdd={(item) => setViewSections((prev) => [...prev, item])}
+          onLayoutChange={(id, newLayout) =>
+            setViewSections((prev) =>
+              prev.map((i) => (i.id === id ? { ...i, layout: newLayout } : i)),
+            )
+          }
+          onBaseLayoutChange={setLayout}
+        />
+      </TabsContent>
       <div className="mt-6">
         <Button
           disabled={!canMutate || isDisabled || isAddingView}

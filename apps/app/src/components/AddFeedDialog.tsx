@@ -2,8 +2,9 @@ import { ToggleGroup } from "@radix-ui/react-toggle-group";
 import {
   CheckIcon,
   ExternalLinkIcon,
-  LinkIcon,
+  OrbitIcon,
   RefreshCwIcon,
+  RssIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -153,8 +154,6 @@ export function AddFeedDialog() {
         }),
       );
     toast.promise(createFeedPromise, {
-      loading: "Adding feed...",
-      success: "Feed added!",
       error: (error) =>
         error instanceof Error
           ? error.message
@@ -444,10 +443,12 @@ function CopyFeedLinkButton({
   url,
   label,
   success,
+  icon,
 }: {
   url: string;
   label: string;
   success: string;
+  icon: ReactNode;
 }) {
   const [hasCopied, setHasCopied] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -477,7 +478,7 @@ function CopyFeedLinkButton({
           aria-label={label}
           onClick={copy}
         >
-          {hasCopied ? <CheckIcon size={16} /> : <LinkIcon size={16} />}
+          {hasCopied ? <CheckIcon size={16} /> : icon}
         </Button>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
@@ -515,20 +516,22 @@ function FeedNameField({
           className="flex-1"
         />
         {children}
-        {feedUrl && (
-          <CopyFeedLinkButton
-            key={feedUrl}
-            url={feedUrl}
-            label="Copy Feed URL"
-            success="Feed URL copied!"
-          />
-        )}
         {publicationUri && (
           <CopyFeedLinkButton
             key={publicationUri}
             url={publicationUri}
-            label="Copy publication link"
+            icon={<OrbitIcon size={16} />}
+            label="Copy Publication Link"
             success="Publication link copied!"
+          />
+        )}
+        {feedUrl && (
+          <CopyFeedLinkButton
+            key={feedUrl}
+            url={feedUrl}
+            icon={<RssIcon size={16} />}
+            label="Copy Feed URL"
+            success="Feed URL copied!"
           />
         )}
         {websiteUrl && (

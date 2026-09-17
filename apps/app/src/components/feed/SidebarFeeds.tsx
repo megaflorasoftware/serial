@@ -8,6 +8,7 @@ import {
   OrbitIcon,
   PauseIcon,
   PlusIcon,
+  RssIcon,
   SettingsIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
@@ -47,7 +48,7 @@ import {
 import { isContentStatusAvailable } from "~/lib/content-status";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 
-import { getFeedPublicationName } from "~/lib/feeds/origins";
+import { getFeedPublicationName, getRssOrigin } from "~/lib/feeds/origins";
 
 function useDebouncedState(defaultValue: string, delay: number) {
   const [searchQuery, setSearchQuery] = useState(defaultValue);
@@ -77,15 +78,33 @@ function sortFeedOptions(a: ApplicationFeed, b: ApplicationFeed) {
   return a.name.localeCompare(b.name);
 }
 
-function PublicationGlyph({ name }: { name?: string }) {
-  if (name === undefined) return null;
+function FeedOriginGlyphs({
+  publicationName,
+  hasRss,
+}: {
+  publicationName?: string;
+  hasRss: boolean;
+}) {
+  if (publicationName === undefined && !hasRss) return null;
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <OrbitIcon size={16} className="ml-auto shrink-0" aria-label={name} />
-      </TooltipTrigger>
-      <TooltipContent>{name}</TooltipContent>
-    </Tooltip>
+    <span className="ml-auto flex shrink-0 items-center gap-2">
+      {publicationName !== undefined && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <OrbitIcon size={16} aria-label="Atmosphere" />
+          </TooltipTrigger>
+          <TooltipContent>Atmosphere</TooltipContent>
+        </Tooltip>
+      )}
+      {hasRss && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <RssIcon size={16} aria-label="RSS" />
+          </TooltipTrigger>
+          <TooltipContent>RSS</TooltipContent>
+        </Tooltip>
+      )}
+    </span>
   );
 }
 
@@ -103,6 +122,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   feedId,
   name,
   publicationName,
+  hasRss,
   hasEntries,
   isSelected,
   onSelect,
@@ -111,6 +131,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   feedId: number;
   name: string;
   publicationName?: string;
+  hasRss: boolean;
   hasEntries: boolean;
   isSelected: boolean;
   onSelect: (feedId: number) => void;
@@ -156,7 +177,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
           </div>
         )}
         <div className="line-clamp-1">{name}</div>
-        <PublicationGlyph name={publicationName} />
+        <FeedOriginGlyphs publicationName={publicationName} hasRss={hasRss} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -170,7 +191,6 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
 const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
   feedId,
   name,
-  publicationName,
   hasEntries,
   isSelected,
   onSelect,
@@ -178,7 +198,6 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
 }: {
   feedId: number;
   name: string;
-  publicationName?: string;
   hasEntries: boolean;
   isSelected: boolean;
   onSelect: (feedId: number) => void;
@@ -198,16 +217,19 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
             <div className="bg-sidebar-accent size-2.5 rounded-full" />
           </div>
         )}
+        <div className="text-muted-foreground line-clamp-1">{name}</div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <PauseIcon size={16} className="text-muted-foreground" />
+            <PauseIcon
+              size={16}
+              className="text-muted-foreground ml-auto shrink-0"
+              aria-label="Paused"
+            />
           </TooltipTrigger>
           <TooltipContent>
             This feed is inactive and won&apos;t receive new content.
           </TooltipContent>
         </Tooltip>
-        <div className="text-muted-foreground line-clamp-1">{name}</div>
-        <PublicationGlyph name={publicationName} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -435,6 +457,7 @@ export function SidebarFeeds() {
               feedId={feed.id}
               name={feed.name}
               publicationName={getFeedPublicationName(feed)}
+              hasRss={getRssOrigin(feed) !== undefined}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}
@@ -450,6 +473,7 @@ export function SidebarFeeds() {
               feedId={feed.id}
               name={feed.name}
               publicationName={getFeedPublicationName(feed)}
+              hasRss={getRssOrigin(feed) !== undefined}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}
@@ -467,7 +491,6 @@ export function SidebarFeeds() {
                   key={feed.id}
                   feedId={feed.id}
                   name={feed.name}
-                  publicationName={getFeedPublicationName(feed)}
                   hasEntries={feed.hasEntries}
                   isSelected={feed.id === feedFilter}
                   onSelect={selectFeed}

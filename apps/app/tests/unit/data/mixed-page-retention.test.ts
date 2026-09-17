@@ -355,3 +355,21 @@ describe("mixed-content page retention", () => {
     expect(bookmarksStore.getState().getBookmark(stale.id)).toBeUndefined();
   });
 });
+
+it("retains Bookmark identities and revision across repeated reconciliation upserts", () => {
+  const items = Array.from({ length: 300 }, (_, index) =>
+    bookmark(`bookmark-${index}`),
+  );
+  bookmarksStore.getState().upsertMany(items);
+  const before = bookmarksStore.getState().snapshot();
+  const revision = bookmarksStore.getState().revision;
+  bookmarksStore.getState().upsertMany(structuredClone(items));
+  expect(bookmarksStore.getState().revision).toBe(revision);
+  expect(bookmarksStore.getState().snapshot()).toBe(before);
+  bookmarksStore.getState().upsert(structuredClone(items[0]!));
+  expect(bookmarksStore.getState().revision).toBe(revision);
+  const changed = { ...structuredClone(items[0]!), tagIds: [7] };
+  bookmarksStore.getState().upsertMany([changed]);
+  expect(bookmarksStore.getState().getBookmark(changed.id)).toEqual(changed);
+  expect(bookmarksStore.getState().revision).toBe(revision + 1);
+});

@@ -58,7 +58,7 @@ test("revalidates from an icon button and preserves custom names and drafts", as
       "Test Blog",
     );
     await expect(
-      dialog.getByRole("button", { name: "Copy publication link" }),
+      dialog.getByRole("button", { name: "Copy Publication Link" }),
     ).toHaveCount(0);
     await dialog.getByLabel("Name", { exact: true }).fill("My custom name");
     await dialog.getByRole("button", { name: "Save", exact: true }).click();

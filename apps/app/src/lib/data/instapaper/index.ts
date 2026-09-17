@@ -10,8 +10,11 @@ import { feedsStore } from "../feeds/store";
 import { refreshNavigationSnapshotSafely } from "../navigation/store";
 import { orpc } from "~/lib/orpc";
 
+const connectionStatusOptions =
+  orpc.instapaper.getConnectionStatus.queryOptions();
+
 export function useInstapaperConnectionStatus() {
-  return useQuery(orpc.instapaper.getConnectionStatus.queryOptions());
+  return useQuery(connectionStatusOptions);
 }
 
 export function useShowInstapaperAction(itemId: string) {

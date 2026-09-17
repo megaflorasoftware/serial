@@ -38,9 +38,20 @@ test.describe("publication Feed surfaces", () => {
         .locator('[data-slot="sidebar-menu-item"]')
         .filter({ has: page.getByText("My renamed Feed", { exact: true }) });
       await expect(row).toBeVisible();
-      await expect(
-        row.locator('svg[aria-label="Published name"]'),
-      ).toBeVisible();
+      if (rss) {
+        await expect(row.locator('svg[aria-label="Atmosphere"]')).toBeVisible();
+        await row.locator('svg[aria-label="Atmosphere"]').hover();
+        await expect(page.getByRole("tooltip")).toHaveText("Atmosphere");
+      } else {
+        await expect(row.locator('svg[aria-label="Paused"]')).toBeVisible();
+        await expect(
+          row.locator("svg.lucide-orbit, svg.lucide-rss"),
+        ).toHaveCount(0);
+        await row.locator('svg[aria-label="Paused"]').hover();
+        await expect(page.getByRole("tooltip")).toHaveText(
+          "This feed is inactive and won't receive new content.",
+        );
+      }
       await row.locator("button").last().click();
       const dialog = page.getByRole("dialog");
       await expect(
@@ -53,7 +64,7 @@ test.describe("publication Feed surfaces", () => {
       if (rss) await expect(rssCopy).toBeVisible();
       else await expect(rssCopy).toHaveCount(0);
       const copy = dialog.getByRole("button", {
-        name: "Copy publication link",
+        name: "Copy Publication Link",
         exact: true,
       });
       await copy.click();

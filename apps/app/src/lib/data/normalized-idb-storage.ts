@@ -29,6 +29,16 @@ type NormalizedRoot = {
 
 type NormalizedRecordSnapshots = Map<string, Map<string, unknown>>;
 
+export type NormalizedIDBStorage<T> = PersistStorage<T> & {
+  flushAndWait: () => Promise<void>;
+};
+
+const normalizedPersistenceFlushers = new Set<() => Promise<void>>();
+
+export async function flushNormalizedPersistence(): Promise<void> {
+  await Promise.all([...normalizedPersistenceFlushers].map((flush) => flush()));
+}
+
 function normalizedPrefix(name: string) {
   return `${name}::normalized:v1`;
 }
@@ -315,13 +325,18 @@ async function writeNormalized<T>(input: {
  * therefore write one entity instead of structured-cloning the whole cache.
  */
 export function createNormalizedIDBStorage<T>(
-  options: NormalizedStorageOptions,
-): PersistStorage<T> {
+  options: NormalizedStorageOptions & {
+    // Apply expensive retention/projection once per throttled write, not on
+    // every store mutation. The result must contain only persistable fields.
+    prepareWrite?: (state: T) => T;
+  },
+): NormalizedIDBStorage<T> {
   if (typeof window === "undefined") {
     return {
       getItem: () => null,
       setItem: () => {},
       removeItem: () => {},
+      flushAndWait: () => Promise.resolve(),
     };
   }
 
@@ -337,8 +352,10 @@ export function createNormalizedIDBStorage<T>(
   let pending: { name: string; value: StorageValue<T> } | null = null;
   let writeTimeout: ReturnType<typeof setTimeout> | null = null;
   let writeChain = Promise.resolve();
+  let lastWriteError: unknown = null;
 
   const reportWriteError = (name: string, error: unknown) => {
+    lastWriteError = error;
     const isDOMException = error instanceof DOMException;
     const shouldClear =
       isDOMException &&
@@ -370,6 +387,17 @@ export function createNormalizedIDBStorage<T>(
     const current = pending;
     pending = null;
     if (!current) return;
+    // Project before yielding: dictionaries may mutate in place while page
+    // metadata is replaced. Both must come from the same store snapshot.
+    let value: StorageValue<T>;
+    try {
+      value = options.prepareWrite
+        ? { ...current.value, state: options.prepareWrite(current.value.state) }
+        : current.value;
+    } catch (error) {
+      reportWriteError(current.name, error);
+      return;
+    }
     writeChain = writeChain
       .then(() =>
         withCurrentIndexedDbSchema(async () => {
@@ -384,7 +412,7 @@ export function createNormalizedIDBStorage<T>(
           await writeNormalized({
             name: current.name,
             previous: staleKeysPossible ? null : lastValue,
-            next: current.value,
+            next: value,
             options,
             recordSnapshots,
           });
@@ -392,7 +420,8 @@ export function createNormalizedIDBStorage<T>(
           // rewrite can itself orphan records, so the next flush must sweep
           // again.
           staleKeysPossible = false;
-          lastValue = current.value;
+          lastValue = value;
+          lastWriteError = null;
         }),
       )
       .catch((error: unknown) => reportWriteError(current.name, error));
@@ -408,7 +437,7 @@ export function createNormalizedIDBStorage<T>(
   });
   window.addEventListener("pagehide", flushPending);
 
-  return {
+  const storage: NormalizedIDBStorage<T> = {
     // A rejected getItem would leave zustand persist permanently un-hydrated
     // (it never fires finish-hydration listeners on error), which wedges the
     // reconciliation hydration domains. This read path can also fail during
@@ -467,6 +496,11 @@ export function createNormalizedIDBStorage<T>(
         writeTimeout = setTimeout(flush, WRITE_THROTTLE_MS);
       }
     },
+    flushAndWait: async () => {
+      flushPending();
+      await writeChain;
+      if (lastWriteError) throw lastWriteError;
+    },
     removeItem: async (name) => {
       if (writeTimeout !== null) clearTimeout(writeTimeout);
       writeTimeout = null;
@@ -490,4 +524,6 @@ export function createNormalizedIDBStorage<T>(
       });
     },
   };
+  normalizedPersistenceFlushers.add(storage.flushAndWait);
+  return storage;
 }

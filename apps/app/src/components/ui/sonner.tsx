@@ -4,12 +4,16 @@ import { useTheme } from "next-themes";
 import { Toaster as Sonner } from "sonner";
 import type React from "react";
 import { useIsMobile } from "~/hooks/use-mobile";
+import { useOnboarding } from "~/lib/onboarding/store";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
   const isMobile = useIsMobile();
+  const tutorialActive = useOnboarding((state) => state.step !== null);
+
+  if (tutorialActive) return null;
 
   return (
     <Sonner

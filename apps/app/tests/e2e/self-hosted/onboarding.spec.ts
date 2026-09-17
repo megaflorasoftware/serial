@@ -474,16 +474,24 @@ for (const mobile of [false, true]) {
     await expect(
       guide(page).getByRole("textbox", { name: "Suggested website" }),
     ).toHaveValue("www.serial.tube");
-    await page.getByRole("button", { name: "Copy website address" }).click();
+    const copyWebsite = page.getByRole("button", {
+      name: "Copy website address",
+    });
+    await copyWebsite.click();
+    await expect(copyWebsite.locator(".lucide-check")).toBeVisible();
     await expect(
       page.getByText("Website address copied.", { exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
     await expect(
       page.getByRole("textbox", { name: "Suggested website" }),
     ).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "www.serial.tube",
-    );
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe("www.serial.tube");
+    await expect(copyWebsite.locator(".lucide-copy")).toBeVisible({
+      timeout: 5000,
+    });
     await expect(guide(page)).toContainText("Enter a website address");
     await expect(guide(page).getByRole("button", { name: "Next" })).toHaveCount(
       0,
@@ -508,6 +516,7 @@ for (const mobile of [false, true]) {
     await result.click();
     await expect(page.locator('[data-onboarding="save-feed"]')).toBeVisible();
     await expect(guide(page)).toContainText("Save your feed");
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
   });
 }
 
