@@ -2,6 +2,8 @@
 
 import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback, PropsWithChildren } from "react";
+import { waitForOfflineHydrationIdle } from "~/lib/data/offline-hydration";
+import { flushNormalizedPersistence } from "~/lib/data/normalized-idb-storage";
 
 export type ClientPerformanceCommit = {
   phase: "mount" | "update" | "nested-update";
@@ -14,6 +16,7 @@ export type ClientPerformanceCommit = {
 type ClientPerformanceWindow = Window & {
   __SERIAL_CLIENT_PERFORMANCE__?: {
     commits: ClientPerformanceCommit[];
+    readyForWarmReload: () => Promise<void>;
   };
 };
 
@@ -32,7 +35,16 @@ export function ClientPerformanceProfiler({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!auditEnabled || !performanceWindow) return;
-    performanceWindow.__SERIAL_CLIENT_PERFORMANCE__ = { commits: [] };
+    performanceWindow.__SERIAL_CLIENT_PERFORMANCE__ = {
+      commits: [],
+      readyForWarmReload: async () => {
+        await waitForOfflineHydrationIdle();
+        await flushNormalizedPersistence();
+      },
+    };
+    return () => {
+      delete performanceWindow.__SERIAL_CLIENT_PERFORMANCE__;
+    };
   }, [auditEnabled, performanceWindow]);
 
   if (!auditEnabled || !performanceWindow) return children;

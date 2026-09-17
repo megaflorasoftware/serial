@@ -8,6 +8,7 @@ import {
   hydrateOfflineBodiesForPage,
   invalidateOfflineHydration,
   planPageBodyHydration,
+  waitForOfflineHydrationIdle,
 } from "~/lib/data/offline-hydration";
 import { feedItemsStore } from "~/lib/data/store";
 
@@ -178,6 +179,30 @@ describe("planPageBodyHydration", () => {
 });
 
 describe("hydrateOfflineBodiesForPage", () => {
+  it("reports idle only after the active hydration finishes", async () => {
+    const entity = bookmark();
+    bookmarksStore.getState().upsert(entity);
+    let resolveCaptures!: (captures: unknown[]) => void;
+    mocks.getCaptures.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCaptures = resolve;
+      }),
+    );
+    void hydrateOfflineBodiesForPage({ feedItems: [], bookmarks: [entity] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    let idle = false;
+    const readiness = waitForOfflineHydrationIdle().then(() => {
+      idle = true;
+    });
+    await Promise.resolve();
+    expect(idle).toBe(false);
+
+    resolveCaptures([]);
+    await readiness;
+    expect(idle).toBe(true);
+  });
+
   it("uses persisted captures before deciding to fetch them again", async () => {
     const entity = bookmark();
     bookmarksStore.getState().upsert(entity);

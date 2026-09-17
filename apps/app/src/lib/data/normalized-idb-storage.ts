@@ -29,6 +29,16 @@ type NormalizedRoot = {
 
 type NormalizedRecordSnapshots = Map<string, Map<string, unknown>>;
 
+export type NormalizedIDBStorage<T> = PersistStorage<T> & {
+  flushAndWait: () => Promise<void>;
+};
+
+const normalizedPersistenceFlushers = new Set<() => Promise<void>>();
+
+export async function flushNormalizedPersistence(): Promise<void> {
+  await Promise.all([...normalizedPersistenceFlushers].map((flush) => flush()));
+}
+
 function normalizedPrefix(name: string) {
   return `${name}::normalized:v1`;
 }
@@ -320,12 +330,13 @@ export function createNormalizedIDBStorage<T>(
     // every store mutation. The result must contain only persistable fields.
     prepareWrite?: (state: T) => T;
   },
-): PersistStorage<T> {
+): NormalizedIDBStorage<T> {
   if (typeof window === "undefined") {
     return {
       getItem: () => null,
       setItem: () => {},
       removeItem: () => {},
+      flushAndWait: () => Promise.resolve(),
     };
   }
 
@@ -341,8 +352,10 @@ export function createNormalizedIDBStorage<T>(
   let pending: { name: string; value: StorageValue<T> } | null = null;
   let writeTimeout: ReturnType<typeof setTimeout> | null = null;
   let writeChain = Promise.resolve();
+  let lastWriteError: unknown = null;
 
   const reportWriteError = (name: string, error: unknown) => {
+    lastWriteError = error;
     const isDOMException = error instanceof DOMException;
     const shouldClear =
       isDOMException &&
@@ -408,6 +421,7 @@ export function createNormalizedIDBStorage<T>(
           // again.
           staleKeysPossible = false;
           lastValue = value;
+          lastWriteError = null;
         }),
       )
       .catch((error: unknown) => reportWriteError(current.name, error));
@@ -423,7 +437,7 @@ export function createNormalizedIDBStorage<T>(
   });
   window.addEventListener("pagehide", flushPending);
 
-  return {
+  const storage: NormalizedIDBStorage<T> = {
     // A rejected getItem would leave zustand persist permanently un-hydrated
     // (it never fires finish-hydration listeners on error), which wedges the
     // reconciliation hydration domains. This read path can also fail during
@@ -482,6 +496,11 @@ export function createNormalizedIDBStorage<T>(
         writeTimeout = setTimeout(flush, WRITE_THROTTLE_MS);
       }
     },
+    flushAndWait: async () => {
+      flushPending();
+      await writeChain;
+      if (lastWriteError) throw lastWriteError;
+    },
     removeItem: async (name) => {
       if (writeTimeout !== null) clearTimeout(writeTimeout);
       writeTimeout = null;
@@ -505,4 +524,6 @@ export function createNormalizedIDBStorage<T>(
       });
     },
   };
+  normalizedPersistenceFlushers.add(storage.flushAndWait);
+  return storage;
 }

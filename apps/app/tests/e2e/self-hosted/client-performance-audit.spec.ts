@@ -41,6 +41,7 @@ type BrowserMetrics = {
 type PerformanceWindow = Window & {
   __SERIAL_CLIENT_PERFORMANCE__?: {
     commits: Array<{ actualDuration: number; baseDuration: number }>;
+    readyForWarmReload: () => Promise<void>;
   };
 };
 
@@ -232,6 +233,17 @@ async function measureWarmHydration(
   network: NetworkMetrics,
   resetNetwork: () => void,
 ) {
+  await page.waitForFunction(() =>
+    performance
+      .getEntriesByType("mark")
+      .some(({ name }) => name === "serial:server-parity-applied"),
+  );
+  await page.evaluate(async () => {
+    const readiness = (window as PerformanceWindow)
+      .__SERIAL_CLIENT_PERFORMANCE__?.readyForWarmReload;
+    if (!readiness) throw new Error("Client performance readiness is missing");
+    await readiness();
+  });
   await resetBrowserMetrics(page);
   resetNetwork();
   await page.reload();

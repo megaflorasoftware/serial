@@ -47,6 +47,64 @@ afterEach(() => {
 });
 
 describe("normalized IndexedDB in-place record updates", () => {
+  it("waits for a queued write to finish when explicitly flushed", async () => {
+    let releaseWrite!: () => void;
+    const writeBlocked = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let markWriteStarted!: () => void;
+    const writeStarted = new Promise<void>((resolve) => {
+      markWriteStarted = resolve;
+    });
+    vi.mocked(setMany).mockImplementationOnce(async (entries) => {
+      markWriteStarted();
+      await writeBlocked;
+      for (const [key, value] of entries) {
+        indexedDb.entries.set(key, cloneStoredValue(value));
+      }
+    });
+    const storage = createNormalizedIDBStorage<{
+      records: Record<string, { id: string }>;
+    }>({ recordFields: ["records"] });
+    storage.setItem("awaited-flush", {
+      state: { records: { first: { id: "first" } } },
+    });
+
+    let completed = false;
+    const flush = storage.flushAndWait().then(() => {
+      completed = true;
+    });
+    await writeStarted;
+    expect(completed).toBe(false);
+
+    releaseWrite();
+    await flush;
+    expect(await storage.getItem("awaited-flush")).toEqual({
+      state: { records: { first: { id: "first" } } },
+      version: undefined,
+    });
+  });
+
+  it("rejects an explicit flush when persistence fails", async () => {
+    const failure = new Error("write failed");
+    vi.mocked(setMany).mockRejectedValueOnce(failure);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const storage = createNormalizedIDBStorage<{
+      records: Record<string, { id: string }>;
+    }>({ recordFields: ["records"] });
+    storage.setItem("failed-flush", {
+      state: { records: { first: { id: "first" } } },
+    });
+
+    await expect(storage.flushAndWait()).rejects.toBe(failure);
+    expect(warning).toHaveBeenCalledWith(
+      "[normalized-idb-storage] write failed:",
+      "failed-flush",
+      failure,
+    );
+    warning.mockRestore();
+  });
+
   it("projects a queued flush before its mutable source can change", async () => {
     type Cache = {
       records: Record<string, { id: string }>;

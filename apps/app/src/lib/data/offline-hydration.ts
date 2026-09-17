@@ -64,6 +64,10 @@ export function invalidateOfflineHydration() {
   activeHydration = null;
 }
 
+export async function waitForOfflineHydrationIdle(): Promise<void> {
+  while (activeHydration) await activeHydration;
+}
+
 // Macrotask yield through a MessageChannel rather than setTimeout: the
 // single-flight run must survive mocked timers, and a message task defers
 // off the page-application task just the same.
