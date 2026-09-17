@@ -225,6 +225,39 @@ function useAutomaticDiscovery(
   return { isPending, reset: () => setLastQuery(null) };
 }
 
+function DiscoveryProgress({
+  state,
+  hasResults,
+  pending,
+  loadingLabel,
+}: {
+  state: FeedDiscoveryCommandProps["state"];
+  hasResults: boolean;
+  pending: boolean;
+  loadingLabel: string;
+}) {
+  const adding = state === "adding";
+  if (!adding && state !== "discovering" && !pending) return null;
+  if (!adding && hasResults)
+    return (
+      <div
+        className="text-muted-foreground flex items-center gap-2 px-4 py-2 text-xs"
+        role="status"
+      >
+        <Loader2Icon className="size-4 animate-spin" />
+        <span>Finding feeds…</span>
+      </div>
+    );
+  return (
+    <div className={CENTERED_STATE_CLASS_NAME} role="status" aria-live="polite">
+      <CenteredStateContent testId="feed-discovery-loading-state">
+        <Loader2Icon className="size-8 animate-spin" strokeWidth={1.5} />
+        <span>{adding ? loadingLabel : "Finding feeds…"}</span>
+      </CenteredStateContent>
+    </div>
+  );
+}
+
 export function FeedDiscoveryCommand({
   url,
   onUrlChange,
@@ -317,23 +350,6 @@ export function FeedDiscoveryCommand({
       <CommandList className="relative flex max-h-none min-h-0 flex-1 flex-col sm:max-h-[min(60dvh,32rem,calc(100dvh-5.5rem))] sm:min-h-[min(20rem,60dvh,calc(100dvh-5.5rem))] sm:flex-none">
         {normalizedUrl ? (
           <>
-            {(isAddingFeed ||
-              (isDiscovering && !isSelecting) ||
-              isAutoDiscoveryPending) && (
-              <div
-                className={CENTERED_STATE_CLASS_NAME}
-                role="status"
-                aria-live="polite"
-              >
-                <CenteredStateContent testId="feed-discovery-loading-state">
-                  <Loader2Icon
-                    className="size-8 animate-spin"
-                    strokeWidth={1.5}
-                  />
-                  <span>{isAddingFeed ? loadingLabel : "Finding feeds…"}</span>
-                </CenteredStateContent>
-              </div>
-            )}
             {!bookmarkUrl && (
               <SuggestedFeedResults
                 query={url}
@@ -348,15 +364,12 @@ export function FeedDiscoveryCommand({
               onDiscover={() => onDiscover()}
               onSelect={onSelectFeed}
             />
-            {isDiscovering && isSelecting && (
-              <div
-                className="text-muted-foreground flex items-center gap-2 px-4 py-2 text-xs"
-                role="status"
-              >
-                <Loader2Icon className="size-4 animate-spin" />
-                <span>Finding feeds…</span>
-              </div>
-            )}
+            <DiscoveryProgress
+              state={state}
+              hasResults={isSelecting}
+              pending={isAutoDiscoveryPending}
+              loadingLabel={loadingLabel}
+            />
             {bookmarkUrl && (
               <BookmarkResult
                 url={bookmarkUrl}
