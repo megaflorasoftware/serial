@@ -160,6 +160,7 @@ function FeedResults({
         <CommandItem
           className="gap-2"
           key={feedDiscoveryKey(feed)}
+          data-onboarding="feed-result"
           value={feedDiscoveryKey(feed)}
           onSelect={() => onSelect(feed)}
         >

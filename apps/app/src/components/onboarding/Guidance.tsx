@@ -66,6 +66,7 @@ type Position = {
   viewportHeight: number;
   viewportTop: number;
   bottomDrawerOpen: boolean;
+  helperHidden: boolean;
 };
 const EMPTY: Position = {
   x: 0,
@@ -80,12 +81,14 @@ const EMPTY: Position = {
   viewportHeight: 0,
   viewportTop: 0,
   bottomDrawerOpen: false,
+  helperHidden: false,
 };
 
 function useGuidanceTarget(
   selector: string | undefined,
   instructionKey: string,
   anchorSelector: string | undefined,
+  hideWhenSelector: string | undefined,
   highlightDialog: boolean,
   confirming: boolean,
   helper: RefObject<HTMLDivElement | null>,
@@ -133,6 +136,8 @@ function useGuidanceTarget(
         focusedInput.scrollIntoView({ block: "center", behavior: "instant" });
       }
       const updated: Position = {
+        helperHidden:
+          !!hideWhenSelector && !!document.querySelector(hideWhenSelector),
         x: Math.max(0, (rect?.x ?? 0) - 5),
         y: Math.max(0, (rect?.y ?? 0) - 5),
         width: rect ? rect.width + 10 : 0,
@@ -202,6 +207,7 @@ function useGuidanceTarget(
     selector,
     instructionKey,
     anchorSelector,
+    hideWhenSelector,
     highlightDialog,
     confirming,
     helper,
@@ -215,6 +221,7 @@ export function Guidance({
   instructionKey,
   selector,
   anchorSelector,
+  hideWhenSelector,
   highlightDialog = false,
   interactiveDialog = false,
   dimmed = true,
@@ -230,6 +237,7 @@ export function Guidance({
   instructionKey: string;
   selector?: string;
   anchorSelector?: string;
+  hideWhenSelector?: string;
   highlightDialog?: boolean;
   interactiveDialog?: boolean;
   dimmed?: boolean;
@@ -249,6 +257,7 @@ export function Guidance({
       selector,
       instructionKey,
       anchorSelector,
+      hideWhenSelector,
       highlightDialog,
       confirming,
       helper,
@@ -435,9 +444,7 @@ export function Guidance({
         </svg>
       )}
       {confirming ? (
-        <div
-          className={`pointer-events-auto fixed inset-0 flex items-center justify-center p-4 ${dimmed ? "bg-black/60" : ""}`}
-        >
+        <div className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/60 p-4">
           <div
             ref={helper}
             // Guidance traps Tab and Escape inside this existing Radix modal.
@@ -466,7 +473,7 @@ export function Guidance({
         </div>
       ) : (
         <>
-          {children && (
+          {children && !position.helperHidden && (
             <div
               ref={helper}
               role="region"

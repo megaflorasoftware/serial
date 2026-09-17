@@ -618,9 +618,3 @@ dialog:modal {
 body {
   overscroll-behavior-y: contain;
 }
-
-/* Onboarding keeps modal interaction boundaries without obscuring the app. */
-body:has([data-onboarding-active])
-  :is([data-slot="dialog-overlay"], [data-vaul-overlay]) {
-  background: transparent;
-}

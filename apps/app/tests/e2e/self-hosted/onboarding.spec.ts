@@ -54,15 +54,14 @@ async function savedProgress() {
 }
 const guide = (page: Page) =>
   page.getByRole("region", { name: "Onboarding guidance" });
-async function expectUndimmed(page: Page) {
+async function expectNormalBackdrop(page: Page) {
   await expect(page.locator("[data-guidance-layer] > svg")).toHaveCount(0);
   for (const overlay of await page
     .locator('[data-slot="dialog-overlay"], [data-vaul-overlay]')
     .all()) {
-    await expect(overlay).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(overlay).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   }
 }
-
 test.afterEach(async () => {
   if (email) await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
 });
@@ -172,7 +171,7 @@ for (const mobile of [false, true]) {
     );
     await expect(name).not.toBeFocused();
     await expect(guide(page)).toContainText("Give your view a name");
-    await expectUndimmed(page);
+    await expectNormalBackdrop(page);
     await expect(
       page.getByRole("tab", { name: "Content", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
@@ -220,7 +219,7 @@ for (const mobile of [false, true]) {
       has: page.getByRole("button", { name: "Large Grid", exact: true }),
     });
     await expect(layoutPopup).toBeVisible();
-    await expectUndimmed(page);
+    await expectNormalBackdrop(page);
     await page.getByRole("button", { name: "Large Grid", exact: true }).click();
     await expect(layoutPopup).toHaveCount(0);
     await page.getByRole("button", { name: "Large Grid", exact: true }).click();
@@ -253,7 +252,7 @@ for (const mobile of [false, true]) {
     );
     await guide(page).getByRole("button", { name: "Next" }).click();
     await expect(
-      page.getByRole("heading", { name: "Next steps" }),
+      page.getByRole("heading", { name: "That's it!" }),
     ).toBeVisible();
     await expect
       .poll(async () => (await savedProgress())?.onboarding_complete)
@@ -282,7 +281,7 @@ for (const mobile of [false, true]) {
     await expect(guide(page)).toContainText(
       "Let's start by adding your first feed",
     );
-    await expectUndimmed(page);
+    await expectNormalBackdrop(page);
     await expect(
       page.getByRole("textbox", { name: "Suggested website" }),
     ).toHaveCount(0);
@@ -290,7 +289,7 @@ for (const mobile of [false, true]) {
     await expect(guide(page)).toContainText(
       "Let's start by adding your first feed",
     );
-    await expectUndimmed(page);
+    await expectNormalBackdrop(page);
     expect(
       await page.evaluate(() => {
         const style = getComputedStyle(document.documentElement);
@@ -359,6 +358,22 @@ for (const mobile of [false, true]) {
     const search = page.locator('[data-onboarding="find-feed"] [cmdk-input]');
     await search.fill("https://example.com/my-favorite-site");
     await expect(search).toHaveValue("https://example.com/my-favorite-site");
+    const feedUrl = `http://127.0.0.1:${SELF_HOSTED_RSS_SERVER_PORT}/feed/cgp-grey`;
+    await search.fill(feedUrl);
+    const result = page.getByRole("option", { name: /CGP Grey/ });
+    await expect(result).toBeVisible({ timeout: 15000 });
+    await expect(guide(page)).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Skip Onboarding", exact: true }),
+    ).toBeVisible();
+    await search.fill("");
+    await expect(guide(page)).toContainText("Enter a website address");
+    await search.fill(feedUrl);
+    await expect(result).toBeVisible({ timeout: 15000 });
+    await expect(guide(page)).toHaveCount(0);
+    await result.click();
+    await expect(page.locator('[data-onboarding="save-feed"]')).toBeVisible();
+    await expect(guide(page)).toContainText("Save your feed");
   });
 }
 
@@ -390,7 +405,7 @@ test("saves unchanged sync preferences and stays on the slide after a failure", 
     route.fulfill({ json: { json: { saved: true } } }),
   );
   await next.click();
-  await expect(page.getByRole("heading", { name: "Next steps" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "That's it!" })).toBeVisible();
 });
 
 for (const result of ["denied", "success"]) {
@@ -406,7 +421,7 @@ for (const result of ["denied", "success"]) {
     await expect(
       page.getByRole("heading", {
         name:
-          result === "success" ? "Next steps" : "Your Atmosphere subscriptions",
+          result === "success" ? "That's it!" : "Your Atmosphere subscriptions",
       }),
     ).toBeVisible();
     await expect(
@@ -451,7 +466,7 @@ test("a pending theme save cannot reopen onboarding after confirmed skip", async
 });
 
 for (const mobile of [false, true]) {
-  test(`next steps matches welcome and restores ordinary backdrop after completion ${mobile ? "mobile" : "desktop"}`, async ({
+  test(`next steps matches welcome and keeps ordinary dialog backdrops ${mobile ? "mobile" : "desktop"}`, async ({
     page,
   }) => {
     await page.setViewportSize(
@@ -459,21 +474,26 @@ for (const mobile of [false, true]) {
     );
     await start(page, "next-steps");
     const title = page.getByRole("heading", {
-      name: "Next steps",
+      name: "That's it!",
       exact: true,
     });
     const blurb = page.getByText(
-      "That's it! Add our extension to save bookmarks as you browse the web, or import feeds from YouTube or your previous RSS reader.",
+      /Next, add our extension to save bookmarks as you browse the web, or import feeds from YouTube or your previous RSS reader\./,
       { exact: true },
     );
     await expect(title).toHaveCSS("font-size", "20px");
     await expect(title).toHaveCSS("text-align", "center");
-    await expect(blurb).toHaveCSS("font-size", "18px");
+    await expect(blurb).toHaveCSS("font-size", "16px");
     await expect(blurb).toHaveCSS("text-align", "center");
+    await expect(
+      page
+        .getByRole("dialog", { name: "That's it!", exact: true })
+        .getByRole("link"),
+    ).toHaveText(["Get the extension", "Import feeds"]);
     await expect(
       page.getByRole("button", { name: "Close", exact: true }),
     ).toHaveCount(0);
-    await expectUndimmed(page);
+    await expectNormalBackdrop(page);
     await expect
       .poll(async () => {
         const actions = (await page
@@ -484,7 +504,7 @@ for (const mobile of [false, true]) {
       })
       .toBe(true);
     await page.getByRole("button", { name: "Done", exact: true }).click();
-    await expect(page.locator("[data-onboarding-active]")).toHaveCount(0);
+    await expect(title).toHaveCount(0);
     await page.locator('[data-onboarding="open-menu"]').click();
     await page
       .locator('[data-onboarding="add-view"]')

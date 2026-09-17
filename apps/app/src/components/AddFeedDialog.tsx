@@ -27,7 +27,7 @@ import { Switch } from "./ui/switch";
 import { ToggleGroupItem } from "./ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type {
   ApplicationFeed,
   ApplicationView,
@@ -512,10 +512,12 @@ function FeedNameField({
   name,
   setName,
   feed,
+  children,
 }: {
   name: string;
   setName: (name: string) => void;
   feed: ApplicationFeed | undefined;
+  children?: ReactNode;
 }) {
   const websiteUrl = feed && getFeedWebsiteUrl(feed);
   const feedUrl = feed && getFeedRssUrl(feed);
@@ -535,6 +537,7 @@ function FeedNameField({
           onChange={(e) => setName(e.target.value)}
           className="flex-1"
         />
+        {children}
         {feedUrl && (
           <CopyFeedLinkButton
             key={feedUrl}
@@ -803,6 +806,23 @@ export function EditFeedDialog({
       title="Edit Feed"
       headerRight={
         <div className="flex items-center gap-2">
+          <FeedActiveSwitch
+            canMutate={canMutate && !isRevalidating}
+            feed={feed}
+            selectedFeedId={selectedFeedId}
+          />
+        </div>
+      }
+      footer={
+        <EditFeedDialogFooter
+          canMutate={canMutate && !isRevalidating}
+          isFormDisabled={isFormDisabled}
+          actions={actions}
+        />
+      }
+    >
+      <div className="grid gap-6">
+        <FeedNameField name={name} setName={setName} feed={feed}>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -831,23 +851,7 @@ export function EditFeedDialog({
             </TooltipTrigger>
             <TooltipContent>Revalidate Feed</TooltipContent>
           </Tooltip>
-          <FeedActiveSwitch
-            canMutate={canMutate && !isRevalidating}
-            feed={feed}
-            selectedFeedId={selectedFeedId}
-          />
-        </div>
-      }
-      footer={
-        <EditFeedDialogFooter
-          canMutate={canMutate && !isRevalidating}
-          isFormDisabled={isFormDisabled}
-          actions={actions}
-        />
-      }
-    >
-      <div className="grid gap-6">
-        <FeedNameField name={name} setName={setName} feed={feed} />
+        </FeedNameField>
         <EditFeedViewsField
           canMutate={canMutate}
           selectedViewIds={selectedViewIds}

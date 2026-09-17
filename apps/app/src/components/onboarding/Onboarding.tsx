@@ -38,7 +38,8 @@ const INSTRUCTIONS: Record<
   {
     selector: string;
     anchorSelector?: string;
-    text: string;
+    hideWhenSelector?: string;
+    text: string | string[];
     next?: boolean;
     highlightDialog?: boolean;
     interactiveDialog?: boolean;
@@ -53,6 +54,8 @@ const INSTRUCTIONS: Record<
     text: "Here's where you add a feed. Feeds are the parts of the web that you want to bring into Serial.",
   },
   "find-feed": {
+    hideWhenSelector:
+      '[data-onboarding="find-feed"] [data-onboarding="feed-result"]',
     anchorSelector:
       '[data-onboarding="find-feed"] [cmdk-input], [data-onboarding="find-feed"] [role="option"]',
     selector: '[data-onboarding="find-feed"]',
@@ -65,7 +68,7 @@ const INSTRUCTIONS: Record<
   },
   "feed-added": {
     selector: '[data-onboarding="feed-content"]',
-    text: "Your feed is added! Feed content is viewable in this main pane.",
+    text: "Your feed is added! Everything you have in Serial is viewable through this main pane.",
     next: true,
   },
   "open-menu": {
@@ -74,7 +77,10 @@ const INSTRUCTIONS: Record<
   },
   "add-view": {
     selector: '[data-onboarding="add-view"]',
-    text: "Now, let's add a view. Views are a more customizable version of folders that enable you to group your feeds and tags in the way that makes sense to you.",
+    text: [
+      "Now, let's add a view.",
+      "Views enable you to group your feeds in a way that makes sense to you.",
+    ],
   },
   "name-view": {
     highlightDialog: true,
@@ -97,11 +103,18 @@ const INSTRUCTIONS: Record<
     anchorSelector: '[role="dialog"]:has([data-onboarding="open-display"])',
     interactiveDialog: true,
     selector: '[data-onboarding="open-display"]',
-    text: "Here, you can organize your feeds and tags in the order you'd like to see them in this view. Feel free to update the layout or poke around this view a bit more, then click \"Add View\" when you're ready to move on.",
+    text: [
+      "Here, you can organize your feeds into sections to display them exactly how you want. Each section can have its own layout.",
+      'When you\'re ready, click "Add View" to move on.',
+    ],
   },
   "view-chips": {
     selector: '[data-onboarding="view-chips"]',
-    text: 'Your view is added! Each of your views appears here, making it easy to switch between them as you wish. Feeds that aren\'t a part of any view will show up in "Uncategorized"',
+    text: [
+      "Your view is added!",
+      "You can swap between each of your views here.",
+      'Feeds that aren\'t a part of any view will show up in "Uncategorized".',
+    ],
     next: true,
   },
 };
@@ -110,7 +123,8 @@ function SuggestedWebsite() {
   return (
     <>
       <p className="text-muted-foreground">
-        Not sure where to start? Try following Serial.
+        Not sure where to start? Try following Serial to stay up-to-date with
+        new improvements.
       </p>
       <div className="flex gap-2">
         <Input
@@ -382,7 +396,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
     "add-feed": "Follow your first feed",
     "create-view": "Create a view",
     "atmosphere-sync-setup": "Your Atmosphere subscriptions",
-    "next-steps": "Next steps",
+    "next-steps": "That's it!",
   };
   const close = () => {
     if (state.step === "next-steps") finishOnboarding();
@@ -391,7 +405,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
   const bookend = state.step === "introduction" || state.step === "next-steps";
   return (
     <>
-      <span hidden data-onboarding-active />
       <ControlledResponsiveDialog
         hideClose={bookend}
         titleClassName={bookend ? "text-xl" : undefined}
@@ -415,9 +428,8 @@ function AccountOnboarding({ userId }: { userId: string }) {
             <>
               <WelcomeDrawing />
               <p className="text-center text-lg">
-                Serial is a reader for the old and new web. Follow RSS feeds and
-                Atmosphere publications, and save bookmarks from anywhere on the
-                web.
+                Serial lets you follow RSS feeds, subscribe to Atmosphere
+                publications, and save bookmarks from anywhere on the web.
               </p>
               <Button onClick={() => advanceOnboarding("choose-colors")}>
                 Get started
@@ -434,16 +446,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
                   className="h-auto flex-col gap-2 py-4"
                   asChild
                 >
-                  <Link to="/import" onClick={finishOnboarding}>
-                    <ImportIcon size={20} />
-                    Import feeds
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col gap-2 py-4"
-                  asChild
-                >
                   <a
                     href="https://www.serial.tube/downloads"
                     target="_blank"
@@ -453,11 +455,20 @@ function AccountOnboarding({ userId }: { userId: string }) {
                     Get the extension
                   </a>
                 </Button>
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col gap-2 py-4"
+                  asChild
+                >
+                  <Link to="/import" onClick={finishOnboarding}>
+                    <ImportIcon size={20} />
+                    Import feeds
+                  </Link>
+                </Button>
               </div>
-              <p className="text-center text-lg">
-                That&apos;s it! Add our extension to save bookmarks as you
-                browse the web, or import feeds from YouTube or your previous
-                RSS reader.
+              <p className="text-center text-base">
+                Next, add our extension to save bookmarks as you browse the web,
+                or import feeds from YouTube or your previous RSS reader.
               </p>
               <Button onClick={finishOnboarding}>Done</Button>
             </>
@@ -473,6 +484,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
               : instruction?.selector
           }
           anchorSelector={instruction?.anchorSelector}
+          hideWhenSelector={instruction?.hideWhenSelector}
           highlightDialog={instruction?.highlightDialog}
           interactiveDialog={instruction?.interactiveDialog}
           dimmed={false}
@@ -492,7 +504,14 @@ function AccountOnboarding({ userId }: { userId: string }) {
         >
           {instruction && (
             <>
-              {instruction.text}
+              <div className="grid gap-3">
+                {(Array.isArray(instruction.text)
+                  ? instruction.text
+                  : [instruction.text]
+                ).map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </div>
               {state.instruction === "find-feed" && <SuggestedWebsite />}
             </>
           )}
