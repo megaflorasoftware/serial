@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode, RefObject } from "react";
 import { GuidanceLayer } from "./GuidanceLayer";
+import type { ReactNode, RefObject } from "react";
 import type { GuidancePosition } from "./GuidanceLayer";
 
 const POPUP_SELECTOR =

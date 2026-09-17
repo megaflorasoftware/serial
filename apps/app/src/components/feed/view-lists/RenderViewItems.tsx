@@ -19,6 +19,7 @@ import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import type { ViewSection } from "./useViewSections";
+import type { ViewLayout } from "~/server/db/constants";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import FeedLoading from "~/components/loading";
 import { buildContentStatusKey, isInboxUnread } from "~/lib/content-status";
@@ -41,7 +42,7 @@ import { useFeedItemNavigation } from "~/lib/hooks/useFeedItemNavigation";
 import { useShortcut } from "~/lib/hooks/useShortcut";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { showUndoToast } from "~/lib/undo";
-import { VIEW_LAYOUT, type ViewLayout } from "~/server/db/constants";
+import { VIEW_LAYOUT } from "~/server/db/constants";
 import { useRootItemScrollRestoration } from "~/lib/root-scroll-restoration";
 
 function getLoadingSkeleton(layout: ViewLayout) {
