@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CopyIcon, DownloadIcon, ImportIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, DownloadIcon, ImportIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Guidance } from "./Guidance";
 import { OnboardingSyncSlide } from "./OnboardingSyncSlide";
@@ -130,6 +130,12 @@ const INSTRUCTIONS: Record<
 };
 
 function SuggestedWebsite() {
+  const [hasCopied, setHasCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
+
   return (
     <>
       <p className="text-muted-foreground">
@@ -151,13 +157,15 @@ function SuggestedWebsite() {
           onClick={async () => {
             try {
               await navigator.clipboard.writeText("www.serial.tube");
-              toast.success("Website address copied.");
+              setHasCopied(true);
+              clearTimeout(resetTimer.current);
+              resetTimer.current = setTimeout(() => setHasCopied(false), 3000);
             } catch {
               toast.error("Couldn't copy the address. Please try again.");
             }
           }}
         >
-          <CopyIcon size={16} />
+          {hasCopied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
         </Button>
       </div>
     </>
