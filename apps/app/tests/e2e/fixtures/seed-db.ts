@@ -291,6 +291,17 @@ export async function getFeedItemProgress(tursoPort: number, id: string) {
   return feedItem?.progress ?? null;
 }
 
+export async function getFeedItemWatchedState(tursoPort: number, id: string) {
+  const { db, client } = getDb(tursoPort);
+  const item = await db
+    .select({ isWatched: schema.feedItems.isWatched })
+    .from(schema.feedItems)
+    .where(eq(schema.feedItems.id, id))
+    .get();
+  client.close();
+  return item?.isWatched ?? null;
+}
+
 export async function getFeedItemWatchLaterState(
   tursoPort: number,
   id: string,

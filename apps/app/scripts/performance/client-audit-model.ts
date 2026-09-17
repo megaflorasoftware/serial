@@ -25,6 +25,11 @@ import {
   selectPersistedPages,
 } from "~/lib/data/page-retention";
 import { projectLocalMixedContentOrder } from "~/lib/data/mixed-content/bookmarkProjection";
+import {
+  getEligibleSoftReadIds,
+  retainEligibleSoftReadPositions,
+  retainSoftReadPositions,
+} from "~/components/feed/view-lists/softReads";
 
 const PAGE_SIZE = 30;
 const CONTENT_STATUSES: readonly ContentStatusFilter[] = CONTENT_STATUS_FILTERS;
@@ -85,6 +90,7 @@ export type ClientAuditResult = {
     bookmarkBurstSingleFrame: ClientAuditOperation;
     bookmarkBurstSeparateFrames: ClientAuditOperation;
     localViewProjection: ClientAuditOperation;
+    softReadProjection: ClientAuditOperation;
     normalizedPersistenceMutation: ClientAuditOperation;
   };
 };
@@ -616,6 +622,60 @@ export function runClientAuditProfile(
 ): ClientAuditResult {
   let fixture = seedClientFixture(profileName);
   const profile = fixture.profile;
+  const savedIds = [
+    ...fixture.feedItems
+      .filter((item) => item.isWatchLater)
+      .map((item) => item.id),
+    ...fixture.bookmarks.filter((item) => item.isSaved).map((item) => item.id),
+  ];
+  const softReadPositions = new Map(
+    savedIds.flatMap((id, index) =>
+      index % 2 === 0
+        ? [[id, { sectionKey: "uncategorized", index }] as const]
+        : [],
+    ),
+  );
+  const softReadView = {
+    ...makeView(0),
+    feedIds: [...new Set(fixture.feedItems.map((item) => item.feedId))],
+    categoryIds: fixture.views.map((view) => view.id),
+  };
+  const softReadViews = fixture.views.map((view) =>
+    view.id === softReadView.id ? softReadView : view,
+  );
+  const softReadProjection = measure(() => {
+    const eligibleIds = getEligibleSoftReadIds({
+      positions: softReadPositions,
+      bookmarksById: bookmarksStore.getState().snapshot(),
+      feedItemsById: feedItemsStore.getState().feedItemsDict,
+      feedCategories: [],
+      views: softReadViews,
+      currentView: softReadView,
+      categoryFilter: -1,
+      feedFilter: -1,
+      saveStatus: "saved",
+    });
+    const section = {
+      name: "Saved",
+      layout: "list" as const,
+      startIndex: 0,
+      isUncategorized: true,
+      placement: null,
+    };
+    const activePositions = retainEligibleSoftReadPositions(softReadPositions, [
+      { ...section, items: eligibleIds },
+    ]);
+    retainSoftReadPositions(
+      [
+        {
+          ...section,
+          items: savedIds.filter((id) => !softReadPositions.has(id)),
+        },
+      ],
+      activePositions,
+    );
+    return 0;
+  });
   const localProjectionView = fixture.views.at(-1)!;
   const localProjectionFeedIds = new Set(localProjectionView.feedIds);
   const localProjectionFeedItemIds = fixture.feedItems
@@ -794,6 +854,7 @@ export function runClientAuditProfile(
       bookmarkBurstSingleFrame,
       bookmarkBurstSeparateFrames,
       localViewProjection,
+      softReadProjection,
       normalizedPersistenceMutation,
     },
   };

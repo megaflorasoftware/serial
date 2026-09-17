@@ -53,6 +53,12 @@ describe("client performance audit model", () => {
         mixedStoreNotifications: 0,
         authoritativeRefills: 0,
       });
+      expect(result.operations.softReadProjection).toMatchObject({
+        bookmarkStoreNotifications: 0,
+        feedItemStoreNotifications: 0,
+        mixedStoreNotifications: 0,
+        authoritativeRefills: 0,
+      });
     },
     30_000,
   );
@@ -81,6 +87,14 @@ describe("client performance audit model", () => {
     ).toBe(0);
     expect(result.operations.feedProgressBurst.feedItemScopeNotifications).toBe(
       0,
+    );
+  });
+
+  it("includes soft-read projection in the operation duration gate", () => {
+    const result = runClientAuditProfile("small");
+    result.operations.softReadProjection.durationMs = 51;
+    expect(evaluateClientAuditOperationBudgets(result)).toContain(
+      "softReadProjection: 51.0ms > 50ms",
     );
   });
 

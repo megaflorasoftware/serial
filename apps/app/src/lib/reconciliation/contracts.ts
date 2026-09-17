@@ -181,10 +181,12 @@ export type ReconciliationStreamEvent = {
 export type ReconciliationRequestIntent =
   | {
       type: "full";
+      discardManifest?: boolean;
       selectedScope: ReconciliationScopeTarget;
     }
   | {
       type: "full";
+      discardManifest?: boolean;
       coldContentStatus: ContentStatusFilter;
     }
   | {

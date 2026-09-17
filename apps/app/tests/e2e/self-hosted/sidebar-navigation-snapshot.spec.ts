@@ -198,7 +198,7 @@ test.describe("authoritative sidebar navigation", () => {
 
     await item.getByRole("link").hover();
     await page.keyboard.press("e");
-    await expect(item).toHaveCount(0);
+    await expect(item).toHaveCSS("opacity", "0.75");
     await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(0);
 
     await page

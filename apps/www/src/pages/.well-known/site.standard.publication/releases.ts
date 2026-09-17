@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
-import { STANDARD_SITE_PUBLICATION_URI } from "../../lib/site";
-import { getConfiguredPublicationUri } from "../../lib/standard-site";
+import { STANDARD_SITE_PUBLICATION_URI } from "../../../lib/site";
+import { getConfiguredPublicationUri } from "../../../lib/standard-site";
 
 export const GET: APIRoute = () => {
   const publicationUri = getConfiguredPublicationUri(
