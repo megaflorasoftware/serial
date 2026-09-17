@@ -76,10 +76,6 @@ export function legacyObservation(item: DatabaseFeedItem) {
     content: item.content,
     contentSnippet: item.contentSnippet,
     thumbnail: item.thumbnail,
-    // Old rows did not distinguish a body fallback from explicit feed media.
-    ...(item.content.includes(item.thumbnail) && item.thumbnail
-      ? { mediaThumbnail: "", firstImageUrl: item.thumbnail }
-      : {}),
     publishedDate: item.postedAt.toISOString(),
     tags: item.tags,
   });

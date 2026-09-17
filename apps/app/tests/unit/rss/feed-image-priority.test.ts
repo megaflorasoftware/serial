@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type * as AtprotoClientModule from "~/server/rss/atprotoClient";
 import type { FetchableOrigin } from "~/server/rss/types";
 import type { ItemObservation } from "~/server/rss/itemObservation";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
@@ -33,7 +34,7 @@ vi.mock("~/server/rss/feedCache", () => ({
 }));
 vi.mock("~/server/rss/feedHttp", () => ({ readFeedHttp: vi.fn() }));
 vi.mock("~/server/rss/atprotoClient", async (original) => ({
-  ...(await original<typeof import("~/server/rss/atprotoClient")>()),
+  ...(await original<typeof AtprotoClientModule>()),
   createPublicationClient: vi.fn(),
 }));
 
@@ -357,12 +358,25 @@ it("discards an in-flight result after the document URL changes", async () => {
   ).toBeNull();
 });
 
-it("repairs a pre-observation row queued by the migration", async () => {
+it("preserves ambiguous legacy thumbnails until a fresh source observation identifies the fallback", async () => {
   await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
   await fixture.database.delete(feedItemObservations);
   await refreshPageImages(fixture.database, fetchable.feed);
+  expect((await stored()).thumbnail).toBe(BODY);
+  expect(readFeedHttp).not.toHaveBeenCalled();
+  await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
+  await refreshPageImages(fixture.database, fetchable.feed);
   expect((await stored()).thumbnail).toBe(OG);
-  expect((await stored()).id).toBeDefined();
+});
+
+it("keeps explicit legacy media even when the article contains the same image", async () => {
+  await writeObservedItems(fixture.database, fetchable.feed, [
+    { ...observation(), thumbnail: BODY },
+  ]);
+  await fixture.database.delete(feedItemObservations);
+  await refreshPageImages(fixture.database, fetchable.feed);
+  expect((await stored()).thumbnail).toBe(BODY);
+  expect(readFeedHttp).not.toHaveBeenCalled();
 });
 
 it("does not overwrite a cover added while a page request is in flight", async () => {

@@ -14,7 +14,15 @@ it.each([1_000, 10_000, 50_000])(
     const session = openBenchmarkDatabase({ url: target.url });
     try {
       await applyMigrations(session.baseClient);
-      await createIngestWorkload(session.database, historySize);
+      await createIngestWorkload(session.database, 0);
+      // Seed history in one statement so fixture setup does not dominate this bound check.
+      await session.baseClient.execute({
+        sql: `WITH RECURSIVE history(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM history WHERE n < ?)
+          INSERT INTO serial_feed_item (id, feed_id, content_id, title, author, url, posted_at, created_at, updated_at)
+          SELECT 'old-' || n, (SELECT id FROM serial_feed WHERE user_id = 'ingest-benchmark'),
+            'old-' || n, 'Old item', 'Author', 'https://example.com/old/' || n, 0, 0, 0 FROM history`,
+        args: [historySize],
+      });
       const workload = await createPageImageWorkload(session.database);
       await workload.prepare();
       session.instrumentation.reset();

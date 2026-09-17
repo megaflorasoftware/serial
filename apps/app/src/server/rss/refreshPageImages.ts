@@ -91,16 +91,16 @@ export async function refreshPageImages(
             .update(feedItemPageImages)
             .set({ nextCheckAt: lease })
             .where(inArray(feedItemPageImages.itemId, ids));
-          const items = await tx
-            .select()
-            .from(feedItems)
-            .where(inArray(feedItems.id, ids));
-          const observations = await tx
-            .select()
-            .from(feedItemObservations)
-            .where(inArray(feedItemObservations.itemId, ids));
+          const [items, observations] = await Promise.all([
+            tx.select().from(feedItems).where(inArray(feedItems.id, ids)),
+            tx
+              .select()
+              .from(feedItemObservations)
+              .where(inArray(feedItemObservations.itemId, ids)),
+          ]);
+          const itemsById = new Map(items.map((item) => [item.id, item]));
           return due.flatMap((entry) => {
-            const item = items.find((row) => row.id === entry.itemId);
+            const item = itemsById.get(entry.itemId);
             if (!item) return [];
             const sources = sourcesFor(
               item,
@@ -144,27 +144,28 @@ export async function refreshPageImages(
       database.transaction(
         async (tx) => {
           const ids = results.map(({ candidate }) => candidate.itemId);
-          const currentImages = await tx
-            .select()
-            .from(feedItemPageImages)
-            .where(inArray(feedItemPageImages.itemId, ids));
-          const items = await tx
-            .select()
-            .from(feedItems)
-            .where(inArray(feedItems.id, ids));
-          const observations = await tx
-            .select()
-            .from(feedItemObservations)
-            .where(inArray(feedItemObservations.itemId, ids));
+          const [currentImages, items, observations] = await Promise.all([
+            tx
+              .select()
+              .from(feedItemPageImages)
+              .where(inArray(feedItemPageImages.itemId, ids)),
+            tx.select().from(feedItems).where(inArray(feedItems.id, ids)),
+            tx
+              .select()
+              .from(feedItemObservations)
+              .where(inArray(feedItemObservations.itemId, ids)),
+          ]);
+          const imagesById = new Map(
+            currentImages.map((entry) => [entry.itemId, entry]),
+          );
+          const itemsById = new Map(items.map((item) => [item.id, item]));
           const changed: ApplicationFeedItem[] = [];
           const legacySnapshots: Array<
             typeof feedItemObservations.$inferInsert
           > = [];
           for (const { candidate, result } of results) {
-            const current = currentImages.find(
-              (row) => row.itemId === candidate.itemId,
-            );
-            const item = items.find((row) => row.id === candidate.itemId);
+            const current = imagesById.get(candidate.itemId);
+            const item = itemsById.get(candidate.itemId);
             if (
               !current ||
               !item ||

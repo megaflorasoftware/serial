@@ -98,9 +98,10 @@ export async function writeObservedItems(
               selectMatches(inArray(feedItems.atprotoUri, atprotoUris)),
             );
           const matchedRows = await matches;
-          const existing = matchedRows.map(
-            ({ pageImage: _pageImage, ...item }) => item,
-          );
+          const existing = matchedRows.map(({ pageImage, ...item }) => {
+            void pageImage;
+            return item;
+          });
           const ids = existing.map((item) => item.id);
           const persistedIds = new Set(ids);
           const observations = ids.length
@@ -122,8 +123,6 @@ export async function writeObservedItems(
           const sources = new Map<string, Sources>();
           for (const observation of observations) {
             const values = sources.get(observation.itemId) ?? {};
-            const previousExplicitImage =
-              values.atproto?.thumbnail || values.rss?.thumbnail;
             values[observation.kind] = observation.value;
             sources.set(observation.itemId, values);
           }
