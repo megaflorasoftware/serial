@@ -14,43 +14,6 @@ import type {
   NewFeedDetails,
 } from "../types";
 import { captureException, logError } from "~/server/logger";
-import { workerPool } from "~/lib/workerPool";
-
-const MAX_OG_IMAGE_FETCHES_PER_FEED = 8;
-const OG_IMAGE_FETCH_CONCURRENCY = 2;
-
-async function fetchOgImage(url: string): Promise<string | undefined> {
-  try {
-    const response = await readFeedHttp(url, {
-      maxBodyBytes: 256 * 1024,
-      totalDurationMs: 3_000,
-    });
-
-    if (!response.ok) return undefined;
-
-    const html = response.text;
-
-    // Try og:image meta tag
-    const ogImageMatch = html.match(
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-    );
-    if (ogImageMatch?.[1]) {
-      return ogImageMatch[1];
-    }
-
-    // Try alternate format (content before property)
-    const ogImageAltMatch = html.match(
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-    );
-    if (ogImageAltMatch?.[1]) {
-      return ogImageAltMatch[1];
-    }
-
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export async function getWebsiteFeedIfMatches(
   text: string,
@@ -95,25 +58,6 @@ export async function fetchWebsiteFeedData(
       ...data.fetchMetadata,
     };
     const items = boundFeedItems(data.items);
-
-    const metadataCandidates = items
-      .flatMap((item, position) =>
-        item.thumbnail ? [] : [{ itemIndex: position, item }],
-      )
-      .slice(0, MAX_OG_IMAGE_FETCHES_PER_FEED);
-
-    for await (const { itemIndex, thumbnail } of workerPool(
-      metadataCandidates,
-      OG_IMAGE_FETCH_CONCURRENCY,
-      async (candidate) => ({
-        itemIndex: candidate.itemIndex,
-        thumbnail: await fetchOgImage(candidate.item.url),
-      }),
-    )) {
-      if (thumbnail && items[itemIndex]) {
-        items[itemIndex].thumbnail = thumbnail;
-      }
-    }
 
     return {
       id: feed.id,

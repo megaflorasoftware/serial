@@ -1,5 +1,6 @@
 import { sanitizeEmbeddedContent } from "@serial/standard-site";
 import { boundFeedItems } from "./feedBounds";
+import type { DatabaseFeedItem } from "../db/schema";
 import type { RSSContent } from "./types";
 import type { ItemObservation } from "../db/feed-item-observation";
 import { normalizeBookmarkUrl } from "~/server/bookmarks/url";
@@ -36,6 +37,7 @@ export function rssObservation(item: RSSContent): ItemObservation {
 export function composeItem(
   rss: ItemObservation | undefined,
   document: ItemObservation | undefined,
+  pageImage?: string | null,
 ) {
   const primary = document ?? rss!;
   const body = document?.content ? document : rss?.content ? rss : undefined;
@@ -49,7 +51,11 @@ export function composeItem(
     contentSnippet:
       document?.description || rss?.description || body?.firstParagraph || "",
     thumbnail:
-      document?.thumbnail || rss?.thumbnail || body?.firstImageUrl || "",
+      document?.thumbnail ||
+      rss?.thumbnail ||
+      pageImage ||
+      body?.firstImageUrl ||
+      "",
     content: body?.content ?? "",
     postedAt: new Date(document?.publishedAt || rss?.publishedAt || 0),
     sourceKind: document && rss ? ("both" as const) : primary.kind,
@@ -59,4 +65,18 @@ export function composeItem(
       ...new Set([...(document?.tags ?? []), ...(rss?.tags ?? [])]),
     ].sort(),
   };
+}
+
+export function legacyObservation(item: DatabaseFeedItem) {
+  return rssObservation({
+    id: item.contentId,
+    url: item.url,
+    title: item.title,
+    author: item.author,
+    content: item.content,
+    contentSnippet: item.contentSnippet,
+    thumbnail: item.thumbnail,
+    publishedDate: item.postedAt.toISOString(),
+    tags: item.tags,
+  });
 }

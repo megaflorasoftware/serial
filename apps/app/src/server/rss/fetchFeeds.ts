@@ -8,7 +8,7 @@ import { runDatabaseWrite } from "../db/retry-write";
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
 import { feedItems, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
-import { logMessage } from "../logger";
+import { logMessage, logWarning } from "../logger";
 import { calculateNextFetch } from "./calculateNextFetch";
 import { getCachedFeedResult, setCachedFeedResult } from "./feedCache";
 import { fetchNebulaFeedData, fetchNebulaFeedDetails } from "./parsers/nebula";
@@ -24,6 +24,7 @@ import { resolveItemDate } from "./publishedDate";
 import { writeObservedItems } from "./writeItems";
 import { rssObservation } from "./itemObservation";
 import { ingestAtmosphere } from "./ingestAtmosphere";
+import { refreshPageImages } from "./refreshPageImages";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { readFeedHttp } from "./feedHttp";
@@ -353,7 +354,7 @@ export async function* fetchAndInsertFeedData(
   const now = new Date();
   const databaseFeeds = uniqueFeeds(fetchableOrigins);
 
-  const processOrigin = async (
+  const fetchOrigin = async (
     fetchable: FetchableOrigin,
   ): Promise<FeedResult> => {
     const { origin, feed } = fetchable;
@@ -566,6 +567,44 @@ export async function* fetchAndInsertFeedData(
         message: e instanceof Error ? e.message : String(e),
       });
       return { status: "error", ...ids, error: e };
+    }
+  };
+
+  const repairedFeeds = new Set<number>();
+  const processOrigin = async (
+    fetchable: FetchableOrigin,
+  ): Promise<FeedResult> => {
+    const result = await fetchOrigin(fetchable);
+    const { feed, origin } = fetchable;
+    if (
+      feed.platform !== "website" ||
+      !feed.isActive ||
+      (origin.nextFetchAt && origin.nextFetchAt > now) ||
+      repairedFeeds.has(feed.id)
+    )
+      return result;
+    repairedFeeds.add(feed.id);
+    try {
+      const repaired = await refreshPageImages(context.db, feed);
+      if (!repaired.length) return result;
+      const changed = new Map(
+        ("feedItems" in result ? (result.feedItems ?? []) : []).map((item) => [
+          item.id,
+          item,
+        ]),
+      );
+      for (const item of repaired) changed.set(item.id, item);
+      return {
+        ...result,
+        status: result.status === "error" ? "error" : "success",
+        feedItems: [...changed.values()],
+      } as FeedResult;
+    } catch (error) {
+      logWarning("Could not refresh Feed item page images", {
+        feedId: feed.id,
+        error,
+      });
+      return result;
     }
   };
 

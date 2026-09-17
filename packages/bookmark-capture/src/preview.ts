@@ -2,7 +2,12 @@ import type {
   BookmarkContentPlatform,
   BookmarkContentType,
 } from "./capabilities";
-import { boundedText, metaContent, resolvedHttpUrl } from "./metadata";
+import {
+  boundedText,
+  metaContent,
+  resolvedHttpUrl,
+  openGraphImageUrl,
+} from "./metadata";
 import { BOOKMARK_CAPTURE_LIMITS } from "./policy";
 import { selectBookmarkPreviewThumbnail } from "./thumbnail";
 
@@ -305,12 +310,9 @@ function generalPreview(input: PreviewExtractionInput): ExtractedPagePreview {
     effectiveUrl,
   );
   const thumbnailUrl =
+    openGraphImageUrl(document, effectiveUrl) ??
     firstResolvedHttpUrl(
-      [
-        metaContent(document, 'meta[property="og:image:secure_url"]'),
-        metaContent(document, 'meta[property="og:image"]'),
-        metaContent(document, 'meta[name="twitter:image"]'),
-      ],
+      [metaContent(document, 'meta[name="twitter:image"]')],
       effectiveUrl,
     ) ??
     (input.inspectStructuredData
