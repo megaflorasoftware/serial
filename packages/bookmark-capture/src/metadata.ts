@@ -38,3 +38,14 @@ export function resolvedHttpUrl(
 export function metaContent(document: Document, selector: string) {
   return document.querySelector<HTMLMetaElement>(selector)?.content ?? null;
 }
+
+/** The article's declared Open Graph image, resolved against the final page URL. */
+export function openGraphImageUrl(document: Document, effectiveUrl: string) {
+  for (const property of ["og:image:secure_url", "og:image"]) {
+    for (const meta of document.querySelectorAll<HTMLMetaElement>(`meta[property="${property}"]`)) {
+      const url = resolvedHttpUrl(meta.content, effectiveUrl);
+      if (url) return url;
+    }
+  }
+  return undefined;
+}

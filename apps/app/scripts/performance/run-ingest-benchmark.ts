@@ -5,6 +5,7 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "./database";
+import { createPageImageWorkload } from "./page-image-workload";
 import { createIngestWorkload } from "./ingest-workload";
 
 const profiles = { small: 1_000, representative: 10_000, stress: 50_000 };
@@ -53,6 +54,35 @@ try {
     const ordered = samples.map((sample) => sample.ms).sort((a, b) => a - b);
     results[name] = { medianMs: ordered[7], p95Ms: ordered[14], samples };
   }
+  const pageImages = await createPageImageWorkload(session.database);
+  const imageSamples = [];
+  for (let i = 0; i < 18; i++) {
+    // Prepare outside the timed operation.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await pageImages.prepare();
+    globalThis.gc?.();
+    session.instrumentation.reset();
+    const started = performance.now();
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await pageImages.run();
+    const ms = performance.now() - started;
+    const evidence = session.instrumentation.snapshot();
+    if (i >= 3)
+      imageSamples.push({
+        ms,
+        statements: evidence.statementCount,
+        rows: evidence.materializedRows,
+        requests: pageImages.requests,
+      });
+  }
+  const imageTimes = imageSamples
+    .map((sample) => sample.ms)
+    .sort((a, b) => a - b);
+  results["page-image-repair"] = {
+    medianMs: imageTimes[7],
+    p95Ms: imageTimes[14],
+    samples: imageSamples,
+  };
   mkdirSync("benchmarks/results", { recursive: true });
   const output = `benchmarks/results/ingest-${profile}.json`;
   writeFileSync(

@@ -2,7 +2,7 @@
 // https://orm.drizzle.team/docs/sql-schema-declaration
 
 import { createId } from "@paralleldrive/cuid2";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -492,6 +492,31 @@ export const feedItems = sqliteTable(
     ),
   ],
 );
+/** Canonical-page imagery and its bounded refresh queue are independent of origin revisions. */
+export const feedItemPageImages = sqliteTable(
+  "feed_item_page_image",
+  {
+    itemId: text("item_id")
+      .primaryKey()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    pageUrl: text("page_url").notNull(),
+    imageUrl: text("image_url"),
+    nextCheckAt: integer("next_check_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(sql`0`),
+  },
+  (table) => [
+    index("feed_item_page_image_due_idx").on(
+      table.feedId,
+      table.nextCheckAt,
+      table.itemId,
+    ),
+  ],
+);
+
 /** Internal source snapshots allow edits to restore the other origin's fallback. */
 export const feedItemObservations = sqliteTable(
   "feed_item_observation",

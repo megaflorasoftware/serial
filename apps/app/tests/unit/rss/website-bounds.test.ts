@@ -114,7 +114,7 @@ describe("fetchWebsiteFeedData resource bounds", () => {
     expect(result.items[0]?.content).toHaveLength(256 * 1024);
   });
 
-  it("fetches fallback metadata for at most 8 items with concurrency 2", async () => {
+  it("leaves canonical-page enrichment to the shared persisted-item queue", async () => {
     metadataRequestCount = 0;
     activeMetadataRequests = 0;
     maximumActiveMetadataRequests = 0;
@@ -126,8 +126,8 @@ describe("fetchWebsiteFeedData resource bounds", () => {
     expect(result).not.toHaveProperty("notModified");
     if (!result || "notModified" in result) return;
 
-    expect(metadataRequestCount).toBe(8);
+    expect(metadataRequestCount).toBe(0);
     expect(maximumActiveMetadataRequests).toBeLessThanOrEqual(2);
-    expect(result.items.filter((item) => item.thumbnail)).toHaveLength(8);
+    expect(result.items.filter((item) => item.thumbnail)).toHaveLength(0);
   });
 });
