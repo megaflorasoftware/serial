@@ -51,7 +51,7 @@ export function ConnectedAccountRow({
  * sign-in method still exists. Same treatment as the demo banner: amber
  * strip, state on the left, the one action on the right.
  */
-function ReconnectBanner({
+export function ReconnectBanner({
   disabled,
   onReconnect,
   reconnecting,

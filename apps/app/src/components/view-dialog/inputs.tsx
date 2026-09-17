@@ -8,6 +8,11 @@ import type {
   ContentFilter,
   ContentFilterOption,
 } from "~/lib/views/contentFilter";
+import {
+  advanceInstruction,
+  isOnboardingFeedSelection,
+  useOnboarding,
+} from "~/lib/onboarding/store";
 import { ChipCombobox } from "~/components/ui/chip-combobox";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -51,6 +56,10 @@ export function ViewNameInput({
       <Label htmlFor="name">Name</Label>
       <Input
         ref={inputRef}
+        data-onboarding="name-view"
+        onBlur={() => {
+          if (name.trim()) advanceInstruction("name-view", "choose-feed");
+        }}
         id="name"
         type="text"
         value={name}
@@ -236,14 +245,22 @@ export function ViewFeedsInput({
   setSelectedFeedIds: (feedIds: number[]) => void;
 }) {
   const feedOptions = useFeedOptions();
+  const instruction = useOnboarding((state) => state.instruction);
+  const guided = instruction === "choose-feed";
 
   return (
     <ChipCombobox
+      guidance={guided}
+      closeOnSelect={guided ? isOnboardingFeedSelection : false}
       label="Feeds"
       placeholder="Search feeds..."
       options={feedOptions}
       selectedIds={selectedFeedIds}
-      onAdd={(id) => setSelectedFeedIds([...selectedFeedIds, id])}
+      onAdd={(id) => {
+        setSelectedFeedIds([...selectedFeedIds, id]);
+        if (isOnboardingFeedSelection(id))
+          advanceInstruction("choose-feed", "open-display");
+      }}
       onRemove={(id) =>
         setSelectedFeedIds(selectedFeedIds.filter((f) => f !== id))
       }

@@ -131,6 +131,40 @@ test.describe("add feed manually", () => {
     });
     await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
 
+    // Safari can show page pixels behind its floating keyboard controls,
+    // outside the smaller visual viewport. The fullscreen backdrop must cover
+    // that area while the form remains inside the visible viewport.
+    await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport, "height", {
+        configurable: true,
+        value: 300,
+      });
+      Object.defineProperty(window.visualViewport, "offsetTop", {
+        configurable: true,
+        value: 20,
+      });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    await expect(dialog).toHaveCSS("height", "300px");
+    await expect(dialog).toHaveCSS("top", "20px");
+    const backdrop = page.locator('[data-slot="dialog-overlay"]');
+    await expect(backdrop).toHaveCSS(
+      "background-color",
+      await dialog.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    );
+    const backdropBox = (await backdrop.boundingBox())!;
+    expect(backdropBox.y + backdropBox.height).toBe(500);
+    await expectVerticalPosition(commandList, emptyState, 1 / 3);
+    await page.evaluate(() => {
+      Reflect.deleteProperty(window.visualViewport!, "height");
+      Reflect.deleteProperty(window.visualViewport!, "offsetTop");
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    await expect(dialog).toHaveCSS("height", "500px");
+    await expect(dialog).toHaveCSS("top", "0px");
+
     // Exercise the reduced visual height produced by a mobile keyboard. The
     // palette follows it, and the empty state remains centered and visible.
     await page.setViewportSize({ width: 390, height: 300 });

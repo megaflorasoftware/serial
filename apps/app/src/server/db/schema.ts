@@ -70,6 +70,10 @@ export const user = sqliteTable(
     })
       .notNull()
       .default(false),
+    onboardingComplete: integer("onboarding_complete", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    onboardingStep: text("onboarding_step"),
     image: text("image"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),

@@ -120,7 +120,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   const isSuccess = feedStatus === "success" || feedStatus === "skipped";
 
   return (
-    <SidebarMenuItem className="group flex gap-1">
+    <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
         onClick={() => onSelect(feedId)}
@@ -340,6 +340,7 @@ export function SidebarFeeds() {
                   disabled={!canMutate}
                   shortcut="a"
                   variant="ghost"
+                  data-onboarding="add-feed"
                   aria-label="Add Feed or Bookmark"
                 >
                   <PlusIcon />
@@ -386,6 +387,7 @@ export function SidebarFeeds() {
             </SidebarMenuButton>
             <SidebarMenuButton
               size="default-icon"
+              data-onboarding="add-feed"
               aria-label="Add Feed or Bookmark"
               disabled={!canMutate}
               onClick={() => launchDialog("add-feed")}

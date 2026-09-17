@@ -27,7 +27,7 @@ import { Switch } from "./ui/switch";
 import { ToggleGroupItem } from "./ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type {
   ApplicationFeed,
   ApplicationView,
@@ -36,6 +36,13 @@ import type {
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import type { BookmarkSaveResult } from "~/server/bookmarks/contracts";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
+import { useVisualViewport } from "~/lib/hooks/useVisualViewport";
+import {
+  feedCreatedDuringOnboarding,
+  feedSavedDuringOnboarding,
+  requestOnboardingSkip,
+  useOnboarding,
+} from "~/lib/onboarding/store";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import {
@@ -96,7 +103,6 @@ export function AddFeedDialog() {
       })
     | null
   >(null);
-  const dialogContentRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const discovery = useFeedDiscovery();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
@@ -122,6 +128,7 @@ export function AddFeedDialog() {
   });
 
   const onOpenChange = (open = false) => {
+    if (!open && requestOnboardingSkip()) return;
     onDialogOpenChange(open);
 
     if (!open) {
@@ -159,6 +166,7 @@ export function AddFeedDialog() {
       const createdFeed = result.feeds[0];
       if (!createdFeed) return;
 
+      feedCreatedDuringOnboarding(createdFeed.id);
       discovery.reset();
       launchDialog("edit-feed", { selectedFeedId: createdFeed.id });
     } catch {
@@ -173,6 +181,7 @@ export function AddFeedDialog() {
     setPendingAction("bookmark");
     try {
       const result = await saveBookmark({ sourceUrl });
+      if (useDialogStore.getState().dialog !== "add-feed") return;
       setBookmarkFeedback(
         result as BookmarkSaveResult<ApplicationBookmark> & {
           bookmark: ApplicationBookmark;
@@ -187,49 +196,25 @@ export function AddFeedDialog() {
 
   const isOpen = dialog === "add-feed";
 
-  useEffect(() => {
-    if (!isOpen) return;
+  const dialogContentRef = useVisualViewport(isOpen);
 
-    const content = dialogContentRef.current;
-    if (!content) return;
-
-    const updateVisualViewport = () => {
-      const viewport = window.visualViewport;
-      content.style.setProperty(
-        "--feed-command-viewport-height",
-        `${viewport?.height ?? window.innerHeight}px`,
-      );
-      content.style.setProperty(
-        "--feed-command-viewport-top",
-        `${viewport?.offsetTop ?? 0}px`,
-      );
-    };
-
-    updateVisualViewport();
-    window.visualViewport?.addEventListener("resize", updateVisualViewport);
-    window.visualViewport?.addEventListener("scroll", updateVisualViewport);
-    window.addEventListener("resize", updateVisualViewport);
-
-    return () => {
-      window.visualViewport?.removeEventListener(
-        "resize",
-        updateVisualViewport,
-      );
-      window.visualViewport?.removeEventListener(
-        "scroll",
-        updateVisualViewport,
-      );
-      window.removeEventListener("resize", updateVisualViewport);
-    };
-  }, [isOpen]);
+  const handleBookmarkEditorClose = () => {
+    if (useOnboarding.getState().instruction === "find-feed") {
+      setBookmarkFeedback(null);
+      discovery.reset();
+      return;
+    }
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={isOpen && canMutate} onOpenChange={onOpenChange}>
       <DialogContent
+        data-onboarding="find-feed"
         ref={dialogContentRef}
         hideClose
-        overlayClassName="bg-black/40"
-        className="top-[var(--feed-command-viewport-top,0px)] left-0 h-[var(--feed-command-viewport-height,100dvh)] max-h-[var(--feed-command-viewport-height,100dvh)] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden border-0 p-0 sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:[@media(min-height:600px)]:top-1/3"
+        overlayClassName="bg-background sm:bg-black/40"
+        className="top-[var(--visual-viewport-top,0px)] left-0 h-[var(--visual-viewport-height,100dvh)] max-h-[var(--visual-viewport-height,100dvh)] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden border-0 p-0 sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:[@media(min-height:600px)]:top-1/3"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           urlInputRef.current?.focus();
@@ -245,7 +230,7 @@ export function AddFeedDialog() {
           <BookmarkOrganizationEditor
             bookmarkId={bookmarkFeedback.bookmark.id}
             feedback={bookmarkFeedback}
-            onClose={() => onOpenChange(false)}
+            onClose={handleBookmarkEditorClose}
           />
         ) : (
           <FeedDiscoveryCommand
@@ -445,6 +430,7 @@ function EditFeedDialogFooter({
       </Button>
       <Button
         disabled={!canMutate || isFormDisabled || actions.isUpdatingFeed}
+        data-onboarding="save-feed"
         onClick={actions.handleSave}
         className="flex-1"
       >
@@ -503,10 +489,12 @@ function FeedNameField({
   name,
   setName,
   feed,
+  children,
 }: {
   name: string;
   setName: (name: string) => void;
   feed: ApplicationFeed | undefined;
+  children?: ReactNode;
 }) {
   const websiteUrl = feed && getFeedWebsiteUrl(feed);
   const feedUrl = feed && getFeedRssUrl(feed);
@@ -526,6 +514,7 @@ function FeedNameField({
           onChange={(e) => setName(e.target.value)}
           className="flex-1"
         />
+        {children}
         {feedUrl && (
           <CopyFeedLinkButton
             key={feedUrl}
@@ -638,6 +627,7 @@ function useEditFeedDialogActions({
         name,
       });
       toast.success("Feed updated!");
+      feedSavedDuringOnboarding();
       onClose();
     } catch {
       // Error handled by toast
@@ -786,11 +776,31 @@ export function EditFeedDialog({
 
   return (
     <ControlledResponsiveDialog
+      mobileSheet
       open={selectedFeedId !== null}
-      onOpenChange={onClose}
+      onOpenChange={() => {
+        if (!requestOnboardingSkip()) onClose();
+      }}
       title="Edit Feed"
       headerRight={
         <div className="flex items-center gap-2">
+          <FeedActiveSwitch
+            canMutate={canMutate && !isRevalidating}
+            feed={feed}
+            selectedFeedId={selectedFeedId}
+          />
+        </div>
+      }
+      footer={
+        <EditFeedDialogFooter
+          canMutate={canMutate && !isRevalidating}
+          isFormDisabled={isFormDisabled}
+          actions={actions}
+        />
+      }
+    >
+      <div className="grid gap-6">
+        <FeedNameField name={name} setName={setName} feed={feed}>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -819,23 +829,7 @@ export function EditFeedDialog({
             </TooltipTrigger>
             <TooltipContent>Revalidate Feed</TooltipContent>
           </Tooltip>
-          <FeedActiveSwitch
-            canMutate={canMutate && !isRevalidating}
-            feed={feed}
-            selectedFeedId={selectedFeedId}
-          />
-        </div>
-      }
-      footer={
-        <EditFeedDialogFooter
-          canMutate={canMutate && !isRevalidating}
-          isFormDisabled={isFormDisabled}
-          actions={actions}
-        />
-      }
-    >
-      <div className="grid gap-6">
-        <FeedNameField name={name} setName={setName} feed={feed} />
+        </FeedNameField>
         <EditFeedViewsField
           canMutate={canMutate}
           selectedViewIds={selectedViewIds}

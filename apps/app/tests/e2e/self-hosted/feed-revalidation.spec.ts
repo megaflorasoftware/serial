@@ -34,6 +34,15 @@ test("revalidates from an icon button and preserves custom names and drafts", as
       exact: true,
     });
     await expect(button).toHaveText("");
+    const nameRow = dialog.getByLabel("Name", { exact: true }).locator("..");
+    await expect(nameRow.getByRole("button").first()).toHaveAttribute(
+      "aria-label",
+      "Revalidate Feed",
+    );
+    await expect(nameRow.getByRole("button").nth(1)).toHaveAttribute(
+      "aria-label",
+      "Copy Feed URL",
+    );
     await dialog.getByLabel("Name", { exact: true }).focus();
     await page.mouse.move(10, 10);
     await expect(button.locator("svg.lucide-refresh-cw")).toBeVisible();

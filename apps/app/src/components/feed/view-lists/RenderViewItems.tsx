@@ -3,7 +3,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { CheckIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState, FeedEmptyState } from "./EmptyStates";
+import { EmptyState } from "./EmptyStates";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
 import {
@@ -19,6 +19,7 @@ import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
 import { ViewItemStandardList } from "./ViewItemStandardList";
 import type { ViewSection } from "./useViewSections";
+import type { ViewLayout } from "~/server/db/constants";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import FeedLoading from "~/components/loading";
 import { buildContentStatusKey, isInboxUnread } from "~/lib/content-status";
@@ -43,6 +44,65 @@ import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { showUndoToast } from "~/lib/undo";
 import { VIEW_LAYOUT } from "~/server/db/constants";
 import { useRootItemScrollRestoration } from "~/lib/root-scroll-restoration";
+
+function getLoadingSkeleton(layout: ViewLayout) {
+  switch (layout) {
+    case VIEW_LAYOUT.LARGE_LIST:
+      return <LargeListSkeleton />;
+    case VIEW_LAYOUT.GRID:
+      return <GridSkeleton />;
+    case VIEW_LAYOUT.LARGE_GRID:
+      return <LargeGridSkeleton />;
+    default:
+      return <StandardListSkeleton />;
+  }
+}
+
+function isRootListReady({
+  hasInitialData,
+  navigationItemCount,
+  hasFetchedFeeds,
+  hasFetchedFeedCategories,
+  paginationLoaded,
+  feedCount,
+}: {
+  hasInitialData: boolean;
+  navigationItemCount: number;
+  hasFetchedFeeds: boolean;
+  hasFetchedFeedCategories: boolean;
+  paginationLoaded: boolean;
+  feedCount: number;
+}) {
+  return (
+    hasInitialData &&
+    (navigationItemCount > 0 ||
+      (hasFetchedFeeds &&
+        hasFetchedFeedCategories &&
+        (paginationLoaded || feedCount === 0)))
+  );
+}
+
+function isViewLoading(
+  paginationLoaded: boolean,
+  paginationFetching: boolean | undefined,
+  itemCount: number,
+) {
+  return (!paginationLoaded || paginationFetching) && itemCount === 0;
+}
+
+function isViewEmpty(
+  hasFetchedFeeds: boolean,
+  paginationLoaded: boolean,
+  hasFetchedFeedCategories: boolean,
+  itemCount: number,
+) {
+  return (
+    hasFetchedFeeds &&
+    paginationLoaded &&
+    hasFetchedFeedCategories &&
+    itemCount === 0
+  );
+}
 
 function getNextAvailableItemAfterSection(
   sectionIndex: number,
@@ -353,12 +413,14 @@ export function RenderViewItems() {
     () => fullComputedSections.flatMap((section) => section.items),
     [fullComputedSections],
   );
-  const rootListReady =
-    hasInitialData &&
-    (navigationItems.length > 0 ||
-      (hasFetchedFeeds &&
-        hasFetchedFeedCategories &&
-        (paginationState.isLoaded || feeds.length === 0)));
+  const rootListReady = isRootListReady({
+    hasInitialData,
+    navigationItemCount: navigationItems.length,
+    hasFetchedFeeds,
+    hasFetchedFeedCategories,
+    paginationLoaded: paginationState.isLoaded,
+    feedCount: feeds.length,
+  });
   useRootItemScrollRestoration({
     activeItemIds: navigationItems,
     selectedItemId,
@@ -377,38 +439,24 @@ export function RenderViewItems() {
     return <FeedLoading />;
   }
 
-  if (
-    paginationState.isLoaded &&
-    hasFetchedFeeds &&
-    !feeds.length &&
-    filteredFeedItemsOrder.length === 0 &&
-    Object.keys(bookmarksStore.getState().snapshot()).length === 0
-  ) {
-    return <FeedEmptyState />;
-  }
-
   // Show skeletons while feed items are being fetched
   if (
-    (!paginationState.isLoaded || paginationState.isFetching) &&
-    filteredFeedItemsOrder.length === 0
+    isViewLoading(
+      paginationState.isLoaded,
+      paginationState.isFetching,
+      filteredFeedItemsOrder.length,
+    )
   ) {
-    switch (baseLayout) {
-      case VIEW_LAYOUT.LARGE_LIST:
-        return <LargeListSkeleton />;
-      case VIEW_LAYOUT.GRID:
-        return <GridSkeleton />;
-      case VIEW_LAYOUT.LARGE_GRID:
-        return <LargeGridSkeleton />;
-      default:
-        return <StandardListSkeleton />;
-    }
+    return getLoadingSkeleton(baseLayout);
   }
 
   if (
-    hasFetchedFeeds &&
-    paginationState.isLoaded &&
-    hasFetchedFeedCategories &&
-    !filteredFeedItemsOrder.length
+    isViewEmpty(
+      hasFetchedFeeds,
+      paginationState.isLoaded,
+      hasFetchedFeedCategories,
+      filteredFeedItemsOrder.length,
+    )
   ) {
     return <EmptyState />;
   }

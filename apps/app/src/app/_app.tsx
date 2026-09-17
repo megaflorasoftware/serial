@@ -17,6 +17,8 @@ import { GlobalImportDropzone } from "../components/feed/import/GlobalImportDrop
 import type React from "react";
 import { PublicationSyncProgress } from "~/components/connections/PublicationSyncProgress";
 import { refreshPublicationSyncProgress } from "~/lib/data/publication-sync";
+import { Onboarding } from "~/components/onboarding/Onboarding";
+import { recordOnboardingConsentResult } from "~/lib/onboarding/store";
 import FeedLoading from "~/components/loading";
 import { AppLeftSidebar, AppRightSidebar } from "~/components/app-sidebar";
 import { Button } from "~/components/ui/button";
@@ -256,6 +258,8 @@ function useAtprotoReturn(
         : outcome.fallbackErrorMessage;
       toast.error(message);
     }
+    if (param === ATPROTO_CONSENT_RESULT_PARAM)
+      recordOnboardingConsentResult(result);
     launchDialog("connections", { connectionsPane: "atproto" });
   }, [launchDialog, queryClient, isRestoring, param, outcome]);
 }
@@ -372,7 +376,7 @@ function RootLayout() {
         <ClientPerformanceProfiler>
           <GlobalImportDropzone />
           <PublicationSyncProgress />
-          <div className="flex h-svh flex-col overflow-hidden">
+          <div className="flex h-dvh flex-col overflow-hidden">
             <ImpersonationBanner />
             <DemoBanner />
             <OfflineBanner />
@@ -402,6 +406,7 @@ function RootLayout() {
                     </PageErrorBoundary>
                   </div>
                   <AppDialogs />
+                  <Onboarding />
                   {billingEnabled && (
                     <CheckoutSuccessDialog
                       open={showPlanSuccess}

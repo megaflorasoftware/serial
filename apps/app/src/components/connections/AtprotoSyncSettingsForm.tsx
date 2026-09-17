@@ -21,7 +21,7 @@ export const ATPROTO_PERMISSIONS_NOTICE =
   "In order to save Serial subscriptions to your PDS, we need additional permissions.";
 
 /** The pane shares this operation state across Save and account actions. */
-export function useAtprotoSyncSettingsSave() {
+export function useAtprotoSyncSettingsSave(onSaved?: () => void) {
   // Keep controls locked until navigation, but let Back restore the form
   // if the user abandons consent and the browser retains this page.
   const [redirecting, setRedirecting] = useState(false);
@@ -44,6 +44,7 @@ export function useAtprotoSyncSettingsSave() {
           window.location.assign(result.consentUrl);
           return;
         }
+        onSaved?.();
         await queryClient.invalidateQueries({
           queryKey: orpc.atproto.getConnectionStatus.queryKey(),
         });
@@ -75,7 +76,9 @@ export function AtprotoSyncSettingsForm({
   disabled,
   saving,
   onSave,
+  onboarding = false,
 }: {
+  onboarding?: boolean;
   savedPreferences: AtprotoSyncPreferences;
   hasWriteScope: boolean;
   disabled: boolean;
@@ -119,7 +122,11 @@ export function AtprotoSyncSettingsForm({
             if (!value) return;
             setMethod(value as AtprotoSyncMethod);
           }}
-          className="flex w-fit flex-wrap justify-start gap-1"
+          className={
+            onboarding
+              ? "flex w-full flex-col items-stretch gap-2"
+              : "flex w-fit flex-wrap justify-start gap-1"
+          }
         >
           {ATPROTO_SYNC_METHODS.map((option) => (
             <ToggleGroupItem
@@ -161,8 +168,17 @@ export function AtprotoSyncSettingsForm({
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <Button type="submit" disabled={disabled || saving || !dirty}>
-        {saving ? <Loader2Icon className="animate-spin" size={16} /> : "Save"}
+      <Button
+        type="submit"
+        disabled={disabled || saving || (!onboarding && !dirty)}
+      >
+        {saving ? (
+          <Loader2Icon className="animate-spin" size={16} />
+        ) : onboarding ? (
+          "Next"
+        ) : (
+          "Save"
+        )}
       </Button>
     </form>
   );

@@ -115,7 +115,11 @@ async function mockYouTubePlayer(
 }
 
 test.describe("custom video player", () => {
-  test.use({ viewport: { width: 1920, height: 1080 } });
+  test.use({
+    viewport: { width: 1920, height: 1080 },
+    // Service-worker fetches bypass page.route, including the YouTube API mock.
+    serviceWorkers: "block",
+  });
 
   let testEmail: string;
 
