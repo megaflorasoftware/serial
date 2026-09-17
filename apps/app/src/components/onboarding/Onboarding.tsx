@@ -78,7 +78,7 @@ const INSTRUCTIONS: Record<
   "add-view": {
     selector: '[data-onboarding="add-view"]',
     text: [
-      "Now, let's add a view.",
+      "You can add views here.",
       "Views enable you to group your feeds in a way that makes sense to you.",
     ],
   },
