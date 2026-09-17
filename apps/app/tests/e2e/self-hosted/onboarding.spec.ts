@@ -71,6 +71,44 @@ test.afterEach(async () => {
   if (email) await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
 });
 
+test("redirects incomplete onboarding to the main page and releases navigation after skipping", async ({
+  page,
+}) => {
+  await start(page, "create-view");
+  await page.goto("/feeds");
+  await expect(page).toHaveURL("/");
+  await expect(guide(page)).toBeVisible();
+  await expect(page.locator('[data-onboarding="view-chips"]')).toBeVisible();
+  await expect(page.locator('[data-onboarding="feed-content"]')).toBeVisible();
+
+  // The router observes history changes, including navigation after initialization.
+  await page.evaluate(() => window.history.pushState({}, "", "/feeds"));
+  await expect(page).toHaveURL("/");
+  await expect(guide(page)).toBeVisible();
+  expect((await savedProgress())?.onboarding_step).toBe(
+    "2026-09-16-create-view",
+  );
+
+  await page.route("**/api/rpc/onboarding/saveProgress", (route) =>
+    route.abort(),
+  );
+  await page
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await expect(guide(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  await expect(page).toHaveURL("/feeds");
+  expect((await savedProgress())?.onboarding_complete).toBe(0);
+
+  await page.reload();
+  await expect(page).toHaveURL("/");
+  await expect(guide(page)).toBeVisible();
+});
+
 test("advances despite a failed progress write and resumes the last saved step", async ({
   page,
 }) => {
@@ -102,6 +140,11 @@ test("advances despite a failed progress write and resumes the last saved step",
   await expect(
     page.getByRole("button", { name: "Skip Tutorial", exact: true }),
   ).toHaveCount(0);
+  await page.goto("/feeds");
+  await expect(
+    page.getByRole("button", { name: "Home", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL("/feeds");
 });
 
 test("keeps feed-entry guidance clear of its input with a short mobile keyboard viewport", async ({
@@ -227,6 +270,8 @@ for (const mobile of [false, true]) {
       mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
     );
     await start(page, "create-view");
+    await page.goto("/feeds");
+    await expect(page).toHaveURL("/");
     await expect(guide(page)).toContainText("Open the menu", {
       timeout: 30000,
     });

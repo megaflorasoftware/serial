@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, Navigate, useLocation } from "@tanstack/react-router";
 import { CheckIcon, CopyIcon, DownloadIcon, ImportIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Guidance } from "./Guidance";
@@ -284,6 +284,7 @@ export function Onboarding() {
 }
 
 function AccountOnboarding({ userId }: { userId: string }) {
+  const pathname = useLocation({ select: (location) => location.pathname });
   useEffect(() => () => stopOnboarding(), []);
   const progress = useQuery({
     ...orpc.onboarding.getProgress.queryOptions(),
@@ -344,6 +345,9 @@ function AccountOnboarding({ userId }: { userId: string }) {
     useOnboarding.setState({ consentResult: null, consentResultUserId: null });
     if (result === "success") advanceOnboarding("next-steps");
   }, [state.step, state.consentResult]);
+
+  if (state.step && state.step !== "next-steps" && pathname !== "/")
+    return <Navigate to="/" replace />;
 
   if (!state.step || !canMutate) return null;
   const instruction = state.instruction
