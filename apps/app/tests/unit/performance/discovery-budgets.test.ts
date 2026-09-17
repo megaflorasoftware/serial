@@ -97,6 +97,7 @@ it("gives an advertised feed the primary allowance even at a guessed path", asyn
   const result = await measure(() => discoverFeeds("advertised", site));
   expect(result.rows.map((row) => row.url)).toEqual([`${site}rss`]);
   expect(result.elapsedMs).toBeGreaterThanOrEqual(4020);
+  expect(result.elapsedMs).toBeLessThanOrEqual(4060);
   expect(
     vi.mocked(readFeedHttp).mock.calls.filter(([url]) => url === `${site}rss`),
   ).toHaveLength(1);
@@ -133,6 +134,22 @@ it.each(["import", "revalidation"])(
     );
     expect(result.rows.map((row) => row.url)).toEqual([rss]);
     expect(result.elapsedMs).toBeGreaterThanOrEqual(1500);
+  },
+);
+
+it.each(["import", "revalidation"])(
+  "does not return successful RSS when strict %s has an incomplete Publication check",
+  async (mode) => {
+    responses((url) =>
+      url === rss ? { ms: 80, text: xml } : { ms: 6000, status: 404 },
+    );
+    const pending = (
+      mode === "import"
+        ? discoverFeedOriginsForImport("strict-timeout", rss)
+        : discoverFeedOriginsForRevalidation(rss)
+    ).catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+    expect(await pending).toBeInstanceOf(Error);
   },
 );
 
