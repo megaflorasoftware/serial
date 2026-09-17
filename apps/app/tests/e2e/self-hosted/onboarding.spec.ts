@@ -54,6 +54,15 @@ async function savedProgress() {
 }
 const guide = (page: Page) =>
   page.getByRole("region", { name: "Onboarding guidance" });
+async function expectUndimmed(page: Page) {
+  await expect(page.locator("[data-guidance-layer] > svg")).toHaveCount(0);
+  for (const overlay of await page
+    .locator('[data-slot="dialog-overlay"], [data-vaul-overlay]')
+    .all()) {
+    await expect(overlay).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+}
+
 test.afterEach(async () => {
   if (email) await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
 });
@@ -155,14 +164,15 @@ for (const mobile of [false, true]) {
       await expect(name).toHaveValue("My reading");
       await expect(name).toBeInViewport();
     }
-    // A dimmed control blurs the name without activating that control.
+    // A blocked control blurs the name without activating that control.
     await name.fill("");
     await page.mouse.click(
       page.viewportSize()!.width - 8,
       page.viewportSize()!.height / 2,
     );
     await expect(name).not.toBeFocused();
-    await expect(guide(page)).toContainText("Give your View a name");
+    await expect(guide(page)).toContainText("Give your view a name");
+    await expectUndimmed(page);
     await expect(
       page.getByRole("tab", { name: "Content", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
@@ -210,21 +220,7 @@ for (const mobile of [false, true]) {
       has: page.getByRole("button", { name: "Large Grid", exact: true }),
     });
     await expect(layoutPopup).toBeVisible();
-    await expect
-      .poll(async () => {
-        const bounds = (await layoutPopup.boundingBox())!;
-        return page
-          .locator("[data-guidance-layer] svg path")
-          .evaluate((path, box) => {
-            const shape = path as SVGPathElement;
-            const point = new DOMPoint(
-              box.x + 12,
-              box.y + box.height - 12,
-            ).matrixTransform(shape.getScreenCTM()!.inverse());
-            return shape.isPointInFill(point);
-          }, bounds);
-      })
-      .toBe(false);
+    await expectUndimmed(page);
     await page.getByRole("button", { name: "Large Grid", exact: true }).click();
     await expect(layoutPopup).toHaveCount(0);
     await page.getByRole("button", { name: "Large Grid", exact: true }).click();
@@ -250,8 +246,8 @@ for (const mobile of [false, true]) {
     await expect
       .poll(async () => (await savedProgress())?.onboarding_step)
       .toBe("2026-09-16-atmosphere-sync-setup");
-    await expect(guide(page)).toContainText("Use these chips");
-    await expect(page.locator("[data-guidance-layer] svg")).toHaveCount(0);
+    await expect(guide(page)).toContainText("Your view is added!");
+    await expect(page.locator("[data-guidance-layer] > svg")).toHaveCount(0);
     await expect(page.locator('[data-onboarding="view-chips"]')).toContainText(
       "My reading",
     );
@@ -283,12 +279,18 @@ for (const mobile of [false, true]) {
       light: [60, 10, 100],
       dark: [60, 10, 15],
     });
-    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
+    await expect(guide(page)).toContainText(
+      "Let's start by adding your first feed",
+    );
+    await expectUndimmed(page);
     await expect(
       page.getByRole("textbox", { name: "Suggested website" }),
     ).toHaveCount(0);
     await page.reload();
-    await expect(guide(page)).toContainText("Open the menu to find Add Feed");
+    await expect(guide(page)).toContainText(
+      "Let's start by adding your first feed",
+    );
+    await expectUndimmed(page);
     expect(
       await page.evaluate(() => {
         const style = getComputedStyle(document.documentElement);
@@ -309,7 +311,7 @@ for (const mobile of [false, true]) {
           : '[data-onboarding="open-menu"]',
       )
       .click();
-    await expect(guide(page)).toContainText("Add a Feed to bring");
+    await expect(guide(page)).toContainText("Here's where you add a feed");
     const addFeed = page
       .locator('[data-onboarding="add-feed"]')
       .filter({ visible: true });
@@ -447,3 +449,56 @@ test("a pending theme save cannot reopen onboarding after confirmed skip", async
     page.getByRole("button", { name: "Copy website address" }),
   ).toHaveCount(0);
 });
+
+for (const mobile of [false, true]) {
+  test(`next steps matches welcome and restores ordinary backdrop after completion ${mobile ? "mobile" : "desktop"}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+    );
+    await start(page, "next-steps");
+    const title = page.getByRole("heading", {
+      name: "Next steps",
+      exact: true,
+    });
+    const blurb = page.getByText(
+      "That's it! Add our extension to save bookmarks as you browse the web, or import feeds from YouTube or your previous RSS reader.",
+      { exact: true },
+    );
+    await expect(title).toHaveCSS("font-size", "20px");
+    await expect(title).toHaveCSS("text-align", "center");
+    await expect(blurb).toHaveCSS("font-size", "18px");
+    await expect(blurb).toHaveCSS("text-align", "center");
+    await expect(
+      page.getByRole("button", { name: "Close", exact: true }),
+    ).toHaveCount(0);
+    await expectUndimmed(page);
+    await expect
+      .poll(async () => {
+        const actions = (await page
+          .getByRole("link", { name: "Import feeds", exact: true })
+          .boundingBox())!;
+        const copy = (await blurb.boundingBox())!;
+        return actions.y + actions.height < copy.y;
+      })
+      .toBe(true);
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.locator("[data-onboarding-active]")).toHaveCount(0);
+    await page.locator('[data-onboarding="open-menu"]').click();
+    await page
+      .locator('[data-onboarding="add-view"]')
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Add View", exact: true }),
+    ).toBeVisible();
+    const overlays = page.locator(
+      '[data-slot="dialog-overlay"], [data-vaul-overlay]',
+    );
+    await expect(overlays.last()).not.toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+  });
+}

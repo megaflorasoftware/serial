@@ -42,69 +42,66 @@ const INSTRUCTIONS: Record<
     next?: boolean;
     highlightDialog?: boolean;
     interactiveDialog?: boolean;
-    dimmed?: boolean;
   }
 > = {
   "open-feed-menu": {
     selector: '[data-onboarding="open-menu"]',
-    text: "Open the menu to find Add Feed.",
+    text: "Let's start by adding your first feed. Open the menu to add one.",
   },
   "add-feed": {
     selector: '[data-onboarding="add-feed"]',
-    text: "Add a Feed to bring its new posts into Serial.",
+    text: "Here's where you add a feed. Feeds are the parts of the web that you want to bring into Serial.",
   },
   "find-feed": {
     anchorSelector:
       '[data-onboarding="find-feed"] [cmdk-input], [data-onboarding="find-feed"] [role="option"]',
     selector: '[data-onboarding="find-feed"]',
-    text: "Enter a website address, then choose a Feed to follow.",
+    text: "Enter a website address, then choose a feed to follow.",
   },
   "save-feed": {
     highlightDialog: true,
     selector: '[data-onboarding="save-feed"]',
-    text: "Save your Feed to finish adding it.",
+    text: "Save your feed to finish adding it.",
   },
   "feed-added": {
-    dimmed: false,
     selector: '[data-onboarding="feed-content"]',
-    text: "Your Feed is ready. New posts will appear here.",
+    text: "Your feed is added! Feed content is viewable in this main pane.",
     next: true,
   },
   "open-menu": {
     selector: '[data-onboarding="open-menu"]',
-    text: "Open the menu to create a View.",
+    text: "Open the menu to create a view.",
   },
   "add-view": {
     selector: '[data-onboarding="add-view"]',
-    text: "Views bring together the Feeds and Bookmarks you choose.",
+    text: "Now, let's add a view. Views are a more customizable version of folders that enable you to group your feeds and tags in the way that makes sense to you.",
   },
   "name-view": {
     highlightDialog: true,
     selector: '[data-onboarding="name-view"]',
-    text: "Give your View a name, then choose Next.",
+    text: "Give your view a name, then choose Next.",
     next: true,
   },
   "choose-feed": {
     highlightDialog: true,
     selector: 'button[aria-label="Add feeds"]',
-    text: "Click + and select your Feed to include it in this View.",
+    text: "Click + and select your feed to include it in this view.",
   },
   "open-display": {
     highlightDialog: true,
     selector: '[data-onboarding="open-display"]',
-    text: "Open Display to explore how your View looks.",
+    text: "Open Display to explore how your view looks.",
   },
   "explore-display": {
-    anchorSelector: '[role="dialog"]:has([data-onboarding="open-display"])',
     highlightDialog: true,
+    anchorSelector: '[role="dialog"]:has([data-onboarding="open-display"])',
     interactiveDialog: true,
     selector: '[data-onboarding="open-display"]',
-    text: "Choose a layout, or add sections organized by Feed or Tag. Save your View when you are ready.",
+    text: "Here, you can organize your feeds and tags in the order you'd like to see them in this view. Feel free to update the layout or poke around this view a bit more, then click \"Add View\" when you're ready to move on.",
   },
   "view-chips": {
-    dimmed: false,
     selector: '[data-onboarding="view-chips"]',
-    text: "Use these chips to choose which View appears here. Switch Views anytime.",
+    text: 'Your view is added! Each of your views appears here, making it easy to switch between them as you wish. Feeds that aren\'t a part of any view will show up in "Uncategorized"',
     next: true,
   },
 };
@@ -382,8 +379,8 @@ function AccountOnboarding({ userId }: { userId: string }) {
   const titles = {
     introduction: "Welcome to Serial!",
     "choose-colors": "Customize appearance",
-    "add-feed": "Follow your first Feed",
-    "create-view": "Create a View",
+    "add-feed": "Follow your first feed",
+    "create-view": "Create a view",
     "atmosphere-sync-setup": "Your Atmosphere subscriptions",
     "next-steps": "Next steps",
   };
@@ -391,30 +388,20 @@ function AccountOnboarding({ userId }: { userId: string }) {
     if (state.step === "next-steps") finishOnboarding();
     else requestOnboardingSkip();
   };
+  const bookend = state.step === "introduction" || state.step === "next-steps";
   return (
     <>
+      <span hidden data-onboarding-active />
       <ControlledResponsiveDialog
-        hideClose={state.step === "introduction"}
-        titleClassName={state.step === "introduction" ? "text-xl" : undefined}
-        headerClassName={
-          state.step === "introduction"
-            ? "text-center sm:text-center"
-            : undefined
-        }
+        hideClose={bookend}
+        titleClassName={bookend ? "text-xl" : undefined}
+        headerClassName={bookend ? "text-center sm:text-center" : undefined}
         previewDrawer={state.step === "choose-colors"}
         open={!instruction}
         onOpenChange={(open) => {
           if (!open) close();
         }}
         title={titles[state.step]}
-        description={
-          state.step === "next-steps" ? (
-            <span className="text-base">
-              That&apos;s it! Add our extension to save bookmarks as you browse
-              the web, or import feeds from YouTube or your previous RSS reader.
-            </span>
-          ) : undefined
-        }
         headerRight={
           state.step === "choose-colors" ? (
             <div className="shrink-0">
@@ -449,7 +436,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
                 >
                   <Link to="/import" onClick={finishOnboarding}>
                     <ImportIcon size={20} />
-                    Import Feeds
+                    Import feeds
                   </Link>
                 </Button>
                 <Button
@@ -467,6 +454,11 @@ function AccountOnboarding({ userId }: { userId: string }) {
                   </a>
                 </Button>
               </div>
+              <p className="text-center text-lg">
+                That&apos;s it! Add our extension to save bookmarks as you
+                browse the web, or import feeds from YouTube or your previous
+                RSS reader.
+              </p>
               <Button onClick={finishOnboarding}>Done</Button>
             </>
           )}
@@ -483,7 +475,7 @@ function AccountOnboarding({ userId }: { userId: string }) {
           anchorSelector={instruction?.anchorSelector}
           highlightDialog={instruction?.highlightDialog}
           interactiveDialog={instruction?.interactiveDialog}
-          dimmed={instruction?.dimmed}
+          dimmed={false}
           next={instruction?.next}
           explanation={
             state.instruction === "feed-added" ||

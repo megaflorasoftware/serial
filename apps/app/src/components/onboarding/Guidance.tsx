@@ -435,7 +435,9 @@ export function Guidance({
         </svg>
       )}
       {confirming ? (
-        <div className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/60 p-4">
+        <div
+          className={`pointer-events-auto fixed inset-0 flex items-center justify-center p-4 ${dimmed ? "bg-black/60" : ""}`}
+        >
           <div
             ref={helper}
             // Guidance traps Tab and Escape inside this existing Radix modal.
@@ -454,7 +456,7 @@ export function Guidance({
               id="skip-onboarding-description"
               className="text-muted-foreground text-sm"
             >
-              Your saved Feeds, Views, and settings will stay as they are.
+              Your saved feeds, views, and settings will stay as they are.
             </p>
             <Button variant="outline" onClick={onCancelSkip}>
               Keep going
