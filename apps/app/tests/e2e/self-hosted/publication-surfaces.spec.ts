@@ -40,8 +40,10 @@ test.describe("publication Feed surfaces", () => {
       await expect(row).toBeVisible();
       if (rss) {
         await expect(
-          row.locator('svg[aria-label="Published name"]'),
+          row.locator('svg[aria-label="Atmosphere"]'),
         ).toBeVisible();
+        await row.locator('svg[aria-label="Atmosphere"]').hover();
+        await expect(page.getByRole("tooltip")).toHaveText("Atmosphere");
       } else {
         await expect(row.locator('svg[aria-label="Paused"]')).toBeVisible();
         await expect(
@@ -64,7 +66,7 @@ test.describe("publication Feed surfaces", () => {
       if (rss) await expect(rssCopy).toBeVisible();
       else await expect(rssCopy).toHaveCount(0);
       const copy = dialog.getByRole("button", {
-        name: "Copy publication link",
+        name: "Copy Publication Link",
         exact: true,
       });
       await copy.click();

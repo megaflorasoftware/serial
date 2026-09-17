@@ -91,9 +91,9 @@ function FeedOriginGlyphs({
       {publicationName !== undefined && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <OrbitIcon size={16} aria-label={publicationName} />
+            <OrbitIcon size={16} aria-label="Atmosphere" />
           </TooltipTrigger>
-          <TooltipContent>{publicationName}</TooltipContent>
+          <TooltipContent>Atmosphere</TooltipContent>
         </Tooltip>
       )}
       {hasRss && (

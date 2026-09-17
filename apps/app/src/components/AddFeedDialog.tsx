@@ -523,7 +523,7 @@ function FeedNameField({
             key={publicationUri}
             url={publicationUri}
             icon={<OrbitIcon size={16} />}
-            label="Copy publication link"
+            label="Copy Publication Link"
             success="Publication link copied!"
           />
         )}
