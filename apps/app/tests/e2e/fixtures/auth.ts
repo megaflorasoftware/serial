@@ -316,7 +316,7 @@ export async function completeTestOnboarding(page: Page) {
   if (progress.complete) return;
 
   const skip = page.getByRole("button", {
-    name: "Skip Onboarding",
+    name: "Skip Tutorial",
     exact: true,
   });
   await expect(skip).toBeVisible({ timeout: 10000 });
@@ -328,7 +328,7 @@ export async function completeTestOnboarding(page: Page) {
   );
   await page
     .getByRole("alertdialog")
-    .getByRole("button", { name: "Skip onboarding", exact: true })
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
     .click();
   expect((await saveProgress).ok()).toBe(true);
 }

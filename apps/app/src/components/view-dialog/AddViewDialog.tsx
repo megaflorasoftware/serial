@@ -107,6 +107,7 @@ export function AddViewDialog() {
 
   return (
     <ControlledResponsiveDialog
+      mobileSheet
       open={dialog === "add-view"}
       onOpenChange={onOpenChange}
       title="Add View"

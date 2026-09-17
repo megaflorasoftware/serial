@@ -99,6 +99,73 @@ test("advances despite a failed progress write and resumes the last saved step",
   ).toHaveCount(0);
 });
 
+test("mobile view sheet restores space after keyboard height changes and blur", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page, "create-view");
+  await expect(guide(page)).toContainText("Open the menu", { timeout: 30000 });
+  await page.locator('[data-onboarding="open-menu"]').click();
+  await page.getByRole("button", { name: "Add View", exact: true }).click();
+  const name = page.locator('[data-onboarding="name-view"]');
+  await expect(name).toBeFocused();
+  await name.fill("Mobile reading");
+  const drawer = page.getByRole("dialog", { name: "Add View", exact: true });
+  await drawer.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    );
+  });
+  const initial = (await drawer.boundingBox())!;
+  // iOS shrinks the visual viewport while the layout viewport stays unchanged.
+  // A second keyboard height change can happen when its accessory bar changes.
+  for (const height of [500, 420]) {
+    await page.evaluate((height) => {
+      Object.defineProperty(window.visualViewport, "height", {
+        configurable: true,
+        value: height,
+      });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    }, height);
+    await expect
+      .poll(async () => {
+        const box = (await drawer.boundingBox())!;
+        return Math.round(box.y + box.height);
+      })
+      .toBe(height);
+    await expect
+      .poll(async () => Math.round((await drawer.boundingBox())!.y))
+      .toBe(Math.round(initial.y));
+    await expect(name).toBeInViewport();
+  }
+  await name.blur();
+  await expect(guide(page)).toContainText("Click +");
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport, "height", {
+      configurable: true,
+      value: 844,
+    });
+    window.visualViewport!.dispatchEvent(new Event("resize"));
+  });
+  await expect
+    .poll(async () => {
+      const box = (await drawer.boundingBox())!;
+      return Math.round(box.y + box.height);
+    })
+    .toBe(844);
+  await expect
+    .poll(async () => Math.round((await drawer.boundingBox())!.y))
+    .toBe(Math.round(initial.y));
+  await expect(
+    page.getByRole("button", { name: "Add feeds", exact: true }),
+  ).toBeInViewport();
+  await page.getByRole("button", { name: "Add feeds", exact: true }).click();
+  await expect(
+    page.getByRole("option", { name: "Weekend reading", exact: true }),
+  ).toBeVisible();
+});
+
 for (const mobile of [false, true]) {
   test(`guides View creation, preserves drafts on canceled skip, and closes selectors first ${mobile ? "mobile" : "desktop"}`, async ({
     page,
@@ -162,6 +229,9 @@ for (const mobile of [false, true]) {
       await page.getByRole("button", { name: "Keep going" }).click();
       await expect(name).toHaveValue("My reading");
       await expect(name).toBeInViewport();
+      await expect
+        .poll(async () => Math.round((await drawer.boundingBox())!.y))
+        .toBe(Math.round(bounds.y));
     }
     // A blocked control blurs the name without activating that control.
     await name.fill("");

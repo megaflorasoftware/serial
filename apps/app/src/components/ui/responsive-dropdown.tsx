@@ -30,6 +30,7 @@ import {
   DrawerTrigger,
 } from "~/components/ui/drawer";
 import { useMediaQuery } from "~/lib/hooks/use-media-query";
+import { useVisualViewport } from "~/lib/hooks/useVisualViewport";
 
 export function ResponsiveDropdownMenuItem({
   children,
@@ -112,6 +113,7 @@ export function ResponsiveDropdown({
 interface ControlledResponsiveDialogProps {
   hideClose?: boolean;
   previewDrawer?: boolean;
+  mobileSheet?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
@@ -129,6 +131,7 @@ interface ControlledResponsiveDialogProps {
 export function ControlledResponsiveDialog({
   hideClose = false,
   previewDrawer = false,
+  mobileSheet = false,
   open,
   onOpenChange,
   children,
@@ -145,6 +148,14 @@ export function ControlledResponsiveDialog({
 }: ControlledResponsiveDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 640px)");
   const drawerRef = React.useRef<HTMLDivElement>(null);
+  const viewportRef = useVisualViewport(open && !isDesktop && mobileSheet);
+  const setDrawerRef = React.useCallback(
+    (element: HTMLDivElement | null) => {
+      drawerRef.current = element;
+      return viewportRef(element);
+    },
+    [viewportRef],
+  );
 
   if (isDesktop && !previewDrawer) {
     return (
@@ -217,6 +228,7 @@ export function ControlledResponsiveDialog({
   return (
     <Drawer
       shouldScaleBackground={!previewDrawer}
+      repositionInputs={!mobileSheet}
       open={open}
       onOpenChange={onOpenChange}
       onRelease={(_event, staysOpen) => {
@@ -240,11 +252,13 @@ export function ControlledResponsiveDialog({
       }}
     >
       <DrawerContent
-        ref={drawerRef}
+        ref={setDrawerRef}
         overlayClassName={previewDrawer ? "bg-transparent" : undefined}
         className={cn(
           "max-h-[calc(100dvh-6rem)]",
           previewDrawer && "mx-auto w-full max-w-3xl",
+          mobileSheet &&
+            "top-[calc(var(--visual-viewport-top,0px)+6rem)] bottom-auto mt-0 h-[max(0px,calc(var(--visual-viewport-height,100dvh)-6rem))] max-h-none",
         )}
         onOpenAutoFocus={onOpenAutoFocus}
       >

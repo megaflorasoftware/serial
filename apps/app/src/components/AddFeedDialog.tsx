@@ -36,6 +36,7 @@ import type {
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import type { BookmarkSaveResult } from "~/server/bookmarks/contracts";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
+import { useVisualViewport } from "~/lib/hooks/useVisualViewport";
 import {
   feedCreatedDuringOnboarding,
   feedSavedDuringOnboarding,
@@ -101,7 +102,6 @@ export function AddFeedDialog() {
       })
     | null
   >(null);
-  const dialogContentRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const discovery = useFeedDiscovery();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
@@ -194,41 +194,7 @@ export function AddFeedDialog() {
 
   const isOpen = dialog === "add-feed";
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const content = dialogContentRef.current;
-    if (!content) return;
-
-    const updateVisualViewport = () => {
-      const viewport = window.visualViewport;
-      content.style.setProperty(
-        "--feed-command-viewport-height",
-        `${viewport?.height ?? window.innerHeight}px`,
-      );
-      content.style.setProperty(
-        "--feed-command-viewport-top",
-        `${viewport?.offsetTop ?? 0}px`,
-      );
-    };
-
-    updateVisualViewport();
-    window.visualViewport?.addEventListener("resize", updateVisualViewport);
-    window.visualViewport?.addEventListener("scroll", updateVisualViewport);
-    window.addEventListener("resize", updateVisualViewport);
-
-    return () => {
-      window.visualViewport?.removeEventListener(
-        "resize",
-        updateVisualViewport,
-      );
-      window.visualViewport?.removeEventListener(
-        "scroll",
-        updateVisualViewport,
-      );
-      window.removeEventListener("resize", updateVisualViewport);
-    };
-  }, [isOpen]);
+  const dialogContentRef = useVisualViewport(isOpen);
 
   return (
     <Dialog open={isOpen && canMutate} onOpenChange={onOpenChange}>
@@ -237,7 +203,7 @@ export function AddFeedDialog() {
         ref={dialogContentRef}
         hideClose
         overlayClassName="bg-black/40"
-        className="top-[var(--feed-command-viewport-top,0px)] left-0 h-[var(--feed-command-viewport-height,100dvh)] max-h-[var(--feed-command-viewport-height,100dvh)] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden border-0 p-0 sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:[@media(min-height:600px)]:top-1/3"
+        className="top-[var(--visual-viewport-top,0px)] left-0 h-[var(--visual-viewport-height,100dvh)] max-h-[var(--visual-viewport-height,100dvh)] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden border-0 p-0 sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:[@media(min-height:600px)]:top-1/3"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           urlInputRef.current?.focus();
@@ -799,6 +765,7 @@ export function EditFeedDialog({
 
   return (
     <ControlledResponsiveDialog
+      mobileSheet
       open={selectedFeedId !== null}
       onOpenChange={() => {
         if (!requestOnboardingSkip()) onClose();
