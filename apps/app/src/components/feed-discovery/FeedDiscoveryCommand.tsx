@@ -1,6 +1,7 @@
 import {
   classifyDiscoveryInput,
   feedDiscoveryKey,
+  matchesDiscoveredFeed,
 } from "@serial/feed-discovery";
 import { PublicationRowContent } from "@serial/ui";
 import {
@@ -159,7 +160,7 @@ function FeedResults({
         <CommandItem
           className="gap-2"
           key={feedDiscoveryKey(feed)}
-          value={`${feed.title ?? ""} ${feedDiscoveryKey(feed)}`}
+          value={feedDiscoveryKey(feed)}
           onSelect={() => onSelect(feed)}
         >
           <PublicationRowContent feed={feed} />
@@ -224,6 +225,39 @@ function useAutomaticDiscovery(
   return { isPending, reset: () => setLastQuery(null) };
 }
 
+function DiscoveryProgress({
+  state,
+  hasResults,
+  pending,
+  loadingLabel,
+}: {
+  state: FeedDiscoveryCommandProps["state"];
+  hasResults: boolean;
+  pending: boolean;
+  loadingLabel: string;
+}) {
+  const adding = state === "adding";
+  if (!adding && state !== "discovering" && !pending) return null;
+  if (!adding && hasResults)
+    return (
+      <div
+        className="text-muted-foreground flex items-center gap-2 px-4 py-2 text-xs"
+        role="status"
+      >
+        <Loader2Icon className="size-4 animate-spin" />
+        <span>Finding feeds…</span>
+      </div>
+    );
+  return (
+    <div className={CENTERED_STATE_CLASS_NAME} role="status" aria-live="polite">
+      <CenteredStateContent testId="feed-discovery-loading-state">
+        <Loader2Icon className="size-8 animate-spin" strokeWidth={1.5} />
+        <span>{adding ? loadingLabel : "Finding feeds…"}</span>
+      </CenteredStateContent>
+    </div>
+  );
+}
+
 export function FeedDiscoveryCommand({
   url,
   onUrlChange,
@@ -237,12 +271,22 @@ export function FeedDiscoveryCommand({
   loadingLabel = "Adding feed…",
 }: FeedDiscoveryCommandProps) {
   const commandRef = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<{
+    value: string;
+    feed?: DiscoveredFeed;
+  }>({ value: "" });
+  const selectedFeed = selection.feed
+    ? discoveredFeeds.find((feed) =>
+        matchesDiscoveredFeed(feed, selection.feed!),
+      )
+    : undefined;
   const normalizedUrl = classifyDiscoveryInput(url) ? url.trim() : null;
   const bookmarkUrl = normalizeFeedSearchUrl(url);
   const isAddingFeed = state === "adding";
   const isDiscovering = state === "discovering";
   const hasNoResults = state === "no-results";
-  const isSelecting = state === "select";
+  const isSelecting =
+    state === "select" || (isDiscovering && discoveredFeeds.length > 0);
   const { isPending: isAutoDiscoveryPending, reset: resetAutoDiscovery } =
     useAutomaticDiscovery(normalizedUrl, state, onDiscover);
 
@@ -261,6 +305,15 @@ export function FeedDiscoveryCommand({
   return (
     <Command
       ref={commandRef}
+      value={selectedFeed ? feedDiscoveryKey(selectedFeed) : selection.value}
+      onValueChange={(value) =>
+        setSelection({
+          value,
+          feed: discoveredFeeds.find(
+            (feed) => feedDiscoveryKey(feed) === value,
+          ),
+        })
+      }
       className="h-full min-h-0 rounded-none border-0 sm:h-auto [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:pr-10 sm:[&_[cmdk-input]]:pr-0 [&_[cmdk-item]]:pointer-events-auto [&_[cmdk-item]]:opacity-100"
       shouldFilter={
         !isAddingFeed &&
@@ -297,21 +350,6 @@ export function FeedDiscoveryCommand({
       <CommandList className="relative flex max-h-none min-h-0 flex-1 flex-col sm:max-h-[min(60dvh,32rem,calc(100dvh-5.5rem))] sm:min-h-[min(20rem,60dvh,calc(100dvh-5.5rem))] sm:flex-none">
         {normalizedUrl ? (
           <>
-            {(isAddingFeed || isDiscovering || isAutoDiscoveryPending) && (
-              <div
-                className={CENTERED_STATE_CLASS_NAME}
-                role="status"
-                aria-live="polite"
-              >
-                <CenteredStateContent testId="feed-discovery-loading-state">
-                  <Loader2Icon
-                    className="size-8 animate-spin"
-                    strokeWidth={1.5}
-                  />
-                  <span>{isAddingFeed ? loadingLabel : "Finding feeds…"}</span>
-                </CenteredStateContent>
-              </div>
-            )}
             {!bookmarkUrl && (
               <SuggestedFeedResults
                 query={url}
@@ -325,6 +363,12 @@ export function FeedDiscoveryCommand({
               feeds={discoveredFeeds}
               onDiscover={() => onDiscover()}
               onSelect={onSelectFeed}
+            />
+            <DiscoveryProgress
+              state={state}
+              hasResults={isSelecting}
+              pending={isAutoDiscoveryPending}
+              loadingLabel={loadingLabel}
             />
             {bookmarkUrl && (
               <BookmarkResult

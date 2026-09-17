@@ -18,6 +18,7 @@ function readLocalFeedHttp(
 
 let server: Server;
 let baseUrl: string;
+let onSlowChunk: (() => void) | undefined;
 
 beforeAll(async () => {
   server = createServer((request, response) => {
@@ -42,6 +43,7 @@ beforeAll(async () => {
     if (request.url === "/slow") {
       response.writeHead(200, { "Content-Type": "application/rss+xml" });
       response.write("<rss>");
+      onSlowChunk?.();
       setTimeout(() => response.end("</rss>"), 100);
       return;
     }
@@ -194,4 +196,19 @@ describe("readFeedHttp", () => {
     expect(response.status).toBe(304);
     expect(response.text).toBe("");
   });
+});
+
+it("cancels a body read when its caller aborts", async () => {
+  const controller = new AbortController();
+  const started = new Promise<void>((resolve) => {
+    onSlowChunk = resolve;
+  });
+  const pending = readLocalFeedHttp(`${baseUrl}/slow`, {
+    signal: controller.signal,
+  });
+  const assertion = expect(pending).rejects.toThrow();
+  await started;
+  onSlowChunk = undefined;
+  controller.abort();
+  await assertion;
 });

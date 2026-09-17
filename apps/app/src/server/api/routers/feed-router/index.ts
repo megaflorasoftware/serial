@@ -34,7 +34,10 @@ import {
 } from "~/server/subscriptions/helpers";
 import { getEffectivePlanConfig } from "~/server/subscriptions/plans";
 import { createFeedsForUser } from "~/server/feeds/create";
-import { discoverFeeds as discoverFeedsForUrl } from "~/server/feeds/discovery";
+import {
+  discoverFeeds as discoverFeedsForUrl,
+  streamDiscoverFeeds,
+} from "~/server/feeds/discovery";
 import {
   boundedNumberIdsSchema,
   boundedStringsSchema,
@@ -437,6 +440,12 @@ export const discoverFeeds = protectedProcedure
   .handler(({ input, context }) =>
     discoverFeedsForUrl(context.user.id, input.url),
   );
+
+export const discoverFeedsStream = protectedProcedure
+  .input(z.object({ url: z.string().trim().min(1).max(DISCOVERY_QUERY_LIMIT) }))
+  .handler(async function* ({ input, context, signal }) {
+    yield* streamDiscoverFeeds(context.user.id, input.url, signal);
+  });
 
 export const revalidate = protectedProcedure
   .input(z.object({ feedId: z.number().int().positive() }))

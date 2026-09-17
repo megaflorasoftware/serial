@@ -4,6 +4,7 @@ export {
   collapseSyndicationAlternates,
   combinePublicationRows,
   mergeCapturedDiscoveryFeeds,
+  matchesDiscoveredFeed,
 } from "./grouping";
 export type { SyndicationCandidate } from "./grouping";
 
@@ -22,8 +23,11 @@ export function httpUrl(value: string): string | null {
   }
 }
 
-export function feedDiscoveryKey(feed: DiscoveredFeed): string {
+export type DiscoveryOption = DiscoveredFeed & { discoveryId?: string };
+
+export function feedDiscoveryKey(feed: DiscoveryOption): string {
   return (
+    feed.discoveryId ??
     feed.origins?.find((origin) => origin.kind === "atproto")?.locator ??
     feed.url
   );

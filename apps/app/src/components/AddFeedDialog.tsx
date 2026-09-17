@@ -135,12 +135,16 @@ export function AddFeedDialog() {
     if (pendingAction || !canMutate) return;
     setPendingAction("feed");
 
-    const createFeedPromise = createFeed({
-      url: feed.url,
-      selection: feed,
-      categoryIds: [],
-      viewIds: [],
-    });
+    const createFeedPromise = discovery
+      .finishSelection(feed)
+      .then((selection) =>
+        createFeed({
+          url: selection.url,
+          selection,
+          categoryIds: [],
+          viewIds: [],
+        }),
+      );
     toast.promise(createFeedPromise, {
       loading: "Adding feed...",
       success: "Feed added!",
