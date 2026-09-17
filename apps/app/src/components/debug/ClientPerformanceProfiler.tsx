@@ -1,6 +1,6 @@
 "use client";
 
-import { Profiler, useEffect } from "react";
+import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback, PropsWithChildren } from "react";
 
 export type ClientPerformanceCommit = {
@@ -20,11 +20,15 @@ type ClientPerformanceWindow = Window & {
 export function ClientPerformanceProfiler({ children }: PropsWithChildren) {
   const performanceWindow =
     typeof window === "undefined" ? null : (window as ClientPerformanceWindow);
-  const auditEnabled =
-    performanceWindow !== null &&
-    new URLSearchParams(performanceWindow.location.search).has(
-      "client-performance-audit",
-    );
+  // Audit the whole document visit. Re-evaluating this after navigation
+  // removes the Profiler boundary and remounts the entire application.
+  const [auditEnabled] = useState(
+    () =>
+      performanceWindow !== null &&
+      new URLSearchParams(performanceWindow.location.search).has(
+        "client-performance-audit",
+      ),
+  );
 
   useEffect(() => {
     if (!auditEnabled || !performanceWindow) return;

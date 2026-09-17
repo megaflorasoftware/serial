@@ -94,6 +94,7 @@ export default defineConfig(({ mode }) => {
         : undefined,
       tsconfigPaths: true,
     },
+    build: { sourcemap: isClientPerformanceBuild ? "hidden" : false },
     plugins,
   };
 });

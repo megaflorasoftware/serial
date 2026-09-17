@@ -2,6 +2,7 @@ import { createStore } from "zustand";
 import { persist } from "zustand/middleware";
 import { createNormalizedIDBStorage } from "../normalized-idb-storage";
 import { createSelectorHooks } from "../createSelectorHooks";
+import { retainEqualEntity } from "../entity-equality";
 import { e2eBookmarkHydrationBeforeRead } from "../e2eFaultControls";
 import { shouldRetainBookmarkCapture } from "../offline-content";
 import { bookmarkCapturesStore } from "./capture-store";
@@ -71,6 +72,11 @@ const vanillaBookmarkStore = createStore<BookmarkStore>()(
         if (!shouldRetainBookmarkCapture(bookmark)) {
           bookmarkCapturesStore.getState().remove(bookmark.id);
         }
+        if (
+          retainEqualEntity(bookmarkEntities[bookmark.id], bookmark) ===
+          bookmarkEntities[bookmark.id]
+        )
+          return;
         bookmarkEntities = {
           ...bookmarkEntities,
           [bookmark.id]: bookmark,
@@ -79,13 +85,21 @@ const vanillaBookmarkStore = createStore<BookmarkStore>()(
       },
       upsertMany: (bookmarks) => {
         if (bookmarks.length === 0) return;
-        const nextEntities = { ...bookmarkEntities };
+        let nextEntities = bookmarkEntities;
         for (const bookmark of bookmarks) {
           if (!shouldRetainBookmarkCapture(bookmark)) {
             bookmarkCapturesStore.getState().remove(bookmark.id);
           }
+          if (
+            retainEqualEntity(nextEntities[bookmark.id], bookmark) ===
+            nextEntities[bookmark.id]
+          )
+            continue;
+          if (nextEntities === bookmarkEntities)
+            nextEntities = { ...bookmarkEntities };
           nextEntities[bookmark.id] = bookmark;
         }
+        if (nextEntities === bookmarkEntities) return;
         bookmarkEntities = nextEntities;
         set({ revision: get().revision + 1 });
       },

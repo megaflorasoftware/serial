@@ -79,6 +79,31 @@ afterEach(() => {
 });
 
 describe("Feed-item page retention", () => {
+  it("retains entity identity when reconciliation repeats an unchanged page", () => {
+    const items = Array.from({ length: 300 }, (_, index) => makeItem(0, index));
+    feedItemsStore.getState().setFeedItems(items);
+    const before = { ...feedItemsStore.getState().feedItemsDict };
+    // Network and IndexedDB produce fresh arrays and Date objects.
+    feedItemsStore.getState().setFeedItems(structuredClone(items));
+    for (const item of items) {
+      expect(feedItemsStore.getState().feedItemsDict[item.id]).toBe(
+        before[item.id],
+      );
+    }
+    const changed = {
+      ...structuredClone(items[0]!),
+      title: "Corrected title",
+      tags: ["updated"],
+    };
+    feedItemsStore.getState().setFeedItems([changed]);
+    expect(feedItemsStore.getState().feedItemsDict[changed.id]).toEqual(
+      changed,
+    );
+    expect(feedItemsStore.getState().feedItemsDict[changed.id]).not.toBe(
+      before[changed.id],
+    );
+  });
+
   it("retains all four content-status pages under collision-free identities", () => {
     const state = feedItemsStore.getState();
     for (const [index, contentStatus] of CONTENT_STATUS_FILTERS.entries()) {

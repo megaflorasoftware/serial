@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { format } from "prettier";
+import { startBrowserPerformanceDiagnostics } from "../fixtures/browser-performance-diagnostics";
 import { SELF_HOSTED_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, seedClientPerformanceData } from "../fixtures/seed-db";
 import { signIn } from "../fixtures/auth";
@@ -23,7 +24,11 @@ type BrowserMetrics = {
   usableContentMs: number | null;
   longTasks: number[];
   commits: Array<{ actualDuration: number; baseDuration: number }>;
-  indexedDb: { reads: number; writes: number };
+  indexedDb: {
+    reads: number;
+    writes: number;
+    writesByStore: Record<string, number>;
+  };
   requests: number;
   transferBytes: number;
   rpcRequests: number;
@@ -44,13 +49,18 @@ type NetworkMetrics = {
   transferBytes: number;
   rpcRequests: number;
   rpcTransferBytes: number;
+  rpcPaths: string[];
 };
 
 async function installObservers(page: Page) {
   await page.addInitScript(() => {
     const metrics = {
       longTasks: [] as number[],
-      indexedDb: { reads: 0, writes: 0 },
+      indexedDb: {
+        reads: 0,
+        writes: 0,
+        writesByStore: {} as Record<string, number>,
+      },
     };
     Object.defineProperty(window, "__SERIAL_BROWSER_AUDIT__", {
       value: metrics,
@@ -70,6 +80,12 @@ async function installObservers(page: Page) {
     };
     objectStore.put = function (...args) {
       metrics.indexedDb.writes++;
+      const store = String(args[1]).replace(
+        /(::record:[^:]+:|::array:[^:]+:).*$/,
+        "$1",
+      );
+      metrics.indexedDb.writesByStore[store] =
+        (metrics.indexedDb.writesByStore[store] ?? 0) + 1;
       return put.apply(this, args);
     };
   });
@@ -81,12 +97,16 @@ async function resetBrowserMetrics(page: Page) {
       window as typeof window & {
         __SERIAL_BROWSER_AUDIT__: {
           longTasks: number[];
-          indexedDb: { reads: number; writes: number };
+          indexedDb: {
+            reads: number;
+            writes: number;
+            writesByStore: Record<string, number>;
+          };
         };
       }
     ).__SERIAL_BROWSER_AUDIT__;
     audit.longTasks = [];
-    audit.indexedDb = { reads: 0, writes: 0 };
+    audit.indexedDb = { reads: 0, writes: 0, writesByStore: {} };
     const performanceWindow = window as PerformanceWindow;
     if (performanceWindow.__SERIAL_CLIENT_PERFORMANCE__) {
       performanceWindow.__SERIAL_CLIENT_PERFORMANCE__.commits = [];
@@ -108,13 +128,18 @@ async function collectMetrics(
       transferBytes,
       rpcRequests,
       rpcTransferBytes,
+      rpcPaths,
       usableContentMs,
     }) => {
       const audit = (
         window as typeof window & {
           __SERIAL_BROWSER_AUDIT__: {
             longTasks: number[];
-            indexedDb: { reads: number; writes: number };
+            indexedDb: {
+              reads: number;
+              writes: number;
+              writesByStore: Record<string, number>;
+            };
           };
           performance: Performance & {
             memory?: { usedJSHeapSize: number };
@@ -140,6 +165,7 @@ async function collectMetrics(
         transferBytes,
         rpcRequests,
         rpcTransferBytes,
+        rpcPaths,
         heapBytes:
           (
             window.performance as Performance & {
@@ -227,12 +253,14 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
     transferBytes: 0,
     rpcRequests: 0,
     rpcTransferBytes: 0,
+    rpcPaths: [] as string[],
   };
   const rpcRequestIds = new Set<string>();
   client.on("Network.requestWillBeSent", ({ requestId, request }) => {
     network.requests++;
     if (request.url.includes("/api/rpc")) {
       network.rpcRequests++;
+      network.rpcPaths.push(new URL(request.url).pathname);
       rpcRequestIds.add(requestId);
     }
   });
@@ -248,9 +276,11 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
     network.transferBytes = 0;
     network.rpcRequests = 0;
     network.rpcTransferBytes = 0;
+    network.rpcPaths = [];
     rpcRequestIds.clear();
   };
 
+  const stopDiagnostics = await startBrowserPerformanceDiagnostics(client);
   try {
     await signIn({ page, email, password });
     const firstFixtureItem = page.getByText(/Fixture item \d+/).first();
@@ -308,7 +338,6 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
     const readerStartedAt = await page.evaluate(() => performance.now());
     await page
       .getByText(/Fixture item \d+/)
-      .filter({ hasNotText: "Fixture item 8" })
       .first()
       .click({ timeout: 30_000 });
     await expect(page.getByText(/Fixture body \d+/)).toBeVisible({
@@ -326,11 +355,14 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
     );
 
     await page.goto(`/?client-performance-audit=1`);
-    await expect(page.getByText("Fixture item 8", { exact: true })).toBeVisible(
-      {
-        timeout: 30_000,
-      },
-    );
+    await page
+      .getByRole("radio", { name: "All benchmark content", exact: true })
+      .click();
+    await expect(
+      page.getByText("Fixture page capture", { exact: true }),
+    ).toBeVisible({
+      timeout: 30_000,
+    });
     await page.waitForTimeout(2_200);
     await resetBrowserMetrics(page);
     resetNetwork();
@@ -338,7 +370,7 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       performance.now(),
     );
     await page
-      .getByText("Fixture item 8", { exact: true })
+      .getByText("Fixture page capture", { exact: true })
       .click({ timeout: 30_000 });
     await expect(page.getByText("Captured performance body 100.")).toBeVisible({
       timeout: 30_000,
@@ -419,6 +451,7 @@ test("profiles representative cold load, warm hydration, reconnect, pagination, 
       expect(violations, "production browser performance budgets").toEqual([]);
     }
   } finally {
+    await stopDiagnostics();
     await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
   }
 });

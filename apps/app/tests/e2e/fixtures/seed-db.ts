@@ -239,12 +239,27 @@ export async function seedClientPerformanceData(
   const userId = `client-performance-${uniqueId()}`;
   const email = `${userId}@benchmark.invalid`;
   const password = "testpassword123";
-  await seedBenchmarkFixture({ database: db, profileName, userId });
-  const pageCaptureFeedItemId = `${userId}-feed-item-000008`;
+  const { allContentViewId } = await seedBenchmarkFixture({
+    database: db,
+    profileName,
+    userId,
+  });
+  const pageCaptureBookmarkId = `${userId}-bookmark-000202`;
   await db
-    .update(schema.feedItems)
-    .set({ content: PAGE_CAPTURE_READER_HTML })
-    .where(eq(schema.feedItems.id, pageCaptureFeedItemId));
+    .update(schema.pageCaptures)
+    .set({ contentHtml: PAGE_CAPTURE_READER_HTML })
+    .where(eq(schema.pageCaptures.bookmarkId, pageCaptureBookmarkId));
+  await db
+    .update(schema.bookmarks)
+    .set({
+      title: "Fixture page capture",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.bookmarks.id, pageCaptureBookmarkId));
+  await db
+    .insert(schema.bookmarkViews)
+    .values({ bookmarkId: pageCaptureBookmarkId, viewId: allContentViewId });
   const hashedPassword = await hashPassword(password);
   const now = new Date();
   await db.insert(schema.account).values({

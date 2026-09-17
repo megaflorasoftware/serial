@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { createSelectorHooks } from "./createSelectorHooks";
+import { retainEqualEntity } from "./entity-equality";
 import {
   applyFeedItemPageRetention,
   getPersistedFeedItemRetentionState,
@@ -161,7 +162,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       setFeedItem: (id, item) => {
         const state = get();
         const previousItem = state.feedItemsDict[id];
-        const retainedItem = retainEligibleFeedBody(previousItem, item);
+        const retainedItem = retainEqualEntity(
+          previousItem,
+          retainEligibleFeedBody(previousItem, item),
+        );
         const retainedFeedItemBodyIds = {
           ...state.retainedFeedItemBodyIds,
         };
@@ -203,9 +207,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         };
 
         for (const item of items) {
-          const retainedItem = retainEligibleFeedBody(
+          const retainedItem = retainEqualEntity(
             state.feedItemsDict[item.id],
-            item,
+            retainEligibleFeedBody(state.feedItemsDict[item.id], item),
           );
           if (
             hasFeedItemListProjectionChanged(
