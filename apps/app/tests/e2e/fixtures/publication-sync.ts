@@ -91,6 +91,7 @@ export async function seedLocalPublication(
       .values({
         userId,
         name: "Local publication",
+        nameEditedAt: new Date(),
         platform: "website",
         siteUrl: publication.url,
         isActive: true,

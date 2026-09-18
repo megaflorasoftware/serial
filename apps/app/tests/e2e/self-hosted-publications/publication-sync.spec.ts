@@ -204,7 +204,7 @@ for (const method of [
         .toBe(false);
       await page.goto("/feeds");
       await expect(
-        page.locator("main").getByRole("button", { name: /Publication local/ }),
+        page.locator("main").getByRole("button", { name: /Local publication/ }),
       ).toBeVisible();
       await page.keyboard.press("s");
       await page.keyboard.press("d");
