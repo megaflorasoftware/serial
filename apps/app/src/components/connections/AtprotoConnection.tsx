@@ -151,14 +151,18 @@ export function AtprotoConnectionPane() {
   return <ConnectedAtmospherePane status={status} />;
 }
 
-function ConnectedAtmospherePane({
+export function ConnectedAtmospherePane({
   status,
+  onboarding = false,
+  onSaved,
 }: {
   status: NonNullable<ReturnType<typeof useAtprotoConnectionStatus>["data"]>;
+  onboarding?: boolean;
+  onSaved?: () => void;
 }) {
   const unlinkMutation = useAtprotoUnlink();
   const reconnectMutation = useAtprotoReconnect();
-  const syncSettingsSave = useAtprotoSyncSettingsSave();
+  const syncSettingsSave = useAtprotoSyncSettingsSave(onSaved);
   const loading = useLoadingMode();
   const syncBusy = loading.mode === "importing";
   // Either round trip leaves the page; neither action may start while the
@@ -173,7 +177,9 @@ function ConnectedAtmospherePane({
         label={status.handle ?? "Connected"}
         disabled={busy}
         disconnecting={unlinkMutation.isPending}
-        onDisconnect={() => unlinkMutation.mutate(undefined)}
+        onDisconnect={
+          onboarding ? undefined : () => unlinkMutation.mutate(undefined)
+        }
         onReconnect={
           status.needsReconnect
             ? () => reconnectMutation.mutate(undefined)
@@ -183,6 +189,7 @@ function ConnectedAtmospherePane({
       />
       <AtprotoSyncSettingsForm
         key={JSON.stringify(status.syncPreferences)}
+        onboarding={onboarding}
         savedPreferences={status.syncPreferences}
         hasWriteScope={status.hasWriteScope}
         disabled={unavailable}

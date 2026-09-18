@@ -122,11 +122,7 @@ export function AtprotoSyncSettingsForm({
             if (!value) return;
             setMethod(value as AtprotoSyncMethod);
           }}
-          className={
-            onboarding
-              ? "flex w-full flex-col items-stretch gap-2"
-              : "flex w-fit flex-wrap justify-start gap-1"
-          }
+          className="flex w-fit flex-wrap justify-start gap-1"
         >
           {ATPROTO_SYNC_METHODS.map((option) => (
             <ToggleGroupItem

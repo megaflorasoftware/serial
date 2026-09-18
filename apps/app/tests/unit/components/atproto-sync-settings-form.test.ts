@@ -5,9 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { OnboardingSyncSlide } from "~/components/onboarding/OnboardingSyncSlide";
 import { AtprotoConnectionPane } from "~/components/connections/AtprotoConnection";
 
-const { saveSettings, unlinkAccount, connectionStatus } = vi.hoisted(() => ({
+const {
+  saveSettings,
+  unlinkAccount,
+  connectionStatus,
+  advanceSavedOnboardingStep,
+} = vi.hoisted(() => ({
+  advanceSavedOnboardingStep: vi.fn(),
   saveSettings: vi.fn(),
   unlinkAccount: vi.fn(),
   connectionStatus: vi.fn(),
@@ -41,6 +48,13 @@ vi.mock("~/lib/orpc", () => ({
 }));
 vi.mock("~/components/auth/AtprotoHandleField", () => ({
   AtprotoHandleField: () => null,
+}));
+vi.mock("~/lib/onboarding/store", () => ({
+  advanceOnboarding: vi.fn(),
+  advanceSavedOnboardingStep,
+}));
+vi.mock("~/lib/data/publication-sync", () => ({
+  refreshPublicationSyncProgress: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -77,7 +91,7 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-async function renderPane() {
+async function renderPane(onboarding = false) {
   const container = document.createElement("div");
   const root = createRoot(container);
   roots.push(root);
@@ -88,7 +102,9 @@ async function renderPane() {
       createElement(
         QueryClientProvider,
         { client },
-        createElement(AtprotoConnectionPane),
+        onboarding
+          ? createElement(OnboardingSyncSlide, { run: 4, userId: "alice" })
+          : createElement(AtprotoConnectionPane),
       ),
     );
   });
@@ -185,4 +201,57 @@ it("locks settings during Disconnect and keeps the draft if Disconnect fails", a
   });
   expect(disconnect.disabled).toBe(false);
   expect(exportOption.getAttribute("aria-checked")).toBe("true");
+});
+
+it("shares the connection identity and settings layout during onboarding without Disconnect", async () => {
+  const settings = await renderPane();
+  const onboarding = await renderPane(true);
+  expect(onboarding.container.textContent).toContain("alice.example");
+  expect(onboarding.disconnect).toBeUndefined();
+  expect(onboarding.save.textContent).toBe("Next");
+  expect(onboarding.save.disabled).toBe(false);
+  expect(settings.save.textContent).toBe("Save");
+  expect(settings.save.disabled).toBe(true);
+  expect(
+    onboarding.container.querySelector("#atproto-sync-method")?.outerHTML,
+  ).toBe(settings.container.querySelector("#atproto-sync-method")?.outerHTML);
+});
+
+it("advances onboarding only after Next saves successfully", async () => {
+  let resolve!: (result: { saved: true }) => void;
+  saveSettings.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const { container, save } = await renderPane(true);
+  await act(async () => {
+    submit(container);
+    await vi.waitFor(() => expect(saveSettings).toHaveBeenCalledOnce());
+  });
+  expect(save.disabled).toBe(true);
+  expect(advanceSavedOnboardingStep).not.toHaveBeenCalled();
+  await act(async () => {
+    resolve({ saved: true });
+    await vi.waitFor(() =>
+      expect(advanceSavedOnboardingStep).toHaveBeenCalledWith(
+        4,
+        "atmosphere-sync-setup",
+        "next-steps",
+      ),
+    );
+  });
+});
+
+it("shows the shared reconnect row and disables Next for expired onboarding credentials", async () => {
+  connectionStatus.mockResolvedValue({
+    ...connectedStatus,
+    needsReconnect: true,
+  });
+  const { container, save, disconnect } = await renderPane(true);
+  expect(container.textContent).toContain("alice.example");
+  expect(container.textContent).toContain("Sign-in expired");
+  expect(container.textContent).toContain("Reconnect");
+  expect(save.disabled).toBe(true);
+  expect(disconnect).toBeUndefined();
 });
