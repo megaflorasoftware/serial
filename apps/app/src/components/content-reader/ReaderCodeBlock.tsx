@@ -87,7 +87,7 @@ export function replaceReaderCodeBlock(node: DOMNode) {
   );
   return (
     <ReaderCodeBlock
-      code={codeText(node)}
+      code={codeText(code instanceof Element ? code : node)}
       language={
         (code instanceof Element ? codeLanguage(code) : undefined) ??
         codeLanguage(node)

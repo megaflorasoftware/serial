@@ -153,6 +153,7 @@
   overflow-wrap: normal;
   word-break: normal;
   font-family: var(--font-mono);
+  font-size: calc(1em - 0.125rem);
 }
 
 .article pre * {

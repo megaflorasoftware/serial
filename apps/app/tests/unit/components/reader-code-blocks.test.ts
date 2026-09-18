@@ -48,6 +48,20 @@ async function render(content: string, kind = "full") {
 }
 
 describe("article code blocks", () => {
+  it.each(["full", "simplified", "bookmark"])(
+    "excludes surrounding controls and formatting from %s code",
+    async (kind) => {
+      const { container } = await render(
+        '<pre class="language-js">\n<code>  const value = 42;\n</code>\n<button>Copy</button></pre>',
+        kind,
+      );
+      expect(container.querySelector("pre")?.textContent).toBe(
+        "  const value = 42;\n",
+      );
+      expect(container.querySelector("button")).toBeNull();
+    },
+  );
+
   it("preserves code direction and an explicit accessible label", async () => {
     const { container } = await render(
       '<div dir="rtl"><pre dir="ltr" aria-label="Example">const value = 42;</pre></div>',
