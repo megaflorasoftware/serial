@@ -20,7 +20,7 @@ describe("publication transport", () => {
     const { remote, fetch, resolvePds } = client(() =>
       Response.json({
         uri,
-        cid: "cid",
+        cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         value: { name: "Site", url: "https://example.com" },
       }),
     );
@@ -31,7 +31,7 @@ describe("publication transport", () => {
     expect(results[0]).toEqual({ title: "Site", url: "https://example.com" });
     expect(results[1]).toEqual(results[0]);
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(resolvePds).toHaveBeenCalledTimes(1);
+    expect(resolvePds).not.toHaveBeenCalled();
   });
   it.each([404, 400])(
     "recognizes missing records with HTTP %s",
@@ -51,7 +51,11 @@ describe("publication transport", () => {
   });
   it("rejects a response for a different record", async () => {
     const { remote } = client(() =>
-      Response.json({ uri: `${uri}-other`, cid: "cid", value: {} }),
+      Response.json({
+        uri: `${uri}-other`,
+        cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        value: {},
+      }),
     );
     await expect(remote.getRecord(uri)).rejects.toThrow("Record URI mismatch");
   });
@@ -59,7 +63,7 @@ describe("publication transport", () => {
     const { remote } = client(() =>
       Response.json({
         uri,
-        cid: "cid",
+        cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         value: { name: "Site", url: "javascript:alert(1)" },
       }),
     );

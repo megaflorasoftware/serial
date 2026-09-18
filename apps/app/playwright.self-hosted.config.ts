@@ -138,6 +138,7 @@ export default defineConfig({
       hostname: "127.0.0.1",
       extraEnvironment: {
         ATPROTO_PLC_DIRECTORY_URL: `http://127.0.0.1:${PUBLICATIONS_PDS_PORT}`,
+        ATPROTO_SLINGSHOT_ENDPOINT: `http://127.0.0.1:${PUBLICATIONS_PDS_PORT}`,
         // Main-instance limits with billing disabled give the real Pro quota.
         VITE_PUBLIC_IS_MAIN_INSTANCE: "true",
         POLAR_ACCESS_TOKEN: "",

@@ -14,3 +14,4 @@ export type {
   ConvertDocumentOptions,
   ConvertedDocument,
 } from "./convert";
+export * from "./public-record";

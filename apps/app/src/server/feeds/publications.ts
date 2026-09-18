@@ -1,13 +1,16 @@
-import { extractPdsUrl } from "@atproto/oauth-client-node";
 import {
   buildBlueskyCdnImageUrl,
+  MissingPublicRecordError,
   normalizePublicationUrl,
   parsePublicationRecord,
   parsePublicationUri,
+  PublicRecordHttpError,
   STANDARD_SITE_COLLECTIONS,
 } from "@serial/standard-site";
+import { extractPdsUrl } from "@atproto/oauth-client-node";
 import type { NewFeedOriginDetails } from "~/server/rss/types";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
+import { createPublicRecordReader } from "~/server/auth/atproto/public-record";
 import { getAtprotoIdentityResolver } from "~/server/auth/atproto/identity";
 import { createHardenedFetch } from "~/server/auth/atproto/hardened-fetch";
 import { searchAtprotoActorsTypeahead } from "~/server/auth/atproto/typeahead";
@@ -30,7 +33,7 @@ export type ResolvedPublication = {
   uri: string;
   did: string;
   rkey: string;
-  pdsUrl: string;
+  pdsUrl?: string;
   siteUrl: string;
   name: string;
   imageUrl?: string;
@@ -40,7 +43,7 @@ export type ResolvedPublication = {
 function parseResolvedPublication(
   input: unknown,
   did: string,
-  pdsUrl: string,
+  pdsUrl?: string,
 ): ResolvedPublication | null {
   const record = parsePublicationRecord(input);
   if (!record) return null;
@@ -96,21 +99,33 @@ async function readRecordJson(
 export async function resolvePublication(
   uri: string,
   signal: AbortSignal = AbortSignal.timeout(12_000),
+  deadline = Date.now() + 12_000,
 ): Promise<ResolvedPublication | null> {
   const parts = parsePublicationUri(uri);
   if (!parts) return null;
-  const { did, pdsUrl } = await publicIdentity(parts.did, signal);
-  const result = await readRecordJson(
-    pdsUrl,
-    "com.atproto.repo.getRecord",
-    {
-      repo: did,
-      collection: STANDARD_SITE_COLLECTIONS.publication,
-      rkey: parts.rkey,
+  let pdsUrl: string | undefined;
+  const readRecord = createPublicRecordReader({
+    fetch,
+    resolvePds: async () => {
+      const identity = await publicIdentity(parts.did, signal);
+      if (identity.did !== parts.did)
+        throw new Error("Repository DID mismatch");
+      pdsUrl = identity.pdsUrl;
+      return pdsUrl;
     },
-    signal,
+  });
+  const result = await readRecord({ uri }, { signal, deadline }).catch(
+    (error: unknown) => {
+      if (
+        error instanceof MissingPublicRecordError ||
+        (error instanceof PublicRecordHttpError &&
+          [400, 401, 403, 404, 410].includes(error.status))
+      )
+        throw new PublicationUnavailableError("Publication is unavailable");
+      throw error;
+    },
   );
-  const publication = parseResolvedPublication(result, did, pdsUrl);
+  const publication = parseResolvedPublication(result, parts.did, pdsUrl);
   return publication?.uri === uri ? publication : null;
 }
 

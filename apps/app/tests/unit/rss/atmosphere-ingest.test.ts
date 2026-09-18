@@ -556,9 +556,13 @@ function resolvingClient(
   documents: Array<ReturnType<typeof record>>,
   failReference = false,
 ) {
+  documents = documents.map((document) => ({
+    ...document,
+    cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  }));
   const publication = {
     uri: PUB,
-    cid: "pubcid",
+    cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     value: { name: "Publication", url: "https://example.com" },
   };
   const transport = createPublicationClient({
