@@ -3,20 +3,21 @@ import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type * as AtprotoClientModule from "~/server/rss/atprotoClient";
 import type { FetchableOrigin } from "~/server/rss/types";
 import type { ItemObservation } from "~/server/rss/itemObservation";
+import {
+  attachMissingFeedOrigins,
+  insertFeedWithOrigins,
+} from "~/server/feeds/origins";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import {
-  feedIngestState,
-  feedItemObservations,
-  feedItemPageImages,
   feedItems,
-  feedOrigins,
-  feeds,
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
   user,
 } from "~/server/db/schema";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import { writeObservedItems } from "~/server/rss/writeItems";
 import { rssObservation } from "~/server/rss/itemObservation";
-import { refreshPageImages } from "~/server/rss/refreshPageImages";
+import { enrichObservationImages } from "~/server/rss/observationImages";
 import { createPublicationClient } from "~/server/rss/atprotoClient";
 
 vi.mock("~/server/logger", () => ({
@@ -78,10 +79,23 @@ async function refresh() {
 async function stored() {
   return (await fixture.database.select().from(feedItems))[0]!;
 }
-async function due() {
-  await fixture.database
-    .update(feedItemPageImages)
-    .set({ nextCheckAt: new Date(0) });
+async function writeEnriched(incoming: ItemObservation[]) {
+  return writeObservedItems(
+    fixture.database,
+    fetchable.feed,
+    await enrichObservationImages(incoming),
+  );
+}
+async function useAtmosphere() {
+  const feed = await attachMissingFeedOrigins(
+    fixture.database,
+    { ...fetchable.feed, origins: [fetchable.origin] },
+    [{ kind: "atproto", locator: PUB }],
+  );
+  fetchable = {
+    feed,
+    origin: feed.origins.find((origin) => origin.kind === "atproto")!,
+  };
 }
 
 beforeEach(async () => {
@@ -96,26 +110,19 @@ beforeEach(async () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  const [feed] = await database
-    .insert(feeds)
-    .values({
-      userId: "reader",
+  const feed = await insertFeedWithOrigins(database, {
+    userId: "reader",
+    isActive: true,
+    details: {
       name: "Releases",
       platform: "website",
       imageUrl: "",
-      isActive: true,
-    })
-    .returning();
-  const [origin] = await database
-    .insert(feedOrigins)
-    .values({
-      userId: "reader",
-      feedId: feed!.id,
-      kind: "rss",
-      locator: "https://www.serial.tube/releases/rss.xml",
-    })
-    .returning();
-  fetchable = { feed: feed!, origin: origin! };
+      origins: [
+        { kind: "rss", locator: "https://www.serial.tube/releases/rss.xml" },
+      ],
+    },
+  });
+  fetchable = { feed, origin: feed.origins[0]! };
   vi.mocked(readFeedHttp)
     .mockReset()
     .mockImplementation(async (url) =>
@@ -135,132 +142,123 @@ it("persists the release OG image ahead of its RSS body screenshot and retains i
   vi.mocked(readFeedHttp).mockClear();
   await refresh();
   expect((await stored()).thumbnail).toBe(OG);
-  expect(readFeedHttp).toHaveBeenCalledTimes(1);
+  expect(readFeedHttp).toHaveBeenCalledTimes(2);
 });
 
 it.each(["rss", "atproto"] as const)(
-  "repairs existing %s items even when the origin is unchanged, preserving user state",
+  "does no image work for an unchanged %s origin",
   async (kind) => {
-    const source = {
-      ...observation(),
-      kind,
-      ...(kind === "atproto"
-        ? { key: "at://did:plc:alice/site.standard.document/post" }
-        : {}),
-    };
-    await writeObservedItems(fixture.database, fetchable.feed, [source]);
+    if (kind === "atproto") await useAtmosphere();
+    await writeObservedItems(fixture.database, fetchable.feed, [
+      {
+        ...observation(),
+        kind,
+        key:
+          kind === "atproto"
+            ? "at://did:plc:alice/site.standard.document/post"
+            : "release-0",
+      },
+    ]);
     const original = await stored();
     await fixture.database
       .update(feedItems)
       .set({ isWatched: true, isWatchLater: true, progress: 42 });
-    if (kind === "rss") {
+    if (kind === "rss")
       vi.mocked(readFeedHttp).mockImplementation(async (url) =>
-        url.endsWith("rss.xml")
-          ? response(url, "", 304)
-          : response(url, `<meta property="og:image" content="${OG}">`),
+        response(url, "", 304),
       );
-    } else {
-      fetchable.origin.kind = "atproto";
-      fetchable.origin.locator = PUB;
-      fetchable.origin.repoRev = "same";
+    else {
+      fetchable.origin.atproto!.repoRev = "same";
+      fetchable.origin.atproto!.initialized = true;
       await fixture.database
-        .insert(feedIngestState)
-        .values({ originId: fetchable.origin.id, initialized: true });
+        .update(feedOriginAtproto)
+        .set({ repoRev: "same", initialized: true });
       vi.mocked(createPublicationClient).mockReturnValue({
         latestRev: vi.fn(async () => "same"),
       } as unknown as ReturnType<typeof createPublicationClient>);
     }
-    const result = await refresh();
-    expect(result).toMatchObject({
-      status: "success",
-      feedItems: [
-        {
-          id: original.id,
-          thumbnail: OG,
-          isWatched: true,
-          isWatchLater: true,
-          progress: 42,
-        },
-      ],
-    });
+    expect((await refresh()).status).toBe("skipped");
     expect(await stored()).toMatchObject({
       id: original.id,
-      thumbnail: OG,
+      thumbnail: BODY,
       isWatched: true,
       isWatchLater: true,
       progress: 42,
     });
+    expect(readFeedHttp).toHaveBeenCalledTimes(kind === "rss" ? 1 : 0);
   },
 );
 
-it("enriches newly ingested Atmosphere documents through the same page-image path", async () => {
-  fetchable.origin.kind = "atproto";
-  fetchable.origin.locator = PUB;
-  vi.mocked(createPublicationClient).mockReturnValue({
-    latestRev: async () => "new",
-    resolvePds: async () => "https://pds.example.com",
-    getRecord: async () => ({
-      uri: PUB,
-      cid: "pub",
-      value: { name: "Serial", url: "https://www.serial.tube" },
-    }),
-    list: async () => ({
-      notModified: false,
-      etag: null,
-      cursor: undefined,
-      records: [
-        {
-          uri: "at://did:plc:alice/site.standard.document/post",
-          cid: "doc",
-          value: {
-            title: "Bookmarked",
-            site: PUB,
-            path: "/releases/2026-08-07",
-            publishedAt: DATE,
-            textContent: "Bookmarks",
+it.each([true, false])(
+  "ingests Atmosphere documents with image availability=%s",
+  async (available) => {
+    if (!available)
+      vi.mocked(readFeedHttp).mockRejectedValue(
+        new Error("Optional image unavailable"),
+      );
+    await useAtmosphere();
+    vi.mocked(createPublicationClient).mockReturnValue({
+      latestRev: async () => "new",
+      resolvePds: async () => "https://pds.example.com",
+      getRecord: async () => ({
+        uri: PUB,
+        cid: "pub",
+        value: { name: "Serial", url: "https://www.serial.tube" },
+      }),
+      list: async () => ({
+        notModified: false,
+        etag: null,
+        cursor: undefined,
+        records: [
+          {
+            uri: "at://did:plc:alice/site.standard.document/post",
+            cid: "doc",
+            value: {
+              title: "Bookmarked",
+              site: PUB,
+              path: "/releases/2026-08-07",
+              publishedAt: DATE,
+              textContent: "Bookmarks",
+            },
           },
-        },
-      ],
-    }),
-    loadBlob: async () => new Uint8Array(),
-    resolveRecord: async () => null,
-  });
-  expect((await refresh()).status).toBe("success");
-  expect(await stored()).toMatchObject({
-    thumbnail: OG,
-    sourceKind: "atproto",
-  });
-});
+        ],
+      }),
+      loadBlob: async () => new Uint8Array(),
+      resolveRecord: async () => null,
+    });
+    expect((await refresh()).status).toBe("success");
+    expect(await stored()).toMatchObject({
+      thumbnail: available ? OG : "",
+      sourceKind: "atproto",
+    });
+    expect(
+      await fixture.database.select().from(feedOriginAtprotoDocuments),
+    ).toMatchObject([{ status: "ready" }]);
+  },
+);
 
-it("preserves explicit covers and RSS media ahead of OG, and retries when they are removed", async () => {
-  const rss = { ...observation(), thumbnail: "https://example.com/media.png" };
+it("composes cover, RSS media, page and body candidates in order", async () => {
+  const rss = {
+    ...observation(),
+    thumbnail: "https://example.com/media.png",
+    pageImageUrl: OG,
+  };
   const document = {
     ...observation(),
     kind: "atproto" as const,
     key: "at://did:plc:alice/site.standard.document/post",
     thumbnail: "https://example.com/cover.png",
   };
-  await writeObservedItems(fixture.database, fetchable.feed, [rss, document]);
-  await refreshPageImages(fixture.database, fetchable.feed);
+  await writeEnriched([rss, document]);
   expect((await stored()).thumbnail).toBe(document.thumbnail);
   expect(readFeedHttp).not.toHaveBeenCalled();
-  await writeObservedItems(fixture.database, fetchable.feed, [
-    { ...document, thumbnail: "" },
-  ]);
+  await writeEnriched([{ ...document, thumbnail: "" }]);
   expect((await stored()).thumbnail).toBe(rss.thumbnail);
-  await writeObservedItems(fixture.database, fetchable.feed, [
-    { ...rss, thumbnail: "" },
-  ]);
-  await refreshPageImages(fixture.database, fetchable.feed);
+  await writeEnriched([{ ...rss, thumbnail: "" }]);
   expect((await stored()).thumbnail).toBe(OG);
 });
 
-it("advances past the first eight items and bounds concurrent page reads", async () => {
-  await writeObservedItems(
-    fixture.database,
-    fetchable.feed,
-    Array.from({ length: 20 }, (_, i) => observation(i)),
-  );
+it("bounds optional page requests and concurrency within content ingestion", async () => {
   let active = 0;
   let maximum = 0;
   vi.mocked(readFeedHttp).mockImplementation(async (url) => {
@@ -270,11 +268,14 @@ it("advances past the first eight items and bounds concurrent page reads", async
     active--;
     return response(url, `<meta property="og:image" content="${OG}">`);
   });
-  for (const count of [8, 16, 20]) {
-    await refreshPageImages(fixture.database, fetchable.feed);
-    expect(readFeedHttp).toHaveBeenCalledTimes(count);
-  }
+  await writeEnriched(Array.from({ length: 20 }, (_, i) => observation(i)));
+  expect(readFeedHttp).toHaveBeenCalledTimes(8);
   expect(maximum).toBeLessThanOrEqual(2);
+  expect(
+    (await fixture.database.select().from(feedItems)).filter(
+      (item) => item.thumbnail === OG,
+    ),
+  ).toHaveLength(8);
   expect(
     vi
       .mocked(readFeedHttp)
@@ -287,49 +288,36 @@ it("advances past the first eight items and bounds concurrent page reads", async
 });
 
 it.each(["missing", "failure"])(
-  "keeps the body fallback after a %s OG lookup",
+  "keeps content and the body fallback after a %s image lookup",
   async (mode) => {
-    await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
     vi.mocked(readFeedHttp).mockImplementation(async (url) => {
       if (mode === "failure") throw new Error("timeout");
       return response(url, "<p>No metadata</p>");
     });
-    await refreshPageImages(fixture.database, fetchable.feed);
-    expect((await stored()).thumbnail).toBe(BODY);
-    await refreshPageImages(fixture.database, fetchable.feed);
+    await writeEnriched([observation()]);
+    expect(await stored()).toMatchObject({
+      thumbnail: BODY,
+      content: expect.stringContaining("Bookmarks"),
+    });
     expect(readFeedHttp).toHaveBeenCalledTimes(1);
   },
 );
 
-it("retains a previously fetched OG image on a temporary failure but clears removed metadata", async () => {
-  await refresh();
-  await due();
-  vi.mocked(readFeedHttp).mockRejectedValue(new Error("timeout"));
-  await refreshPageImages(fixture.database, fetchable.feed);
-  expect((await stored()).thumbnail).toBe(OG);
-  await due();
-  vi.mocked(readFeedHttp).mockImplementation(async (url) =>
-    response(url, "<p>No metadata</p>"),
-  );
-  await refreshPageImages(fixture.database, fetchable.feed);
-  expect((await stored()).thumbnail).toBe(BODY);
-});
-
 it("resolves escaped relative OG metadata against the final redirected URL", async () => {
-  await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
   vi.mocked(readFeedHttp).mockResolvedValue(
     response(
       "https://cdn.example.com/article/",
       '<meta content="javascript:alert(1)" property="og:image:secure_url"><meta content="../image.png?a=1&amp;b=2" property="og:image">',
     ),
   );
-  await refreshPageImages(fixture.database, fetchable.feed);
+  await writeEnriched([observation()]);
   expect((await stored()).thumbnail).toBe(
     "https://cdn.example.com/image.png?a=1&b=2",
   );
 });
 
-it("discards an in-flight result after the document URL changes", async () => {
+it("does not reuse an RSS page image after a document changes the canonical URL", async () => {
+  await writeEnriched([observation()]);
   await writeObservedItems(fixture.database, fetchable.feed, [
     {
       ...observation(),
@@ -337,56 +325,28 @@ it("discards an in-flight result after the document URL changes", async () => {
       key: "at://did:plc:alice/site.standard.document/post",
     },
   ]);
-  vi.mocked(readFeedHttp).mockImplementationOnce(async (url) => {
-    await writeObservedItems(fixture.database, fetchable.feed, [
-      {
-        ...observation(),
-        kind: "atproto",
-        key: "at://did:plc:alice/site.standard.document/post",
-        url: "https://example.com/moved",
-      },
-    ]);
-    return response(url, `<meta property="og:image" content="${OG}">`);
-  });
-  await refreshPageImages(fixture.database, fetchable.feed);
+  await writeObservedItems(fixture.database, fetchable.feed, [
+    {
+      ...observation(),
+      kind: "atproto",
+      key: "at://did:plc:alice/site.standard.document/post",
+      url: "https://example.com/moved",
+    },
+  ]);
   expect(await stored()).toMatchObject({
     url: "https://example.com/moved",
     thumbnail: BODY,
   });
-  expect(
-    (await fixture.database.select().from(feedItemPageImages))[0]?.imageUrl,
-  ).toBeNull();
 });
 
-it("preserves ambiguous legacy thumbnails until a fresh source observation identifies the fallback", async () => {
-  await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
-  await fixture.database.delete(feedItemObservations);
-  await refreshPageImages(fixture.database, fetchable.feed);
-  expect((await stored()).thumbnail).toBe(BODY);
-  expect(readFeedHttp).not.toHaveBeenCalled();
-  await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
-  await refreshPageImages(fixture.database, fetchable.feed);
-  expect((await stored()).thumbnail).toBe(OG);
-});
-
-it("keeps explicit legacy media even when the article contains the same image", async () => {
+it("retains an observation's successful image when the other source updates", async () => {
+  await writeEnriched([observation()]);
   await writeObservedItems(fixture.database, fetchable.feed, [
-    { ...observation(), thumbnail: BODY },
+    {
+      ...observation(),
+      kind: "atproto",
+      key: "at://did:plc:alice/site.standard.document/post",
+    },
   ]);
-  await fixture.database.delete(feedItemObservations);
-  await refreshPageImages(fixture.database, fetchable.feed);
-  expect((await stored()).thumbnail).toBe(BODY);
-  expect(readFeedHttp).not.toHaveBeenCalled();
-});
-
-it("does not overwrite a cover added while a page request is in flight", async () => {
-  await writeObservedItems(fixture.database, fetchable.feed, [observation()]);
-  vi.mocked(readFeedHttp).mockImplementationOnce(async (url) => {
-    await writeObservedItems(fixture.database, fetchable.feed, [
-      { ...observation(), thumbnail: "https://example.com/new-cover.png" },
-    ]);
-    return response(url, `<meta property="og:image" content="${OG}">`);
-  });
-  await refreshPageImages(fixture.database, fetchable.feed);
-  expect((await stored()).thumbnail).toBe("https://example.com/new-cover.png");
+  expect((await stored()).thumbnail).toBe(OG);
 });

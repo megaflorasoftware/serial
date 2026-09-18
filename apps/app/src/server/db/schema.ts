@@ -2,7 +2,7 @@
 // https://orm.drizzle.team/docs/sql-schema-declaration
 
 import { createId } from "@paralleldrive/cuid2";
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   index,
   integer,
@@ -283,8 +283,7 @@ export type FeedOriginKind = z.infer<typeof feedOriginKindSchema>;
 
 /**
  * One data source of a Feed. An RSS origin is located by its feed URL; an
- * Atmosphere origin by a publication at-uri. Fetch state, conditional
- * headers, and observed source metadata live here so each origin keeps its
+ * Atmosphere origin by a publication at-uri. Scheduling and observed source metadata live here so each origin keeps its
  * own clock. `userId` is denormalised so the due-origin pager never joins
  * before filtering.
  */
@@ -300,22 +299,12 @@ export const feedOrigins = sqliteTable(
       .references(() => user.id, { onDelete: "cascade" }),
     kind: text("kind", { length: 16 }).notNull(),
     locator: text("locator", { length: 1024 }).notNull(),
-    etag: text("etag"),
-    lastModifiedHeader: text("last_modified_header"),
     lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
     nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
-    // Atmosphere only: last seen repository commit rev and cached resolution.
-    repoRev: text("repo_rev"),
-    publicationDid: text("publication_did"),
-    publicationRkey: text("publication_rkey"),
-    pdsUrl: text("pds_url", { length: 512 }),
     // Metadata as observed from the source on the last successful read.
     sourceName: text("source_name", { length: 256 }),
     sourceImageUrl: text("source_image_url", { length: 512 }),
     sourceDescription: text("source_description"),
-    alternateLocators: text("alternate_locators", { mode: "json" }).$type<
-      string[]
-    >(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
@@ -360,38 +349,64 @@ export const feedsSchema = createSelectSchema(feeds).merge(
 export type DatabaseFeed = typeof feeds.$inferSelect;
 /** A Feed row with its origin rows attached, the shape every Feed read returns. */
 export type DatabaseFeedWithOrigins = DatabaseFeed & {
-  origins: DatabaseFeedOrigin[];
+  origins: HydratedFeedOrigin[];
 };
 export type ApplicationFeed = z.infer<typeof feedsSchema>;
 
-export const feedIngestState = sqliteTable("feed_ingest_state", {
+export const feedOriginRss = sqliteTable("feed_origin_rss", {
   originId: integer("origin_id")
     .primaryKey()
     .references(() => feedOrigins.id, { onDelete: "cascade" }),
-  cursor: text("cursor"),
-  boundary: text("boundary"),
-  newestRkey: text("newest_rkey"),
-  pendingRev: text("pending_rev"),
-  retryCursor: text("retry_cursor"),
-  initialCount: integer("initial_count").notNull().default(0),
-  initialized: integer("initialized", { mode: "boolean" })
-    .notNull()
-    .default(false),
+  etag: text("etag"),
+  lastModifiedHeader: text("last_modified_header"),
+  alternateLocators: text("alternate_locators", { mode: "json" }).$type<
+    string[]
+  >(),
 });
 
-export const feedDocumentRecords = sqliteTable(
-  "feed_document_record",
+export const feedOriginAtproto = sqliteTable(
+  "feed_origin_atproto",
+  {
+    originId: integer("origin_id")
+      .primaryKey()
+      .references(() => feedOrigins.id, { onDelete: "cascade" }),
+    publicationDid: text("publication_did").notNull(),
+    listingEtag: text("listing_etag"),
+    repoRev: text("repo_rev"),
+    cursor: text("cursor"),
+    boundary: text("boundary"),
+    newestRkey: text("newest_rkey"),
+    pendingRev: text("pending_rev"),
+    retryCursor: text("retry_cursor"),
+    initialCount: integer("initial_count").notNull().default(0),
+    initialized: integer("initialized", { mode: "boolean" })
+      .notNull()
+      .default(false),
+  },
+  (table) => [
+    index("feed_origin_atproto_publication_did_idx").on(table.publicationDid),
+  ],
+);
+
+/** Server-only details; the application schema exposes only the common origin. */
+export type HydratedFeedOrigin = DatabaseFeedOrigin & {
+  rss: typeof feedOriginRss.$inferSelect | null;
+  atproto: typeof feedOriginAtproto.$inferSelect | null;
+};
+
+export const feedOriginAtprotoDocuments = sqliteTable(
+  "feed_origin_atproto_document",
   {
     originId: integer("origin_id")
       .notNull()
-      .references(() => feedOrigins.id, { onDelete: "cascade" }),
+      .references(() => feedOriginAtproto.originId, { onDelete: "cascade" }),
     uri: text("uri").notNull(),
     cid: text("cid").notNull(),
     status: text("status", { enum: ["ready", "retry", "invalid"] }).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.originId, table.uri] }),
-    index("feed_document_retry_idx").on(
+    index("feed_origin_atproto_document_retry_idx").on(
       table.originId,
       table.status,
       table.uri,
@@ -496,31 +511,6 @@ export const feedItems = sqliteTable(
     ),
   ],
 );
-/** Canonical-page imagery and its bounded refresh queue are independent of origin revisions. */
-export const feedItemPageImages = sqliteTable(
-  "feed_item_page_image",
-  {
-    itemId: text("item_id")
-      .primaryKey()
-      .references(() => feedItems.id, { onDelete: "cascade" }),
-    feedId: integer("feed_id")
-      .notNull()
-      .references(() => feeds.id, { onDelete: "cascade" }),
-    pageUrl: text("page_url").notNull(),
-    imageUrl: text("image_url"),
-    nextCheckAt: integer("next_check_at", { mode: "timestamp_ms" })
-      .notNull()
-      .default(sql`0`),
-  },
-  (table) => [
-    index("feed_item_page_image_due_idx").on(
-      table.feedId,
-      table.nextCheckAt,
-      table.itemId,
-    ),
-  ],
-);
-
 /** Internal source snapshots allow edits to restore the other origin's fallback. */
 export const feedItemObservations = sqliteTable(
   "feed_item_observation",

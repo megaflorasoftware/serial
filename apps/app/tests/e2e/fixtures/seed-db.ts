@@ -61,18 +61,24 @@ async function seedFeedsWithRssOrigins(
   if (created.length !== rows.length) {
     throw new Error("Feed insert returned an unexpected row count");
   }
-  await db.insert(schema.feedOrigins).values(
-    created.map((feed, index) => ({
-      feedId: feed.id,
-      userId: feed.userId,
-      kind: "rss",
-      locator: rows[index]!.url,
-      lastFetchedAt: rows[index]!.lastFetchedAt ?? null,
-      nextFetchAt: rows[index]!.nextFetchAt ?? null,
-      createdAt: feed.createdAt,
-      updatedAt: feed.updatedAt,
-    })),
-  );
+  const origins = await db
+    .insert(schema.feedOrigins)
+    .values(
+      created.map((feed, index) => ({
+        feedId: feed.id,
+        userId: feed.userId,
+        kind: "rss",
+        locator: rows[index]!.url,
+        lastFetchedAt: rows[index]!.lastFetchedAt ?? null,
+        nextFetchAt: rows[index]!.nextFetchAt ?? null,
+        createdAt: feed.createdAt,
+        updatedAt: feed.updatedAt,
+      })),
+    )
+    .returning({ id: schema.feedOrigins.id });
+  await db
+    .insert(schema.feedOriginRss)
+    .values(origins.map((origin) => ({ originId: origin.id })));
   return created;
 }
 
@@ -383,13 +389,20 @@ export async function addArticlePublicationOrigin(
       .update(schema.feeds)
       .set({ siteUrl, name: "My renamed Feed", isActive: options.active })
       .where(eq(schema.feeds.id, feed.id));
-    await db.insert(schema.feedOrigins).values({
-      feedId: feed.id,
-      userId: feed.userId,
-      kind: "atproto",
-      locator: publicationUri,
-      sourceName: "Published name",
-      nextFetchAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    const [origin] = await db
+      .insert(schema.feedOrigins)
+      .values({
+        feedId: feed.id,
+        userId: feed.userId,
+        kind: "atproto",
+        locator: publicationUri,
+        sourceName: "Published name",
+        nextFetchAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: schema.feedOrigins.id });
+    await db.insert(schema.feedOriginAtproto).values({
+      originId: origin!.id,
+      publicationDid: publicationUri.split("/")[2]!,
     });
     return { publicationUri, siteUrl };
   } finally {
@@ -1420,7 +1433,7 @@ export async function seedYouTubeVideoData(
     title: "Test YouTube Video",
     author: "Test Channel",
     url: originalUrl,
-    thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbnail: `http://localhost:${appPort}/icon-192.png`,
     content: "",
     contentSnippet: "Test YouTube video",
     contentType: "video",

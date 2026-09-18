@@ -92,6 +92,9 @@ async function seedFeeds(input: {
       .insert(feedOrigins)
       .values(originRows.slice(start, start + 200));
   }
+  await session.baseClient.execute(
+    "INSERT INTO serial_feed_origin_rss (origin_id) SELECT id FROM serial_feed_origin WHERE kind = 'rss' AND id NOT IN (SELECT origin_id FROM serial_feed_origin_rss)",
+  );
   return inserted;
 }
 
@@ -111,6 +114,9 @@ describe("due origin page bounds", () => {
         locator: `at://did:plc:alice/site.standard.publication/${id}`,
         nextFetchAt: PAST,
       })),
+    );
+    await session.baseClient.execute(
+      "INSERT INTO serial_feed_origin_atproto (origin_id, publication_did) SELECT id, 'did:plc:alice' FROM serial_feed_origin WHERE kind = 'atproto' AND id NOT IN (SELECT origin_id FROM serial_feed_origin_atproto)",
     );
     expect(await countDueFeeds(session.database, "due-user", NOW)).toBe(51);
     session.instrumentation.reset();

@@ -11,7 +11,13 @@ import {
 } from "drizzle-orm";
 import type { db as Database } from "~/server/db";
 import type { FetchableOrigin } from "./types";
-import { feedOrigins, feeds } from "~/server/db/schema";
+import { hydrateOrigin, originSelection } from "~/server/feeds/origins";
+import {
+  feedOriginAtproto,
+  feedOriginRss,
+  feedOrigins,
+  feeds,
+} from "~/server/db/schema";
 
 export const RSS_FEED_PAGE_SIZE = 50;
 
@@ -61,10 +67,12 @@ export async function getDueFeedPage(
     .groupBy(feedOrigins.feedId)
     .orderBy(asc(feedOrigins.feedId))
     .limit(RSS_FEED_PAGE_SIZE);
-  return database
-    .select({ origin: feedOrigins, feed: feeds })
+  const rows = await database
+    .select({ ...originSelection, feed: feeds })
     .from(feedOrigins)
     .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+    .leftJoin(feedOriginRss, eq(feedOriginRss.originId, feedOrigins.id))
+    .leftJoin(feedOriginAtproto, eq(feedOriginAtproto.originId, feedOrigins.id))
     .where(
       and(
         dueOriginCondition(input.userId, input.now),
@@ -73,4 +81,5 @@ export async function getDueFeedPage(
     )
     .orderBy(asc(feedOrigins.feedId), asc(feedOrigins.id))
     .all();
+  return rows.map((row) => ({ feed: row.feed, origin: hydrateOrigin(row) }));
 }

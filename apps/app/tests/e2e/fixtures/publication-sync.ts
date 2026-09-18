@@ -97,12 +97,19 @@ export async function seedLocalPublication(
       })
       .returning();
     if (!feed) throw new Error("Feed insert failed");
-    await db.insert(schema.feedOrigins).values({
-      userId,
-      feedId: feed.id,
-      kind: "atproto",
-      locator: publication.uri,
-      nextFetchAt: new Date("2099-01-01"),
+    const [origin] = await db
+      .insert(schema.feedOrigins)
+      .values({
+        userId,
+        feedId: feed.id,
+        kind: "atproto",
+        locator: publication.uri,
+        nextFetchAt: new Date("2099-01-01"),
+      })
+      .returning({ id: schema.feedOrigins.id });
+    await db.insert(schema.feedOriginAtproto).values({
+      originId: origin!.id,
+      publicationDid: publication.uri.split("/")[2]!,
     });
     return feed;
   });

@@ -1245,158 +1245,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "serial_feed_document_record": {
-      "name": "serial_feed_document_record",
-      "columns": {
-        "origin_id": {
-          "name": "origin_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "uri": {
-          "name": "uri",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cid": {
-          "name": "cid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "feed_document_retry_idx": {
-          "name": "feed_document_retry_idx",
-          "columns": [
-            "origin_id",
-            "status",
-            "uri"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "serial_feed_document_record_origin_id_serial_feed_origin_id_fk": {
-          "name": "serial_feed_document_record_origin_id_serial_feed_origin_id_fk",
-          "tableFrom": "serial_feed_document_record",
-          "tableTo": "serial_feed_origin",
-          "columnsFrom": [
-            "origin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "serial_feed_document_record_origin_id_uri_pk": {
-          "columns": [
-            "origin_id",
-            "uri"
-          ],
-          "name": "serial_feed_document_record_origin_id_uri_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "serial_feed_ingest_state": {
-      "name": "serial_feed_ingest_state",
-      "columns": {
-        "origin_id": {
-          "name": "origin_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cursor": {
-          "name": "cursor",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "boundary": {
-          "name": "boundary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "newest_rkey": {
-          "name": "newest_rkey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pending_rev": {
-          "name": "pending_rev",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "retry_cursor": {
-          "name": "retry_cursor",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "initial_count": {
-          "name": "initial_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "initialized": {
-          "name": "initialized",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "serial_feed_ingest_state_origin_id_serial_feed_origin_id_fk": {
-          "name": "serial_feed_ingest_state_origin_id_serial_feed_origin_id_fk",
-          "tableFrom": "serial_feed_ingest_state",
-          "tableTo": "serial_feed_origin",
-          "columnsFrom": [
-            "origin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "serial_feed_item_alias": {
       "name": "serial_feed_item_alias",
       "columns": {
@@ -1521,89 +1369,6 @@
           "name": "serial_feed_item_observation_item_id_kind_pk"
         }
       },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "serial_feed_item_page_image": {
-      "name": "serial_feed_item_page_image",
-      "columns": {
-        "item_id": {
-          "name": "item_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "feed_id": {
-          "name": "feed_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "page_url": {
-          "name": "page_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "image_url": {
-          "name": "image_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "next_check_at": {
-          "name": "next_check_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "0"
-        }
-      },
-      "indexes": {
-        "feed_item_page_image_due_idx": {
-          "name": "feed_item_page_image_due_idx",
-          "columns": [
-            "feed_id",
-            "next_check_at",
-            "item_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "serial_feed_item_page_image_item_id_serial_feed_item_id_fk": {
-          "name": "serial_feed_item_page_image_item_id_serial_feed_item_id_fk",
-          "tableFrom": "serial_feed_item_page_image",
-          "tableTo": "serial_feed_item",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "serial_feed_item_page_image_feed_id_serial_feed_id_fk": {
-          "name": "serial_feed_item_page_image_feed_id_serial_feed_id_fk",
-          "tableFrom": "serial_feed_item_page_image",
-          "tableTo": "serial_feed",
-          "columnsFrom": [
-            "feed_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -1923,20 +1688,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "etag": {
-          "name": "etag",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_modified_header": {
-          "name": "last_modified_header",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "last_fetched_at": {
           "name": "last_fetched_at",
           "type": "integer",
@@ -1947,34 +1698,6 @@
         "next_fetch_at": {
           "name": "next_fetch_at",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "repo_rev": {
-          "name": "repo_rev",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "publication_did": {
-          "name": "publication_did",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "publication_rkey": {
-          "name": "publication_rkey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pds_url": {
-          "name": "pds_url",
-          "type": "text(512)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1995,13 +1718,6 @@
         },
         "source_description": {
           "name": "source_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "alternate_locators": {
-          "name": "alternate_locators",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -3351,6 +3067,239 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "serial_feed_origin_atproto": {
+      "name": "serial_feed_origin_atproto",
+      "columns": {
+        "origin_id": {
+          "name": "origin_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "publication_did": {
+          "name": "publication_did",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "repo_rev": {
+          "name": "repo_rev",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "listing_etag": {
+          "name": "listing_etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cursor": {
+          "name": "cursor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "boundary": {
+          "name": "boundary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "newest_rkey": {
+          "name": "newest_rkey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pending_rev": {
+          "name": "pending_rev",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "retry_cursor": {
+          "name": "retry_cursor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "initial_count": {
+          "name": "initial_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "initialized": {
+          "name": "initialized",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "feed_origin_atproto_publication_did_idx": {
+          "name": "feed_origin_atproto_publication_did_idx",
+          "columns": [
+            "publication_did"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "serial_feed_origin_atproto_origin_id_serial_feed_origin_id_fk": {
+          "name": "serial_feed_origin_atproto_origin_id_serial_feed_origin_id_fk",
+          "tableFrom": "serial_feed_origin_atproto",
+          "tableTo": "serial_feed_origin",
+          "columnsFrom": [
+            "origin_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "serial_feed_origin_rss": {
+      "name": "serial_feed_origin_rss",
+      "columns": {
+        "origin_id": {
+          "name": "origin_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "etag": {
+          "name": "etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_modified_header": {
+          "name": "last_modified_header",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "alternate_locators": {
+          "name": "alternate_locators",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "serial_feed_origin_rss_origin_id_serial_feed_origin_id_fk": {
+          "name": "serial_feed_origin_rss_origin_id_serial_feed_origin_id_fk",
+          "tableFrom": "serial_feed_origin_rss",
+          "tableTo": "serial_feed_origin",
+          "columnsFrom": [
+            "origin_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "serial_feed_origin_atproto_document": {
+      "name": "serial_feed_origin_atproto_document",
+      "columns": {
+        "origin_id": {
+          "name": "origin_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "uri": {
+          "name": "uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cid": {
+          "name": "cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "feed_origin_atproto_document_retry_idx": {
+          "name": "feed_origin_atproto_document_retry_idx",
+          "columns": [
+            "origin_id",
+            "status",
+            "uri"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "serial_feed_origin_atproto_document_origin_id_serial_feed_origin_atproto_origin_id_fk": {
+          "name": "serial_feed_origin_atproto_document_origin_id_serial_feed_origin_atproto_origin_id_fk",
+          "tableFrom": "serial_feed_origin_atproto_document",
+          "tableTo": "serial_feed_origin_atproto",
+          "columnsFrom": [
+            "origin_id"
+          ],
+          "columnsTo": [
+            "origin_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "serial_feed_origin_atproto_document_origin_id_uri_pk": {
+          "columns": [
+            "origin_id",
+            "uri"
+          ],
+          "name": "serial_feed_origin_atproto_document_origin_id_uri_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     }

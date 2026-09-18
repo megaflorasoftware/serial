@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as FeedOrigins from "~/server/feeds/origins";
 import { addExtensionFeed } from "~/app/api.extension.feeds";
 import { authenticatedExtensionUser } from "~/server/auth/extensionRequest";
+import { withOrigins } from "~/server/feeds/origins";
 import { createFeedsForUser } from "~/server/feeds/create";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
@@ -8,6 +10,12 @@ vi.mock("~/server/auth/extensionRequest", () => ({
   authenticatedExtensionUser: vi.fn(),
 }));
 vi.mock("~/server/feeds/create", () => ({ createFeedsForUser: vi.fn() }));
+vi.mock("~/server/feeds/origins", async (original) => ({
+  ...(await original<typeof FeedOrigins>()),
+  withOrigins: vi.fn((_database: unknown, feeds: unknown[]) =>
+    Promise.resolve(feeds),
+  ),
+}));
 vi.mock("~/server/rss/fetchFeeds", () => ({
   fetchAndInsertFeedData: vi.fn(),
 }));
@@ -33,6 +41,7 @@ describe("extension Feed HTTP contract", () => {
   beforeEach(() => {
     vi.mocked(authenticatedExtensionUser).mockReset();
     vi.mocked(createFeedsForUser).mockReset();
+    vi.mocked(withOrigins).mockClear();
     vi.mocked(fetchAndInsertFeedData).mockReset();
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
@@ -86,6 +95,10 @@ describe("extension Feed HTTP contract", () => {
           origin: expect.objectContaining({ id: 10 }),
         }),
       ],
+    );
+    expect(withOrigins).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ id: 1 })]),
     );
     expect(ingestionCompleted).toBe(true);
   });

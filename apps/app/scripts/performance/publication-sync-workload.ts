@@ -7,6 +7,7 @@ import {
   user,
 } from "../../src/server/db/schema";
 import type { db as Database } from "../../src/server/db";
+import { feedOriginAtproto } from "~/server/db/schema";
 
 export async function createPublicationSyncWorkload(
   database: typeof Database,
@@ -48,12 +49,21 @@ export async function createPublicationSyncWorkload(
       .returning({ id: feeds.id });
     const publicationUri = (id: number) =>
       `at://${did}/site.standard.publication/${id}`;
-    await database.insert(feedOrigins).values(
-      rows.map((row) => ({
-        userId,
-        feedId: row.id,
-        kind: "atproto",
-        locator: publicationUri(row.id),
+    const originRows = await database
+      .insert(feedOrigins)
+      .values(
+        rows.map((row) => ({
+          userId,
+          feedId: row.id,
+          kind: "atproto",
+          locator: publicationUri(row.id),
+        })),
+      )
+      .returning({ id: feedOrigins.id });
+    await database.insert(feedOriginAtproto).values(
+      originRows.map((origin) => ({
+        originId: origin.id,
+        publicationDid: did,
       })),
     );
     await database.insert(atprotoSubscriptionMirror).values(

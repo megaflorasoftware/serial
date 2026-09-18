@@ -1,12 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { runDatabaseWrite } from "../db/retry-write";
-import {
-  feedItemAliases,
-  feedItemObservations,
-  feedItemPageImages,
-  feedItems,
-} from "../db/schema";
+import { feedItemAliases, feedItemObservations, feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { composeItem, legacyObservation } from "./itemObservation";
 import { computeItemHash } from "./hash";
@@ -76,15 +71,8 @@ export async function writeObservedItems(
           // Separate indexed branches avoid scanning the Feed for an OR predicate.
           const selectMatches = (condition: ReturnType<typeof inArray>) =>
             tx
-              .select({
-                ...getTableColumns(feedItems),
-                pageImage: feedItemPageImages,
-              })
+              .select()
               .from(feedItems)
-              .leftJoin(
-                feedItemPageImages,
-                eq(feedItemPageImages.itemId, feedItems.id),
-              )
               .where(and(eq(feedItems.feedId, feed.id), condition));
           let matches = selectMatches(inArray(feedItems.url, locators))
             .union(selectMatches(inArray(feedItems.normalizedUrl, locators)))
@@ -97,11 +85,7 @@ export async function writeObservedItems(
             matches = matches.union(
               selectMatches(inArray(feedItems.atprotoUri, atprotoUris)),
             );
-          const matchedRows = await matches;
-          const existing = matchedRows.map(({ pageImage, ...item }) => {
-            void pageImage;
-            return item;
-          });
+          const existing = await matches;
           const ids = existing.map((item) => item.id);
           const persistedIds = new Set(ids);
           const observations = ids.length
@@ -110,15 +94,6 @@ export async function writeObservedItems(
                 .from(feedItemObservations)
                 .where(inArray(feedItemObservations.itemId, ids))
             : [];
-          const images = new Map(
-            matchedRows.flatMap((row) =>
-              row.pageImage ? [[row.id, row.pageImage] as const] : [],
-            ),
-          );
-          const imageWrites = new Map<
-            string,
-            typeof feedItemPageImages.$inferInsert
-          >();
           const rows = new Map(existing.map((item) => [item.id, item]));
           const sources = new Map<string, Sources>();
           for (const observation of observations) {
@@ -173,13 +148,10 @@ export async function writeObservedItems(
               replacements.set(otherId, id);
               removedItemIds.push(otherId);
               changed.delete(otherId);
-              imageWrites.delete(otherId);
               touched.delete(otherId);
               rows.delete(otherId);
               sources.delete(otherId);
             }
-            const previousExplicitImage =
-              values.atproto?.thumbnail || values.rss?.thumbnail;
             values[observation.kind] =
               observation.kind === "rss" &&
               !Number.isFinite(new Date(observation.publishedAt).getTime())
@@ -196,31 +168,7 @@ export async function writeObservedItems(
                 : observation;
             sources.set(id, values);
             touched.add(id);
-            const pageUrl = composeItem(values.rss, values.atproto).url;
-            const image = images.get(id);
-            const validImage =
-              image?.pageUrl === pageUrl ? image.imageUrl : null;
-            const composed = composeItem(
-              values.rss,
-              values.atproto,
-              validImage,
-            );
-            if (
-              !image ||
-              image.pageUrl !== pageUrl ||
-              (previousExplicitImage &&
-                !(values.atproto?.thumbnail || values.rss?.thumbnail))
-            ) {
-              const state = {
-                itemId: id,
-                feedId: feed.id,
-                pageUrl,
-                imageUrl: validImage,
-                nextCheckAt: new Date(0),
-              };
-              images.set(id, state);
-              imageWrites.set(id, state);
-            }
+            const composed = composeItem(values.rss, values.atproto);
             const value = {
               ...row,
               ...composed,
@@ -312,21 +260,6 @@ export async function writeObservedItems(
               })
               .returning();
             written.push(...batch);
-          }
-          const imageChanges = [...imageWrites.values()];
-          for (let offset = 0; offset < imageChanges.length; offset += 100) {
-            // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            await tx
-              .insert(feedItemPageImages)
-              .values(imageChanges.slice(offset, offset + 100))
-              .onConflictDoUpdate({
-                target: feedItemPageImages.itemId,
-                set: {
-                  pageUrl: sql`excluded.page_url`,
-                  imageUrl: sql`excluded.image_url`,
-                  nextCheckAt: sql`excluded.next_check_at`,
-                },
-              });
           }
           const previousSnapshots = new Map(
             observations.map((entry) => [

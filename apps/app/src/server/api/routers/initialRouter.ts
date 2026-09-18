@@ -39,7 +39,11 @@ import {
 } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import { getFeedRssUrl } from "~/lib/feeds/origins";
-import { fetchableOriginsOf, findFeedsByRssUrls } from "~/server/feeds/origins";
+import {
+  fetchableOriginsOf,
+  findFeedsByRssUrls,
+  withOrigins,
+} from "~/server/feeds/origins";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import {
@@ -992,7 +996,9 @@ export const streamingImport = protectedProcedure
       const fetchPromise = (async () => {
         for await (const feedResult of fetchAndInsertFeedData(
           context,
-          fetchableOriginsOf([insertedFeed.feed]),
+          fetchableOriginsOf(
+            await withOrigins(context.db, [insertedFeed.feed]),
+          ),
         )) {
           chunks.push({
             type: "feed-status",

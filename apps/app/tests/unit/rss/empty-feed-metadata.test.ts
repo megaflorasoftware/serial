@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
-import { feedOrigins, feeds, user } from "~/server/db/schema";
+import { insertFeedWithOrigins } from "~/server/feeds/origins";
+import { feedOriginRss, feedOrigins, feeds, user } from "~/server/db/schema";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import { fetchWebsiteFeedData } from "~/server/rss/parsers/website";
 import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
@@ -51,26 +52,17 @@ async function reader(id: string) {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  const [feed] = await fixture.database
-    .insert(feeds)
-    .values({
-      userId: id,
+  const feed = await insertFeedWithOrigins(fixture.database, {
+    userId: id,
+    isActive: true,
+    details: {
       name: "Old",
       imageUrl: "",
       platform: "website",
-      isActive: true,
-    })
-    .returning();
-  const [origin] = await fixture.database
-    .insert(feedOrigins)
-    .values({
-      userId: id,
-      feedId: feed!.id,
-      kind: "rss",
-      locator: "https://example.com/feed",
-    })
-    .returning();
-  return { feed: feed!, origin: origin! };
+      origins: [{ kind: "rss", locator: "https://example.com/feed" }],
+    },
+  });
+  return { feed, origin: feed.origins[0]! };
 }
 
 it("refreshes metadata and reports invalidation for live and cached empty feeds", async () => {
@@ -104,7 +96,7 @@ it("refreshes metadata and reports invalidation for live and cached empty feeds"
     { name: "New title", imageUrl: "https://example.com/icon.png" },
     { name: "New title", imageUrl: "https://example.com/icon.png" },
   ]);
-  expect(await fixture.database.select().from(feedOrigins)).toMatchObject([
+  expect(await fixture.database.select().from(feedOriginRss)).toMatchObject([
     { etag: "new" },
     { etag: "new" },
   ]);

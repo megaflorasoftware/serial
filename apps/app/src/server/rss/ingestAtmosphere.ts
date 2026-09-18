@@ -13,10 +13,12 @@ import {
 } from "@serial/standard-site";
 import { runDatabaseWrite } from "../db/retry-write";
 import {
-  feedDocumentRecords,
-  feedIngestState,
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
   feedOrigins,
 } from "../db/schema";
+import { enrichObservationImages } from "./observationImages";
+import { readFeedHttp } from "./feedHttp";
 import {
   createPublicationClient,
   MissingPublicationRecordError,
@@ -52,52 +54,41 @@ export async function ingestAtmosphere(
   database: typeof db,
   fetchable: FetchableOrigin,
   client: PublicationClient = createPublicationClient(),
+  readPage: typeof readFeedHttp = readFeedHttp,
 ) {
   const { origin, feed } = fetchable;
   const publicationUri = parsePublicationUri(origin.locator);
   if (!publicationUri) throw new Error("Invalid publication URI");
   const now = new Date();
-  const [saved, rev] = await Promise.all([
-    dbSemaphore.run(() =>
-      database
-        .select()
-        .from(feedIngestState)
-        .where(eq(feedIngestState.originId, origin.id))
-        .get(),
-    ),
-    client.latestRev(publicationUri.did),
-  ]);
-  const state = saved ?? {
-    originId: origin.id,
-    cursor: null,
-    boundary: null,
-    newestRkey: null,
-    pendingRev: null,
-    retryCursor: null,
-    initialCount: 0,
-    initialized: false,
-  };
+  if (!origin.atproto) throw new Error("Missing AT Protocol origin details");
+  const state = { ...origin.atproto };
+  const rev = await client.latestRev(publicationUri.did);
   const retryWhere = and(
-    eq(feedDocumentRecords.originId, origin.id),
-    eq(feedDocumentRecords.status, "retry"),
+    eq(feedOriginAtprotoDocuments.originId, origin.id),
+    eq(feedOriginAtprotoDocuments.status, "retry"),
   );
   const retries = await dbSemaphore.run(async () => {
     const afterCursor = await database
       .select()
-      .from(feedDocumentRecords)
+      .from(feedOriginAtprotoDocuments)
       .where(
         state.retryCursor
-          ? and(retryWhere, gt(feedDocumentRecords.uri, state.retryCursor))
+          ? and(
+              retryWhere,
+              gt(feedOriginAtprotoDocuments.uri, state.retryCursor),
+            )
           : retryWhere,
       )
-      .orderBy(asc(feedDocumentRecords.uri))
+      .orderBy(asc(feedOriginAtprotoDocuments.uri))
       .limit(100);
     if (!state.retryCursor || afterCursor.length === 100) return afterCursor;
     const wrapped = await database
       .select()
-      .from(feedDocumentRecords)
-      .where(and(retryWhere, lte(feedDocumentRecords.uri, state.retryCursor)))
-      .orderBy(asc(feedDocumentRecords.uri))
+      .from(feedOriginAtprotoDocuments)
+      .where(
+        and(retryWhere, lte(feedOriginAtprotoDocuments.uri, state.retryCursor)),
+      )
+      .orderBy(asc(feedOriginAtprotoDocuments.uri))
       .limit(100 - afterCursor.length);
     return [...afterCursor, ...wrapped];
   });
@@ -107,7 +98,7 @@ export async function ingestAtmosphere(
     !state.cursor &&
     !retries.length &&
     rev &&
-    rev === origin.repoRev
+    rev === origin.atproto.repoRev
   ) {
     await runDatabaseWrite(database, () =>
       database
@@ -136,13 +127,12 @@ export async function ingestAtmosphere(
       : null,
     description: publication.value.description,
     siteUrl: publication.value.url,
-    pdsUrl: await client.resolvePds(publicationUri.did),
   });
   const items = new Map<string, ApplicationFeedItem>();
   const removedItemIds = new Set<string>();
   let failed = false;
   let processedDocuments = 0;
-  let firstEtag = origin.etag;
+  let firstEtag = origin.atproto.listingEtag;
   const continuing = Boolean(state.cursor);
   const previousNewest = state.newestRkey;
   if (!continuing) {
@@ -167,12 +157,12 @@ export async function ingestAtmosphere(
     const existing = envelopes.length
       ? await database
           .select()
-          .from(feedDocumentRecords)
+          .from(feedOriginAtprotoDocuments)
           .where(
             and(
-              eq(feedDocumentRecords.originId, origin.id),
+              eq(feedOriginAtprotoDocuments.originId, origin.id),
               inArray(
-                feedDocumentRecords.uri,
+                feedOriginAtprotoDocuments.uri,
                 envelopes.map((record) => record.uri),
               ),
             ),
@@ -180,7 +170,7 @@ export async function ingestAtmosphere(
       : [];
     const known = new Map(existing.map((record) => [record.uri, record]));
     let initialCount = state.initialCount;
-    const statuses: Array<typeof feedDocumentRecords.$inferInsert> = [];
+    const statuses: Array<typeof feedOriginAtprotoDocuments.$inferInsert> = [];
     const candidates = envelopes.filter((record) => {
       const old = known.get(record.uri);
       if (
@@ -298,7 +288,11 @@ export async function ingestAtmosphere(
     observations.sort(
       (a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
     );
-    const written = await writeObservedItems(database, feed, observations);
+    const written = await writeObservedItems(
+      database,
+      feed,
+      await enrichObservationImages(observations, readPage),
+    );
     for (const id of written.removedItemIds) {
       removedItemIds.add(id);
       items.delete(id);
@@ -308,19 +302,19 @@ export async function ingestAtmosphere(
       await runDatabaseWrite(database, () =>
         database.transaction(async (tx) => {
           await tx
-            .insert(feedDocumentRecords)
+            .insert(feedOriginAtprotoDocuments)
             .values(statuses)
             .onConflictDoUpdate({
-              target: [feedDocumentRecords.originId, feedDocumentRecords.uri],
+              target: [
+                feedOriginAtprotoDocuments.originId,
+                feedOriginAtprotoDocuments.uri,
+              ],
               set: { cid: sql`excluded.cid`, status: sql`excluded.status` },
             });
           await tx
-            .insert(feedIngestState)
-            .values({ ...state, initialCount })
-            .onConflictDoUpdate({
-              target: feedIngestState.originId,
-              set: { ...state, initialCount },
-            });
+            .update(feedOriginAtproto)
+            .set({ ...state, initialCount })
+            .where(eq(feedOriginAtproto.originId, origin.id));
         }),
       );
       state.initialCount = initialCount;
@@ -333,12 +327,12 @@ export async function ingestAtmosphere(
   async function retireRetry(uri: string, message: string) {
     await runDatabaseWrite(database, () =>
       database
-        .update(feedDocumentRecords)
+        .update(feedOriginAtprotoDocuments)
         .set({ status: "invalid" })
         .where(
           and(
-            eq(feedDocumentRecords.originId, origin.id),
-            eq(feedDocumentRecords.uri, uri),
+            eq(feedOriginAtprotoDocuments.originId, origin.id),
+            eq(feedOriginAtprotoDocuments.uri, uri),
           ),
         ),
     );
@@ -393,7 +387,7 @@ export async function ingestAtmosphere(
           !continuing &&
           !retries.length &&
           !publicationChanged
-          ? origin.etag
+          ? origin.atproto.listingEtag
           : null,
       );
       if (pageIndex === 0) firstEtag = page.etag;
@@ -432,9 +426,9 @@ export async function ingestAtmosphere(
       state.cursor = cursor;
       await runDatabaseWrite(database, () =>
         database
-          .insert(feedIngestState)
-          .values(state)
-          .onConflictDoUpdate({ target: feedIngestState.originId, set: state }),
+          .update(feedOriginAtproto)
+          .set(state)
+          .where(eq(feedOriginAtproto.originId, origin.id)),
       );
       if (complete) break;
     }
@@ -447,12 +441,12 @@ export async function ingestAtmosphere(
   }
   // Do not claim a repo revision until both the scan and all retries are complete.
   const pendingRetry = await database
-    .select({ uri: feedDocumentRecords.uri })
-    .from(feedDocumentRecords)
+    .select({ uri: feedOriginAtprotoDocuments.uri })
+    .from(feedOriginAtprotoDocuments)
     .where(
       and(
-        eq(feedDocumentRecords.originId, origin.id),
-        eq(feedDocumentRecords.status, "retry"),
+        eq(feedOriginAtprotoDocuments.originId, origin.id),
+        eq(feedOriginAtprotoDocuments.status, "retry"),
       ),
     )
     .limit(1);
@@ -463,19 +457,22 @@ export async function ingestAtmosphere(
     state.boundary = null;
   }
   // A cycle resumed from a cursor records only the revision from its first page.
-  const completedRev = complete && !failed ? state.pendingRev : origin.repoRev;
+  const completedRev =
+    complete && !failed ? state.pendingRev : origin.atproto.repoRev;
   if (!complete && !state.newestRkey) state.newestRkey = previousNewest;
   await runDatabaseWrite(database, () =>
     database.transaction(async (tx) => {
       await tx
-        .insert(feedIngestState)
-        .values(state)
-        .onConflictDoUpdate({ target: feedIngestState.originId, set: state });
+        .update(feedOriginAtproto)
+        .set({
+          ...state,
+          repoRev: completedRev,
+          listingEtag: complete && !failed ? firstEtag : null,
+        })
+        .where(eq(feedOriginAtproto.originId, origin.id));
       await tx
         .update(feedOrigins)
         .set({
-          repoRev: completedRev,
-          etag: complete && !failed ? firstEtag : null,
           lastFetchedAt: now,
           nextFetchAt: failed
             ? new Date(now.getTime() + 3_600_000)

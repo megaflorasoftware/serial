@@ -6,6 +6,7 @@ import {
 import { feedOrigins, feeds, user } from "../../src/server/db/schema";
 import { newRssFeedDetails } from "../../src/server/rss/types";
 import type { db as Database } from "../../src/server/db";
+import { feedOriginAtproto } from "~/server/db/schema";
 
 /** Measure verified attachment among unrelated owned Feeds, with deterministic source evidence. */
 export async function createFeedImportWorkload(
@@ -40,12 +41,21 @@ export async function createFeedImportWorkload(
       .returning({ id: feeds.id, siteUrl: feeds.siteUrl });
     // Origin rows depend on the generated Feed IDs from this batch.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    await database.insert(feedOrigins).values(
-      rows.map((row) => ({
-        feedId: row.id,
-        userId,
-        kind: "atproto",
-        locator: `at://did:plc:example/site.standard.publication/${row.id}`,
+    const originRows = await database
+      .insert(feedOrigins)
+      .values(
+        rows.map((row) => ({
+          feedId: row.id,
+          userId,
+          kind: "atproto",
+          locator: `at://did:plc:example/site.standard.publication/${row.id}`,
+        })),
+      )
+      .returning({ id: feedOrigins.id });
+    await database.insert(feedOriginAtproto).values(
+      originRows.map((origin) => ({
+        originId: origin.id,
+        publicationDid: "did:plc:example",
       })),
     );
     targetId ||=

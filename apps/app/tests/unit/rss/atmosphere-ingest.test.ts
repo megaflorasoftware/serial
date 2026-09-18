@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type { HydratedFeedOrigin } from "~/server/db/schema";
 import type { ItemObservation } from "~/server/rss/itemObservation";
 import type { PublicationClient } from "~/server/rss/atprotoClient";
+import {
+  insertFeedWithOrigins,
+  loadOriginsForFeeds,
+} from "~/server/feeds/origins";
 import {
   createPublicationClient,
   MissingPublicationRecordError,
 } from "~/server/rss/atprotoClient";
 import {
-  feedDocumentRecords,
-  feedIngestState,
   feedItems,
-  feedOrigins,
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
   feeds,
   user,
 } from "~/server/db/schema";
@@ -32,7 +36,7 @@ const uri = (rkey: string) => `at://${DID}/site.standard.document/${rkey}`;
 const DATE = "2026-09-15T12:00:00Z";
 let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 let feed: typeof feeds.$inferSelect;
-let origin: typeof feedOrigins.$inferSelect;
+let origin: HydratedFeedOrigin;
 beforeEach(async () => {
   fixture = await createBookmarkTestDatabase();
   await fixture.database.insert(user).values({
@@ -43,25 +47,18 @@ beforeEach(async () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  [feed] = (await fixture.database
-    .insert(feeds)
-    .values({
-      userId: "reader",
+  const created = await insertFeedWithOrigins(fixture.database, {
+    userId: "reader",
+    isActive: true,
+    details: {
       name: "Feed",
       platform: "website",
       imageUrl: "",
-      isActive: true,
-    })
-    .returning()) as [typeof feed];
-  [origin] = (await fixture.database
-    .insert(feedOrigins)
-    .values({
-      feedId: feed.id,
-      userId: "reader",
-      kind: "atproto",
-      locator: PUB,
-    })
-    .returning()) as [typeof origin];
+      origins: [{ kind: "atproto", locator: PUB }],
+    },
+  });
+  feed = created;
+  origin = created.origins[0]!;
 });
 afterEach(() => fixture.cleanup());
 
@@ -153,17 +150,20 @@ function client(records: unknown[] = []): PublicationClient {
   };
 }
 async function refresh(remote: PublicationClient) {
-  origin = (await fixture.database
-    .select()
-    .from(feedOrigins)
-    .where(eq(feedOrigins.id, origin.id))
-    .get())!;
+  origin = (await loadOriginsForFeeds(fixture.database, [feed.id]))[0]!;
   feed = (await fixture.database
     .select()
     .from(feeds)
     .where(eq(feeds.id, feed.id))
     .get())!;
-  return ingestAtmosphere(fixture.database, { feed, origin }, remote);
+  return ingestAtmosphere(
+    fixture.database,
+    { feed, origin },
+    remote,
+    async () => {
+      throw new Error("Page unavailable");
+    },
+  );
 }
 
 describe("composite Feed items", () => {
@@ -324,7 +324,7 @@ describe("Atmosphere polling", () => {
     expect((await refresh(remote)).status).toBe("error");
     expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
     expect(
-      await fixture.database.select().from(feedOrigins).get(),
+      await fixture.database.select().from(feedOriginAtproto).get(),
     ).toMatchObject({ repoRev: null });
     remote.list = vi.fn(async () => ({
       records: [record("003")],
@@ -341,8 +341,8 @@ describe("Atmosphere polling", () => {
     expect(
       await fixture.database
         .select()
-        .from(feedDocumentRecords)
-        .where(eq(feedDocumentRecords.status, "retry")),
+        .from(feedOriginAtprotoDocuments)
+        .where(eq(feedOriginAtprotoDocuments.status, "retry")),
     ).toHaveLength(0);
   });
   it("retains a renamed Feed and does not use plaintext as its article body", async () => {
@@ -377,7 +377,7 @@ describe("Atmosphere polling", () => {
     await refresh(remote);
     expect(remote.list).toHaveBeenCalledTimes(10);
     expect(
-      await fixture.database.select().from(feedIngestState).get(),
+      await fixture.database.select().from(feedOriginAtproto).get(),
     ).toMatchObject({ cursor: "10", initialized: false });
     await refresh(remote);
     expect(remote.list).toHaveBeenNthCalledWith(12, DID, "10", null);
@@ -401,7 +401,9 @@ it("continues past a deleted boundary until it encounters a known document", asy
 
 it("stops retrying a deleted document while preserving its stored item", async () => {
   await refresh(client([record("001")]));
-  await fixture.database.update(feedDocumentRecords).set({ status: "retry" });
+  await fixture.database
+    .update(feedOriginAtprotoDocuments)
+    .set({ status: "retry" });
   const remote = client();
   const originalGet = remote.getRecord;
   remote.getRecord = vi.fn(async (key) => {
@@ -411,14 +413,16 @@ it("stops retrying a deleted document while preserving its stored item", async (
   expect((await refresh(remote)).status).toBe("empty");
   expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
   expect(
-    await fixture.database.select().from(feedDocumentRecords).get(),
+    await fixture.database.select().from(feedOriginAtprotoDocuments).get(),
   ).toMatchObject({ status: "invalid" });
   expect((await refresh(remote)).status).toBe("skipped");
 });
 
 it("stops retrying an invalid fetched envelope while preserving its stored item", async () => {
   await refresh(client([record("001")]));
-  await fixture.database.update(feedDocumentRecords).set({ status: "retry" });
+  await fixture.database
+    .update(feedOriginAtprotoDocuments)
+    .set({ status: "retry" });
   const remote = client([]);
   remote.getRecord = vi.fn(async (key) =>
     key === uri("001")
@@ -431,14 +435,16 @@ it("stops retrying an invalid fetched envelope while preserving its stored item"
   );
   expect((await refresh(remote)).status).toBe("empty");
   expect(
-    await fixture.database.select().from(feedDocumentRecords).get(),
+    await fixture.database.select().from(feedOriginAtprotoDocuments).get(),
   ).toMatchObject({ status: "invalid" });
   expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
 });
 
 it("retires a retry that moved to another publication", async () => {
   await refresh(client([record("001")]));
-  await fixture.database.update(feedDocumentRecords).set({ status: "retry" });
+  await fixture.database
+    .update(feedOriginAtprotoDocuments)
+    .set({ status: "retry" });
   const remote = client([]);
   remote.latestRev = vi.fn(async () => "rev2");
   const originalGet = remote.getRecord;
@@ -451,17 +457,17 @@ it("retires a retry that moved to another publication", async () => {
   );
   expect((await refresh(remote)).status).toBe("empty");
   expect(
-    await fixture.database.select().from(feedDocumentRecords).get(),
+    await fixture.database.select().from(feedOriginAtprotoDocuments).get(),
   ).toMatchObject({ status: "invalid" });
-  expect(await fixture.database.select().from(feedOrigins).get()).toMatchObject(
-    {
-      repoRev: "rev2",
-    },
-  );
+  expect(
+    await fixture.database.select().from(feedOriginAtproto).get(),
+  ).toMatchObject({
+    repoRev: "rev2",
+  });
 });
 
 it("rotates bounded retry batches so later records are not starved", async () => {
-  await fixture.database.insert(feedDocumentRecords).values(
+  await fixture.database.insert(feedOriginAtprotoDocuments).values(
     Array.from({ length: 101 }, (_, index) => {
       const rkey = String(index).padStart(3, "0");
       return {
@@ -486,11 +492,11 @@ it("rotates bounded retry batches so later records are not starved", async () =>
   expect(remote.getRecord).toHaveBeenCalledTimes(101);
   expect(remote.getRecord).toHaveBeenCalledWith(uri("100"));
   const plan = await fixture.client.execute({
-    sql: "EXPLAIN QUERY PLAN SELECT * FROM serial_feed_document_record WHERE origin_id = ? AND status = ? AND uri > ? ORDER BY uri LIMIT 100",
+    sql: "EXPLAIN QUERY PLAN SELECT * FROM serial_feed_origin_atproto_document WHERE origin_id = ? AND status = ? AND uri > ? ORDER BY uri LIMIT 100",
     args: [origin.id, "retry", uri("050")],
   });
   expect(plan.rows.map((row) => String(row.detail)).join("\n")).toContain(
-    "feed_document_retry_idx",
+    "feed_origin_atproto_document_retry_idx",
   );
 });
 
@@ -511,9 +517,9 @@ it("logs malformed listed-record envelopes without exposing their contents", asy
 it("omits an earlier retry result that a later listed document replaces", async () => {
   await refresh(client([record("002", { path: "/two" }), record("001")]));
   await fixture.database
-    .update(feedDocumentRecords)
+    .update(feedOriginAtprotoDocuments)
     .set({ status: "retry" })
-    .where(eq(feedDocumentRecords.uri, uri("001")));
+    .where(eq(feedOriginAtprotoDocuments.uri, uri("001")));
   const remote = client([
     { ...record("002", { path: "/shared" }), cid: "edited-two" },
   ]);
@@ -612,8 +618,8 @@ it("eventually completes documents that exceed the refresh reference budget", as
   expect(
     await fixture.database
       .select()
-      .from(feedDocumentRecords)
-      .where(eq(feedDocumentRecords.status, "retry")),
+      .from(feedOriginAtprotoDocuments)
+      .where(eq(feedOriginAtprotoDocuments.status, "retry")),
   ).toHaveLength(0);
 });
 
@@ -670,26 +676,18 @@ it("continues queued origin writes after a failed transaction", async () => {
 });
 
 it("commits items and bookkeeping for concurrent publication refreshes", async () => {
-  const [secondFeed] = await fixture.database
-    .insert(feeds)
-    .values({
-      userId: "reader",
+  const secondPublication = PUB + "2";
+  const secondFeed = await insertFeedWithOrigins(fixture.database, {
+    userId: "reader",
+    isActive: true,
+    details: {
       name: "Second",
       imageUrl: "",
       platform: "website",
-      isActive: true,
-    })
-    .returning();
-  const secondPublication = PUB + "2";
-  const [secondOrigin] = await fixture.database
-    .insert(feedOrigins)
-    .values({
-      userId: "reader",
-      feedId: secondFeed!.id,
-      kind: "atproto",
-      locator: secondPublication,
-    })
-    .returning();
+      origins: [{ kind: "atproto", locator: secondPublication }],
+    },
+  });
+  const secondOrigin = secondFeed.origins[0]!;
   const remote = client([record("001", { site: secondPublication })]);
   remote.getRecord = vi.fn(async () => ({
     uri: secondPublication,
@@ -700,8 +698,11 @@ it("commits items and bookkeeping for concurrent publication refreshes", async (
     refresh(client([record("001")])),
     ingestAtmosphere(
       fixture.database,
-      { feed: secondFeed!, origin: secondOrigin! },
+      { feed: secondFeed, origin: secondOrigin },
       remote,
+      async () => {
+        throw new Error("Page unavailable");
+      },
     ),
   ]);
   expect(results.map((result) => result.status)).toEqual([
@@ -709,14 +710,12 @@ it("commits items and bookkeeping for concurrent publication refreshes", async (
     "success",
   ]);
   expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
-  expect(await fixture.database.select().from(feedOrigins)).toMatchObject([
-    { repoRev: "rev1" },
-    { repoRev: "rev1" },
-  ]);
-  expect(await fixture.database.select().from(feedIngestState)).toMatchObject([
-    { initialized: true },
-    { initialized: true },
-  ]);
+  expect(await fixture.database.select().from(feedOriginAtproto)).toMatchObject(
+    [{ repoRev: "rev1" }, { repoRev: "rev1" }],
+  );
+  expect(await fixture.database.select().from(feedOriginAtproto)).toMatchObject(
+    [{ initialized: true }, { initialized: true }],
+  );
 });
 
 it("keeps remote database writers concurrent", async () => {

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { PublishedChunk } from "~/server/api/publisher";
+import { feedOriginRss, feedOrigins, feeds, user } from "~/server/db/schema";
 import { publisher } from "~/server/api/publisher";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
 import { emptyRefreshStats } from "~/server/rss/stats";
-import { feedOrigins, feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 
@@ -40,14 +40,20 @@ describe("background refresh delivery", () => {
       updatedAt: now,
       isActive: true,
     });
-    await testDatabase.database.insert(feedOrigins).values({
-      feedId: 7,
-      userId: "watching-user",
-      kind: "rss",
-      locator: "https://example.com/watching.xml",
-      createdAt: now,
-      updatedAt: now,
-    });
+    const [origin] = await testDatabase.database
+      .insert(feedOrigins)
+      .values({
+        feedId: 7,
+        userId: "watching-user",
+        kind: "rss",
+        locator: "https://example.com/watching.xml",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: feedOrigins.id });
+    await testDatabase.database
+      .insert(feedOriginRss)
+      .values({ originId: origin!.id });
 
     const controller = new AbortController();
     const received: PublishedChunk[] = [];

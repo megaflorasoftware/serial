@@ -22,12 +22,14 @@ describe("Atmosphere ingest resource bounds", () => {
         expect((await workload.run(false)).status).toBe("success");
         let evidence = session.instrumentation.snapshot();
         expect(workload.requests).toBe(4);
+        expect(workload.imageRequests).toBeLessThanOrEqual(16);
         expect(evidence.statementCount).toBeLessThanOrEqual(40);
         expect(evidence.materializedRows).toBeLessThanOrEqual(210);
         session.instrumentation.reset();
         expect((await workload.run(true)).status).toBe("success");
         evidence = session.instrumentation.snapshot();
         expect(workload.requests).toBe(3);
+        expect(workload.imageRequests).toBeLessThanOrEqual(8);
         const lookup = evidence.statements.find((entry) =>
           entry.sql.includes(" union "),
         );
@@ -47,6 +49,7 @@ describe("Atmosphere ingest resource bounds", () => {
         expect((await workload.run(false)).status).toBe("skipped");
         evidence = session.instrumentation.snapshot();
         expect(workload.requests).toBe(1);
+        expect(workload.imageRequests).toBe(0);
         expect(evidence.statementCount).toBeLessThanOrEqual(4);
         expect(evidence.materializedRows).toBeLessThanOrEqual(2);
       } finally {

@@ -22,9 +22,6 @@ const publication: OriginEvidence = {
   origin: {
     kind: "atproto",
     locator: "at://did:plc:example/site.standard.publication/one",
-    publicationDid: "did:plc:example",
-    publicationRkey: "one",
-    pdsUrl: "https://pds.example.com",
     sourceName: "Publication name",
     sourceImageUrl: "https://example.com/publication.png",
   },

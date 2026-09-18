@@ -11,6 +11,7 @@ import type { Server } from "node:http";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
 import {
   feedItems,
+  feedOriginRss,
   feedOrigins,
   feeds as feedTable,
   user,
@@ -167,12 +168,16 @@ function createMockDb(existingItems: unknown[] = []) {
     all: vi.fn(() => existingItems),
   };
 
+  const db = {
+    update: vi.fn(() => updateChain),
+    insert: vi.fn(() => insertChain),
+    select: vi.fn(() => selectChain),
+    transaction: vi.fn(
+      async (fn: (tx: unknown) => Promise<unknown>): Promise<unknown> => fn(db),
+    ),
+  };
   return {
-    db: {
-      update: vi.fn(() => updateChain),
-      insert: vi.fn(() => insertChain),
-      select: vi.fn(() => selectChain),
-    },
+    db,
     updateSetCalls,
     insertValuesCalls,
   };
@@ -196,7 +201,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
     expect(db.insert).toHaveBeenCalled();
     expect(insertValuesCalls.length).toBeGreaterThan(0);
 
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate.etag).toBe(ETAG_V1);
     expect(feedUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V1);
   });
@@ -218,7 +225,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
     expect(db.insert).not.toHaveBeenCalled();
     expect(insertValuesCalls).toHaveLength(0);
 
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "lastFetchedAt" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate).toHaveProperty("lastFetchedAt");
     expect(feedUpdate).toHaveProperty("nextFetchAt");
     expect(feedUpdate).not.toHaveProperty("etag");
@@ -244,7 +253,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
 
     // Mirror the etag-version assertions: update should bump fetch
     // bookkeeping but NOT overwrite the cached header fields.
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "lastFetchedAt" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate).toHaveProperty("lastFetchedAt");
     expect(feedUpdate).toHaveProperty("nextFetchAt");
     expect(feedUpdate).not.toHaveProperty("etag");
@@ -262,7 +273,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
       expect(result.status).toBe("success");
     }
 
-    const firstUpdate = updates1[0] as Record<string, unknown>;
+    const firstUpdate = updates1.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(firstUpdate.etag).toBe(ETAG_V1);
 
     // Second fetch with cached etag → 304
@@ -298,7 +311,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
     expect((insertValuesCalls[0] as unknown[]).length).toBe(14);
 
     // The feed update should overwrite the stale etag with the fresh one
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate.etag).toBe(ETAG_V1);
     expect(feedUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V1);
   });
@@ -324,7 +339,9 @@ describe("fetchAndInsertFeedData with content update", () => {
     // Should have inserted 14 items (old content)
     expect(inserts1).toHaveLength(1);
     expect((inserts1[0] as unknown[]).length).toBe(14);
-    const firstUpdate = updates1[0] as Record<string, unknown>;
+    const firstUpdate = updates1.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(firstUpdate.etag).toBe(ETAG_V1);
 
     // Capture the 14 items as "existing" DB state (only url + contentHash needed)
@@ -362,7 +379,9 @@ describe("fetchAndInsertFeedData with content update", () => {
     expect(newItem.url).toBe("https://www.youtube.com/watch?v=JSuS-zXMVwE");
 
     // Should store updated etag
-    const secondUpdate = updates2[0] as Record<string, unknown>;
+    const secondUpdate = updates2.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(secondUpdate.etag).toBe(ETAG_V2);
     expect(secondUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V2);
   });
@@ -388,7 +407,9 @@ describe("fetchAndInsertFeedData with content update", () => {
     ])) {
       expect(result.status).toBe("success");
     }
-    const update = updates2[0] as Record<string, unknown>;
+    const update = updates2.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(update.etag).toBe(ETAG_V2);
 
     // Now cache with new etag → 304
@@ -432,6 +453,7 @@ describe("fetchAndInsertFeedData content diffing", () => {
       });
       await fixture.database.insert(feedTable).values(feed.feed);
       await fixture.database.insert(feedOrigins).values(feed.origin);
+      await fixture.database.insert(feedOriginRss).values(feed.origin.rss!);
       const startedAt = Math.floor(Date.now() / 1000) * 1000;
       const refresh = async () => {
         const items = [];

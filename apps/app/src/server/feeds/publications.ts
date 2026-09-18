@@ -228,9 +228,6 @@ export function publicationOrigin(
   return {
     kind: "atproto",
     locator: publication.uri,
-    publicationDid: publication.did,
-    publicationRkey: publication.rkey,
-    pdsUrl: publication.pdsUrl,
     sourceName: publication.name,
     sourceImageUrl: publication.imageUrl,
     sourceDescription: publication.description,

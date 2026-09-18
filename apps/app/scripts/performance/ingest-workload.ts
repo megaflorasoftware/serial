@@ -1,7 +1,10 @@
-import { eq } from "drizzle-orm";
 import type { BenchmarkDatabase } from "./database";
 import type { PublicationClient } from "~/server/rss/atprotoClient";
-import { feedItems, feedOrigins, feeds, user } from "~/server/db/schema";
+import {
+  insertFeedWithOrigins,
+  loadOriginsForFeeds,
+} from "~/server/feeds/origins";
+import { feedItems, user } from "~/server/db/schema";
 import { ingestAtmosphere } from "~/server/rss/ingestAtmosphere";
 
 export async function createIngestWorkload(
@@ -17,32 +20,20 @@ export async function createIngestWorkload(
     createdAt: now,
     updatedAt: now,
   });
-  const feed = (
-    await database
-      .insert(feeds)
-      .values({
-        userId: "ingest-benchmark",
-        name: "Publication",
-        platform: "website",
-        siteUrl: "https://example.com",
-        imageUrl: "",
-        isActive: true,
-      })
-      .returning()
-  )[0]!;
   const publication = "at://did:plc:benchmark/site.standard.publication/site";
-  const origin = (
-    await database
-      .insert(feedOrigins)
-      .values({
-        feedId: feed.id,
-        userId: "ingest-benchmark",
-        kind: "atproto",
-        locator: publication,
-        sourceName: "Publication",
-      })
-      .returning()
-  )[0]!;
+  const feed = await insertFeedWithOrigins(database, {
+    userId: "ingest-benchmark",
+    isActive: true,
+    details: {
+      name: "Publication",
+      platform: "website",
+      siteUrl: "https://example.com",
+      imageUrl: "",
+      origins: [
+        { kind: "atproto", locator: publication, sourceName: "Publication" },
+      ],
+    },
+  });
   for (let start = 0; start < historySize; start += 100) {
     // Seed bounded batches without queuing the entire history at once.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -60,6 +51,7 @@ export async function createIngestWorkload(
   }
   let revision = 1;
   let requests = 0;
+  let imageRequests = 0;
   const remote: PublicationClient = {
     resolvePds: async () => "https://pds.example.com",
     latestRev: async () => {
@@ -118,21 +110,27 @@ export async function createIngestWorkload(
     },
   };
   return {
+    get imageRequests() {
+      return imageRequests;
+    },
     get requests() {
       return requests;
     },
     async run(changed: boolean) {
       if (changed) revision++;
       requests = 0;
-      const currentOrigin = (await database
-        .select()
-        .from(feedOrigins)
-        .where(eq(feedOrigins.id, origin.id))
-        .get())!;
+      imageRequests = 0;
+      const currentOrigin = (
+        await loadOriginsForFeeds(database, [feed.id])
+      )[0]!;
       return ingestAtmosphere(
         database,
         { feed, origin: currentOrigin },
         remote,
+        async () => {
+          imageRequests++;
+          throw new Error("No page image");
+        },
       );
     },
   };

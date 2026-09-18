@@ -3,12 +3,14 @@ import { runDatabaseWrite } from "../db/retry-write";
 import { feedOrigins, feeds } from "../db/schema";
 import type { FeedDatabase } from "~/server/feeds/origins";
 import type { db } from "../db";
-import type { FetchableOrigin } from "./types";
+import type { DatabaseFeed, DatabaseFeedOrigin } from "../db/schema";
 import { dbSemaphore } from "~/lib/semaphore";
+
+type MetadataOrigin = { feed: DatabaseFeed; origin: DatabaseFeedOrigin };
 
 export async function refreshOriginMetadata(
   database: typeof db,
-  { origin, feed }: FetchableOrigin,
+  { origin, feed }: MetadataOrigin,
   metadata: OriginMetadata,
 ) {
   return runDatabaseWrite(database, () =>
@@ -28,12 +30,11 @@ type OriginMetadata = {
   imageUrl?: string | null;
   description?: string | null;
   siteUrl?: string | null;
-  pdsUrl?: string;
 };
 
 export async function applyOriginMetadata(
   database: FeedDatabase,
-  { origin, feed }: FetchableOrigin,
+  { origin, feed }: MetadataOrigin,
   metadata: OriginMetadata,
 ) {
   await database
@@ -42,7 +43,6 @@ export async function applyOriginMetadata(
       sourceName: metadata.name,
       sourceImageUrl: metadata.imageUrl ?? null,
       sourceDescription: metadata.description ?? null,
-      ...(metadata.pdsUrl ? { pdsUrl: metadata.pdsUrl } : {}),
       updatedAt: new Date(),
     })
     .where(eq(feedOrigins.id, origin.id));

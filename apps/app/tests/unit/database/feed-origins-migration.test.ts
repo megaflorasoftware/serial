@@ -167,6 +167,14 @@ describe("publication subscriptions migration", () => {
           ],
         });
       }
+      await client.execute(
+        "UPDATE serial_feed_item SET thumbnail = 'https://example.com/retained.png', is_watched = 1, is_watch_later = 1, progress = 42",
+      );
+      const readerStateBefore = (
+        await client.execute(
+          "SELECT id, thumbnail, is_watched, is_watch_later, progress FROM serial_feed_item ORDER BY id",
+        )
+      ).rows;
       const beforeMigration = Math.floor(Date.now() / 1000);
 
       await applyJournalRange(
@@ -183,7 +191,7 @@ describe("publication subscriptions migration", () => {
         await client.execute(
           `SELECT feed_id, user_id, kind, locator, etag, last_modified_header,
                   last_fetched_at, next_fetch_at, source_name, source_image_url
-           FROM serial_feed_origin ORDER BY feed_id`,
+           FROM serial_feed_origin JOIN serial_feed_origin_rss ON origin_id = id ORDER BY feed_id`,
         )
       ).rows;
       expect(origins).toHaveLength(4);
@@ -281,35 +289,16 @@ describe("publication subscriptions migration", () => {
           tags: "[]",
         },
       ]);
+      expect(await columnNames(client, "serial_feed_item_page_image")).toEqual(
+        [],
+      );
       expect(
         (
           await client.execute(
-            "SELECT item_id, feed_id, page_url, image_url, next_check_at FROM serial_feed_item_page_image ORDER BY item_id",
+            "SELECT id, thumbnail, is_watched, is_watch_later, progress FROM serial_feed_item ORDER BY id",
           )
         ).rows,
-      ).toEqual([
-        {
-          item_id: "body",
-          feed_id: 1,
-          page_url: "https://example.com/body",
-          image_url: null,
-          next_check_at: 0,
-        },
-        {
-          item_id: "empty",
-          feed_id: 1,
-          page_url: "https://example.com/empty",
-          image_url: null,
-          next_check_at: 0,
-        },
-        {
-          item_id: "whitespace",
-          feed_id: 3,
-          page_url: "https://example.com/whitespace",
-          image_url: null,
-          next_check_at: 0,
-        },
-      ]);
+      ).toEqual(readerStateBefore);
       expect(
         (
           await client.execute(
@@ -393,7 +382,7 @@ describe("publication subscriptions migration", () => {
       expect(
         (
           await client.execute(
-            "SELECT item_id FROM serial_feed_item_page_image WHERE feed_id = 1",
+            "SELECT origin_id FROM serial_feed_origin_rss WHERE origin_id = 1",
           )
         ).rows,
       ).toEqual([]);
