@@ -15,6 +15,8 @@ CREATE TABLE `serial_feed_origin` (
 	FOREIGN KEY (`user_id`) REFERENCES `serial_user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `feed_origin_kind_locator_idx` ON `serial_feed_origin` (`kind`,`locator`);
+--> statement-breakpoint
 CREATE INDEX `feed_origin_user_id_kind_locator_idx` ON `serial_feed_origin` (`user_id`,`kind`,`locator`);--> statement-breakpoint
 CREATE INDEX `feed_origin_user_id_next_fetch_at_idx` ON `serial_feed_origin` (`user_id`,`next_fetch_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `feed_origin_feed_id_kind_unique` ON `serial_feed_origin` (`feed_id`,`kind`);--> statement-breakpoint
@@ -29,6 +31,22 @@ CREATE TABLE `serial_feed_origin_rss` (
 CREATE TABLE `serial_feed_origin_atproto` (
   `origin_id` integer PRIMARY KEY NOT NULL,
   `publication_did` text NOT NULL,
+  `work_owner` text,
+  `work_until` integer,
+  `recovery_retry_at` integer,
+  `recovery_attempts` integer DEFAULT 0 NOT NULL,
+  `stream_service` text,
+  `stream_seq` text,
+  `stream_mode` text DEFAULT 'paused' NOT NULL,
+  `publication_record` text,
+  `publication_seq` text,
+  `publication_dirty` integer DEFAULT false NOT NULL,
+  `account_seq` text,
+  `account_status` text,
+  `repository_seq` text,
+  `repository_rev` text,
+  `repository_active` integer DEFAULT true NOT NULL,
+  `identity_seq` text,
   `listing_etag` text,
   `cursor` text,
   `boundary` text,
@@ -45,9 +63,16 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
   `uri` text NOT NULL,
   `cid` text NOT NULL,
   `status` text NOT NULL,
+  `event_seq` text,
+  `event_rev` text,
+  `pending_record` text,
+  `retry_at` integer,
+  `attempts` integer DEFAULT 0 NOT NULL,
   PRIMARY KEY (`origin_id`, `uri`),
   FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin_atproto`(`origin_id`) ON UPDATE no action ON DELETE cascade
 );
+--> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,`uri`);
 --> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `site_url` text(512);--> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `name_edited_at` integer;
@@ -191,35 +216,6 @@ CREATE TABLE `serial_atproto_stream_state` (
 );
 --> statement-breakpoint
 ALTER TABLE `serial_user` ADD `last_active_at` integer;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `stream_service` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `stream_seq` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `stream_mode` text DEFAULT 'paused' NOT NULL;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `publication_record` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `publication_seq` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `publication_dirty` integer DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `repository_seq` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `repository_rev` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `repository_active` integer DEFAULT true NOT NULL;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `identity_seq` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto_document` ADD `event_seq` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto_document` ADD `event_rev` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto_document` ADD `pending_record` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto_document` ADD `retry_at` integer;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto_document` ADD `attempts` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-CREATE INDEX `feed_origin_kind_locator_idx` ON `serial_feed_origin` (`kind`,`locator`);
---> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `work_owner` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `work_until` integer;
---> statement-breakpoint
-CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,`uri`);
---> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `recovery_retry_at` integer;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `recovery_attempts` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `account_seq` text;
---> statement-breakpoint
-ALTER TABLE `serial_feed_origin_atproto` ADD `account_status` text;
-
---> statement-breakpoint
 CREATE TABLE `serial_app_activity_operation` (
 	`user_id` text NOT NULL,
 	`operation_id` text NOT NULL,
