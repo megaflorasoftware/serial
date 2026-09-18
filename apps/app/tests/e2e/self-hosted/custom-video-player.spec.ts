@@ -26,7 +26,7 @@ async function mockYouTubePlayer(
               this.options = options;
               this.listeners = {};
               this.iframe = document.createElement("iframe");
-              this.iframe.src = "https://www.youtube-nocookie.com/embed/" + (options.videoId || "");
+              this.iframe.src = "about:blank";
               this.iframe.title = "YouTube video player";
               this.element.appendChild(this.iframe);
 

@@ -17,7 +17,10 @@ import {
 import { signIn } from "../fixtures/auth";
 
 test.describe("feed item actions", () => {
-  test.use({ viewport: { width: 1920, height: 1080 } });
+  test.use({
+    viewport: { width: 1920, height: 1080 },
+    serviceWorkers: "block",
+  });
 
   let testEmail: string;
 

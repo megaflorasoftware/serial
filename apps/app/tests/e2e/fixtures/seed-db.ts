@@ -1433,7 +1433,7 @@ export async function seedYouTubeVideoData(
     title: "Test YouTube Video",
     author: "Test Channel",
     url: originalUrl,
-    thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbnail: `http://localhost:${appPort}/icon-192.png`,
     content: "",
     contentSnippet: "Test YouTube video",
     contentType: "video",
