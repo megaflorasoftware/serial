@@ -6,6 +6,7 @@ import { assign, createActor, setup } from "xstate";
 // ---------------------------------------------------------------------------
 
 type LoadingMachineEvent =
+  | { type: "REFRESH_PROGRESS"; total: number; completed: number }
   // Initial reconciliation
   | { type: "INITIAL_LOAD_START" }
   | { type: "RECONCILIATION_COMPLETE" }
@@ -192,6 +193,13 @@ export const loadingMachine = setup({
     // -----------------------------------------------------------------
     backgroundRefresh: {
       on: {
+        REFRESH_PROGRESS: {
+          actions: assign({
+            totalFeeds: ({ event }) => event.total,
+            completedFeeds: ({ event }) => event.completed,
+          }),
+        },
+
         FEED_STATUS: [
           {
             guard: "allFeedsCompleteAfterStatus",

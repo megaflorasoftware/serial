@@ -738,7 +738,6 @@ describe("Bookmark persistence", () => {
       id: 1,
       userId: "user-one",
       name: "Feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
       createdAt: now,
       updatedAt: now,

@@ -63,3 +63,15 @@ export function useBookmarkCaptureValue(bookmarkId: string) {
     (state) => state.capturesDict[bookmarkId],
   );
 }
+
+/** Wait for the disk cache before classifying a capture as missing. */
+export function waitForBookmarkCaptureHydration(): Promise<void> {
+  const persistence = vanillaBookmarkCaptureStore.persist;
+  if (persistence.hasHydrated()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = persistence.onFinishHydration(() => {
+      unsubscribe();
+      resolve();
+    });
+  });
+}

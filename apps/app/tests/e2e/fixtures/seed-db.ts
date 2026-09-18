@@ -30,6 +30,58 @@ function getDb(tursoPort: number) {
   return { db: drizzle({ client, schema }), client };
 }
 
+type SeedFeedRow = Omit<typeof schema.feeds.$inferInsert, "id"> & {
+  url: string;
+  lastFetchedAt?: Date | null;
+  nextFetchAt?: Date | null;
+};
+
+/**
+ * Insert Feeds with one RSS origin each. Fetch state lives on the origin,
+ * so the URL and schedule move there while the Feed keeps its identity.
+ * Feeds are batched; origins pair with them by the returned ids, which a
+ * single VALUES insert returns in input order.
+ */
+async function seedFeedsWithRssOrigins(
+  db: ReturnType<typeof getDb>["db"],
+  rows: SeedFeedRow[],
+) {
+  if (rows.length === 0) return [];
+  const created = await db
+    .insert(schema.feeds)
+    .values(
+      rows.map(({ url, lastFetchedAt, nextFetchAt, ...feedValues }) => {
+        void url;
+        void lastFetchedAt;
+        void nextFetchAt;
+        return feedValues;
+      }),
+    )
+    .returning();
+  if (created.length !== rows.length) {
+    throw new Error("Feed insert returned an unexpected row count");
+  }
+  const origins = await db
+    .insert(schema.feedOrigins)
+    .values(
+      created.map((feed, index) => ({
+        feedId: feed.id,
+        userId: feed.userId,
+        kind: "rss",
+        locator: rows[index]!.url,
+        lastFetchedAt: rows[index]!.lastFetchedAt ?? null,
+        nextFetchAt: rows[index]!.nextFetchAt ?? null,
+        createdAt: feed.createdAt,
+        updatedAt: feed.updatedAt,
+      })),
+    )
+    .returning({ id: schema.feedOrigins.id });
+  await db
+    .insert(schema.feedOriginRss)
+    .values(origins.map((origin) => ({ originId: origin.id })));
+  return created;
+}
+
 /**
  * Generates a unique email for test isolation.
  */
@@ -193,12 +245,31 @@ export async function seedClientPerformanceData(
   const userId = `client-performance-${uniqueId()}`;
   const email = `${userId}@benchmark.invalid`;
   const password = "testpassword123";
-  await seedBenchmarkFixture({ database: db, profileName, userId });
-  const pageCaptureFeedItemId = `${userId}-feed-item-000008`;
-  await db
-    .update(schema.feedItems)
-    .set({ content: PAGE_CAPTURE_READER_HTML })
-    .where(eq(schema.feedItems.id, pageCaptureFeedItemId));
+  const { allContentViewId } = await seedBenchmarkFixture({
+    database: db,
+    profileName,
+    userId,
+  });
+  // The representative browser audit opens this large Page capture. Small
+  // topology/ownership fixtures do not contain Bookmark 202.
+  if (profileName === "representative") {
+    const pageCaptureBookmarkId = `${userId}-bookmark-000202`;
+    await db
+      .update(schema.pageCaptures)
+      .set({ contentHtml: PAGE_CAPTURE_READER_HTML })
+      .where(eq(schema.pageCaptures.bookmarkId, pageCaptureBookmarkId));
+    await db
+      .update(schema.bookmarks)
+      .set({
+        title: "Fixture page capture",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.bookmarks.id, pageCaptureBookmarkId));
+    await db
+      .insert(schema.bookmarkViews)
+      .values({ bookmarkId: pageCaptureBookmarkId, viewId: allContentViewId });
+  }
   const hashedPassword = await hashPassword(password);
   const now = new Date();
   await db.insert(schema.account).values({
@@ -287,6 +358,56 @@ export async function matchBookmarkToFeedItem(
     .set({ sourceUrl: feedItem.url, canonicalUrl: feedItem.url })
     .where(eq(schema.bookmarks.id, bookmarkId));
   client.close();
+}
+
+export async function addArticlePublicationOrigin(
+  tursoPort: number,
+  itemId: string,
+  options: { rss: boolean; active: boolean },
+) {
+  const { db, client } = getDb(tursoPort);
+  try {
+    const item = await db
+      .select()
+      .from(schema.feedItems)
+      .where(eq(schema.feedItems.id, itemId))
+      .get();
+    if (!item) throw new Error("Missing article fixture");
+    const feed = await db
+      .select()
+      .from(schema.feeds)
+      .where(eq(schema.feeds.id, item.feedId))
+      .get();
+    if (!feed) throw new Error("Missing article Feed fixture");
+    if (!options.rss)
+      await db
+        .delete(schema.feedOrigins)
+        .where(eq(schema.feedOrigins.feedId, feed.id));
+    const publicationUri = "at://did:plc:alice/site.standard.publication/blog";
+    const siteUrl = "https://example.com/publication";
+    await db
+      .update(schema.feeds)
+      .set({ siteUrl, name: "My renamed Feed", isActive: options.active })
+      .where(eq(schema.feeds.id, feed.id));
+    const [origin] = await db
+      .insert(schema.feedOrigins)
+      .values({
+        feedId: feed.id,
+        userId: feed.userId,
+        kind: "atproto",
+        locator: publicationUri,
+        sourceName: "Published name",
+        nextFetchAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: schema.feedOrigins.id });
+    await db.insert(schema.feedOriginAtproto).values({
+      originId: origin!.id,
+      publicationDid: publicationUri.split("/")[2]!,
+    });
+    return { publicationUri, siteUrl };
+  } finally {
+    client.close();
+  }
 }
 
 export async function setFeedItemContent(
@@ -526,25 +647,23 @@ export async function seedMixedViewSectionCase(
     throw new Error("Mixed View section tag was not created");
   }
 
-  const createdFeeds = await db
-    .insert(schema.feeds)
-    .values(
-      ["Tag Section Feed", "Uncategorized Feed", "Outside Feed"].map(
-        (name, index) => ({
-          userId: testUser.id,
-          name: `${name} ${testId}`,
-          url: `https://example.com/matrix/${testId}/feed-${index}`,
-          imageUrl: "",
-          platform: "website",
-          openLocation: "serial",
-          createdAt: now,
-          updatedAt: now,
-          lastFetchedAt: now,
-          nextFetchAt: farFuture,
-        }),
-      ),
-    )
-    .returning();
+  const createdFeeds = await seedFeedsWithRssOrigins(
+    db,
+    ["Tag Section Feed", "Uncategorized Feed", "Outside Feed"].map(
+      (name, index) => ({
+        userId: testUser.id,
+        name: `${name} ${testId}`,
+        url: `https://example.com/matrix/${testId}/feed-${index}`,
+        imageUrl: "",
+        platform: "website",
+        openLocation: "serial",
+        createdAt: now,
+        updatedAt: now,
+        lastFetchedAt: now,
+        nextFetchAt: farFuture,
+      }),
+    ),
+  );
   const [tagSectionFeed, uncategorizedFeed, outsideFeed] = createdFeeds;
   if (!tagSectionFeed || !uncategorizedFeed || !outsideFeed) {
     client.close();
@@ -957,9 +1076,8 @@ export async function seedArticleData(
 
   // Create a website feed (skip re-fetch by setting nextFetchAt far in future)
   const feedUrl = `http://127.0.0.1:${rssPort}/feed/test-blog?t=${testId}`;
-  const [testFeed] = await db
-    .insert(schema.feeds)
-    .values({
+  const [testFeed] = await seedFeedsWithRssOrigins(db, [
+    {
       userId: testUser.id,
       name: "Test Blog",
       url: feedUrl,
@@ -970,8 +1088,8 @@ export async function seedArticleData(
       updatedAt: now,
       lastFetchedAt: now,
       nextFetchAt: farFuture,
-    })
-    .returning();
+    },
+  ]);
   if (!testFeed) throw new Error("Feed insert returned no rows");
   if (!defaultView) throw new Error("Default View insert returned no rows");
   await db.insert(schema.viewFeeds).values({
@@ -1040,16 +1158,15 @@ export async function seedRssPartialFailureData(
   const dueAt = new Date(0);
   const successSlug = `rss-success-${testId}`;
   await db
-    .update(schema.feeds)
+    .update(schema.feedOrigins)
     .set({
-      url: `http://127.0.0.1:${rssPort}/feed/${successSlug}`,
+      locator: `http://127.0.0.1:${rssPort}/feed/${successSlug}`,
       lastFetchedAt: dueAt,
       nextFetchAt: dueAt,
     })
-    .where(eq(schema.feeds.id, seededItem.feedId));
-  const [failingFeed] = await db
-    .insert(schema.feeds)
-    .values({
+    .where(eq(schema.feedOrigins.feedId, seededItem.feedId));
+  const [failingFeed] = await seedFeedsWithRssOrigins(db, [
+    {
       userId: testUser.id,
       name: `Failing Feed ${testId}`,
       url: `http://127.0.0.1:${rssPort}/delayed/missing-feed`,
@@ -1060,8 +1177,8 @@ export async function seedRssPartialFailureData(
       updatedAt: new Date(),
       lastFetchedAt: dueAt,
       nextFetchAt: dueAt,
-    })
-    .returning();
+    },
+  ]);
   if (!failingFeed) {
     client.close();
     throw new Error("Failing RSS Feed was not created");
@@ -1103,27 +1220,25 @@ export async function seedSidebarFeedAvailabilityData(
 
   const now = Date.now();
   const feedCount = INITIAL_ITEMS_PER_VIEW + 1;
-  const seededFeeds = await db
-    .insert(schema.feeds)
-    .values(
-      Array.from({ length: feedCount }, (_, index) => ({
-        userId: testUser.id,
-        name:
-          index === feedCount - 1
-            ? "Globally Populated Overflow Feed"
-            : `Sidebar Feed ${index + 1}`,
-        url: `https://sidebar.example/${uniqueId()}/${index}.xml`,
-        imageUrl: "",
-        platform: "website" as const,
-        openLocation: "serial" as const,
-        isActive: index !== feedCount - 1,
-        createdAt: new Date(now - index * 1000),
-        updatedAt: new Date(now - index * 1000),
-        lastFetchedAt: new Date(now),
-        nextFetchAt: new Date(now + 86_400_000),
-      })),
-    )
-    .returning();
+  const seededFeeds = await seedFeedsWithRssOrigins(
+    db,
+    Array.from({ length: feedCount }, (_, index) => ({
+      userId: testUser.id,
+      name:
+        index === feedCount - 1
+          ? "Globally Populated Overflow Feed"
+          : `Sidebar Feed ${index + 1}`,
+      url: `https://sidebar.example/${uniqueId()}/${index}.xml`,
+      imageUrl: "",
+      platform: "website" as const,
+      openLocation: "serial" as const,
+      isActive: index !== feedCount - 1,
+      createdAt: new Date(now - index * 1000),
+      updatedAt: new Date(now - index * 1000),
+      lastFetchedAt: new Date(now),
+      nextFetchAt: new Date(now + 86_400_000),
+    })),
+  );
   const overflowFeed = seededFeeds.at(-1);
   if (!overflowFeed) {
     client.close();
@@ -1286,9 +1401,8 @@ export async function seedYouTubeVideoData(
     })
     .returning();
 
-  const [testFeed] = await db
-    .insert(schema.feeds)
-    .values({
+  const [testFeed] = await seedFeedsWithRssOrigins(db, [
+    {
       userId: testUser.id,
       name: "Test YouTube Feed",
       url: `https://www.youtube.com/feeds/videos.xml?channel_id=UC${testId.padEnd(22, "0")}`,
@@ -1299,8 +1413,8 @@ export async function seedYouTubeVideoData(
       updatedAt: now,
       lastFetchedAt: now,
       nextFetchAt: farFuture,
-    })
-    .returning();
+    },
+  ]);
   if (!testFeed) throw new Error("Feed insert returned no rows");
   if (!defaultView) throw new Error("Default View insert returned no rows");
   await db.insert(schema.viewFeeds).values({
@@ -1319,7 +1433,7 @@ export async function seedYouTubeVideoData(
     title: "Test YouTube Video",
     author: "Test Channel",
     url: originalUrl,
-    thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbnail: `http://localhost:${appPort}/icon-192.png`,
     content: "",
     contentSnippet: "Test YouTube video",
     contentType: "video",
@@ -1407,9 +1521,8 @@ export async function seedMultipleArticleData(
 
   // Create a website feed (skip re-fetch by setting nextFetchAt far in future)
   const feedUrl = `http://127.0.0.1:${rssPort}/feed/test-blog?t=${testId}`;
-  const [testFeed] = await db
-    .insert(schema.feeds)
-    .values({
+  const [testFeed] = await seedFeedsWithRssOrigins(db, [
+    {
       userId: testUser.id,
       name: "Test Blog",
       url: feedUrl,
@@ -1420,8 +1533,8 @@ export async function seedMultipleArticleData(
       updatedAt: now,
       lastFetchedAt: now,
       nextFetchAt: farFuture,
-    })
-    .returning();
+    },
+  ]);
   if (!testFeed) throw new Error("Feed insert returned no rows");
   if (!defaultView) throw new Error("Default View insert returned no rows");
   await db.insert(schema.viewFeeds).values({
@@ -1542,9 +1655,8 @@ export async function seedViewLayoutData(
   const feedIds: number[] = [];
   for (let f = 0; f < 3; f++) {
     const feedUrl = `http://127.0.0.1:${rssPort}/feed/feed-${f}?t=${testId}`;
-    const [feed] = await db
-      .insert(schema.feeds)
-      .values({
+    const [feed] = await seedFeedsWithRssOrigins(db, [
+      {
         userId: testUser.id,
         name: feedNames[f],
         url: feedUrl,
@@ -1555,8 +1667,8 @@ export async function seedViewLayoutData(
         updatedAt: now,
         lastFetchedAt: now,
         nextFetchAt: farFuture,
-      })
-      .returning();
+      },
+    ]);
     if (!feed) throw new Error(`Feed ${f} insert returned no rows`);
     feedIds.push(feed.id);
   }
@@ -1759,5 +1871,50 @@ export async function verifyUserCleanup(tursoPort: number, email: string) {
     throw new Error(
       `Database cleanup verification failed:\n${errors.join("\n")}`,
     );
+  }
+}
+
+export async function prepareFeedRevalidation(
+  tursoPort: number,
+  feedItemId: string,
+) {
+  const { db, client } = getDb(tursoPort);
+  try {
+    const item = await db
+      .select()
+      .from(schema.feedItems)
+      .where(eq(schema.feedItems.id, feedItemId))
+      .get();
+    if (!item) throw new Error("Article not found");
+    await db
+      .update(schema.feedOrigins)
+      .set({
+        locator: `http://127.0.0.1:${SELF_HOSTED_RSS_SERVER_PORT}/feed/test-blog`,
+        sourceName: "Old Feed name",
+      })
+      .where(eq(schema.feedOrigins.feedId, item.feedId));
+    await db
+      .update(schema.feeds)
+      .set({ name: "Old Feed name" })
+      .where(eq(schema.feeds.id, item.feedId));
+    return item.feedId;
+  } finally {
+    client.close();
+  }
+}
+
+/** Hold a worker lease while the browser exercises queued-sync UI against real state. */
+export async function holdAtprotoSyncWorker(tursoPort: number, did: string) {
+  const { db, client } = getDb(tursoPort);
+  try {
+    await db
+      .update(schema.atprotoConnections)
+      .set({
+        subscriptionJobToken: "e2e-held-worker",
+        subscriptionJobExpiresAt: new Date(Date.now() + 300_000),
+      })
+      .where(eq(schema.atprotoConnections.did, did));
+  } finally {
+    client.close();
   }
 }

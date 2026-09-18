@@ -13,7 +13,10 @@ import {
 import { signIn } from "../fixtures/auth";
 
 test.describe("Bookmark Serial-app flow", () => {
-  test.use({ viewport: { width: 1280, height: 900 } });
+  test.use({
+    viewport: { width: 1280, height: 900 },
+    serviceWorkers: "block",
+  });
 
   let testEmail: string;
 

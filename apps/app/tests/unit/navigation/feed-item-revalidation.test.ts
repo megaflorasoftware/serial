@@ -10,6 +10,10 @@ const originalFetch = navigationSnapshotStore.getState().fetch;
 
 function savedItem(isWatched: boolean): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: "saved-item",
     feedId: 1,
     contentId: "saved-item",

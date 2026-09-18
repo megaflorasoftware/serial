@@ -18,6 +18,7 @@ export function TopLeftButton() {
     return (
       <div className="flex gap-2">
         <ButtonWithShortcut
+          data-onboarding="open-menu"
           data-serial-reader-left-boundary
           shortcut="\"
           onClick={() => toggleSidebar("left")}
@@ -42,6 +43,7 @@ export function TopLeftButton() {
   return (
     <div className="flex gap-2">
       <ButtonWithShortcut
+        data-onboarding="open-menu"
         data-serial-reader-left-boundary
         shortcut="\"
         onClick={() => toggleSidebar("left")}

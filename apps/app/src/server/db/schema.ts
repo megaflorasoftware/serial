@@ -25,6 +25,8 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
+import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
+import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
   CONTENT_PLATFORM,
@@ -68,6 +70,10 @@ export const user = sqliteTable(
     })
       .notNull()
       .default(false),
+    onboardingComplete: integer("onboarding_complete", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    onboardingStep: text("onboarding_step"),
     image: text("image"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
@@ -76,6 +82,7 @@ export const user = sqliteTable(
     banReason: text("ban_reason"),
     banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
     nextRefreshAt: integer("next_refresh_at", { mode: "timestamp" }),
+    lastActiveAt: integer("last_active_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     index("user_created_at_idx").on(table.createdAt),
@@ -242,7 +249,6 @@ export const feeds = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name", { length: 256 }).notNull().default(""),
-    url: text("url", { length: 512 }).notNull().default(""),
     imageUrl: text("image_url", { length: 512 }).notNull().default(""),
     platform: text("platform", { length: 256 }).notNull().default("youtube"),
     openLocation: text("open_location", { length: 64 })
@@ -254,27 +260,78 @@ export const feeds = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
-    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
-    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-    etag: text("etag"),
-    lastModifiedHeader: text("last_modified_header"),
+    // Canonical site the Feed subscribes to; null until an origin reports one.
+    siteUrl: text("site_url", { length: 512 }),
+    // Set when the user renames the Feed so derived names never overwrite it.
+    nameEditedAt: integer("name_edited_at", { mode: "timestamp" }),
   },
   (example) => [
     index("feed_user_id_idx").on(example.userId),
-    index("feed_user_id_url_idx").on(example.userId, example.url),
-    index("feed_user_id_is_active_idx").on(
-      example.userId,
-      example.isActive,
-      example.lastFetchedAt,
+    index("feed_user_id_is_active_idx").on(example.userId, example.isActive),
+  ],
+);
+
+export const FEED_ORIGIN_KIND = {
+  RSS: "rss",
+  ATPROTO: "atproto",
+} as const;
+export const feedOriginKindSchema = z.enum([
+  FEED_ORIGIN_KIND.RSS,
+  FEED_ORIGIN_KIND.ATPROTO,
+]);
+export type FeedOriginKind = z.infer<typeof feedOriginKindSchema>;
+
+/**
+ * One data source of a Feed. An RSS origin is located by its feed URL; an
+ * Atmosphere origin by a publication at-uri. Scheduling and observed source metadata live here so each origin keeps its
+ * own clock. `userId` is denormalised so the due-origin pager never joins
+ * before filtering.
+ */
+export const feedOrigins = sqliteTable(
+  "feed_origin",
+  {
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { length: 16 }).notNull(),
+    locator: text("locator", { length: 1024 }).notNull(),
+    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
+    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
+    // Metadata as observed from the source on the last successful read.
+    sourceName: text("source_name", { length: 256 }),
+    sourceImageUrl: text("source_image_url", { length: 512 }),
+    sourceDescription: text("source_description"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("feed_origin_feed_id_kind_unique").on(table.feedId, table.kind),
+    index("feed_origin_kind_locator_idx").on(table.kind, table.locator),
+    index("feed_origin_user_id_kind_locator_idx").on(
+      table.userId,
+      table.kind,
+      table.locator,
     ),
-    index("feed_user_id_is_active_next_fetch_at_idx").on(
-      example.userId,
-      example.isActive,
-      example.nextFetchAt,
+    index("feed_origin_user_id_next_fetch_at_idx").on(
+      table.userId,
+      table.nextFetchAt,
     ),
   ],
 );
+export const feedOriginSchema = createSelectSchema(feedOrigins).merge(
+  z.object({ kind: feedOriginKindSchema }),
+);
+export type DatabaseFeedOrigin = typeof feedOrigins.$inferSelect;
+export type ApplicationFeedOrigin = z.infer<typeof feedOriginSchema>;
 export const openLocationSchema = z.enum(["serial", "origin"]);
 export type FeedOpenLocation = z.infer<typeof openLocationSchema>;
 
@@ -288,10 +345,116 @@ export const feedsSchema = createSelectSchema(feeds).merge(
   z.object({
     platform: contentPlatformSchema,
     openLocation: openLocationSchema,
+    origins: feedOriginSchema.array(),
   }),
 );
 export type DatabaseFeed = typeof feeds.$inferSelect;
+/** A Feed row with its origin rows attached, the shape every Feed read returns. */
+export type DatabaseFeedWithOrigins = DatabaseFeed & {
+  origins: HydratedFeedOrigin[];
+};
 export type ApplicationFeed = z.infer<typeof feedsSchema>;
+
+export const feedOriginRss = sqliteTable("feed_origin_rss", {
+  originId: integer("origin_id")
+    .primaryKey()
+    .references(() => feedOrigins.id, { onDelete: "cascade" }),
+  etag: text("etag"),
+  lastModifiedHeader: text("last_modified_header"),
+  alternateLocators: text("alternate_locators", { mode: "json" }).$type<
+    string[]
+  >(),
+});
+
+export const feedOriginAtproto = sqliteTable(
+  "feed_origin_atproto",
+  {
+    originId: integer("origin_id")
+      .primaryKey()
+      .references(() => feedOrigins.id, { onDelete: "cascade" }),
+    publicationDid: text("publication_did").notNull(),
+    workOwner: text("work_owner"),
+    workUntil: integer("work_until", { mode: "timestamp_ms" }),
+    recoveryRetryAt: integer("recovery_retry_at", { mode: "timestamp_ms" }),
+    recoveryAttempts: integer("recovery_attempts").notNull().default(0),
+    streamService: text("stream_service"),
+    streamSeq: text("stream_seq"),
+    streamMode: text("stream_mode", {
+      enum: ["paused", "direct", "catchup", "live"],
+    })
+      .notNull()
+      .default("paused"),
+    publicationRecord: text("publication_record", {
+      mode: "json",
+    }).$type<unknown>(),
+    publicationSeq: text("publication_seq"),
+    publicationDirty: integer("publication_dirty", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    accountSeq: text("account_seq"),
+    accountStatus: text("account_status"),
+    repositorySeq: text("repository_seq"),
+    repositoryRev: text("repository_rev"),
+    repositoryActive: integer("repository_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    identitySeq: text("identity_seq"),
+    listingEtag: text("listing_etag"),
+    cursor: text("cursor"),
+    boundary: text("boundary"),
+    newestRkey: text("newest_rkey"),
+    initialCount: integer("initial_count").notNull().default(0),
+    initialized: integer("initialized", { mode: "boolean" })
+      .notNull()
+      .default(false),
+  },
+  (table) => [
+    index("feed_origin_atproto_publication_did_idx").on(table.publicationDid),
+  ],
+);
+
+/** Server-only details; the application schema exposes only the common origin. */
+export type HydratedFeedOrigin = DatabaseFeedOrigin & {
+  rss: typeof feedOriginRss.$inferSelect | null;
+  atproto: typeof feedOriginAtproto.$inferSelect | null;
+};
+
+/** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
+export const atprotoStreamState = sqliteTable("atproto_stream_state", {
+  id: text("id").primaryKey(),
+  service: text("service").notNull(),
+  seq: text("seq"),
+  leaseOwner: text("lease_owner"),
+  leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
+});
+
+export const feedOriginAtprotoDocuments = sqliteTable(
+  "feed_origin_atproto_document",
+  {
+    originId: integer("origin_id")
+      .notNull()
+      .references(() => feedOriginAtproto.originId, { onDelete: "cascade" }),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    status: text("status", {
+      enum: ["ready", "retry", "invalid", "deleted"],
+    }).notNull(),
+    eventSeq: text("event_seq"),
+    eventRev: text("event_rev"),
+    pendingRecord: text("pending_record", { mode: "json" }).$type<unknown>(),
+    retryAt: integer("retry_at", { mode: "timestamp_ms" }),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.originId, table.uri] }),
+    index("feed_origin_atproto_document_due_idx").on(
+      table.originId,
+      table.status,
+      table.retryAt,
+      table.uri,
+    ),
+  ],
+);
 
 export const feedItems = sqliteTable(
   "feed_item",
@@ -338,9 +501,28 @@ export const feedItems = sqliteTable(
       mode: "timestamp",
     }),
     contentHash: text("content_hash"),
+    sourceKind: text("source_kind", { enum: ["rss", "atproto", "both"] })
+      .notNull()
+      .default("rss"),
+    atprotoUri: text("atproto_uri"),
+    bodySource: text("body_source", { enum: ["rss", "atproto", "none"] })
+      .notNull()
+      .default("none"),
+    tags: text("tags", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
   },
   (example) => [
     unique().on(example.url, example.feedId),
+    index("feed_item_feed_normalized_url_idx").on(
+      example.feedId,
+      example.normalizedUrl,
+    ),
+    unique("feed_item_feed_atproto_uri_unique").on(
+      example.feedId,
+      example.atprotoUri,
+    ),
     index("feed_item_feed_id_posted_at_idx").on(
       example.feedId,
       example.postedAt,
@@ -371,6 +553,37 @@ export const feedItems = sqliteTable(
     ),
   ],
 );
+/** Internal source snapshots allow edits to restore the other origin's fallback. */
+export const feedItemObservations = sqliteTable(
+  "feed_item_observation",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["rss", "atproto"] }).notNull(),
+    value: text("value", { mode: "json" }).$type<ItemObservation>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.kind] })],
+);
+
+/** Old URLs remain aliases after an edit so stale RSS cannot recreate a duplicate. */
+export const feedItemAliases = sqliteTable(
+  "feed_item_alias",
+  {
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    locator: text("locator").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.feedId, table.locator] }),
+    index("feed_item_alias_item_idx").on(table.itemId),
+  ],
+);
+
 export const feedItemSchema = createSelectSchema(feedItems);
 export type DatabaseFeedItem = typeof feedItems.$inferSelect;
 
@@ -880,31 +1093,161 @@ export const atprotoAuthState = sqliteTable(
  * the OAuth callback persisting the session and the sign-in flow binding the
  * DID to a Serial user; unbound rows are swept with expired auth state.
  */
-export const atprotoConnections = sqliteTable("atproto_connections", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  userId: text("user_id")
-    .unique()
-    .references(() => user.id, { onDelete: "cascade" }),
-  did: text("did").notNull().unique(),
-  session: text("session"),
-  /** Scope actually granted; null when the server omitted it. */
-  scopes: text("scopes"),
-  handle: text("handle"),
-  pdsUrl: text("pds_url"),
-  status: text("status")
-    .$type<"active" | "disconnected">()
-    .notNull()
-    .default("active"),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .$default(() => new Date())
-    .notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .$default(() => new Date())
-    .notNull(),
-});
+export const atprotoConnections = sqliteTable(
+  "atproto_connections",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id")
+      .unique()
+      .references(() => user.id, { onDelete: "cascade" }),
+    did: text("did").notNull().unique(),
+    session: text("session"),
+    /** Scope actually granted; null when the server omitted it. */
+    scopes: text("scopes"),
+    handle: text("handle"),
+    pdsUrl: text("pds_url"),
+    status: text("status")
+      .$type<"active" | "disconnected">()
+      .notNull()
+      .default("active"),
+    /**
+     * Atmosphere subscription sync settings. Both directions default off (the
+     * None method) on sign-up and link; unlink resets them because the row
+     * outlives the link and is reused when the DID is linked again.
+     */
+    importSubscriptions: integer("import_subscriptions", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    exportSubscriptions: integer("export_subscriptions", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    importAsInactive: integer("import_as_inactive", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    subscriptionBackfillStarted: integer("subscription_backfill_started", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
+    subscriptionBackfillNextAttemptAt: integer(
+      "subscription_backfill_next_attempt_at",
+      { mode: "timestamp_ms" },
+    ),
+    subscriptionRequestId: text("subscription_request_id"),
+    subscriptionNextAttemptAt: integer("subscription_next_attempt_at", {
+      mode: "timestamp_ms",
+    }),
+    subscriptionJobToken: text("subscription_job_token"),
+    subscriptionJobExpiresAt: integer("subscription_job_expires_at", {
+      mode: "timestamp_ms",
+    }),
+    subscriptionJobProgress: text("subscription_job_progress", {
+      mode: "json",
+    }).$type<{ completed: number; total: number }>(),
+    subscriptionJobResult: text("subscription_job_result", {
+      mode: "json",
+    }).$type<PublicationSyncResult>(),
+    subscriptionSyncCursor: text("subscription_sync_cursor"),
+    subscriptionRepoRev: text("subscription_repo_rev"),
+    subscriptionImportGeneration: integer("subscription_import_generation")
+      .notNull()
+      .default(0),
+    subscriptionExportGeneration: integer("subscription_export_generation")
+      .notNull()
+      .default(0),
+    subscriptionSyncToken: text("subscription_sync_token"),
+    subscriptionSyncExpiresAt: integer("subscription_sync_expires_at", {
+      mode: "timestamp_ms",
+    }),
+    // Consent only saves the submitted draft if no newer settings save won.
+    syncSettingsVersion: integer("sync_settings_version").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("atproto_subscription_job_due_idx").on(
+      table.subscriptionNextAttemptAt,
+    ),
+  ],
+);
+export const publicationBackfillProbes = sqliteTable(
+  "publication_backfill_probes",
+  {
+    feedId: integer("feed_id")
+      .primaryKey()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    index("publication_backfill_due_idx").on(
+      table.userId,
+      table.nextAttemptAt,
+      table.feedId,
+    ),
+  ],
+);
+
 export type DatabaseAtprotoConnection = typeof atprotoConnections.$inferSelect;
+
+/** Retain absent records as tombstones so neither side resurrects an unsubscribe. */
+export const atprotoSubscriptionMirror = sqliteTable(
+  "atproto_subscription_mirror",
+  {
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => atprotoConnections.id, { onDelete: "cascade" }),
+    publicationUri: text("publication_uri").notNull(),
+    recordUri: text("record_uri").notNull(),
+    recordCid: text("record_cid"),
+    // No Feed FK: a deleted Feed must remain observable until sync processes it.
+    feedId: integer("feed_id"),
+    provenance: text("provenance").$type<"serial" | "imported">().notNull(),
+    visibility: text("visibility")
+      .$type<"public" | "private">()
+      .notNull()
+      .default("public"),
+    remotePresent: integer("remote_present", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    importState: text("import_state").$type<"pending" | "skipped">(),
+    importRetryAt: integer("import_retry_at", { mode: "timestamp" }),
+    importFailures: integer("import_failures").notNull().default(0),
+    importGeneration: integer("import_generation").notNull().default(0),
+    exportGeneration: integer("export_generation").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.connectionId,
+        table.publicationUri,
+        table.recordUri,
+        table.visibility,
+      ],
+    }),
+    index("atproto_subscription_mirror_publication_idx").on(
+      table.connectionId,
+      table.publicationUri,
+    ),
+  ],
+);
+export type DatabaseSubscriptionMirror =
+  typeof atprotoSubscriptionMirror.$inferSelect;
 
 // === App Config (app-wide settings) ===
 

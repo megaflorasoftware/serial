@@ -2,7 +2,8 @@ import { publisher } from "../api/publisher";
 import { captureException } from "../logger";
 import { fetchAndInsertFeedData } from "./fetchFeeds";
 import { affectedFeedFromItems, emptyRefreshStats } from "./stats";
-import type { DatabaseFeed } from "../db/schema";
+import type { FeedResult } from "./fetchFeeds";
+import type { FetchableOrigin } from "./types";
 import type { db as Database } from "../db";
 import type { RefreshStats } from "./stats";
 import type { RssPublishedChunk } from "~/lib/rss";
@@ -11,9 +12,11 @@ export type { RefreshStats } from "./stats";
 
 /**
  * Shared feed refresh logic used by both background-refresh tasks and
- * interactive user-triggered refreshes. Fetches RSS content for the
- * given feeds and publishes feed-status / feed-items chunks via the
- * SSE publisher for any active subscribers.
+ * interactive user-triggered refreshes. Fetches content for the given
+ * origins and publishes feed-status / feed-items chunks via the SSE
+ * publisher for any active subscribers. Item writes publish as they commit;
+ * a Feed reports completion once all its due origins finish. The due pager
+ * keeps a Feed's origins together, with at most two origins per Feed.
  *
  * Callers are responsible for publishing `refresh-start` before and
  * `refresh-complete` after calling this function.
@@ -25,16 +28,18 @@ export async function refreshUserFeeds({
   db,
   feedsList,
   channel,
+  manual = false,
 }: {
   db: typeof Database;
-  feedsList: DatabaseFeed[];
+  feedsList: FetchableOrigin[];
   channel?: string;
+  manual?: boolean;
 }): Promise<RefreshStats> {
-  const activeFeedsList = feedsList.filter((feed) => feed.isActive);
+  const activeOrigins = feedsList.filter(({ feed }) => feed.isActive);
 
   const stats = emptyRefreshStats();
 
-  if (activeFeedsList.length === 0) {
+  if (activeOrigins.length === 0) {
     return stats;
   }
 
@@ -50,64 +55,68 @@ export async function refreshUserFeeds({
 
   // Build feed name map for error logging
   const feedNameMap = new Map<number, string>();
-  for (const feed of activeFeedsList) {
+  for (const { feed } of activeOrigins) {
     feedNameMap.set(feed.id, feed.name);
   }
 
-  for await (const feedResult of fetchAndInsertFeedData(
-    { db },
-    activeFeedsList,
+  const pending = new Map<number, number>();
+  const results = new Map<number, FeedResult[]>();
+  for (const { feed } of activeOrigins)
+    pending.set(feed.id, (pending.get(feed.id) ?? 0) + 1);
+  for await (const result of fetchAndInsertFeedData(
+    { db, manual },
+    activeOrigins,
   )) {
-    // Skip publishing status for cached feeds (they complete instantly)
-    if (feedResult.status === "skipped") {
-      stats.skippedCount++;
-      continue;
+    if (result.metadataChanged) stats.metadataChanged = true;
+    const group = results.get(result.id) ?? [];
+    group.push(result);
+    results.set(result.id, group);
+    if ("feedItems" in result && result.feedItems?.length) {
+      stats.totalRowsWritten += result.feedItems.length;
+      const affected = affectedFeedFromItems(result.id, result.feedItems);
+      if (affected) stats.affectedFeeds.push(affected);
     }
-
-    // Publish feed status for actual fetches
-    await publish({
-      type: "feed-status",
-      status: feedResult.status,
-      feedId: feedResult.id,
-    });
-
-    if (feedResult.status === "success") {
-      stats.refreshedCount++;
-      if ("feedItems" in feedResult) {
-        stats.totalRowsWritten += feedResult.feedItems.length;
-        const affectedFeed = affectedFeedFromItems(
-          feedResult.id,
-          feedResult.feedItems,
-        );
-        if (affectedFeed) stats.affectedFeeds.push(affectedFeed);
-
-        if (feedResult.feedItems.length > 0) {
-          await publish({
-            type: "feed-items",
-            feedId: feedResult.id,
-            feedItems: feedResult.feedItems,
-          });
-        }
-      }
-    } else if (feedResult.status === "empty") {
-      stats.emptyCount++;
-    } else if (feedResult.status === "error") {
-      stats.errorCount++;
-      stats.originFailureFeedIds.push(feedResult.id);
-      const feedName = feedNameMap.get(feedResult.id) ?? "unknown";
-      const errMsg =
-        "error" in feedResult
-          ? feedResult.error instanceof Error
-            ? feedResult.error.message
-            : String(feedResult.error)
-          : "Unknown error";
+    if (
+      "feedItems" in result &&
+      (result.feedItems?.length || result.removedItemIds?.length)
+    ) {
+      await publish({
+        type: "feed-items",
+        feedId: result.id,
+        feedItems: result.feedItems ?? [],
+        ...(result.removedItemIds?.length
+          ? { removedItemIds: result.removedItemIds }
+          : {}),
+      });
+    }
+    if (result.status === "error")
       captureException(
-        "error" in feedResult && feedResult.error instanceof Error
-          ? feedResult.error
-          : new Error(errMsg),
-        { feedId: feedResult.id, feedName },
+        result.error instanceof Error
+          ? result.error
+          : new Error(String(result.error)),
+        {
+          feedId: result.id,
+          originId: result.originId,
+          feedName: feedNameMap.get(result.id) ?? "unknown",
+        },
       );
-    }
+    pending.set(result.id, pending.get(result.id)! - 1);
+    if (pending.get(result.id)) continue;
+    const status = group.some((entry) => entry.status === "error")
+      ? "error"
+      : group.some((entry) => entry.status === "success")
+        ? "success"
+        : group.some((entry) => entry.status === "empty")
+          ? "empty"
+          : "skipped";
+    if (status === "error") {
+      stats.errorCount++;
+      stats.originFailureFeedIds.push(result.id);
+    } else if (status === "success") stats.refreshedCount++;
+    else if (status === "empty") stats.emptyCount++;
+    else stats.skippedCount++;
+    await publish({ type: "feed-status", status, feedId: result.id });
+    results.delete(result.id);
   }
 
   return stats;

@@ -15,6 +15,10 @@ function makeItem(pageIndex: number, itemIndex: number): ApplicationFeedItem {
   const id = `page-${pageIndex}-item-${itemIndex}`;
   const date = new Date(Date.UTC(2026, 0, 1, 0, pageIndex, itemIndex));
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id,
     feedId: 7,
     contentId: id,
@@ -75,6 +79,52 @@ afterEach(() => {
 });
 
 describe("Feed-item page retention", () => {
+  it("does not enumerate the library while applying one progress update", () => {
+    const item = makeItem(0, 0);
+    let enumerations = 0;
+    const items = new Proxy(
+      { [item.id]: item },
+      {
+        ownKeys(target) {
+          enumerations++;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    feedItemsStore.setState({ feedItemsDict: items });
+    enumerations = 0;
+    feedItemsStore.getState().setFeedItem(item.id, { ...item, progress: 0.5 });
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.progress).toBe(
+      0.5,
+    );
+    expect(enumerations).toBe(0);
+  });
+
+  it("retains entity identity when reconciliation repeats an unchanged page", () => {
+    const items = Array.from({ length: 300 }, (_, index) => makeItem(0, index));
+    feedItemsStore.getState().setFeedItems(items);
+    const before = { ...feedItemsStore.getState().feedItemsDict };
+    // Network and IndexedDB produce fresh arrays and Date objects.
+    feedItemsStore.getState().setFeedItems(structuredClone(items));
+    for (const item of items) {
+      expect(feedItemsStore.getState().feedItemsDict[item.id]).toBe(
+        before[item.id],
+      );
+    }
+    const changed = {
+      ...structuredClone(items[0]!),
+      title: "Corrected title",
+      tags: ["updated"],
+    };
+    feedItemsStore.getState().setFeedItems([changed]);
+    expect(feedItemsStore.getState().feedItemsDict[changed.id]).toEqual(
+      changed,
+    );
+    expect(feedItemsStore.getState().feedItemsDict[changed.id]).not.toBe(
+      before[changed.id],
+    );
+  });
+
   it("retains all four content-status pages under collision-free identities", () => {
     const state = feedItemsStore.getState();
     for (const [index, contentStatus] of CONTENT_STATUS_FILTERS.entries()) {

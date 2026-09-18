@@ -1,7 +1,10 @@
 "use client";
 
 import { orpcRouterClient } from "../orpc";
-import { bookmarkCapturesStore } from "./bookmarks/capture-store";
+import {
+  bookmarkCapturesStore,
+  waitForBookmarkCaptureHydration,
+} from "./bookmarks/capture-store";
 import {
   bookmarksStore,
   isBookmarkCaptureRetainableNow,
@@ -16,6 +19,7 @@ import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 
 const FULLTEXT_BATCH_SIZE = 500;
 const CAPTURE_BATCH_SIZE = 100;
+const CAPTURE_BATCH_WINDOW_MS = 100;
 
 // Failed requests retry on the next page application even when that page no
 // longer carries the entity (the active target diffs to `unchanged`, so a
@@ -59,6 +63,13 @@ export function invalidateOfflineHydration() {
   // Sever the previous session's run: it exits on its cleared pendingRun
   // flag, and its own finally must not null out a newer session's run.
   activeHydration = null;
+}
+
+export async function waitForOfflineHydrationIdle(): Promise<void> {
+  // The next run can be installed while this one settles; recheck it in order.
+  // These are dependent single-flight runs, not independent parallel work.
+  // oxlint-disable-next-line react-doctor/async-await-in-loop
+  while (activeHydration) await activeHydration;
 }
 
 // Macrotask yield through a MessageChannel rather than setTimeout: the
@@ -191,8 +202,30 @@ async function hydrateFeedItemBodies(itemIds: string[], epoch: number) {
 }
 
 async function hydrateBookmarkCaptures(bookmarkIds: string[], epoch: number) {
-  for (let index = 0; index < bookmarkIds.length; index += CAPTURE_BATCH_SIZE) {
-    const batch = bookmarkIds.slice(index, index + CAPTURE_BATCH_SIZE);
+  if (bookmarkIds.length === 0) return;
+  await waitForBookmarkCaptureHydration();
+  if (epoch !== hydrationEpoch) return;
+  // Fixed window: later streamed pages join without postponing the deadline.
+  // Explicit reader capture requests do not use this background queue.
+  await new Promise<void>((resolve) =>
+    setTimeout(resolve, CAPTURE_BATCH_WINDOW_MS),
+  );
+  if (epoch !== hydrationEpoch) return;
+  const candidateIds = [...bookmarkIds, ...pendingBookmarks.keys()];
+  pendingBookmarks.clear();
+  const missingIds = filterUnavailable(
+    candidateIds.filter(
+      (id) =>
+        Boolean(bookmarksStore.getState().getBookmark(id)?.captureHash) &&
+        bookmarkCapturesStore.getState().capturesDict[id] === undefined &&
+        isBookmarkCaptureRetainableNow(id),
+    ),
+    unavailableCaptures,
+    failedBookmarkIds,
+    (id) => bookmarksStore.getState().getBookmark(id)?.captureHash ?? null,
+  );
+  for (let index = 0; index < missingIds.length; index += CAPTURE_BATCH_SIZE) {
+    const batch = missingIds.slice(index, index + CAPTURE_BATCH_SIZE);
     try {
       const captures = await orpcRouterClient.bookmark.getCaptures(
         { bookmarkIds: batch },
@@ -227,9 +260,6 @@ async function hydratePendingEntities(page: {
   bookmarks: readonly ApplicationBookmark[];
 }) {
   const epoch = hydrationEpoch;
-  // Hydration must not lengthen the page-application task it follows.
-  await yieldToNextTask();
-  if (epoch !== hydrationEpoch) return;
   const plan = planPageBodyHydration({
     feedItems: [...page.feedItems, ...takeFeedItemRetries()],
     bookmarks: [...page.bookmarks, ...takeBookmarkRetries()],
@@ -279,6 +309,10 @@ export function hydrateOfflineBodiesForPage(page: {
       // The epoch condition stops a severed run from resurrecting after
       // invalidation and sweeping concurrently with the newly admitted run.
       while (pendingRun && hydrationEpoch === startEpoch) {
+        // Yield before collecting so page updates arriving in this task share
+        // the same request, without lengthening the page-application task.
+        await yieldToNextTask();
+        if (hydrationEpoch !== startEpoch) return;
         pendingRun = false;
         const feedItems = [...pendingFeedItems.values()];
         const bookmarks = [...pendingBookmarks.values()];

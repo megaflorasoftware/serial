@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { db as Database } from "~/server/db";
-import type { DatabaseFeed } from "~/server/db/schema";
+import type { FetchableOrigin } from "~/server/rss/types";
 import type { RssPublishedChunk } from "~/lib/rss";
 import { emptyRefreshStats } from "~/server/rss/stats";
 import { fetchDueSources } from "~/server/rss/fetchDueSources";
@@ -87,7 +87,11 @@ describe("fetchDueSources", () => {
         countDue: () => Promise.resolve(2),
         getDuePage: () =>
           Promise.resolve(
-            page < 2 ? ([{ id: 7 + page++ }] as DatabaseFeed[]) : [],
+            page < 2
+              ? ([
+                  { origin: { id: 70 + page }, feed: { id: 7 + page++ } },
+                ] as FetchableOrigin[])
+              : [],
           ),
         refreshFeedPage,
       },
@@ -120,7 +124,11 @@ describe("fetchDueSources", () => {
           countDue: () => Promise.resolve(1),
           getDuePage: () =>
             Promise.resolve(
-              page++ === 0 ? ([{ id: 7 }] as DatabaseFeed[]) : [],
+              page++ === 0
+                ? ([
+                    { origin: { id: 70 }, feed: { id: 7 } },
+                  ] as FetchableOrigin[])
+                : [],
             ),
           refreshFeedPage: () => Promise.reject(new Error("database failed")),
         },

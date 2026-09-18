@@ -28,6 +28,7 @@ const testState = vi.hoisted(
 );
 
 const revokeMock = vi.hoisted(() => vi.fn());
+const authorizeMock = vi.hoisted(() => vi.fn());
 
 vi.mock("~/server/db", () => ({
   get db() {
@@ -40,7 +41,10 @@ vi.mock("~/server/auth/constants", () => ({
   isOAuthConfigured: () => testState.oauthConfigured,
 }));
 vi.mock("~/server/auth/atproto/client", () => ({
-  getAtprotoClient: async () => ({ revoke: revokeMock }),
+  getAtprotoClient: async () => ({
+    revoke: revokeMock,
+    authorize: authorizeMock,
+  }),
 }));
 vi.mock("~/env", () => ({
   env: {
@@ -67,6 +71,7 @@ describe("atproto connection procedures", () => {
     testState.database = session.database;
     testState.oauthConfigured = false;
     revokeMock.mockReset();
+    authorizeMock.mockReset();
 
     await session.database.insert(user).values({
       id: "user-1",
@@ -98,12 +103,16 @@ describe("atproto connection procedures", () => {
     );
   }
 
-  async function seedLinked(options?: { extraProviderId?: string }) {
+  async function seedLinked(options?: {
+    extraProviderId?: string;
+    scopes?: string;
+  }) {
     await session.database.insert(account).values({
       id: "acc-atproto",
       accountId: DID,
       providerId: "atproto",
       userId: "user-1",
+      scope: options?.scopes ?? "atproto",
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -121,7 +130,7 @@ describe("atproto connection procedures", () => {
       did: DID,
       userId: "user-1",
       session: "ciphertext",
-      scopes: "atproto",
+      scopes: options?.scopes ?? "atproto",
       handle: "guarded.example.com",
       status: "active",
       createdAt: new Date(),
@@ -159,6 +168,8 @@ describe("atproto connection procedures", () => {
       needsReconnect: false,
       handle: "guarded.example.com",
       isConfigured: true,
+      hasWriteScope: false,
+      syncPreferences: { method: "none", importAsInactive: false },
     });
   });
 
@@ -175,6 +186,8 @@ describe("atproto connection procedures", () => {
       needsReconnect: true,
       handle: "guarded.example.com",
       isConfigured: true,
+      hasWriteScope: false,
+      syncPreferences: { method: "none", importAsInactive: false },
     });
 
     // The sign-in method still exists, so disconnect must work from here.
@@ -237,5 +250,163 @@ describe("atproto connection procedures", () => {
     await expect(
       api().atproto.linkAccount({ identifier: "someone.example.com" }),
     ).rejects.toThrow(/already have an Atmosphere account/);
+  });
+
+  async function loseCredentials() {
+    await session.database
+      .update(atprotoConnections)
+      .set({ session: null, status: "disconnected" })
+      .where(eq(atprotoConnections.did, DID));
+  }
+
+  it.each([
+    ["an identity-only grant", "atproto"],
+    ["the social grant", "atproto include:site.standard.authSocial"],
+  ])(
+    "a reconnect re-requests %s exactly, on the link callback",
+    async (_label, scopes) => {
+      await seedLinked({ extraProviderId: "credential", scopes });
+      await loseCredentials();
+      authorizeMock.mockResolvedValue(new URL("https://pds.example/authorize"));
+
+      await api().atproto.reconnectAccount();
+
+      expect(authorizeMock).toHaveBeenCalledWith(DID, {
+        scope: scopes,
+        state: JSON.stringify({ linkUserId: "user-1" }),
+        redirect_uri: "https://serial.test/api/auth/atproto/link-callback",
+      });
+    },
+  );
+
+  it("a reconnect with only the account row left recovers the grant from it", async () => {
+    await seedLinked({
+      extraProviderId: "credential",
+      scopes: "atproto include:site.standard.authSocial",
+    });
+    // The connection row was swept after its credentials were lost; the
+    // sign-in account row still names the DID and its granted scope.
+    await session.database
+      .delete(atprotoConnections)
+      .where(eq(atprotoConnections.did, DID));
+    authorizeMock.mockResolvedValue(new URL("https://pds.example/authorize"));
+
+    await api().atproto.reconnectAccount();
+
+    expect(authorizeMock).toHaveBeenCalledWith(
+      DID,
+      expect.objectContaining({
+        scope: "atproto include:site.standard.authSocial",
+      }),
+    );
+  });
+
+  it("a reconnect is refused while the connection is healthy or absent", async () => {
+    await expect(api().atproto.reconnectAccount()).rejects.toThrow(
+      /no Atmosphere account to reconnect/,
+    );
+    await seedLinked({ extraProviderId: "credential" });
+    await expect(api().atproto.reconnectAccount()).rejects.toThrow(
+      /already connected/,
+    );
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("a downgrade away from a write method saves directly", async () => {
+    await seedLinked({
+      extraProviderId: "credential",
+      scopes: "atproto include:site.standard.authSocial",
+    });
+    await api().atproto.saveSyncSettings({
+      method: "bidirectional",
+      importAsInactive: false,
+    });
+
+    const result = await api().atproto.saveSyncSettings({
+      method: "import",
+      importAsInactive: false,
+    });
+
+    expect(result).toEqual({ saved: true, consentUrl: null });
+    expect(await api().atproto.getConnectionStatus()).toMatchObject({
+      hasWriteScope: true,
+      syncPreferences: { method: "import", importAsInactive: false },
+    });
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("saves settings directly when the grant covers them", async () => {
+    await seedLinked({ extraProviderId: "credential" });
+
+    const importOnly = await api().atproto.saveSyncSettings({
+      method: "import",
+      importAsInactive: true,
+    });
+    expect(importOnly).toEqual({ saved: true, consentUrl: null });
+    expect((await api().atproto.getConnectionStatus()).syncPreferences).toEqual(
+      { method: "import", importAsInactive: true },
+    );
+
+    await session.database
+      .update(atprotoConnections)
+      .set({ scopes: "atproto include:site.standard.authSocial" })
+      .where(eq(atprotoConnections.did, DID));
+    const exporting = await api().atproto.saveSyncSettings({
+      method: "bidirectional",
+      importAsInactive: false,
+    });
+    expect(exporting).toEqual({ saved: true, consentUrl: null });
+    expect(await api().atproto.getConnectionStatus()).toMatchObject({
+      hasWriteScope: true,
+      syncPreferences: { method: "bidirectional", importAsInactive: false },
+    });
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a consent URL instead of saving a write method the grant lacks", async () => {
+    await seedLinked({ extraProviderId: "credential" });
+    authorizeMock.mockResolvedValue(new URL("https://pds.example/consent"));
+
+    const result = await api().atproto.saveSyncSettings({
+      method: "export",
+      importAsInactive: true,
+    });
+
+    expect(result).toEqual({
+      saved: false,
+      consentUrl: "https://pds.example/consent",
+    });
+    expect(authorizeMock).toHaveBeenCalledWith(
+      DID,
+      expect.objectContaining({
+        scope: "atproto include:site.standard.authSocial",
+        prompt: "consent",
+        state: JSON.stringify({
+          expectedDid: DID,
+          upgradeUserId: "user-1",
+          pendingSyncPreferences: { method: "export", importAsInactive: true },
+          pendingSyncSettingsVersion: 0,
+        }),
+      }),
+    );
+    // Nothing saved: the inactive flag rides in the state, not the row.
+    expect((await api().atproto.getConnectionStatus()).syncPreferences).toEqual(
+      { method: "none", importAsInactive: false },
+    );
+  });
+
+  it("refuses to save settings without an active connection", async () => {
+    await seedLinked({ extraProviderId: "credential" });
+    await session.database
+      .update(atprotoConnections)
+      .set({ session: null, status: "disconnected" })
+      .where(eq(atprotoConnections.did, DID));
+
+    await expect(
+      api().atproto.saveSyncSettings({
+        method: "import",
+        importAsInactive: false,
+      }),
+    ).rejects.toThrow(/Connect your Atmosphere account/);
   });
 });

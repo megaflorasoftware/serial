@@ -188,6 +188,8 @@ export function SidebarViews() {
             </SidebarMenuButton>
             <SidebarMenuButton
               disabled={!canMutate}
+              data-onboarding="add-view"
+              aria-label="Add View"
               onClick={() => launchDialog("add-view")}
             >
               <PlusIcon />

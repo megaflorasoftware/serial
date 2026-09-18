@@ -45,12 +45,15 @@ export type HardenedFetch = (
  */
 export function createHardenedFetch(
   fetch: HardenedFetch = globalThis.fetch,
-  { allowInsecure = ALLOW_INSECURE_PDS }: { allowInsecure?: boolean } = {},
+  {
+    allowInsecure = ALLOW_INSECURE_PDS,
+    responseMaxSize = RESPONSE_MAX_SIZE_BYTES,
+  }: { allowInsecure?: boolean; responseMaxSize?: number } = {},
 ): HardenedFetch {
   const safeFetch = safeFetchWrap({
     fetch,
     timeout: FETCH_TIMEOUT_MS,
-    responseMaxSize: RESPONSE_MAX_SIZE_BYTES,
+    responseMaxSize,
     // Real-world PDS hosts may run on non-standard ports; private and
     // non-unicast addresses stay blocked in production.
     allowCustomPort: true,

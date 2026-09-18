@@ -1,8 +1,9 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { makeFetchableOrigin } from "./fetchable-origin";
+import type { FetchableOriginOverrides } from "./fetchable-origin";
 import type { Server } from "node:http";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
-import type { DatabaseFeed } from "~/server/db/schema";
 import { fetchWebsiteFeedData } from "~/server/rss/parsers/website";
 
 vi.mock("~/server/rss/feedHttp", async (importOriginal) => {
@@ -95,24 +96,11 @@ afterAll(() => {
   server.close();
 });
 
-function makeFeed(overrides: Partial<DatabaseFeed> = {}): DatabaseFeed {
-  return {
-    id: 1,
-    userId: "user-1",
-    name: "Bounded feed",
-    url: `${baseUrl}/feed`,
-    imageUrl: "",
-    platform: "website",
-    openLocation: "serial",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    isActive: true,
-    etag: null,
-    lastModifiedHeader: null,
-    ...overrides,
-  };
+function makeFeed(overrides: FetchableOriginOverrides = {}) {
+  return makeFetchableOrigin(
+    { name: "Bounded feed", platform: "website", url: `${baseUrl}/feed` },
+    overrides,
+  );
 }
 
 describe("fetchWebsiteFeedData resource bounds", () => {
@@ -126,20 +114,20 @@ describe("fetchWebsiteFeedData resource bounds", () => {
     expect(result.items[0]?.content).toHaveLength(256 * 1024);
   });
 
-  it("fetches fallback metadata for at most 8 items with concurrency 2", async () => {
+  it("leaves canonical-page enrichment to the shared persisted-item queue", async () => {
     metadataRequestCount = 0;
     activeMetadataRequests = 0;
     maximumActiveMetadataRequests = 0;
 
     const result = await fetchWebsiteFeedData(
-      makeFeed({ url: `${baseUrl}/feed-no-images` }),
+      makeFeed({ locator: `${baseUrl}/feed-no-images` }),
     );
     expect(result).not.toBeNull();
     expect(result).not.toHaveProperty("notModified");
     if (!result || "notModified" in result) return;
 
-    expect(metadataRequestCount).toBe(8);
+    expect(metadataRequestCount).toBe(0);
     expect(maximumActiveMetadataRequests).toBeLessThanOrEqual(2);
-    expect(result.items.filter((item) => item.thumbnail)).toHaveLength(8);
+    expect(result.items.filter((item) => item.thumbnail)).toHaveLength(0);
   });
 });

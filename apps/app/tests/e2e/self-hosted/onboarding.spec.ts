@@ -1,0 +1,712 @@
+import { createClient } from "@libsql/client";
+import { expect, test } from "@playwright/test";
+import { signIn } from "../fixtures/auth";
+import { cleanupUser, seedArticleData } from "../fixtures/seed-db";
+import {
+  SELF_HOSTED_APP_PORT,
+  SELF_HOSTED_RSS_SERVER_PORT,
+  SELF_HOSTED_TURSO_PORT,
+} from "../fixtures/ports";
+import type { Page } from "@playwright/test";
+
+// Network stubs must intercept requests before a service worker handles them.
+test.use({ serviceWorkers: "block" });
+
+let email = "";
+async function start(page: Page, step = "introduction") {
+  const fixture = await seedArticleData(
+    SELF_HOSTED_TURSO_PORT,
+    SELF_HOSTED_APP_PORT,
+    SELF_HOSTED_RSS_SERVER_PORT,
+  );
+  email = fixture.email;
+  const db = createClient({
+    url: `http://127.0.0.1:${SELF_HOSTED_TURSO_PORT}`,
+  });
+  try {
+    await db.execute({
+      sql: "UPDATE serial_user SET onboarding_complete = 0, onboarding_step = ? WHERE email = ?",
+      args: [`2026-09-16-${step}`, email],
+    });
+    await db.execute({
+      sql: "UPDATE serial_feed SET name = ? WHERE id = (SELECT id FROM serial_feed WHERE user_id = (SELECT id FROM serial_user WHERE email = ?) LIMIT 1)",
+      args: ["Weekend reading", email],
+    });
+  } finally {
+    db.close();
+  }
+  await signIn({ page, email, password: fixture.password, onboarding: true });
+}
+async function savedProgress() {
+  const db = createClient({
+    url: `http://127.0.0.1:${SELF_HOSTED_TURSO_PORT}`,
+  });
+  try {
+    return (
+      await db.execute({
+        sql: "SELECT onboarding_complete, onboarding_step FROM serial_user WHERE email = ?",
+        args: [email],
+      })
+    ).rows[0];
+  } finally {
+    db.close();
+  }
+}
+const guide = (page: Page) =>
+  page.getByRole("region", { name: "Onboarding guidance" });
+async function expectSubtleButtonDimming(page: Page) {
+  const dim = page.locator("[data-guidance-layer] > svg path");
+  await expect(dim).toBeVisible();
+  await expect(dim).toHaveCSS("fill", "oklab(0 0 0 / 0.1)");
+}
+async function expectNormalBackdrop(page: Page) {
+  await expect(page.locator("[data-guidance-layer] > svg")).toHaveCount(0);
+  for (const overlay of await page
+    .locator('[data-slot="dialog-overlay"], [data-vaul-overlay]')
+    .all()) {
+    await expect(overlay).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+}
+test.afterEach(async () => {
+  if (email) await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
+});
+
+test("redirects incomplete onboarding to the main page and releases navigation after skipping", async ({
+  page,
+}) => {
+  await start(page, "create-view");
+  await page.goto("/feeds");
+  await expect(page).toHaveURL("/");
+  await expect(guide(page)).toBeVisible();
+  await expect(page.locator('[data-onboarding="view-chips"]')).toBeVisible();
+  await expect(page.locator('[data-onboarding="feed-content"]')).toBeVisible();
+
+  // The router observes history changes, including navigation after initialization.
+  await page.evaluate(() => window.history.pushState({}, "", "/feeds"));
+  await expect(page).toHaveURL("/");
+  await expect(guide(page)).toBeVisible();
+  expect((await savedProgress())?.onboarding_step).toBe(
+    "2026-09-16-create-view",
+  );
+
+  await page.route("**/api/rpc/onboarding/saveProgress", (route) =>
+    route.abort(),
+  );
+  await page
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await expect(guide(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  await expect(page).toHaveURL("/feeds");
+  expect((await savedProgress())?.onboarding_complete).toBe(0);
+
+  await page.reload();
+  await expect(page).toHaveURL("/");
+  await expect(guide(page)).toBeVisible();
+});
+
+test("advances despite a failed progress write and resumes the last saved step", async ({
+  page,
+}) => {
+  await start(page);
+  await expect(guide(page)).toHaveCount(0);
+  await page.route("**/api/rpc/onboarding/saveProgress", (route) =>
+    route.abort(),
+  );
+  await page.getByRole("button", { name: "Get started", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Customize appearance" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Get started", exact: true }),
+  ).toBeVisible();
+  await page.unroute("**/api/rpc/onboarding/saveProgress");
+  await page
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await savedProgress())?.onboarding_complete)
+    .toBe(1);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Skip Tutorial", exact: true }),
+  ).toHaveCount(0);
+  await page.goto("/feeds");
+  await expect(
+    page.getByRole("button", { name: "Home", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL("/feeds");
+});
+
+test("keeps feed-entry guidance clear of its input with a short mobile keyboard viewport", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page, "add-feed");
+  await expect(guide(page)).toContainText("adding your first feed", {
+    timeout: 30_000,
+  });
+  await page.locator('[data-onboarding="open-feed-menu"]').click();
+  await page
+    .locator('[data-onboarding="add-feed"]')
+    .filter({ visible: true })
+    .click();
+  const input = page.locator('[data-onboarding="find-feed"] [cmdk-input]');
+  await expect(input).toBeVisible();
+  for (const height of [350, 300, 844]) {
+    await page.evaluate((height) => {
+      Object.defineProperty(window.visualViewport, "height", {
+        value: height,
+        configurable: true,
+      });
+      window.visualViewport?.dispatchEvent(new Event("resize"));
+    }, height);
+    await expect
+      .poll(async () => {
+        const target = (await input.boundingBox())!;
+        const helper = (await guide(page).boundingBox())!;
+        return (
+          helper.y >= target.y + target.height &&
+          helper.y + helper.height <= height - 64
+        );
+      })
+      .toBe(true);
+    await input.click({ position: { x: 50, y: 50 } });
+    await expect(input).toBeFocused();
+    await input.fill("my reading");
+    await expect(input).toHaveValue("my reading");
+    await input.fill("");
+    await page
+      .getByRole("button", { name: "Skip Tutorial", exact: true })
+      .click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.getByRole("button", { name: "Keep going" }).click();
+  }
+});
+
+test("mobile view sheet restores space after keyboard height changes and blur", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page, "create-view");
+  await expect(guide(page)).toContainText("Open the menu", { timeout: 30000 });
+  await page.locator('[data-onboarding="open-menu"]').click();
+  await page.getByRole("button", { name: "Add View", exact: true }).click();
+  const name = page.locator('[data-onboarding="name-view"]');
+  await expect(name).toBeFocused();
+  await name.fill("Mobile reading");
+  const drawer = page.getByRole("dialog", { name: "Add View", exact: true });
+  await drawer.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    );
+  });
+  const initial = (await drawer.boundingBox())!;
+  // iOS shrinks the visual viewport while the layout viewport stays unchanged.
+  // A second keyboard height change can happen when its accessory bar changes.
+  for (const height of [500, 420]) {
+    await page.evaluate((height) => {
+      Object.defineProperty(window.visualViewport, "height", {
+        configurable: true,
+        value: height,
+      });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    }, height);
+    await expect
+      .poll(async () => {
+        const box = (await drawer.boundingBox())!;
+        return Math.round(box.y + box.height);
+      })
+      .toBe(height);
+    await expect
+      .poll(async () => Math.round((await drawer.boundingBox())!.y))
+      .toBe(Math.round(initial.y));
+    await expect(name).toBeInViewport();
+  }
+  await name.blur();
+  await expect(guide(page)).toContainText("Click +");
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport, "height", {
+      configurable: true,
+      value: 844,
+    });
+    window.visualViewport!.dispatchEvent(new Event("resize"));
+  });
+  await expect
+    .poll(async () => {
+      const box = (await drawer.boundingBox())!;
+      return Math.round(box.y + box.height);
+    })
+    .toBe(844);
+  await expect
+    .poll(async () => Math.round((await drawer.boundingBox())!.y))
+    .toBe(Math.round(initial.y));
+  await expect(
+    page.getByRole("button", { name: "Add feeds", exact: true }),
+  ).toBeInViewport();
+  await page.getByRole("button", { name: "Add feeds", exact: true }).click();
+  await expect(
+    page.getByRole("option", { name: "Weekend reading", exact: true }),
+  ).toBeVisible();
+});
+
+for (const mobile of [false, true]) {
+  test(`guides View creation, preserves drafts on canceled skip, and closes selectors first ${mobile ? "mobile" : "desktop"}`, async ({
+    page,
+  }) => {
+    test.setTimeout(90000);
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+    );
+    await start(page, "create-view");
+    await page.goto("/feeds");
+    await expect(page).toHaveURL("/");
+    await expect(guide(page)).toContainText("Open the menu", {
+      timeout: 30000,
+    });
+    await expectSubtleButtonDimming(page);
+    await page.locator('[data-onboarding="open-menu"]').click();
+    await expect(guide(page)).toContainText("You can add views here.");
+    if (mobile) await expectNormalBackdrop(page);
+    else await expectSubtleButtonDimming(page);
+    await page.getByRole("button", { name: "Add View", exact: true }).click();
+    const name = page.locator('[data-onboarding="name-view"]');
+    await expect(name).toBeFocused();
+    await name.fill("My reading");
+    if (mobile) {
+      await page.setViewportSize({ width: 390, height: 420 });
+      await expect
+        .poll(async () => {
+          const helper = await guide(page).boundingBox();
+          const input = await name.boundingBox();
+          return (
+            helper &&
+            input &&
+            (helper.y + helper.height <= input.y ||
+              input.y + input.height <= helper.y)
+          );
+        })
+        .toBeTruthy();
+      await page.setViewportSize({ width: 390, height: 844 });
+    }
+    await page
+      .getByRole("button", { name: "Skip Tutorial", exact: true })
+      .click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.getByRole("button", { name: "Keep going" }).click();
+    await expect(name).toHaveValue("My reading");
+    await expect(name).toBeFocused();
+    if (mobile) {
+      const drawer = page.locator("[data-vaul-drawer]").last();
+      await expect(drawer).toBeInViewport();
+      // Vaul ignores dismiss gestures during its opening animation.
+      await drawer.evaluate(async (element) => {
+        await Promise.all(
+          element.getAnimations().map((animation) => animation.finished),
+        );
+      });
+      const bounds = (await drawer.boundingBox())!;
+      // The helper can cover the centered handle. Swipe from the exposed edge
+      // of the drawer so this tests dismissal rather than dragging the helper.
+      const swipeX = bounds.x + bounds.width - 12;
+      await page.mouse.move(swipeX, bounds.y + 20);
+      await page.mouse.down();
+      await page.mouse.move(swipeX, Math.min(830, bounds.y + 420), {
+        steps: 12,
+      });
+      await page.mouse.up();
+      await expect(page.getByRole("alertdialog")).toBeVisible();
+      await page.getByRole("button", { name: "Keep going" }).click();
+      await expect(name).toHaveValue("My reading");
+      await expect(name).toBeInViewport();
+      await expect
+        .poll(async () => Math.round((await drawer.boundingBox())!.y))
+        .toBe(Math.round(bounds.y));
+    }
+    // A blocked control blurs the name without activating that control.
+    await name.fill("");
+    await page.mouse.click(
+      page.viewportSize()!.width - 8,
+      page.viewportSize()!.height / 2,
+    );
+    await expect(name).not.toBeFocused();
+    await expect(guide(page)).toContainText("Give your view a name");
+    await expectNormalBackdrop(page);
+    await expect(
+      page.getByRole("tab", { name: "Content", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await name.fill("My reading");
+    await page.mouse.click(
+      page.viewportSize()!.width - 8,
+      page.viewportSize()!.height / 2,
+    );
+    await expect(guide(page)).toContainText("Click +");
+    await expect(
+      page.getByRole("tab", { name: "Content", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("button", { name: "Add feeds", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const popup = (await page
+          .getByRole("option", { name: "Weekend reading", exact: true })
+          .boundingBox())!;
+        const helper = (await guide(page).boundingBox())!;
+        return (
+          helper.x + helper.width <= popup.x ||
+          popup.x + popup.width <= helper.x ||
+          helper.y + helper.height <= popup.y ||
+          popup.y + popup.height <= helper.y
+        );
+      })
+      .toBeTruthy();
+    await page.keyboard.press("Escape");
+    await expect(page.getByPlaceholder("Search feeds...")).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await page.getByRole("button", { name: "Add feeds", exact: true }).click();
+    await page
+      .getByRole("option", { name: "Weekend reading", exact: true })
+      .click();
+    await expect(page.getByPlaceholder("Search feeds...")).toHaveCount(0);
+    await page.getByRole("tab", { name: "Display", exact: true }).click();
+    await expect(guide(page).getByRole("button", { name: "Next" })).toHaveCount(
+      0,
+    );
+    await page.getByRole("tab", { name: "Content", exact: true }).click();
+    await page.locator('[data-onboarding="name-view"]').fill("My reading");
+    await page.getByRole("tab", { name: "Display", exact: true }).click();
+    await page.getByRole("button", { name: "Large List", exact: true }).click();
+    const layoutPopup = page.locator('[data-slot="popover-content"]').filter({
+      has: page.getByRole("button", { name: "Large Grid", exact: true }),
+    });
+    await expect(layoutPopup).toBeVisible();
+    await expectNormalBackdrop(page);
+    await page.getByRole("button", { name: "Large Grid", exact: true }).click();
+    await expect(layoutPopup).toHaveCount(0);
+    await page.getByRole("button", { name: "Large Grid", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(layoutPopup).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    let unblock!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    await page.route("**/api/rpc/view/create", async (route) => {
+      await pending;
+      await route.continue();
+    });
+    await page.locator('[data-onboarding="save-view"]').click();
+    await expect(page.locator('[data-onboarding="save-view"]')).toHaveText(
+      "Adding...",
+    );
+    expect((await savedProgress())?.onboarding_step).toBe(
+      "2026-09-16-create-view",
+    );
+    unblock();
+    await expect
+      .poll(async () => (await savedProgress())?.onboarding_step)
+      .toBe("2026-09-16-atmosphere-sync-setup");
+    await expect(guide(page)).toContainText("Your view is added!");
+    await expect(page.locator("[data-guidance-layer] > svg")).toHaveCount(0);
+    await expect(page.locator('[data-onboarding="view-chips"]')).toContainText(
+      "My reading",
+    );
+    await guide(page).getByRole("button", { name: "Next" }).click();
+    await expect(
+      page.getByRole("heading", { name: "That's it!" }),
+    ).toBeVisible();
+    await expect
+      .poll(async () => (await savedProgress())?.onboarding_complete)
+      .toBe(1);
+  });
+}
+
+for (const mobile of [false, true]) {
+  test(`default colors, contextual URL copying, and adjacent Feed guidance ${mobile ? "mobile" : "desktop"}`, async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+    );
+    await start(page, "choose-colors");
+    await page.getByRole("button", { name: "Amber", exact: true }).click();
+    await page.getByRole("button", { name: "Default", exact: true }).click();
+    const themeSave = page.waitForRequest("**/api/rpc/userConfig/setThemePair");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    expect((await themeSave).postDataJSON().json).toEqual({
+      light: [60, 10, 100],
+      dark: [60, 10, 15],
+    });
+    await expect(guide(page)).toContainText(
+      "Let's start by adding your first feed",
+    );
+    await expectSubtleButtonDimming(page);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expectSubtleButtonDimming(page);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveClass(/light/);
+    await expect(
+      page.getByRole("textbox", { name: "Suggested website" }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(guide(page)).toContainText(
+      "Let's start by adding your first feed",
+    );
+    await expectSubtleButtonDimming(page);
+    expect(
+      await page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        return ["light", "dark"].map((mode) =>
+          ["hue", "sat", "lgt"].map((part) =>
+            parseFloat(style.getPropertyValue(`--${mode}-${part}`)),
+          ),
+        );
+      }),
+    ).toEqual([
+      [60, 10, 100],
+      [60, 10, 15],
+    ]);
+    await page
+      .locator(
+        mobile
+          ? '[data-onboarding="open-feed-menu"]'
+          : '[data-onboarding="open-menu"]',
+      )
+      .click();
+    await expect(guide(page)).toContainText("Here's where you add a feed");
+    if (mobile) await expectNormalBackdrop(page);
+    else await expectSubtleButtonDimming(page);
+    const addFeed = page
+      .locator('[data-onboarding="add-feed"]')
+      .filter({ visible: true });
+    await expect
+      .poll(async () => {
+        const target = (await addFeed.boundingBox())!;
+        const helper = (await guide(page).boundingBox())!;
+        const dx = Math.max(
+          0,
+          target.x - helper.x - helper.width,
+          helper.x - target.x - target.width,
+        );
+        const dy = Math.max(
+          0,
+          target.y - helper.y - helper.height,
+          helper.y - target.y - target.height,
+        );
+        return Math.hypot(dx, dy);
+      })
+      .toBeLessThanOrEqual(24);
+    await expect(guide(page).locator("[data-guidance-caret]")).toBeVisible();
+    await page
+      .locator('[data-onboarding="add-feed"]')
+      .filter({ visible: true })
+      .click();
+    await expect(guide(page)).toContainText("Enter a website address");
+    await expectNormalBackdrop(page);
+    await expect(
+      guide(page).getByRole("textbox", { name: "Suggested website" }),
+    ).toHaveValue("www.serial.tube");
+    const copyWebsite = page.getByRole("button", {
+      name: "Copy website address",
+    });
+    await copyWebsite.click();
+    await expect(copyWebsite.locator(".lucide-check")).toBeVisible();
+    await expect(
+      page.getByText("Website address copied.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+    await expect(
+      page.getByRole("textbox", { name: "Suggested website" }),
+    ).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe("www.serial.tube");
+    await expect(copyWebsite.locator(".lucide-copy")).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(guide(page)).toContainText("Enter a website address");
+    await expect(guide(page).getByRole("button", { name: "Next" })).toHaveCount(
+      0,
+    );
+
+    const search = page.locator('[data-onboarding="find-feed"] [cmdk-input]');
+    await search.fill("https://example.com/my-favorite-site");
+    await expect(search).toHaveValue("https://example.com/my-favorite-site");
+    const feedUrl = `http://127.0.0.1:${SELF_HOSTED_RSS_SERVER_PORT}/feed/cgp-grey`;
+    await search.fill(feedUrl);
+    const result = page.getByRole("option", { name: /CGP Grey/ });
+    await expect(result).toBeVisible({ timeout: 15000 });
+    await expect(guide(page)).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Skip Tutorial", exact: true }),
+    ).toBeVisible();
+    await search.fill("");
+    await expect(guide(page)).toContainText("Enter a website address");
+    await search.fill(feedUrl);
+    await expect(result).toBeVisible({ timeout: 15000 });
+    await expect(guide(page)).toHaveCount(0);
+    await result.click();
+    await expect(page.locator('[data-onboarding="save-feed"]')).toBeVisible();
+    await expect(guide(page)).toContainText("Save your feed");
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+  });
+}
+
+const connected = {
+  isConnected: true,
+  needsReconnect: false,
+  handle: "reader.test",
+  isConfigured: true,
+  hasWriteScope: false,
+  syncPreferences: { method: "none", importAsInactive: false },
+};
+test("saves unchanged sync preferences and stays on the slide after a failure", async ({
+  page,
+}) => {
+  await page.route("**/api/rpc/atproto/getConnectionStatus**", (route) =>
+    route.fulfill({ json: { json: connected } }),
+  );
+  await start(page, "atmosphere-sync-setup");
+  const next = page.getByRole("button", { name: "Next", exact: true });
+  await expect(next).toBeEnabled({ timeout: 30000 });
+  await page.route("**/api/rpc/atproto/saveSyncSettings", (route) =>
+    route.abort(),
+  );
+  await next.click();
+  await expect(next).toBeEnabled({ timeout: 30000 });
+  expect((await savedProgress())?.onboarding_complete).toBe(0);
+  await page.unroute("**/api/rpc/atproto/saveSyncSettings");
+  await page.route("**/api/rpc/atproto/saveSyncSettings", (route) =>
+    route.fulfill({ json: { json: { saved: true } } }),
+  );
+  await next.click();
+  await expect(page.getByRole("heading", { name: "That's it!" })).toBeVisible();
+});
+
+for (const result of ["denied", "success"]) {
+  test(`resumes the sync slide on consent ${result}`, async ({ page }) => {
+    await page.route("**/api/rpc/atproto/getConnectionStatus**", (route) =>
+      route.fulfill({ json: { json: connected } }),
+    );
+    await start(page, "atmosphere-sync-setup");
+    await expect(
+      page.getByRole("heading", { name: "Your Atmosphere subscriptions" }),
+    ).toBeVisible({ timeout: 30000 });
+    await page.goto(`/?atproto_consent=${result}`);
+    await expect(
+      page.getByRole("heading", {
+        name:
+          result === "success" ? "That's it!" : "Your Atmosphere subscriptions",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Connections", exact: true }),
+    ).toHaveCount(0);
+    await expect
+      .poll(async () => (await savedProgress())?.onboarding_complete)
+      .toBe(result === "success" ? 1 : 0);
+  });
+}
+
+test("a pending theme save cannot reopen onboarding after confirmed skip", async ({
+  page,
+}) => {
+  await start(page, "choose-colors");
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/rpc/userConfig/setThemePair", async (route) => {
+    await pending;
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Saving..." })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  const saved = page.waitForResponse("**/api/rpc/userConfig/setThemePair");
+  release();
+  await saved;
+  await expect
+    .poll(async () => (await savedProgress())?.onboarding_complete)
+    .toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Copy website address" }),
+  ).toHaveCount(0);
+});
+
+for (const mobile of [false, true]) {
+  test(`next steps matches welcome and keeps ordinary dialog backdrops ${mobile ? "mobile" : "desktop"}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(
+      mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+    );
+    await start(page, "next-steps");
+    const title = page.getByRole("heading", {
+      name: "That's it!",
+      exact: true,
+    });
+    const blurb = page.getByText(
+      /Next, add our extension to save bookmarks as you browse the web, or import feeds from YouTube or your previous RSS reader\./,
+      { exact: true },
+    );
+    await expect(title).toHaveCSS("font-size", "20px");
+    await expect(title).toHaveCSS("text-align", "center");
+    await expect(blurb).toHaveCSS("font-size", "16px");
+    await expect(blurb).toHaveCSS("text-align", "center");
+    await expect(
+      page
+        .getByRole("dialog", { name: "That's it!", exact: true })
+        .getByRole("link"),
+    ).toHaveText(["Get the extension", "Import feeds"]);
+    await expect(
+      page.getByRole("button", { name: "Close", exact: true }),
+    ).toHaveCount(0);
+    await expectNormalBackdrop(page);
+    await expect
+      .poll(async () => {
+        const actions = (await page
+          .getByRole("link", { name: "Import feeds", exact: true })
+          .boundingBox())!;
+        const copy = (await blurb.boundingBox())!;
+        return actions.y + actions.height < copy.y;
+      })
+      .toBe(true);
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(title).toHaveCount(0);
+    await page.locator('[data-onboarding="open-menu"]').click();
+    await page
+      .locator('[data-onboarding="add-view"]')
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Add View", exact: true }),
+    ).toBeVisible();
+    const overlays = page.locator(
+      '[data-slot="dialog-overlay"], [data-vaul-overlay]',
+    );
+    await expect(overlays.last()).not.toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+  });
+}

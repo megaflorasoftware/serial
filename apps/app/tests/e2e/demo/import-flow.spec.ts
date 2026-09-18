@@ -5,6 +5,7 @@ import { DEMO_RSS_SERVER_PORT, DEMO_TURSO_PORT } from "../fixtures/ports";
 import { resetDb } from "../fixtures/reset-db";
 import { readOpmlFixture } from "../fixtures/opml";
 import { openSidebar } from "../fixtures/sidebar";
+import { completeTestOnboarding } from "../fixtures/auth";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,7 @@ test.describe("demo instance full import flow", () => {
     await expect(page.getByText(/This is a demo instance/i)).toBeVisible({
       timeout: 10000,
     });
+    await completeTestOnboarding(page);
 
     // ── 2. Import Feeds ─────────────────────────────────────────────
     await page.goto("/import");

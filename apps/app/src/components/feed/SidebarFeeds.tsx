@@ -5,8 +5,10 @@ import {
   CircleSmall,
   Edit2Icon,
   MinusIcon,
+  OrbitIcon,
   PauseIcon,
   PlusIcon,
+  RssIcon,
   SettingsIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
@@ -46,6 +48,8 @@ import {
 import { isContentStatusAvailable } from "~/lib/content-status";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 
+import { getFeedPublicationName, getRssOrigin } from "~/lib/feeds/origins";
+
 function useDebouncedState(defaultValue: string, delay: number) {
   const [searchQuery, setSearchQuery] = useState(defaultValue);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,6 +78,36 @@ function sortFeedOptions(a: ApplicationFeed, b: ApplicationFeed) {
   return a.name.localeCompare(b.name);
 }
 
+function FeedOriginGlyphs({
+  publicationName,
+  hasRss,
+}: {
+  publicationName?: string;
+  hasRss: boolean;
+}) {
+  if (publicationName === undefined && !hasRss) return null;
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-2">
+      {publicationName !== undefined && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <OrbitIcon size={16} aria-label="Atmosphere" />
+          </TooltipTrigger>
+          <TooltipContent>Atmosphere</TooltipContent>
+        </Tooltip>
+      )}
+      {hasRss && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <RssIcon size={16} aria-label="RSS" />
+          </TooltipTrigger>
+          <TooltipContent>RSS</TooltipContent>
+        </Tooltip>
+      )}
+    </span>
+  );
+}
+
 const EMPTY_FEED_AVAILABILITY: NavigationSnapshot["feeds"] = {};
 
 type FeedOption = ApplicationFeed & {
@@ -87,6 +121,8 @@ type FeedOption = ApplicationFeed & {
 const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   feedId,
   name,
+  publicationName,
+  hasRss,
   hasEntries,
   isSelected,
   onSelect,
@@ -94,6 +130,8 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
 }: {
   feedId: number;
   name: string;
+  publicationName?: string;
+  hasRss: boolean;
   hasEntries: boolean;
   isSelected: boolean;
   onSelect: (feedId: number) => void;
@@ -103,7 +141,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   const isSuccess = feedStatus === "success" || feedStatus === "skipped";
 
   return (
-    <SidebarMenuItem className="group flex gap-1">
+    <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
         onClick={() => onSelect(feedId)}
@@ -139,6 +177,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
           </div>
         )}
         <div className="line-clamp-1">{name}</div>
+        <FeedOriginGlyphs publicationName={publicationName} hasRss={hasRss} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -178,15 +217,19 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
             <div className="bg-sidebar-accent size-2.5 rounded-full" />
           </div>
         )}
+        <div className="text-muted-foreground line-clamp-1">{name}</div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <PauseIcon size={16} className="text-muted-foreground" />
+            <PauseIcon
+              size={16}
+              className="text-muted-foreground ml-auto shrink-0"
+              aria-label="Paused"
+            />
           </TooltipTrigger>
           <TooltipContent>
             This feed is inactive and won&apos;t receive new content.
           </TooltipContent>
         </Tooltip>
-        <div className="text-muted-foreground line-clamp-1">{name}</div>
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -319,6 +362,7 @@ export function SidebarFeeds() {
                   disabled={!canMutate}
                   shortcut="a"
                   variant="ghost"
+                  data-onboarding="add-feed"
                   aria-label="Add Feed or Bookmark"
                 >
                   <PlusIcon />
@@ -365,6 +409,7 @@ export function SidebarFeeds() {
             </SidebarMenuButton>
             <SidebarMenuButton
               size="default-icon"
+              data-onboarding="add-feed"
               aria-label="Add Feed or Bookmark"
               disabled={!canMutate}
               onClick={() => launchDialog("add-feed")}
@@ -411,6 +456,8 @@ export function SidebarFeeds() {
               key={feed.id}
               feedId={feed.id}
               name={feed.name}
+              publicationName={getFeedPublicationName(feed)}
+              hasRss={getRssOrigin(feed) !== undefined}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}
@@ -425,6 +472,8 @@ export function SidebarFeeds() {
               key={feed.id}
               feedId={feed.id}
               name={feed.name}
+              publicationName={getFeedPublicationName(feed)}
+              hasRss={getRssOrigin(feed) !== undefined}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}

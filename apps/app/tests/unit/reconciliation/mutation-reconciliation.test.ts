@@ -119,7 +119,6 @@ beforeEach(async () => {
     id: FEED_ID,
     userId: USER_ID,
     name: "Reading feed",
-    url: "https://example.com/feed.xml",
     platform: "website",
   });
   await database.insert(viewFeeds).values({ viewId: VIEW_ID, feedId: FEED_ID });
