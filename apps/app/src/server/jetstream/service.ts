@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { and, asc, eq, gt, isNull, ne } from "drizzle-orm";
-import {
-  atprotoStreamState,
-  feedOriginAtproto,
-  feedOrigins,
-} from "../db/schema";
+import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { atprotoStreamState, feedOriginAtproto } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { publisher } from "../api/publisher";
 import { getUserChannel } from "../api/channels";
@@ -13,12 +9,15 @@ import {
   acceptBatch,
   claimStream,
   ensureStream,
+  interruptStream,
   ORIGIN_PAGE_SIZE,
 } from "./store";
 import { recoverOrigin } from "./recovery";
 import { processOriginDocuments } from "./process";
 import { createStreamTransport, retryStream } from "./transport";
 import { normalizeService, sequence, StreamFailure } from "./protocol";
+import { createStreamReporter } from "./report";
+import { resolveStreamService } from "./endpoint";
 import type { FetchableOrigin } from "../rss/types";
 import type { CommittedUpdate } from "./process";
 import type { StreamDatabase, StreamSettings } from "./store";
@@ -26,9 +25,9 @@ import { ALL_CONTENT_STATUS_KEYS } from "~/lib/reconciliation/invalidation";
 import { env } from "~/env";
 import { workerPool } from "~/lib/workerPool";
 
-function configuration() {
+async function configuration() {
   const settings: StreamSettings = {
-    service: normalizeService(env.ATPROTO_JETSTREAM_ENDPOINT),
+    service: await resolveStreamService(env.ATPROTO_JETSTREAM_ENDPOINT),
     backgroundEnabled: env.BACKGROUND_REFRESH_ENABLED,
   };
   return {
@@ -70,7 +69,7 @@ export async function publishStreamUpdate(update: CommittedUpdate) {
 
 async function establishBoundary(
   database: StreamDatabase,
-  config: ReturnType<typeof configuration>,
+  config: Awaited<ReturnType<typeof configuration>>,
   signal: AbortSignal,
 ) {
   const state = await ensureStream(database, config.settings.service);
@@ -103,9 +102,8 @@ async function establishBoundary(
 export async function refreshStreamOrigin(
   database: StreamDatabase,
   fetchable: FetchableOrigin,
-  manual = false,
 ) {
-  const config = configuration();
+  const config = await configuration();
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
   try {
@@ -117,7 +115,8 @@ export async function refreshStreamOrigin(
       config.transport,
       signal,
       {
-        manual,
+        // The ordinary fetch path already owns scheduling and eligibility.
+        manual: true,
         publish: async (update) => {
           updates.push(update);
         },
@@ -137,62 +136,26 @@ export async function refreshStreamOrigin(
   };
 }
 
-/** App-open and manual catch-up do not depend on the RSS cooldown or refresh owner. */
-export async function catchUpUser(
-  database: StreamDatabase,
-  userId: string,
-  manual = false,
-) {
-  const config = configuration();
-  if (!manual && !config.settings.backgroundEnabled) return;
-  const signal = AbortSignal.timeout(50_000);
-  let after = 0;
-  while (!signal.aborted) {
-    const origins = await database
-      .select({ id: feedOrigins.id })
-      .from(feedOrigins)
-      .where(
-        and(
-          eq(feedOrigins.userId, userId),
-          eq(feedOrigins.kind, "atproto"),
-          gt(feedOrigins.id, after),
-        ),
-      )
-      .orderBy(asc(feedOrigins.id))
-      .limit(ORIGIN_PAGE_SIZE);
-    if (!origins.length) return;
-    try {
-      await establishBoundary(database, config, signal);
-    } catch (error) {
-      if (!signal.aborted) config.transport.report(error, "user-boundary");
-      return;
-    }
-    for await (const unused of workerPool(origins, 4, async (origin) => {
-      try {
-        await recoverOrigin(
-          database,
-          origin.id,
-          config.settings,
-          config.transport,
-          signal,
-          { manual, publish: publishStreamUpdate },
-        );
-      } catch (error) {
-        if (!signal.aborted) config.transport.report(error, "user-recovery");
-      }
-    })) {
-      void unused;
-    }
-    after = origins.at(-1)!.id;
-  }
-}
-
-export function startStreamWorker(
+export async function startStreamWorker(
   database: StreamDatabase,
   shutdown: AbortSignal,
 ) {
-  const config = configuration();
-  if (!config.settings.backgroundEnabled) return Promise.resolve();
+  if (!env.BACKGROUND_REFRESH_ENABLED) return;
+  let configured: Awaited<ReturnType<typeof configuration>> | undefined;
+  let retries = 0;
+  while (!shutdown.aborted && !configured) {
+    try {
+      configured = await configuration();
+    } catch (error) {
+      createStreamReporter(
+        normalizeService(env.ATPROTO_JETSTREAM_ENDPOINT),
+        shutdown,
+      )(error, "configuration");
+      await retryStream(error, retries++, shutdown).catch(() => {});
+    }
+  }
+  if (!configured) return;
+  const config = configured;
   const owner = randomUUID();
   async function consume() {
     let attempt = 0;
@@ -230,6 +193,8 @@ export function startStreamWorker(
           await delay(10_000, undefined, { signal });
           continue;
         }
+        const [connectionState] = await interruptStream(database, owner, true);
+        if (!connectionState) throw new StreamFailure("connection-ownership");
         await establishBoundary(database, config, signal);
         const state = await ensureStream(database, config.settings.service);
         // Keep collection filters stable as readers follow new Publications. A DID-filter
@@ -237,6 +202,28 @@ export function startStreamWorker(
         for await (const batch of config.transport.stream(
           sequence(state.seq!),
           signal,
+          undefined,
+          async () => {
+            signal.throwIfAborted();
+            const rows = await runDatabaseWrite(database, () =>
+              database
+                .update(atprotoStreamState)
+                .set({ connected: true })
+                .where(
+                  and(
+                    eq(atprotoStreamState.id, "primary"),
+                    eq(atprotoStreamState.leaseOwner, owner),
+                    eq(
+                      atprotoStreamState.generation,
+                      connectionState.generation,
+                    ),
+                    gt(atprotoStreamState.leaseUntil, new Date()),
+                  ),
+                )
+                .returning({ id: atprotoStreamState.id }),
+            );
+            if (!rows.length) throw new StreamFailure("connection-ownership");
+          },
         )) {
           await acceptBatch(database, batch, config.settings, {
             owner,
@@ -263,37 +250,30 @@ export function startStreamWorker(
           });
           attempt = 0;
         }
+        if (!signal.aborted) throw new StreamFailure("connection-closed");
       } catch (error) {
         if (signal.aborted) continue;
         config.transport.report(error, "consumer");
-        if (
-          !config.transport.hasReplay &&
-          error instanceof StreamFailure &&
-          error.status === 400
-        ) {
-          // A lost live window requires direct recovery for every retained user position.
+        if (error instanceof StreamFailure && error.status === 400) {
+          // Resume the live tip; each Feed retains its own recovery position.
           await runDatabaseWrite(database, () =>
-            database.transaction(async (tx) => {
-              await tx
-                .update(feedOriginAtproto)
-                .set({ streamMode: "paused" })
-                .where(ne(feedOriginAtproto.streamMode, "direct"));
-              await tx
-                .update(atprotoStreamState)
-                .set({ seq: null })
-                .where(
-                  and(
-                    eq(atprotoStreamState.id, "primary"),
-                    eq(atprotoStreamState.leaseOwner, owner),
-                  ),
-                );
-            }),
+            database
+              .update(atprotoStreamState)
+              .set({ seq: null })
+              .where(
+                and(
+                  eq(atprotoStreamState.id, "primary"),
+                  eq(atprotoStreamState.leaseOwner, owner),
+                ),
+              ),
           );
         }
+        await interruptStream(database, owner);
         await retryStream(error, attempt++, shutdown).catch(() => {});
       } finally {
         if (heartbeat) clearInterval(heartbeat);
         connection.abort();
+        await interruptStream(database, owner);
       }
     }
   }
@@ -311,17 +291,14 @@ export function startStreamWorker(
           if (!rows.length) break;
           for await (const unused of workerPool(rows, 4, async (row) => {
             try {
-              await recoverOrigin(
-                database,
-                row.id,
-                config.settings,
-                config.transport,
-                shutdown,
-                { publish: publishStreamUpdate },
-              );
+              // Only drain staged work. Repository/archive recovery belongs to normal fetches.
+              await processOriginDocuments(database, row.id, config.settings, {
+                signal: shutdown,
+                publish: publishStreamUpdate,
+              });
             } catch (error) {
               if (!shutdown.aborted)
-                config.transport.report(error, "background-recovery");
+                config.transport.report(error, "document-retry");
             }
           })) {
             void unused;
@@ -329,8 +306,7 @@ export function startStreamWorker(
           after = rows.at(-1)!.id;
         }
       } catch (error) {
-        if (!shutdown.aborted)
-          config.transport.report(error, "background-recovery");
+        if (!shutdown.aborted) config.transport.report(error, "document-retry");
       }
       await delay(30_000, undefined, { signal: shutdown }).catch(() => {});
     }

@@ -379,6 +379,7 @@ export const feedOriginAtproto = sqliteTable(
     recoveryAttempts: integer("recovery_attempts").notNull().default(0),
     streamService: text("stream_service"),
     streamSeq: text("stream_seq"),
+    streamGeneration: integer("stream_generation").notNull().default(0),
     streamMode: text("stream_mode", {
       enum: ["paused", "direct", "catchup", "live"],
     })
@@ -424,6 +425,8 @@ export const atprotoStreamState = sqliteTable("atproto_stream_state", {
   id: text("id").primaryKey(),
   service: text("service").notNull(),
   seq: text("seq"),
+  generation: integer("generation").notNull().default(0),
+  connected: integer("connected", { mode: "boolean" }).notNull().default(false),
   leaseOwner: text("lease_owner"),
   leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
 });

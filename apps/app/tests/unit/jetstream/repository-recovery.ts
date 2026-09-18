@@ -4,6 +4,7 @@ import type { ProcessingOptions } from "~/server/jetstream/process";
 import type { StreamTransport } from "~/server/jetstream/transport";
 import { atprotoStreamState, feedOriginAtproto } from "~/server/db/schema";
 import { recoverOrigin } from "~/server/jetstream/recovery";
+import { processOriginDocuments } from "~/server/jetstream/process";
 import { ensureStream } from "~/server/jetstream/store";
 
 /** Drives repository recovery through the same staging and processing as the worker. */
@@ -41,6 +42,10 @@ export async function recoverRepository(
       yield { events: [], lastCursor: seq };
     },
   };
+  if (!direct) {
+    await processOriginDocuments(database, originId, settings, options);
+    return;
+  }
   await recoverOrigin(
     database,
     originId,

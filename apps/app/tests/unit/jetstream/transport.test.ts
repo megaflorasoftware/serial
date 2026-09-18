@@ -193,3 +193,128 @@ describe("Jetstream transport", () => {
     }
   });
 });
+
+it("normalizes both wire URLs into distinct checkpoint identities", () => {
+  expect(normalizeService("wss://EXAMPLE.com/subscribe/")).toBe(
+    "https://example.com/subscribe",
+  );
+  expect(
+    normalizeService(
+      "wss://example.com/xrpc/network.bsky.jetstream.subscribeEvents",
+    ),
+  ).toBe("https://example.com");
+});
+
+it("reads v1 commits, identities and accounts using timestamp cursors without archive access", async () => {
+  const server = createServer();
+  const sockets = new WebSocketServer({ server });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error();
+  const start = 1_790_000_000_000_000;
+  let requested: URL | undefined;
+  const did = "did:plc:alice";
+  const record = { $type: "site.standard.document", title: "Article" };
+  sockets.on("connection", (socket, request) => {
+    requested = new URL(request.url!, "http://localhost");
+    expect(request.headers["sec-websocket-protocol"]).toBeUndefined();
+    expect(request.headers.authorization).toBeUndefined();
+    const commit = {
+      operation: "create",
+      collection: "site.standard.document",
+      rkey: "post",
+      rev: "2222222222222",
+      cid: "bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku",
+      record,
+    };
+    for (const [offset, payload] of [
+      [0, { kind: "commit", commit }],
+      [1, { kind: "commit", commit }],
+      [2, { kind: "commit", commit: { ...commit, operation: "update" } }],
+      [
+        3,
+        {
+          kind: "commit",
+          commit: {
+            operation: "delete",
+            collection: commit.collection,
+            rkey: "post",
+            rev: commit.rev,
+          },
+        },
+      ],
+      [4, { kind: "identity", identity: { did } }],
+      [
+        5,
+        { kind: "account", account: { did, active: false, status: "deleted" } },
+      ],
+    ] as const)
+      socket.send(JSON.stringify({ did, time_us: start + offset, ...payload }));
+  });
+  const fetch = vi.fn();
+  const controller = new AbortController();
+  try {
+    const transport = createStreamTransport({
+      service: `ws://127.0.0.1:${address.port}/subscribe`,
+      apiKey: "unused",
+      fetch,
+    });
+    expect(transport.hasReplay).toBe(false);
+    const events = [];
+    for await (const batch of transport.stream(start, controller.signal)) {
+      events.push(...batch.events);
+      if (events.length === 5) break;
+    }
+    expect(requested?.pathname).toBe("/subscribe");
+    expect(requested?.searchParams.get("cursor")).toBe(String(start));
+    expect(requested?.searchParams.getAll("wantedCollections")).toEqual([
+      "site.standard.document",
+      "site.standard.publication",
+    ]);
+    expect(events.map((event) => event.seq)).toEqual(
+      [1, 2, 3, 4, 5].map((n) => start + n),
+    );
+    expect(events[0]).toMatchObject({
+      kind: "commit",
+      commit: { record },
+      time: new Date((start + 1) / 1000).toISOString(),
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    controller.abort();
+    for (const socket of sockets.clients) socket.terminate();
+    await new Promise<void>((resolve) =>
+      sockets.close(() => server.close(() => resolve())),
+    );
+  }
+});
+
+it("reports a successful quiet connection before receiving any events", async () => {
+  const server = createServer();
+  const sockets = new WebSocketServer({
+    server,
+    handleProtocols: () => "xrpc.v1.json",
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error();
+  const controller = new AbortController();
+  const opened = vi.fn(async () => {
+    controller.abort();
+  });
+  try {
+    const transport = createStreamTransport({
+      service: `http://127.0.0.1:${address.port}`,
+    });
+    expect(
+      await transport.stream(10, controller.signal, undefined, opened).next(),
+    ).toMatchObject({ done: true });
+    expect(opened).toHaveBeenCalledTimes(1);
+  } finally {
+    controller.abort();
+    for (const socket of sockets.clients) socket.terminate();
+    await new Promise<void>((resolve) =>
+      sockets.close(() => server.close(() => resolve())),
+    );
+  }
+});

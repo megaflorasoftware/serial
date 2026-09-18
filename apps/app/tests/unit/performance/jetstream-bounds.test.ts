@@ -5,6 +5,7 @@ import {
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
 import { createJetstreamWorkload } from "../../../scripts/performance/jetstream-workload";
+import { interruptStream } from "~/server/jetstream/store";
 import { recordUserActivity } from "~/server/jetstream/activity";
 
 it.each([1000, 10000, 50000])(
@@ -55,6 +56,25 @@ it.each([1000, 10000, 50000])(
         expect(lookup).toBeDefined();
         lookups.push(lookup!.sql);
       }
+      await workload.prepareHealthy();
+      session.instrumentation.reset();
+      expect(await workload.check()).toEqual({ requests: 0 });
+      expect(
+        session.instrumentation.snapshot().statementCount,
+      ).toBeLessThanOrEqual(10);
+      expect(
+        session.instrumentation.snapshot().materializedRows,
+      ).toBeLessThanOrEqual(5);
+      session.instrumentation.reset();
+      await interruptStream(session.database, "benchmark", true);
+      const interruption = session.instrumentation.snapshot();
+      expect(interruption.statementCount).toBe(1);
+      expect(interruption.materializedRows).toBe(1);
+      expect(
+        interruption.statements.some((entry) =>
+          /update "serial_feed_origin/.test(entry.sql),
+        ),
+      ).toBe(false);
       const activityTime = new Date(Date.now() + 10 * 60 * 1000);
       for (const changedRows of [1, 0]) {
         session.instrumentation.reset();

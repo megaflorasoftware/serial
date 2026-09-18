@@ -4,12 +4,7 @@ import { feedOriginAtproto } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { scanAtmosphere } from "../rss/scanAtmosphere";
 import { createPublicationClient } from "../rss/atprotoClient";
-import {
-  CheckpointHostError,
-  sequence,
-  streamFailure,
-  StreamFailure,
-} from "./protocol";
+import { CheckpointHostError, sequence, streamFailure } from "./protocol";
 import {
   acceptBatch,
   eligible,
@@ -18,6 +13,7 @@ import {
   nowFor,
   planFor,
   stageDocument,
+  streamIsConnected,
 } from "./store";
 import { processOriginDocuments } from "./process";
 import type { StreamTransport } from "./transport";
@@ -54,10 +50,12 @@ export async function recoverOrigin(
     )
   )
     return;
+  const initialState = await ensureStream(database, settings.service);
   if (
     candidate.atproto.initialized &&
     candidate.atproto.streamMode === "live" &&
-    !options.manual
+    candidate.atproto.streamGeneration === initialState.generation &&
+    streamIsConnected(initialState, nowFor(settings))
   ) {
     await processOriginDocuments(database, originId, settings, options);
     return;
@@ -122,71 +120,36 @@ export async function recoverOrigin(
       row.atproto.streamService !== settings.service
     )
       throw new CheckpointHostError();
-    if (row.atproto.streamSeq === null) {
-      const boundary = transport.hasReplay
-        ? sequence(state.seq)
-        : await transport.tip(combined);
+    // Persist the generation being recovered with its boundary across bounded attempts.
+    const continuing =
+      row.atproto.streamSeq !== null &&
+      ["direct", "catchup"].includes(row.atproto.streamMode);
+    const generation = continuing
+      ? row.atproto.streamGeneration
+      : state.generation;
+    const bootstrap =
+      !row.atproto.initialized ||
+      (!transport.hasReplay && !continuing) ||
+      row.atproto.streamMode === "direct";
+    if (!continuing) {
+      const boundary = bootstrap
+        ? transport.hasReplay
+          ? sequence(state.seq)
+          : await transport.tip(combined)
+        : sequence(row.atproto.streamSeq ?? state.seq);
       await runDatabaseWrite(database, () =>
         database
           .update(feedOriginAtproto)
           .set({
             streamService: settings.service,
             streamSeq: String(boundary),
-            streamMode: "paused",
+            streamGeneration: generation,
+            streamMode: bootstrap ? "direct" : "catchup",
           })
           .where(owned),
       );
       row = (await loadOrigin(database, originId))!;
     }
-    let needsDirectRecovery = row.atproto.streamMode === "direct";
-    if (
-      !transport.hasReplay &&
-      !needsDirectRecovery &&
-      row.atproto.initialized &&
-      (row.atproto.streamMode !== "live" || options.manual)
-    ) {
-      await runDatabaseWrite(database, () =>
-        database
-          .update(feedOriginAtproto)
-          .set({ streamMode: "catchup" })
-          .where(owned),
-      );
-      try {
-        for await (const batch of transport.recover(
-          sequence(row.atproto.streamSeq!),
-          options.manual ? await transport.tip(combined) : sequence(state.seq),
-          combined,
-          row.atproto.publicationDid,
-        )) {
-          combined.throwIfAborted();
-          await acceptBatch(database, batch, settings, {
-            originId,
-            manual: options.manual,
-          });
-          await runDatabaseWrite(database, () =>
-            database
-              .update(feedOriginAtproto)
-              .set({ streamSeq: String(batch.lastCursor) })
-              .where(owned),
-          );
-        }
-        row = (await loadOrigin(database, originId))!;
-      } catch (error) {
-        if (!(error instanceof StreamFailure) || error.status !== 400)
-          throw error;
-        transport.report(error, "cursor-expired");
-        const boundary = await transport.tip(combined);
-        await runDatabaseWrite(database, () =>
-          database
-            .update(feedOriginAtproto)
-            .set({ streamSeq: String(boundary), streamMode: "direct" })
-            .where(owned),
-        );
-        row = (await loadOrigin(database, originId))!;
-        needsDirectRecovery = true;
-      }
-    }
-    const bootstrap = !row.atproto.initialized || needsDirectRecovery;
     if (bootstrap) {
       const boundary = sequence(row.atproto.streamSeq!);
       const client = options.client ?? createPublicationClient();
@@ -255,10 +218,12 @@ export async function recoverOrigin(
           .where(owned),
       );
       state = await ensureStream(database, settings.service);
-      const through =
+      const through = Math.max(
+        sequence(row.atproto.streamSeq!),
         bootstrap || options.manual
           ? await transport.tip(combined)
-          : sequence(state.seq!);
+          : sequence(state.seq!),
+      );
       {
         for await (const batch of transport.recover(
           sequence(row.atproto.streamSeq!),
@@ -303,6 +268,9 @@ export async function recoverOrigin(
         database
           .update(feedOriginAtproto)
           .set({
+            ...(!transport.hasReplay && streamFailure(error)?.status === 400
+              ? { streamMode: "paused" as const, cursor: null }
+              : {}),
             recoveryAttempts: candidate.atproto.recoveryAttempts + 1,
             recoveryRetryAt: new Date(
               nowFor(settings).getTime() +

@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket from "ws";
-import { Jetstream, parseRawRecord } from "@bsky/jetstream";
+import { Jetstream, JetstreamV1, parseRawRecord } from "@bsky/jetstream";
 import { lexToJson } from "@atproto/lex";
 import {
   COLLECTIONS,
@@ -12,16 +12,25 @@ import {
   streamFailure,
 } from "./protocol";
 import { createStreamReporter } from "./report";
-import type { EventBatch, LiveTransport, RawEvent } from "@bsky/jetstream";
+import type {
+  EventBatch,
+  LiveTransport,
+  RawEvent,
+  RawEventV1,
+} from "@bsky/jetstream";
 import type { StreamBatch } from "./protocol";
+import { isLegacyJetstream } from "~/lib/jetstream-endpoint";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 /** No hidden reconnects: the caller resumes from durable, applied progress. */
-export function liveTransport(): LiveTransport {
+export function liveTransport(
+  legacy = false,
+  onOpen?: () => Promise<void>,
+): LiveTransport {
   return {
     async *stream(getUrl, signal, options) {
-      const socket = new WebSocket(getUrl(), "xrpc.v1.json", {
+      const socket = new WebSocket(getUrl(), legacy ? [] : ["xrpc.v1.json"], {
         headers: Object.fromEntries(new Headers(options?.headers)),
         maxPayload: 32 * 1024 * 1024,
         handshakeTimeout: 30_000,
@@ -30,6 +39,7 @@ export function liveTransport(): LiveTransport {
       let bytes = 0;
       let ended = false;
       let failure: Error | undefined;
+      let opening: Promise<void> | undefined;
       let wake = () => {};
       const fail = (error: Error) => {
         failure ??= error;
@@ -42,6 +52,20 @@ export function liveTransport(): LiveTransport {
         wake();
         socket.terminate();
       };
+      socket.on("open", () => {
+        if (ended || signal.aborted || !onOpen) return;
+        opening = onOpen().then(
+          () => {
+            wake();
+          },
+          (error: unknown) =>
+            fail(
+              error instanceof Error
+                ? error
+                : new StreamFailure("connection-open"),
+            ),
+        );
+      });
       socket.on("unexpected-response", (_request, response) => {
         response.resume();
         fail(
@@ -71,6 +95,7 @@ export function liveTransport(): LiveTransport {
       if (signal.aborted) abort();
       try {
         while (!signal.aborted) {
+          await opening;
           if (failure) throw failure;
           const next = queue.shift();
           if (next !== undefined) {
@@ -84,6 +109,7 @@ export function liveTransport(): LiveTransport {
           });
         }
       } finally {
+        await opening;
         signal.removeEventListener("abort", abort);
         socket.terminate();
       }
@@ -98,6 +124,7 @@ export function createStreamTransport(input: {
   fetch?: typeof fetch;
 }) {
   const service = normalizeService(input.service);
+  const legacy = isLegacyJetstream(service);
   const report = createStreamReporter(service);
   const fetchImpl: typeof fetch = async (request, init) => {
     const signal =
@@ -137,10 +164,12 @@ export function createStreamTransport(input: {
     snapshotBufferBytes: 4 * 1024 * 1024,
   });
   async function* decode(
-    batches: AsyncIterable<EventBatch<RawEvent>>,
+    batches: AsyncIterable<EventBatch<RawEvent | RawEventV1>>,
   ): AsyncGenerator<StreamBatch> {
     for await (const batch of batches) {
       const events = batch.events.flatMap((raw) => {
+        const time =
+          "time" in raw ? raw.time : new Date(raw.timeUs / 1000).toISOString();
         try {
           const event =
             raw.kind === "commit" && raw.commit.operation !== "delete"
@@ -152,7 +181,12 @@ export function createStreamTransport(input: {
                   },
                 }
               : raw;
-          return [eventSchema.parse(event)];
+          return [
+            eventSchema.parse({
+              ...event,
+              time,
+            }),
+          ];
         } catch (error) {
           report(error, "record-decode");
           // Persist an invalid latest version, retiring older pending work for this key.
@@ -160,6 +194,7 @@ export function createStreamTransport(input: {
             return [
               eventSchema.parse({
                 ...raw,
+                time,
                 commit: { ...raw.commit, record: null },
               }),
             ];
@@ -170,11 +205,11 @@ export function createStreamTransport(input: {
       yield { events, lastCursor: sequence(batch.lastCursor) };
     }
   }
-  function options(signal: AbortSignal) {
+  function options(signal: AbortSignal, onOpen?: () => Promise<void>) {
     return {
       collections: COLLECTIONS,
       signal,
-      liveTransport: liveTransport(),
+      liveTransport: liveTransport(legacy, onOpen),
       onError: (error: Error) => {
         if (!signal.aborted) report(error, "replay-decode");
       },
@@ -238,37 +273,47 @@ export function createStreamTransport(input: {
           : Math.min(before, plannedThrough),
     };
   }
+  const v1 = new JetstreamV1({ service, validateWire: true });
+  async function* live(
+    after: number | undefined,
+    signal: AbortSignal,
+    dids?: string[],
+    onOpen?: () => Promise<void>,
+  ): AsyncGenerator<StreamBatch> {
+    const opts = {
+      ...options(signal, onOpen),
+      dids: dids as Array<`did:${string}:${string}`> | undefined,
+      cursor: { load: async () => after, save: async () => {} },
+    };
+    if (!legacy) {
+      yield* decode(sdk.liveRawBatches(opts));
+      return;
+    }
+    async function* batches() {
+      for await (const event of v1.live({ ...opts, raw: true }))
+        yield { events: [event], lastCursor: event.seq };
+    }
+    yield* decode(batches());
+  }
   return {
     service,
-    hasReplay: Boolean(input.apiKey),
+    hasReplay: !legacy && Boolean(input.apiKey),
     report,
     async *stream(
       after: number | undefined,
       signal: AbortSignal,
       dids?: string[],
+      onOpen?: () => Promise<void>,
     ): AsyncGenerator<StreamBatch> {
-      let cursor = after;
-      if (input.apiKey && after !== undefined) {
-        for await (const batch of archive(after, undefined, signal, dids)) {
-          cursor = Math.max(cursor ?? 0, batch.lastCursor);
-          yield batch;
-        }
-      }
-      yield* decode(
-        sdk.liveRawBatches({
-          ...options(signal),
-          dids: dids as Array<`did:${string}:${string}`> | undefined,
-          cursor: { load: async () => cursor, save: async () => {} },
-        }),
-      );
+      // Archive recovery belongs to normal Feed fetching, never worker reconnect.
+      yield* live(after, signal, dids, onOpen);
     },
     async tip(signal: AbortSignal) {
       const controller = new AbortController();
       try {
-        for await (const batch of decode(
-          sdk.liveRawBatches({
-            ...options(AbortSignal.any([signal, controller.signal])),
-          }),
+        for await (const batch of live(
+          undefined,
+          AbortSignal.any([signal, controller.signal]),
         ))
           return batch.lastCursor;
         throw new StreamFailure("boundary");
@@ -288,7 +333,7 @@ export function createStreamTransport(input: {
       const combined = AbortSignal.any([signal, controller.signal]);
       let cursor = after;
       try {
-        if (input.apiKey) {
+        if (!legacy && input.apiKey) {
           for await (const batch of archive(
             cursor,
             through,
@@ -300,12 +345,7 @@ export function createStreamTransport(input: {
             if (cursor >= through) return;
           }
         }
-        for await (const batch of decode(
-          sdk.liveRawBatches({
-            ...options(combined),
-            cursor: { load: async () => cursor, save: async () => {} },
-          }),
-        )) {
+        for await (const batch of live(cursor, combined)) {
           yield {
             events: batch.events.filter((event) => event.seq <= through),
             lastCursor: Math.min(through, batch.lastCursor),

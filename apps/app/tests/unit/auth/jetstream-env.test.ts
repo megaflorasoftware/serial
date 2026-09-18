@@ -16,6 +16,9 @@ it.each([
   "https://custom.example/service",
   "  https://custom.example/service  ",
   "http://localhost:3009",
+  "wss://legacy.example/subscribe",
+  "ws://localhost:3009/subscribe",
+  "wss://modern.example/xrpc/network.bsky.jetstream.subscribeEvents",
 ])("validates optional Jetstream configuration %s", async (value) => {
   vi.stubEnv("ATPROTO_JETSTREAM_ENDPOINT", value);
   const { env } = await import("~/env");
