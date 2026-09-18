@@ -54,6 +54,7 @@ it.each(["completed", "partial"] as const)(
     mocks.status.mockResolvedValue({
       runId: "fast-run",
       pending: false,
+      running: false,
       progress: null,
       result: {
         ...emptyPublicationSyncCounts(),
@@ -88,6 +89,7 @@ it("does not replay cached completion when the fresh status read fails", async (
   queryClient.setQueryData(["sync-status"], {
     runId: "old-run",
     pending: false,
+    running: false,
     result: { ...emptyPublicationSyncCounts(), status: "completed" },
   });
   mocks.status.mockRejectedValue(new Error("offline"));
@@ -101,6 +103,7 @@ it("tracks server work without blocking a concurrent Feed import", () => {
   showPublicationSyncProgress({
     runId: "run",
     pending: true,
+    running: true,
     progress: { completed: 2, total: 8 },
     result: null,
   });
@@ -112,6 +115,7 @@ it("tracks server work without blocking a concurrent Feed import", () => {
   showPublicationSyncProgress({
     runId: "run",
     pending: false,
+    running: false,
     progress: null,
     result: {
       ...emptyPublicationSyncCounts(),
@@ -125,4 +129,37 @@ it("tracks server work without blocking a concurrent Feed import", () => {
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
   expect(loadingActor.getSnapshot().context.totalFeeds).toBe(9);
+});
+
+it("reports a deferred result instead of spinning on completed progress", () => {
+  showPublicationSyncProgress({
+    runId: "retry",
+    pending: true,
+    running: false,
+    progress: { completed: 7, total: 7 },
+    result: {
+      ...emptyPublicationSyncCounts(),
+      status: "partial",
+      imported: 5,
+      deferred: 1,
+    },
+  });
+  expect(mocks.loading).not.toHaveBeenCalled();
+  expect(mocks.warning).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "5 imported, 0 exported, 0 added inactive, 0 removed, 1 pending the next sync",
+    ),
+    expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
+  );
+  showPublicationSyncProgress({
+    runId: "retry",
+    pending: true,
+    running: true,
+    progress: null,
+    result: { ...emptyPublicationSyncCounts(), status: "partial", deferred: 1 },
+  });
+  expect(mocks.loading).toHaveBeenCalledWith(
+    "Syncing subscriptions…",
+    expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
+  );
 });

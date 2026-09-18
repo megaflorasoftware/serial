@@ -98,7 +98,7 @@ async function discoverFeedsWithoutLimits(
       const failedAdvertisedSource = feedscoutResult.value.find(
         (feed) =>
           !feed.isValid &&
-          (feed.method === "html" ||
+          ((feed.method === "html" && feed.explicitlyAdvertised !== false) ||
             feed.method === "headers" ||
             (feed.method !== "guess" && feed.error !== undefined)),
       );

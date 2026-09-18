@@ -1,6 +1,10 @@
 import { discoverFeeds as scoutFeeds } from "feedscout";
-import { defaultExtractFn, defaultGuessOptions } from "feedscout/feeds";
-import { discoverUrisFromGuess } from "feedscout/methods";
+import {
+  defaultExtractFn,
+  defaultGuessOptions,
+  defaultHtmlOptions,
+} from "feedscout/feeds";
+import { discoverUrisFromGuess, discoverUrisFromHtml } from "feedscout/methods";
 import {
   DISCOVERY_GUESS_REQUEST_MS,
   DISCOVERY_GUESS_TOTAL_MS,
@@ -10,6 +14,16 @@ import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { readFeedHttp } from "~/server/rss/feedHttp";
 
 const MAX_CANDIDATES = 8;
+type RssDiscoveryResult = Awaited<ReturnType<typeof scoutFeeds>>[number] & {
+  explicitlyAdvertised?: boolean;
+};
+
+function requestUrl(uri: string, base: string) {
+  const url = URL.parse(uri, base);
+  if (!url) return null;
+  url.hash = "";
+  return url.href;
+}
 
 function scoutFetcher(read: typeof readFeedHttp, strict: boolean) {
   return async (
@@ -39,21 +53,54 @@ export async function discoverRssFeeds(
   read: typeof readFeedHttp,
   strict: boolean,
   onFeed?: (feed: DiscoveredFeed) => Promise<void>,
-) {
+): Promise<RssDiscoveryResult[]> {
   const fetchFn = scoutFetcher(read, strict);
   const extractFn: typeof defaultExtractFn = async (input) => {
     const result = await defaultExtractFn(input);
     if (result.isValid) await onFeed?.(result);
     return result;
   };
-  if (strict)
-    return scoutFeeds(url, {
-      methods: ["platform", "html", "headers", "guess"],
-      concurrency: 2,
-      maxUris: MAX_CANDIDATES,
-      includeInvalid: true,
-      fetchFn,
-    });
+  if (strict) {
+    const page = await read(url);
+    const explicitHtml = new Set(
+      discoverUrisFromHtml(page.text, {
+        ...defaultHtmlOptions,
+        baseUrl: page.url,
+        anchorUris: [],
+        anchorPathSegments: [],
+        anchorLabels: [],
+        anchorAttributes: [],
+      }).flatMap((uri) => {
+        const target = requestUrl(uri, page.url);
+        return target ? [target] : [];
+      }),
+    );
+    const feeds = await scoutFeeds(
+      { url: page.url, content: page.text, headers: page.headers },
+      {
+        methods: ["platform", "html", "headers", "guess"],
+        concurrency: 2,
+        maxUris: MAX_CANDIDATES,
+        includeInvalid: true,
+        fetchFn: async (target, options) => {
+          const response = await fetchFn(target, options);
+          const requested = requestUrl(target, page.url);
+          const resolved = requestUrl(response.url, page.url);
+          // The extractor reports the final response URL after redirects.
+          if (requested && resolved && explicitHtml.has(requested))
+            explicitHtml.add(resolved);
+          return response;
+        },
+      },
+    );
+    return feeds.map((feed) => ({
+      ...feed,
+      explicitlyAdvertised:
+        feed.method === "html"
+          ? explicitHtml.has(requestUrl(feed.url, page.url) ?? "")
+          : undefined,
+    }));
+  }
 
   const page = await read(url);
   const input = { url: page.url, content: page.text, headers: page.headers };

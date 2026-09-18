@@ -29,6 +29,7 @@ export const emptyPublicationSyncCounts = (): PublicationSyncCounts => ({
 export type PublicationSyncJobStatus = {
   runId: string;
   pending: boolean;
+  running: boolean;
   progress: { completed: number; total: number } | null;
   result: PublicationSyncResult | null;
 };

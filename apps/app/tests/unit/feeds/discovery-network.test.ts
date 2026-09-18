@@ -280,6 +280,61 @@ it("caps discovery transport reads and publication candidates", async () => {
 });
 
 describe("import discovery completeness", () => {
+  it.each(["/feed.xml", "/feed.xml#rss"])(
+    "keeps an invalid declared feed retryable after redirect: %s",
+    async (href) => {
+      const actual = await vi.importActual<{
+        discoverFeeds: typeof scoutFeeds;
+      }>("feedscout");
+      vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+      vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+        if (url === "https://example.com/")
+          return response(
+            url,
+            `<link rel="alternate" type="application/rss+xml" href="${href}">`,
+          );
+        if (url.startsWith("https://example.com/feed.xml"))
+          return response("https://example.com/login", "<html>Sign in</html>");
+        return statusResponse(url, 404);
+      });
+      await expect(
+        discoverFeedOriginsForImport(
+          `redirected-${href}`,
+          "https://example.com/",
+        ),
+      ).rejects.toBeInstanceOf(FeedImportDeferredError);
+    },
+  );
+
+  it("ignores a successfully read non-feed anchor beside an advertised RSS feed", async () => {
+    const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+      "feedscout",
+    );
+    vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+    vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+      if (url === "https://example.com/")
+        return response(
+          url,
+          '<link rel="alternate" type="application/rss+xml" href="/feed.xml"><a href="https://reference.example/news">RSS Reader.</a>',
+        );
+      if (url === "https://example.com/feed.xml")
+        return response(
+          url,
+          '<rss version="2.0"><channel><title>Example</title><link>https://example.com/</link><description>News</description><item><title>Post</title><link>https://example.com/post</link></item></channel></rss>',
+        );
+      if (url === "https://reference.example/news")
+        return response(url, "<html><title>About RSS readers</title></html>");
+      return statusResponse(url, 404);
+    });
+    const rows = await discoverFeedOriginsForImport(
+      "non-feed-anchor",
+      "https://example.com/",
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({ url: "https://example.com/feed.xml" }),
+    ]);
+  });
+
   it.each(["html", "headers"] as const)(
     "defers an unreadable advertised %s feed",
     async (method) => {
@@ -287,7 +342,10 @@ describe("import discovery completeness", () => {
         { url: "https://example.com/rss", isValid: false, method },
       ]);
       vi.mocked(readFeedHttp).mockImplementation(async (url) =>
-        response(url, "<html></html>"),
+        response(
+          url,
+          '<link rel="alternate" type="application/rss+xml" href="/rss">',
+        ),
       );
       await expect(
         discoverFeedOriginsForImport(
