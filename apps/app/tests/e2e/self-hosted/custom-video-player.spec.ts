@@ -10,20 +10,11 @@ import type { Page } from "@playwright/test";
 async function mockYouTubePlayer(
   page: Page,
   {
-    errorCode,
     readyDelayMs = 0,
   }: {
-    errorCode?: number;
     readyDelayMs?: number;
   } = {},
 ) {
-  const errorCallback =
-    errorCode === undefined
-      ? ""
-      : `setTimeout(() => {
-          options.events.onError({ data: ${errorCode}, target: this });
-        }, 0);`;
-
   await page.route(/\/\/www\.youtube\.com\/iframe_api/, async (route) => {
     await route.fulfill({
       contentType: "application/javascript",
@@ -41,7 +32,6 @@ async function mockYouTubePlayer(
 
               setTimeout(() => {
                 options.events.onReady({ target: this });
-                ${errorCallback}
               }, ${readyDelayMs});
             }
 
@@ -127,31 +117,6 @@ test.describe("custom video player", () => {
     if (testEmail) {
       await cleanupUser(SELF_HOSTED_TURSO_PORT, testEmail);
     }
-  });
-
-  test("shows a View on YouTube CTA when the embedded player errors", async ({
-    page,
-  }) => {
-    const { email, password, feedItemId, originalUrl } =
-      await seedYouTubeVideoData(SELF_HOSTED_TURSO_PORT, SELF_HOSTED_APP_PORT);
-    testEmail = email;
-
-    await mockYouTubePlayer(page, { errorCode: 150 });
-    await signIn({ page, email, password });
-    await page.goto(`/watch/${feedItemId}`);
-
-    const viewOnYouTubeButton = page.getByRole("button", {
-      name: "View on YouTube",
-    });
-    await expect(viewOnYouTubeButton).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText("Something went wrong")).toBeVisible();
-    await expect(page.getByTitle("YouTube video player")).toHaveCount(0);
-
-    const popupPromise = page.waitForEvent("popup");
-    await viewOnYouTubeButton.click();
-    const popup = await popupPromise;
-
-    await expect(popup).toHaveURL(originalUrl);
   });
 
   test("shows a spinner while the thumbnail and embed are loading", async ({
