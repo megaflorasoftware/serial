@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, test } from "@playwright/test";
-import { feedItems } from "../../../src/server/db/schema";
+import { feedItems, user } from "../../../src/server/db/schema";
 import {
   readPublicationConnection as connection,
   fillPublicationQuota,
@@ -324,6 +324,9 @@ test("manual Jetstream recovery imports, updates, and retains deleted reader ite
   test.setTimeout(120_000);
   const did = await linkUser(page);
   const userId = (await connection(did))!.userId!;
+  await expect
+    .poll(async () => (await readPublicationUser(userId))!.lastActiveAt)
+    .not.toBeNull();
   const publication = await seedPublication(did, "content");
   const feed = await seedLocalPublication(userId, publication);
   const put = async (title: string) =>
@@ -382,6 +385,14 @@ test("manual Jetstream recovery imports, updates, and retains deleted reader ite
     })
     .toEqual(["Updated document"]);
   expect((await items())[0]!.id).toBe(initial.id);
+  expect((await readPublicationUser(userId))!.lastActiveAt).toEqual(activity);
+  // A later explicit refresh can record activity after the write throttle expires.
+  await withPublicationDatabase((db) =>
+    db
+      .update(user)
+      .set({ lastActiveAt: new Date(Date.now() - 5 * 60 * 1000) })
+      .where(eq(user.id, userId)),
+  );
   await pdsControl({
     operation: "delete",
     repo: did,

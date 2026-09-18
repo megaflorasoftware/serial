@@ -3494,67 +3494,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "serial_app_activity_operation": {
-      "name": "serial_app_activity_operation",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "operation_id": {
-          "name": "operation_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "app_activity_operation_created_idx": {
-          "name": "app_activity_operation_created_idx",
-          "columns": [
-            "created_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "serial_app_activity_operation_user_id_serial_user_id_fk": {
-          "name": "serial_app_activity_operation_user_id_serial_user_id_fk",
-          "tableFrom": "serial_app_activity_operation",
-          "tableTo": "serial_user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "serial_app_activity_operation_user_id_operation_id_pk": {
-          "columns": [
-            "user_id",
-            "operation_id"
-          ],
-          "name": "serial_app_activity_operation_user_id_operation_id_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     }
   },
   "views": {},

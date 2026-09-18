@@ -952,42 +952,45 @@ describe("recovery review regressions", () => {
   });
 });
 
-it("deduplicates an app-load retry after its successful response was lost", async () => {
-  const operationId = "committed-load";
-  await recordUserActivity(fixture.database, "reader", NOW, operationId);
+it("coalesces nearby activity writes and records later use without touching another user", async () => {
+  await fixture.database.update(user).set({ lastActiveAt: null });
+  await fixture.database.insert(user).values({
+    id: "other",
+    name: "Other",
+    email: "other@example.com",
+    emailVerified: true,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  await recordUserActivity(fixture.database, "reader", NOW);
   await recordUserActivity(
     fixture.database,
     "reader",
-    new Date(NOW.getTime() + 3000),
-    operationId,
+    new Date(NOW.getTime() + 299_999),
   );
   expect(
-    (await fixture.database.select().from(user).get())!.lastActiveAt,
+    (await fixture.database
+      .select()
+      .from(user)
+      .where(eq(user.id, "reader"))
+      .get())!.lastActiveAt,
   ).toEqual(NOW);
-  await recordUserActivity(
-    fixture.database,
-    "reader",
-    new Date(NOW.getTime() + 5000),
-    "next-load",
-  );
+  const later = new Date(NOW.getTime() + 300_000);
+  await recordUserActivity(fixture.database, "reader", later);
   expect(
-    (await fixture.database.select().from(user).get())!.lastActiveAt,
-  ).toEqual(new Date(NOW.getTime() + 5000));
-});
-
-it("deduplicates a lost-response retry after a second tab records its load", async () => {
-  await recordUserActivity(fixture.database, "reader", NOW, "tab-a");
-  const later = new Date(NOW.getTime() + 1000);
-  await recordUserActivity(fixture.database, "reader", later, "tab-b");
-  await recordUserActivity(
-    fixture.database,
-    "reader",
-    new Date(NOW.getTime() + 3000),
-    "tab-a",
-  );
-  expect(
-    (await fixture.database.select().from(user).get())!.lastActiveAt,
+    (await fixture.database
+      .select()
+      .from(user)
+      .where(eq(user.id, "reader"))
+      .get())!.lastActiveAt,
   ).toEqual(later);
+  expect(
+    (await fixture.database
+      .select()
+      .from(user)
+      .where(eq(user.id, "other"))
+      .get())!.lastActiveAt,
+  ).toBeNull();
 });
 
 it("falls back on the first manual refresh after a no-key outage with background work disabled", async () => {

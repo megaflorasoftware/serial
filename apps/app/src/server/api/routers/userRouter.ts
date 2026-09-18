@@ -86,17 +86,7 @@ export const requestVerificationCode = protectedProcedure.handler(
   },
 );
 
-export const recordActivity = protectedProcedure
-  .input(z.object({ operationId: z.uuid() }))
-  .handler(async ({ context, input }) => {
-    await recordUserActivity(
-      context.db,
-      context.user.id,
-      new Date(),
-      input.operationId,
-    );
-  });
-
 export const catchUpFeeds = protectedProcedure.handler(async ({ context }) => {
+  await recordUserActivity(context.db, context.user.id);
   await catchUpUser(context.db, context.user.id);
 });

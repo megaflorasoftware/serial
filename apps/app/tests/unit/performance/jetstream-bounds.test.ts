@@ -5,6 +5,7 @@ import {
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
 import { createJetstreamWorkload } from "../../../scripts/performance/jetstream-workload";
+import { recordUserActivity } from "~/server/jetstream/activity";
 
 it.each([1000, 10000, 50000])(
   "bounds event work independently of %s retained items",
@@ -53,6 +54,20 @@ it.each([1000, 10000, 50000])(
         );
         expect(lookup).toBeDefined();
         lookups.push(lookup!.sql);
+      }
+      const activityTime = new Date(Date.now() + 10 * 60 * 1000);
+      for (const changedRows of [1, 0]) {
+        session.instrumentation.reset();
+        const result = await recordUserActivity(
+          session.database,
+          "stream-benchmark-0",
+          activityTime,
+        );
+        expect(result.rowsAffected).toBe(changedRows);
+        expect(session.instrumentation.snapshot()).toMatchObject({
+          statementCount: 1,
+          materializedRows: 0,
+        });
       }
       // Inspect plans after writes: local libSQL EXPLAIN can retain a read lock.
       for (const lookup of lookups) {

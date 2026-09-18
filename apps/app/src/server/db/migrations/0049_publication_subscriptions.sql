@@ -215,13 +215,4 @@ CREATE TABLE `serial_atproto_stream_state` (
 	`lease_until` integer
 );
 --> statement-breakpoint
-ALTER TABLE `serial_user` ADD `last_active_at` integer;--> statement-breakpoint
-CREATE TABLE `serial_app_activity_operation` (
-	`user_id` text NOT NULL,
-	`operation_id` text NOT NULL,
-	`created_at` integer NOT NULL,
-	PRIMARY KEY(`user_id`, `operation_id`),
-	FOREIGN KEY (`user_id`) REFERENCES `serial_user`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `app_activity_operation_created_idx` ON `serial_app_activity_operation` (`created_at`);
+ALTER TABLE `serial_user` ADD `last_active_at` integer;

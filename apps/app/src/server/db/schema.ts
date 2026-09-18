@@ -419,22 +419,6 @@ export type HydratedFeedOrigin = DatabaseFeedOrigin & {
   atproto: typeof feedOriginAtproto.$inferSelect | null;
 };
 
-/** Short-lived receipts make app-load retries idempotent across concurrent tabs. */
-export const appActivityOperations = sqliteTable(
-  "app_activity_operation",
-  {
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    operationId: text("operation_id").notNull(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.userId, table.operationId] }),
-    index("app_activity_operation_created_idx").on(table.createdAt),
-  ],
-);
-
 /** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
 export const atprotoStreamState = sqliteTable("atproto_stream_state", {
   id: text("id").primaryKey(),
