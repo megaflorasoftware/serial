@@ -91,6 +91,14 @@ export function useRestoreArticleProgress({
     let secondFrame = 0;
     const observer = new MutationObserver(() => scheduleRestore());
 
+    function completeRestoration(element?: HTMLElement) {
+      restoredContentIdRef.current = contentId;
+      observer.disconnect();
+      if (element) scrollArticleBlockToTarget(element, "instant");
+      else getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
+      revealContent();
+    }
+
     function scheduleRestore() {
       if (
         firstFrame ||
@@ -100,18 +108,12 @@ export function useRestoreArticleProgress({
         return;
       }
       const elements = getElements(contentElement);
-      if (
-        elements.length === 0 ||
-        contentElement.querySelector("[data-reader-content-pending]")
-      ) {
+      if (contentElement.querySelector("[data-reader-content-pending]")) {
         return;
       }
 
-      if (savedProgress <= 0) {
-        restoredContentIdRef.current = contentId;
-        observer.disconnect();
-        getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
-        revealContent();
+      if (elements.length === 0 || savedProgress <= 0) {
+        completeRestoration();
         return;
       }
 
@@ -121,21 +123,15 @@ export function useRestoreArticleProgress({
           secondFrame = 0;
           if (hasUserInteractedRef.current) return;
           const renderedElements = getElements(contentElement);
-          if (
-            renderedElements.length === 0 ||
-            contentElement.querySelector("[data-reader-content-pending]")
-          ) {
+          if (contentElement.querySelector("[data-reader-content-pending]")) {
             return;
           }
 
-          restoredContentIdRef.current = contentId;
-          observer.disconnect();
-          const element =
+          completeRestoration(
             renderedElements[
               Math.min(savedProgress, renderedElements.length - 1)
-            ]!;
-          scrollArticleBlockToTarget(element, "instant");
-          revealContent();
+            ],
+          );
         });
       });
     }

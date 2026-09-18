@@ -4,7 +4,6 @@ import {
   AlertCircleIcon,
   CircleSmall,
   Edit2Icon,
-  MinusIcon,
   OrbitIcon,
   PauseIcon,
   PlusIcon,
@@ -138,7 +137,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   onEdit: (feedId: number) => void;
 }) {
   const feedStatus = useFeedStatus(feedId);
-  const isSuccess = feedStatus === "success" || feedStatus === "skipped";
+  const hasFetchError = feedStatus === "error";
 
   return (
     <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
@@ -146,7 +145,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
         variant={isSelected ? "outline" : "default"}
         onClick={() => onSelect(feedId)}
       >
-        {feedStatus === "error" && (
+        {hasFetchError && (
           <Tooltip>
             <TooltipTrigger asChild>
               <AlertCircleIcon size={16} className="text-sidebar-accent" />
@@ -158,20 +157,10 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
             </TooltipContent>
           </Tooltip>
         )}
-        {feedStatus === "empty" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <MinusIcon size={16} className="text-sidebar-accent" />
-            </TooltipTrigger>
-            <TooltipContent>
-              This feed has no new content within the last 30 days.
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {isSuccess && !hasEntries && (
+        {!hasFetchError && !hasEntries && (
           <CircleSmall size={16} className="text-sidebar-accent" />
         )}
-        {isSuccess && hasEntries && (
+        {!hasFetchError && hasEntries && (
           <div className="grid size-4 place-items-center">
             <div className="bg-sidebar-accent size-2.5 rounded-full" />
           </div>
