@@ -84,7 +84,7 @@ it("receives events for a Publication followed after the connection starts", asy
     hasReplay: true,
     report: vi.fn(),
     tip: async () => 1,
-    async *recover() {
+    recover() {
       throw new Error("Bootstrap deferred in this fixture");
     },
     async *stream(_after, _signal, dids) {
