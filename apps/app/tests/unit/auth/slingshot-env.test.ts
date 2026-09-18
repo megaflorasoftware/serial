@@ -14,11 +14,14 @@ it.each([
   "",
   "   ",
   "https://custom.example/service",
+  "  https://custom.example/service  ",
   "http://localhost:3009",
 ])("validates optional Slingshot configuration %s", async (value) => {
   vi.stubEnv("ATPROTO_SLINGSHOT_ENDPOINT", value);
   const { env } = await import("~/env");
-  expect(env.ATPROTO_SLINGSHOT_ENDPOINT).toBe(value?.trim() || undefined);
+  expect(env.ATPROTO_SLINGSHOT_ENDPOINT).toBe(
+    value?.trim() || "https://slingshot.microcosm.blue",
+  );
 });
 it.each([
   "ftp://custom.example",

@@ -143,7 +143,7 @@ export const env = createEnv({
             !url.hash
           );
         }, "Expected an HTTP(S) service URL without credentials, query or fragment")
-        .optional(),
+        .default("https://slingshot.microcosm.blue"),
     ),
     SERIAL_EXTENSION_REDIRECT_URIS: z
       .string()

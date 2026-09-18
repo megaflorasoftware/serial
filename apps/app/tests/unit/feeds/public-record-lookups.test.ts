@@ -16,7 +16,7 @@ vi.mock("~/server/logger", () => ({ captureException: vi.fn() }));
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   resolve: vi.fn(),
-  env: { ATPROTO_SLINGSHOT_ENDPOINT: undefined as string | undefined },
+  env: { ATPROTO_SLINGSHOT_ENDPOINT: "https://slingshot.microcosm.blue" },
 }));
 vi.mock("~/env", () => ({ env: mocks.env }));
 vi.mock("~/server/auth/atproto/hardened-fetch", () => ({
@@ -140,7 +140,10 @@ for (const [name, call] of Object.entries(callers)) {
   });
 }
 
-it.each([undefined, "", "   ", "https://custom.example/service/"])(
+it.each([
+  "https://slingshot.microcosm.blue",
+  "https://custom.example/service/",
+])(
   "selects configured/default service %s and still falls back",
   async (configured) => {
     mocks.env.ATPROTO_SLINGSHOT_ENDPOINT = configured;
@@ -152,10 +155,7 @@ it.each([undefined, "", "   ", "https://custom.example/service/"])(
     await client().getRecord(uri);
     const url = new URL(mocks.fetch.mock.calls[0]![0]);
     expect(`${url.origin}${url.pathname}`).toBe(
-      `${configured?.trim() || "https://slingshot.microcosm.blue"}`.replace(
-        /\/$/,
-        "",
-      ) + "/xrpc/com.atproto.repo.getRecord",
+      configured.replace(/\/$/, "") + "/xrpc/com.atproto.repo.getRecord",
     );
     expect(new URL(mocks.fetch.mock.calls[1]![0]).origin).toBe(pds);
   },

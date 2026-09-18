@@ -9,7 +9,6 @@ import type { PublicRecordRequest } from "@serial/standard-site";
 import type { HardenedFetch } from "./hardened-fetch";
 import { env } from "~/env";
 
-const DEFAULT_SLINGSHOT_ENDPOINT = "https://slingshot.microcosm.blue";
 const retryAtByService = new Map<string, number>();
 
 export type PublicRecordOptions = {
@@ -127,9 +126,7 @@ export function createPublicRecordReader(dependencies: {
     return lookupPublicRecord(request, {
       slingshot: () =>
         read(
-          async () =>
-            env.ATPROTO_SLINGSHOT_ENDPOINT?.trim() ||
-            DEFAULT_SLINGSHOT_ENDPOINT,
+          () => Promise.resolve(env.ATPROTO_SLINGSHOT_ENDPOINT),
           Math.min(1_000, Math.floor(remaining() / 2)),
         ),
       pds: () =>
