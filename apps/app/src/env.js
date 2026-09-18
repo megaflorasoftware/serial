@@ -145,6 +145,25 @@ export const env = createEnv({
         }, "Expected an HTTP(S) service URL without credentials, query or fragment")
         .default("https://slingshot.microcosm.blue"),
     ),
+    ATPROTO_JETSTREAM_ENDPOINT: z.preprocess(
+      (value) =>
+        typeof value === "string" ? value.trim() || undefined : value,
+      z
+        .url()
+        .refine((value) => {
+          const url = URL.parse(value);
+          return (
+            !!url &&
+            ["http:", "https:"].includes(url.protocol) &&
+            !url.username &&
+            !url.password &&
+            !url.search &&
+            !url.hash
+          );
+        }, "Expected an HTTP(S) service URL without credentials, query or fragment")
+        .default("https://jetstream.us-east.bsky.network"),
+    ),
+    ATPROTO_JETSTREAM_API_KEY: z.string().trim().min(1).optional(),
     SERIAL_EXTENSION_REDIRECT_URIS: z
       .string()
       .optional()
@@ -241,6 +260,8 @@ export const env = createEnv({
     ATPROTO_PLC_DIRECTORY_URL: process.env.ATPROTO_PLC_DIRECTORY_URL,
     ATPROTO_APPVIEW_URL: process.env.ATPROTO_APPVIEW_URL,
     ATPROTO_SLINGSHOT_ENDPOINT: process.env.ATPROTO_SLINGSHOT_ENDPOINT,
+    ATPROTO_JETSTREAM_ENDPOINT: process.env.ATPROTO_JETSTREAM_ENDPOINT,
+    ATPROTO_JETSTREAM_API_KEY: process.env.ATPROTO_JETSTREAM_API_KEY,
     SERIAL_EXTENSION_REDIRECT_URIS: process.env.SERIAL_EXTENSION_REDIRECT_URIS,
     SERIAL_CAPTURE_MAX_CONCURRENT_FETCHES:
       process.env.SERIAL_CAPTURE_MAX_CONCURRENT_FETCHES,

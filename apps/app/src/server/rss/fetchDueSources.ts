@@ -30,6 +30,7 @@ type FetchDueSourcesDependencies = {
     db: typeof Database;
     feedsList: FetchableOrigin[];
     channel?: string;
+    manual?: boolean;
   }) => Promise<RefreshStats>;
   now?: () => Date;
   syncSubscriptions?: typeof syncPublicationSubscriptions;
@@ -104,6 +105,7 @@ export async function fetchDueSources(input: {
         db: input.database,
         feedsList: feedPage,
         channel: input.channel,
+        manual: input.trigger === "manual",
       });
       addRefreshStats(stats, pageStats);
     }

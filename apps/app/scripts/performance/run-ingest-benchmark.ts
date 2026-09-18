@@ -6,7 +6,7 @@ import {
   openBenchmarkDatabase,
 } from "./database";
 import { createObservationImageWorkload } from "./observation-image-workload";
-import { createIngestWorkload } from "./ingest-workload";
+import { createJetstreamWorkload } from "./jetstream-workload";
 
 const profiles = { small: 1_000, representative: 10_000, stress: 50_000 };
 const profile = process.argv[
@@ -18,29 +18,30 @@ const target = createLocalBenchmarkTarget();
 const session = openBenchmarkDatabase({ url: target.url });
 try {
   await applyMigrations(session.baseClient);
-  const workload = await createIngestWorkload(
+  const workload = await createJetstreamWorkload(
     session.database,
+    1,
     profiles[profile],
   );
-  await workload.run(false);
   const results: Record<string, unknown> = {};
-  for (const [name, changed] of [
-    ["first-page-edits", true],
-    ["unchanged-revision", false],
+  for (const [name, bootstrap] of [
+    ["repository-bootstrap", true],
+    ["direct-recovery", false],
   ] as const) {
     const samples: Array<{
       ms: number;
       statements: number;
       rows: number;
-      requests: number;
+      pages: number;
+      images: number;
     }> = [];
     for (let i = 0; i < 18; i++) {
       globalThis.gc?.();
       session.instrumentation.reset();
       const started = performance.now();
-      // Each sample measures an isolated operation against the preceding revision.
+      // Each sample measures staging and one bounded processing pass.
       // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      await workload.run(changed);
+      const result = await workload.recover(bootstrap);
       const ms = performance.now() - started;
       const evidence = session.instrumentation.snapshot();
       if (i >= 3)
@@ -48,7 +49,8 @@ try {
           ms,
           statements: evidence.statementCount,
           rows: evidence.materializedRows,
-          requests: workload.requests,
+          pages: result.pages,
+          images: result.images,
         });
     }
     const ordered = samples.map((sample) => sample.ms).sort((a, b) => a - b);

@@ -1,17 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import { recoverRepository } from "../jetstream/repository-recovery";
 import type { HydratedFeedOrigin } from "~/server/db/schema";
 import type { ItemObservation } from "~/server/rss/itemObservation";
 import type { PublicationClient } from "~/server/rss/atprotoClient";
-import {
-  insertFeedWithOrigins,
-  loadOriginsForFeeds,
-} from "~/server/feeds/origins";
-import {
-  createPublicationClient,
-  MissingPublicationRecordError,
-} from "~/server/rss/atprotoClient";
+import { insertFeedWithOrigins } from "~/server/feeds/origins";
+import { createPublicationClient } from "~/server/rss/atprotoClient";
 import {
   feedItems,
   feedOriginAtproto,
@@ -22,10 +17,12 @@ import {
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { writeObservedItems } from "~/server/rss/writeItems";
 import { rssObservation } from "~/server/rss/itemObservation";
-import { ingestAtmosphere } from "~/server/rss/ingestAtmosphere";
 import { logWarning } from "~/server/logger";
 
-vi.mock("~/server/logger", () => ({ logWarning: vi.fn() }));
+vi.mock("~/server/logger", () => ({
+  logWarning: vi.fn(),
+  captureException: vi.fn(),
+}));
 vi.mock("~/lib/semaphore", () => ({
   dbSemaphore: { run: <T>(fn: () => T) => fn() },
 }));
@@ -150,20 +147,12 @@ function client(records: unknown[] = []): PublicationClient {
   };
 }
 async function refresh(remote: PublicationClient) {
-  origin = (await loadOriginsForFeeds(fixture.database, [feed.id]))[0]!;
-  feed = (await fixture.database
-    .select()
-    .from(feeds)
-    .where(eq(feeds.id, feed.id))
-    .get())!;
-  return ingestAtmosphere(
-    fixture.database,
-    { feed, origin },
-    remote,
-    async () => {
+  await recoverRepository(fixture.database, origin.id, {
+    client: remote,
+    readPage: async () => {
       throw new Error("Page unavailable");
     },
-  );
+  });
 }
 
 describe("composite Feed items", () => {
@@ -257,20 +246,21 @@ describe("composite Feed items", () => {
   });
 });
 
-describe("Atmosphere polling", () => {
-  it("converts documents and skips an unchanged repo revision", async () => {
+describe("Atmosphere repository recovery", () => {
+  it("converts documents and leaves unchanged items intact on another scan", async () => {
     const remote = client([
       record("003"),
       record("002", { site: `at://${DID}/pub.leaflet.publication/site` }),
     ]);
-    const result = await refresh(remote);
-    expect(result.status).toBe("success");
+    await refresh(remote);
     expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
     expect(await fixture.database.select().from(feeds).get()).toMatchObject({
       name: "Publication",
     });
-    expect((await refresh(remote)).status).toBe("skipped");
-    expect(remote.list).toHaveBeenCalledTimes(1);
+    const items = await fixture.database.select().from(feedItems);
+    await refresh(remote);
+    expect(await fixture.database.select().from(feedItems)).toEqual(items);
+    expect(remote.list).toHaveBeenCalledTimes(2);
   });
   it("processes edits after the known boundary on the entire first page", async () => {
     const remote = client([record("003"), record("002")]);
@@ -308,7 +298,31 @@ describe("Atmosphere polling", () => {
     }));
     await refresh(remote);
     expect(remote.list).toHaveBeenCalledTimes(2);
+    expect(
+      await fixture.database.select().from(feedOriginAtprotoDocuments),
+    ).toHaveLength(200);
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(25);
+    for (let batch = 0; batch < 7; batch++)
+      await recoverRepository(
+        fixture.database,
+        origin.id,
+        {
+          client: remote,
+          manual: false,
+          readPage: async () => {
+            throw new Error("Page unavailable");
+          },
+        },
+        false,
+      );
+    expect(remote.list).toHaveBeenCalledTimes(2);
     expect(await fixture.database.select().from(feedItems)).toHaveLength(200);
+    expect(
+      await fixture.database
+        .select()
+        .from(feedOriginAtprotoDocuments)
+        .where(eq(feedOriginAtprotoDocuments.status, "retry")),
+    ).toHaveLength(0);
   });
   it("keeps successes and retries a failed body after it leaves the first page", async () => {
     const broken = record("002", {
@@ -321,22 +335,30 @@ describe("Atmosphere polling", () => {
     remote.loadBlob = vi.fn(async () => {
       throw new Error("temporary");
     });
-    expect((await refresh(remote)).status).toBe("error");
+    await refresh(remote);
     expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
     expect(
-      await fixture.database.select().from(feedOriginAtproto).get(),
-    ).toMatchObject({ repoRev: null });
+      await fixture.database
+        .select()
+        .from(feedOriginAtprotoDocuments)
+        .where(eq(feedOriginAtprotoDocuments.uri, broken.uri))
+        .get(),
+    ).toMatchObject({ status: "retry", pendingRecord: broken.value });
     remote.list = vi.fn(async () => ({
       records: [record("003")],
       etag: null,
       notModified: false as const,
       cursor: undefined,
     }));
-    const originalGet = remote.getRecord;
-    remote.getRecord = vi.fn(async (key) =>
-      key === broken.uri ? record("002") : originalGet(key),
+    remote.loadBlob = vi.fn(async () =>
+      new TextEncoder().encode(
+        JSON.stringify({ pages: record("002").value.content.pages }),
+      ),
     );
-    expect((await refresh(remote)).status).toBe("success");
+    await fixture.database
+      .update(feedOriginAtprotoDocuments)
+      .set({ retryAt: null });
+    await refresh(remote);
     expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
     expect(
       await fixture.database
@@ -399,107 +421,6 @@ it("continues past a deleted boundary until it encounters a known document", asy
   expect(await fixture.database.select().from(feedItems)).toHaveLength(4);
 });
 
-it("stops retrying a deleted document while preserving its stored item", async () => {
-  await refresh(client([record("001")]));
-  await fixture.database
-    .update(feedOriginAtprotoDocuments)
-    .set({ status: "retry" });
-  const remote = client();
-  const originalGet = remote.getRecord;
-  remote.getRecord = vi.fn(async (key) => {
-    if (key === uri("001")) throw new MissingPublicationRecordError("gone");
-    return originalGet(key);
-  });
-  expect((await refresh(remote)).status).toBe("empty");
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
-  expect(
-    await fixture.database.select().from(feedOriginAtprotoDocuments).get(),
-  ).toMatchObject({ status: "invalid" });
-  expect((await refresh(remote)).status).toBe("skipped");
-});
-
-it("stops retrying an invalid fetched envelope while preserving its stored item", async () => {
-  await refresh(client([record("001")]));
-  await fixture.database
-    .update(feedOriginAtprotoDocuments)
-    .set({ status: "retry" });
-  const remote = client([]);
-  remote.getRecord = vi.fn(async (key) =>
-    key === uri("001")
-      ? { uri: key, value: { title: "missing cid" } }
-      : {
-          uri: PUB,
-          cid: "pubcid",
-          value: { name: "Publication", url: "https://example.com" },
-        },
-  );
-  expect((await refresh(remote)).status).toBe("empty");
-  expect(
-    await fixture.database.select().from(feedOriginAtprotoDocuments).get(),
-  ).toMatchObject({ status: "invalid" });
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
-});
-
-it("retires a retry that moved to another publication", async () => {
-  await refresh(client([record("001")]));
-  await fixture.database
-    .update(feedOriginAtprotoDocuments)
-    .set({ status: "retry" });
-  const remote = client([]);
-  remote.latestRev = vi.fn(async () => "rev2");
-  const originalGet = remote.getRecord;
-  remote.getRecord = vi.fn(async (key) =>
-    key === uri("001")
-      ? record("001", {
-          site: `at://${DID}/site.standard.publication/elsewhere`,
-        })
-      : originalGet(key),
-  );
-  expect((await refresh(remote)).status).toBe("empty");
-  expect(
-    await fixture.database.select().from(feedOriginAtprotoDocuments).get(),
-  ).toMatchObject({ status: "invalid" });
-  expect(
-    await fixture.database.select().from(feedOriginAtproto).get(),
-  ).toMatchObject({
-    repoRev: "rev2",
-  });
-});
-
-it("rotates bounded retry batches so later records are not starved", async () => {
-  await fixture.database.insert(feedOriginAtprotoDocuments).values(
-    Array.from({ length: 101 }, (_, index) => {
-      const rkey = String(index).padStart(3, "0");
-      return {
-        originId: origin.id,
-        uri: uri(rkey),
-        cid: `cid${rkey}`,
-        status: "retry" as const,
-      };
-    }),
-  );
-  const remote = client([]);
-  const originalGet = remote.getRecord;
-  remote.getRecord = vi.fn(async (key) => {
-    if (key === PUB) return originalGet(key);
-    throw new Error("temporary");
-  });
-  await refresh(remote);
-  expect(remote.getRecord).toHaveBeenCalledTimes(101);
-  expect(remote.getRecord).not.toHaveBeenCalledWith(uri("100"));
-  vi.mocked(remote.getRecord).mockClear();
-  await refresh(remote);
-  expect(remote.getRecord).toHaveBeenCalledTimes(101);
-  expect(remote.getRecord).toHaveBeenCalledWith(uri("100"));
-  const plan = await fixture.client.execute({
-    sql: "EXPLAIN QUERY PLAN SELECT * FROM serial_feed_origin_atproto_document WHERE origin_id = ? AND status = ? AND uri > ? ORDER BY uri LIMIT 100",
-    args: [origin.id, "retry", uri("050")],
-  });
-  expect(plan.rows.map((row) => String(row.detail)).join("\n")).toContain(
-    "feed_origin_atproto_document_retry_idx",
-  );
-});
-
 it("logs malformed listed-record envelopes without exposing their contents", async () => {
   vi.mocked(logWarning).mockClear();
   await refresh(
@@ -512,31 +433,6 @@ it("logs malformed listed-record envelopes without exposing their contents", asy
   expect(JSON.stringify(vi.mocked(logWarning).mock.calls)).not.toContain(
     "do not log",
   );
-});
-
-it("omits an earlier retry result that a later listed document replaces", async () => {
-  await refresh(client([record("002", { path: "/two" }), record("001")]));
-  await fixture.database
-    .update(feedOriginAtprotoDocuments)
-    .set({ status: "retry" })
-    .where(eq(feedOriginAtprotoDocuments.uri, uri("001")));
-  const remote = client([
-    { ...record("002", { path: "/shared" }), cid: "edited-two" },
-  ]);
-  remote.latestRev = vi.fn(async () => "rev2");
-  const originalGet = remote.getRecord;
-  remote.getRecord = vi.fn(async (key) =>
-    key === uri("001")
-      ? { ...record("001", { path: "/shared" }), cid: "edited-one" }
-      : originalGet(key),
-  );
-  const result = await refresh(remote);
-  if (result.status === "skipped") throw new Error("Expected refresh work");
-  expect(result.removedItemIds).toHaveLength(1);
-  expect(result.feedItems?.map((item) => item.id)).not.toContain(
-    result.removedItemIds[0],
-  );
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
 });
 
 function linkedDocument(rkey: string, count: number) {
@@ -596,24 +492,29 @@ function resolvingClient(
 
 it("retries temporary embedded-link failures and then stores the canonical card", async () => {
   const documents = [linkedDocument("001", 1)];
-  expect((await refresh(resolvingClient(documents, true))).status).toBe(
-    "error",
-  );
+  await refresh(resolvingClient(documents, true));
   expect(await fixture.database.select().from(feedItems)).toHaveLength(0);
-  expect((await refresh(resolvingClient(documents))).status).toBe("success");
+  await fixture.database
+    .update(feedOriginAtprotoDocuments)
+    .set({ retryAt: null });
+  await refresh(resolvingClient(documents));
   expect(
     (await fixture.database.select().from(feedItems).get())?.content,
   ).toContain('href="https://example.com/"');
-  expect((await refresh(resolvingClient(documents))).status).toBe("skipped");
+  await refresh(resolvingClient(documents));
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
 });
 
 it("eventually completes documents that exceed the refresh reference budget", async () => {
   const documents = Array.from({ length: 8 }, (_, i) =>
     linkedDocument(String(100 - i), 16),
   );
-  expect((await refresh(resolvingClient(documents))).status).toBe("error");
+  await refresh(resolvingClient(documents));
   expect(await fixture.database.select().from(feedItems)).toHaveLength(4);
-  expect((await refresh(resolvingClient(documents))).status).toBe("success");
+  await fixture.database
+    .update(feedOriginAtprotoDocuments)
+    .set({ retryAt: null });
+  await refresh(resolvingClient(documents));
   expect(await fixture.database.select().from(feedItems)).toHaveLength(8);
   expect(
     await fixture.database
@@ -694,25 +595,16 @@ it("commits items and bookkeeping for concurrent publication refreshes", async (
     cid: "pubcid",
     value: { name: "Second", url: "https://second.example.com" },
   }));
-  const results = await Promise.all([
+  await Promise.all([
     refresh(client([record("001")])),
-    ingestAtmosphere(
-      fixture.database,
-      { feed: secondFeed, origin: secondOrigin },
-      remote,
-      async () => {
+    recoverRepository(fixture.database, secondOrigin.id, {
+      client: remote,
+      readPage: async () => {
         throw new Error("Page unavailable");
       },
-    ),
-  ]);
-  expect(results.map((result) => result.status)).toEqual([
-    "success",
-    "success",
+    }),
   ]);
   expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
-  expect(await fixture.database.select().from(feedOriginAtproto)).toMatchObject(
-    [{ repoRev: "rev1" }, { repoRev: "rev1" }],
-  );
   expect(await fixture.database.select().from(feedOriginAtproto)).toMatchObject(
     [{ initialized: true }, { initialized: true }],
   );

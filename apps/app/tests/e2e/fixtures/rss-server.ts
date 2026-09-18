@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { attachJetstream } from "./jetstream-server";
 
 const port = Number(process.argv[2]) || 3003;
 const BASE = `http://127.0.0.1:${port}`;
@@ -198,6 +199,7 @@ const server = createServer((req, res) => {
   res.end();
 });
 
+attachJetstream(server);
 server.listen(port, "127.0.0.1", () => {
   console.log(`RSS test server running on ${BASE}`);
 });

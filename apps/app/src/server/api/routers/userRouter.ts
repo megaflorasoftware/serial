@@ -3,6 +3,8 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { userNameSchema } from "../schemas";
+import { catchUpUser } from "~/server/jetstream/service";
+import { recordUserActivity } from "~/server/jetstream/activity";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
 import { getOtpCooldownRemaining, OTP_COOLDOWN_SECONDS } from "~/server/otp";
@@ -83,3 +85,8 @@ export const requestVerificationCode = protectedProcedure.handler(
     return { sent: true, retryAfter: OTP_COOLDOWN_SECONDS };
   },
 );
+
+export const catchUpFeeds = protectedProcedure.handler(async ({ context }) => {
+  await recordUserActivity(context.db, context.user.id);
+  await catchUpUser(context.db, context.user.id);
+});

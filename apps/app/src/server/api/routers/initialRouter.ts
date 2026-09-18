@@ -15,6 +15,8 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
+import { catchUpUser } from "~/server/jetstream/service";
+import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
@@ -113,8 +115,12 @@ export const reconcileApplicationState = protectedProcedure
 
 export const fetchDueSources = protectedProcedure
   .input(z.object({ trigger: z.enum(["automatic", "manual"]) }))
-  .handler(async ({ context, input }) =>
-    runFetchDueSources({
+  .handler(async ({ context, input }) => {
+    if (input.trigger === "manual") {
+      await recordUserActivity(context.db, context.user.id);
+      await catchUpUser(context.db, context.user.id, true);
+    }
+    return runFetchDueSources({
       database: context.db,
       userId: context.user.id,
       trigger: input.trigger,
@@ -122,8 +128,8 @@ export const fetchDueSources = protectedProcedure
       publish: async (channel, chunk) => {
         await publisher.publish(channel, { source: "rss", chunk });
       },
-    }),
-  );
+    });
+  });
 
 /** Fulltext content patch for items that need it after the lightweight fetch. */
 export type FeedItemFulltext = {

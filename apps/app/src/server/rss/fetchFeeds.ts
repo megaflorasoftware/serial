@@ -24,7 +24,6 @@ import { computeItemHash } from "./hash";
 import { resolveItemDate } from "./publishedDate";
 import { writeObservedItems } from "./writeItems";
 import { rssObservation } from "./itemObservation";
-import { ingestAtmosphere } from "./ingestAtmosphere";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { readFeedHttp } from "./feedHttp";
@@ -357,7 +356,7 @@ async function insertFeedItems(
 }
 
 export async function* fetchAndInsertFeedData(
-  context: { db: typeof Database },
+  context: { db: typeof Database; manual?: boolean },
   fetchableOrigins: FetchableOrigin[],
 ) {
   const now = new Date();
@@ -378,8 +377,14 @@ export async function* fetchAndInsertFeedData(
         return { status: "skipped", ...ids };
       }
 
-      if (origin.kind === "atproto")
-        return (await ingestAtmosphere(context.db, fetchable)) as FeedResult;
+      if (origin.kind === "atproto") {
+        const { refreshStreamOrigin } = await import("../jetstream/service");
+        return await refreshStreamOrigin(
+          context.db,
+          fetchable,
+          context.manual ?? true,
+        );
+      }
 
       const writeItems = async (data: RSSFeedWithMetadata) => {
         if (feed.platform === "website") {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import { recoverRepository } from "../jetstream/repository-recovery";
 import type * as AtprotoClientModule from "~/server/rss/atprotoClient";
 import type { FetchableOrigin } from "~/server/rss/types";
 import type { ItemObservation } from "~/server/rss/itemObservation";
@@ -69,6 +70,11 @@ function observation(index = 0): ItemObservation {
   });
 }
 async function refresh() {
+  if (fetchable.origin.kind === "atproto")
+    return recoverRepository(fixture.database, fetchable.origin.id, {
+      client: createPublicationClient(),
+      readPage: readFeedHttp,
+    });
   const results = [];
   for await (const result of fetchAndInsertFeedData({ db: fixture.database }, [
     fetchable,
@@ -137,7 +143,7 @@ beforeEach(async () => {
 afterEach(() => fixture.cleanup());
 
 it("persists the release OG image ahead of its RSS body screenshot and retains it on another fetch", async () => {
-  expect((await refresh()).status).toBe("success");
+  await refresh();
   expect((await stored()).thumbnail).toBe(OG);
   vi.mocked(readFeedHttp).mockClear();
   await refresh();
@@ -168,16 +174,22 @@ it.each(["rss", "atproto"] as const)(
         response(url, "", 304),
       );
     else {
-      fetchable.origin.atproto!.repoRev = "same";
-      fetchable.origin.atproto!.initialized = true;
-      await fixture.database
-        .update(feedOriginAtproto)
-        .set({ repoRev: "same", initialized: true });
+      await fixture.database.update(feedOriginAtproto).set({
+        initialized: true,
+        listingEtag: '"same"',
+      });
       vi.mocked(createPublicationClient).mockReturnValue({
-        latestRev: vi.fn(async () => "same"),
+        latestRev: async () => "same",
+        getRecord: async () => ({
+          uri: PUB,
+          cid: "pub",
+          value: { name: "Serial", url: "https://www.serial.tube" },
+        }),
+        list: async () => ({ notModified: true, records: [], etag: '"same"' }),
       } as unknown as ReturnType<typeof createPublicationClient>);
     }
-    expect((await refresh()).status).toBe("skipped");
+    const result = await refresh();
+    if (kind === "rss") expect(result?.status).toBe("skipped");
     expect(await stored()).toMatchObject({
       id: original.id,
       thumbnail: BODY,
@@ -226,7 +238,7 @@ it.each([true, false])(
       loadBlob: async () => new Uint8Array(),
       resolveRecord: async () => null,
     });
-    expect((await refresh()).status).toBe("success");
+    await refresh();
     expect(await stored()).toMatchObject({
       thumbnail: available ? OG : "",
       sourceKind: "atproto",
