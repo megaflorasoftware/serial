@@ -127,6 +127,24 @@ export const env = createEnv({
      * http and private addresses work only outside production.
      */
     ATPROTO_APPVIEW_URL: z.url().optional(),
+    ATPROTO_SLINGSHOT_ENDPOINT: z.preprocess(
+      (value) =>
+        typeof value === "string" ? value.trim() || undefined : value,
+      z
+        .url()
+        .refine((value) => {
+          const url = URL.parse(value);
+          return (
+            !!url &&
+            ["http:", "https:"].includes(url.protocol) &&
+            !url.username &&
+            !url.password &&
+            !url.search &&
+            !url.hash
+          );
+        }, "Expected an HTTP(S) service URL without credentials, query or fragment")
+        .default("https://slingshot.microcosm.blue"),
+    ),
     SERIAL_EXTENSION_REDIRECT_URIS: z
       .string()
       .optional()
@@ -222,6 +240,7 @@ export const env = createEnv({
     ATPROTO_STORE_ENCRYPTION_KEY: process.env.ATPROTO_STORE_ENCRYPTION_KEY,
     ATPROTO_PLC_DIRECTORY_URL: process.env.ATPROTO_PLC_DIRECTORY_URL,
     ATPROTO_APPVIEW_URL: process.env.ATPROTO_APPVIEW_URL,
+    ATPROTO_SLINGSHOT_ENDPOINT: process.env.ATPROTO_SLINGSHOT_ENDPOINT,
     SERIAL_EXTENSION_REDIRECT_URIS: process.env.SERIAL_EXTENSION_REDIRECT_URIS,
     SERIAL_CAPTURE_MAX_CONCURRENT_FETCHES:
       process.env.SERIAL_CAPTURE_MAX_CONCURRENT_FETCHES,

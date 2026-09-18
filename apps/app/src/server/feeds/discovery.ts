@@ -160,6 +160,7 @@ async function websitePublications(
   signal: AbortSignal,
   strict = false,
   onUpdate?: (rows: DiscoveredFeed[]) => void,
+  deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS,
 ) {
   let target = new URL(url);
   const readHint =
@@ -230,7 +231,7 @@ async function websitePublications(
     2,
     async (uri) => {
       try {
-        return await resolvePublication(uri, signal);
+        return await resolvePublication(uri, signal, deadline);
       } catch (error) {
         if (strict) throw error;
         return null;
@@ -258,6 +259,7 @@ async function discoverWebsite(
   signal: AbortSignal,
   strict = false,
   onUpdate?: (rows: DiscoveredFeed[]) => void,
+  deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS,
 ) {
   const candidates = new Map<string, SyndicationCandidate>();
   let publications: DiscoveredFeed[] = [];
@@ -314,6 +316,7 @@ async function discoverWebsite(
             onUpdate(snapshot());
           }
         : undefined,
+      deadline,
     ).then((rows) => {
       publications = rows;
     }),
@@ -337,6 +340,7 @@ async function runDiscovery(
   if (!input || callerSignal?.aborted) return [];
   const lease = captureLimiter.acquire(userId, "discovery");
   if (!lease.ok) return [];
+  const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
@@ -393,6 +397,7 @@ async function runDiscovery(
       signal,
       false,
       onUpdate ? update : undefined,
+      deadline,
     )
       .then((rows) => {
         update(rows);
@@ -407,6 +412,7 @@ async function runDiscovery(
       const publication = await resolvePublication(
         input.publicationUri,
         signal,
+        deadline,
       );
       if (!publication || signal.aborted) return;
       actors = [publicationRow(publication)];
@@ -506,10 +512,11 @@ export async function* streamDiscoverFeeds(
 /** Explicit revalidation must distinguish an unavailable site from an empty discovery. */
 export async function discoverFeedOriginsForRevalidation(url: string) {
   const read = requestReader();
+  const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
   const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
   const response = await read(url, undefined);
   if (!response.ok) throw new Error("Unable to read the Feed website");
-  return discoverWebsite(url, read, signal, true);
+  return discoverWebsite(url, read, signal, true, undefined, deadline);
 }
 
 /** Imports require completed discovery; an unavailable source is never evidence of absence. */
@@ -560,14 +567,20 @@ export async function discoverFeedOriginsForImport(
         throw error;
       }
     };
+    const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
     const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
     const page = await read(url);
     if (!page.ok) throw incomplete ?? new FeedImportDeferredError();
-    const rows = await discoverWebsite(url, read, signal, true).catch(
-      (error: unknown) => {
-        throw incomplete ?? error;
-      },
-    );
+    const rows = await discoverWebsite(
+      url,
+      read,
+      signal,
+      true,
+      undefined,
+      deadline,
+    ).catch((error: unknown) => {
+      throw incomplete ?? error;
+    });
     if (incomplete || signal.aborted)
       throw incomplete ?? new FeedImportDeferredError();
     return rows;

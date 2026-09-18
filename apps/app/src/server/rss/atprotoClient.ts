@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   buildCanonicalDocumentUrl,
+  MissingPublicRecordError as MissingPublicationRecordError,
   normalizePublicationUrl,
   parseAtUri,
   parseDocumentRecord,
@@ -9,9 +10,12 @@ import {
 import { createHardenedFetch } from "../auth/atproto/hardened-fetch";
 import { resolvePublicPds } from "../auth/atproto/did-resolver";
 
+import { createPublicRecordReader } from "../auth/atproto/public-record";
 import { ATMOSPHERE_EMBEDDED_RECORDS_PER_REFRESH } from "./atmospherePolicy";
+import type { PublicRecordRequest } from "@serial/standard-site";
+import type { PublicRecordOptions } from "../auth/atproto/public-record";
 
-export class MissingPublicationRecordError extends Error {}
+export { MissingPublicRecordError as MissingPublicationRecordError } from "@serial/standard-site";
 
 const pageSchema = z.object({
   records: z.array(z.unknown()).max(100),
@@ -54,42 +58,19 @@ export function createPublicationClient(
       headers: etag ? { "If-None-Match": etag } : undefined,
     });
   }
-  async function getRecord(uri: string): Promise<unknown> {
-    if (!records.has(uri))
-      records.set(
-        uri,
-        (async () => {
-          const parts = parseAtUri(uri);
-          if (!parts) throw new Error("Invalid record URI");
-          const response = await request(
-            parts.did,
-            "com.atproto.repo.getRecord",
-            { repo: parts.did, collection: parts.collection, rkey: parts.rkey },
-          );
-          if (!response.ok) {
-            if (response.status === 404)
-              throw new MissingPublicationRecordError("Record is missing");
-            if (response.status === 400) {
-              const error = (await response.json().catch(() => null)) as {
-                error?: string;
-              } | null;
-              if (error?.error === "RecordNotFound")
-                throw new MissingPublicationRecordError("Record is missing");
-            }
-            throw new Error(`Record fetch failed: ${response.status}`);
-          }
-          const record: unknown = await response.json();
-          if (
-            !record ||
-            typeof record !== "object" ||
-            !("uri" in record) ||
-            record.uri !== uri
-          )
-            throw new Error("Record URI mismatch");
-          return record;
-        })(),
-      );
-    return records.get(uri)!;
+  const readRecord = createPublicRecordReader({
+    fetch: dependencies.fetch,
+    resolvePds,
+  });
+  async function getRecord(
+    uri: string,
+    options: PublicRecordOptions & Omit<PublicRecordRequest, "uri"> = {},
+  ): Promise<unknown> {
+    const { cid, record, ...budget } = options;
+    if (record !== undefined) return readRecord({ uri, cid, record }, budget);
+    const key = JSON.stringify([uri, cid]);
+    if (!records.has(key)) records.set(key, readRecord({ uri, cid }, budget));
+    return records.get(key)!;
   }
   return {
     resolvePds,

@@ -2,6 +2,8 @@
 import { createServer } from "node:http";
 import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
 import { z } from "zod";
+import { CID } from "multiformats/cid";
+import { create as createDigest } from "multiformats/hashes/digest";
 import type { IncomingMessage } from "node:http";
 
 const port = Number(process.argv[2]);
@@ -114,6 +116,10 @@ function dpop(request: IncomingMessage, url: URL, accessToken?: string) {
     }),
   );
 }
+function recordCid(value: string) {
+  const digest = createHash("sha256").update(value).digest();
+  return CID.createV1(0x71, createDigest(0x12, digest)).toString();
+}
 function store(
   repo: string,
   collection: string,
@@ -125,7 +131,7 @@ function store(
   revisions.set(repo, revision);
   const record = {
     uri,
-    cid: `fixture-${revision}-${hash(JSON.stringify(value))}`,
+    cid: recordCid(JSON.stringify(value)),
     value,
   };
   records.set(uri, record);
