@@ -1,14 +1,17 @@
+import { parsePublicationUri } from "@serial/standard-site";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { db as defaultDatabase } from "~/server/db";
 import type {
   DatabaseFeed,
-  DatabaseFeedOrigin,
   DatabaseFeedWithOrigins,
+  HydratedFeedOrigin,
 } from "~/server/db/schema";
 import type { FetchableOrigin, NewFeedDetails } from "~/server/rss/types";
 import { runInChunks } from "~/server/api/routers/feed-router/utils";
 import {
   FEED_ORIGIN_KIND,
+  feedOriginAtproto,
+  feedOriginRss,
   feedOrigins,
   feeds,
   feedsSchema,
@@ -22,8 +25,78 @@ import { parseArrayOfSchema } from "~/lib/schemas/utils";
  */
 export type FeedDatabase = Pick<
   typeof defaultDatabase,
-  "select" | "insert" | "update" | "delete"
+  "select" | "insert" | "update" | "delete" | "transaction"
 >;
+
+export const originSelection = {
+  origin: feedOrigins,
+  rss: feedOriginRss,
+  atproto: feedOriginAtproto,
+};
+
+export function hydrateOrigin(row: {
+  origin: typeof feedOrigins.$inferSelect;
+  rss: typeof feedOriginRss.$inferSelect | null;
+  atproto: typeof feedOriginAtproto.$inferSelect | null;
+}): HydratedFeedOrigin {
+  if (
+    (row.origin.kind === "rss" && !row.rss) ||
+    (row.origin.kind === "atproto" && !row.atproto)
+  )
+    throw new Error(
+      `Missing ${row.origin.kind} details for Feed origin ${row.origin.id}`,
+    );
+  return { ...row.origin, rss: row.rss, atproto: row.atproto };
+}
+
+/** The caller's transaction owns the common row and its matching detail row. */
+async function insertOrigins(
+  database: FeedDatabase,
+  feed: { id: number; userId: string },
+  origins: NewFeedDetails["origins"],
+) {
+  const inserted = await database
+    .insert(feedOrigins)
+    .values(
+      origins.map((origin) => ({
+        ...origin,
+        feedId: feed.id,
+        userId: feed.userId,
+      })),
+    )
+    .returning();
+  const rss = inserted
+    .filter((origin) => origin.kind === "rss")
+    .map((origin) => {
+      const details = origins.find((input) => input.kind === origin.kind)!;
+      return {
+        originId: origin.id,
+        etag: details.etag,
+        lastModifiedHeader: details.lastModifiedHeader,
+        alternateLocators: details.alternateLocators,
+      };
+    });
+  const atproto = inserted
+    .filter((origin) => origin.kind === "atproto")
+    .map((origin) => {
+      const publication = parsePublicationUri(origin.locator);
+      if (!publication) throw new Error("Invalid publication URI");
+      return { originId: origin.id, publicationDid: publication.did };
+    });
+  const rssRows = rss.length
+    ? await database.insert(feedOriginRss).values(rss).returning()
+    : [];
+  const atprotoRows = atproto.length
+    ? await database.insert(feedOriginAtproto).values(atproto).returning()
+    : [];
+  return inserted.map((origin) =>
+    hydrateOrigin({
+      origin,
+      rss: rssRows.find((row) => row.originId === origin.id) ?? null,
+      atproto: atprotoRows.find((row) => row.originId === origin.id) ?? null,
+    }),
+  );
+}
 
 export type FeedRow = { id: number; userId: string };
 
@@ -97,25 +170,18 @@ export async function attachMissingFeedOrigins(
     (origin) => !feed.origins.some((existing) => existing.kind === origin.kind),
   );
   if (!missing.length) return feed;
-  const inserted = await database
-    .insert(feedOrigins)
-    .values(
-      missing.map((origin) => ({
-        ...origin,
-        feedId: feed.id,
-        userId: feed.userId,
-      })),
-    )
-    .returning();
+  const inserted = await database.transaction((tx) =>
+    insertOrigins(tx, feed, missing),
+  );
   return { ...feed, origins: [...feed.origins, ...inserted] };
 }
 
 /** Attach origin rows to their Feed rows, preserving the Feed order given. */
 export function attachOrigins<TFeed extends { id: number }>(
   feedRows: TFeed[],
-  originRows: DatabaseFeedOrigin[],
-): Array<TFeed & { origins: DatabaseFeedOrigin[] }> {
-  const originsByFeedId = new Map<number, DatabaseFeedOrigin[]>();
+  originRows: HydratedFeedOrigin[],
+): Array<TFeed & { origins: HydratedFeedOrigin[] }> {
+  const originsByFeedId = new Map<number, HydratedFeedOrigin[]>();
   for (const origin of originRows) {
     const existing = originsByFeedId.get(origin.feedId);
     if (existing) existing.push(origin);
@@ -130,16 +196,21 @@ export function attachOrigins<TFeed extends { id: number }>(
 export async function loadOriginsForFeeds(
   database: FeedDatabase,
   feedIds: number[],
-): Promise<DatabaseFeedOrigin[]> {
+): Promise<HydratedFeedOrigin[]> {
   if (feedIds.length === 0) return [];
   const chunks = await runInChunks(feedIds, (feedIdChunk) =>
     database
-      .select()
+      .select(originSelection)
       .from(feedOrigins)
+      .leftJoin(feedOriginRss, eq(feedOriginRss.originId, feedOrigins.id))
+      .leftJoin(
+        feedOriginAtproto,
+        eq(feedOriginAtproto.originId, feedOrigins.id),
+      )
       .where(inArray(feedOrigins.feedId, feedIdChunk))
       .orderBy(asc(feedOrigins.id)),
   );
-  return chunks.flat();
+  return chunks.flat().map(hydrateOrigin);
 }
 
 /**
@@ -152,20 +223,23 @@ export async function loadUserFeedsWithOrigins(
   userId: string,
 ): Promise<DatabaseFeedWithOrigins[]> {
   const rows = await database
-    .select({ feed: feeds, origin: feedOrigins })
+    .select({ feed: feeds, ...originSelection })
     .from(feeds)
     .leftJoin(feedOrigins, eq(feedOrigins.feedId, feeds.id))
+    .leftJoin(feedOriginRss, eq(feedOriginRss.originId, feedOrigins.id))
+    .leftJoin(feedOriginAtproto, eq(feedOriginAtproto.originId, feedOrigins.id))
     .where(eq(feeds.userId, userId))
     .orderBy(asc(feeds.id), asc(feedOrigins.id));
   const feedRows: DatabaseFeed[] = [];
   const seenFeedIds = new Set<number>();
-  const originRows: DatabaseFeedOrigin[] = [];
+  const originRows: HydratedFeedOrigin[] = [];
   for (const row of rows) {
     if (!seenFeedIds.has(row.feed.id)) {
       seenFeedIds.add(row.feed.id);
       feedRows.push(row.feed);
     }
-    if (row.origin) originRows.push(row.origin);
+    if (row.origin)
+      originRows.push(hydrateOrigin({ ...row, origin: row.origin }));
   }
   return attachOrigins(feedRows, originRows);
 }
@@ -174,7 +248,7 @@ export async function loadUserFeedsWithOrigins(
 export async function withOrigins<TFeed extends DatabaseFeed>(
   database: FeedDatabase,
   feedRows: TFeed[],
-): Promise<Array<TFeed & { origins: DatabaseFeedOrigin[] }>> {
+): Promise<Array<TFeed & { origins: HydratedFeedOrigin[] }>> {
   const originRows = await loadOriginsForFeeds(
     database,
     feedRows.map((feed) => feed.id),
@@ -269,37 +343,29 @@ export async function insertFeedWithOrigins(
     isActive: boolean;
   },
 ): Promise<DatabaseFeedWithOrigins> {
-  const { origins, ...feedValues } = input.details;
-  const insertedFeeds = await database
-    .insert(feeds)
-    .values({
-      userId: input.userId,
-      ...feedValues,
-      isActive: input.isActive,
-      openLocation: PLATFORM_DEFAULT_OPEN_LOCATION[input.details.platform],
-    })
-    .returning();
-  const insertedFeed = insertedFeeds[0];
-  if (!insertedFeed) throw new Error("Couldn't find new feed");
-  const insertedOrigins =
-    origins.length > 0
-      ? await database
-          .insert(feedOrigins)
-          .values(
-            origins.map((origin) => ({
-              ...origin,
-              feedId: insertedFeed.id,
-              userId: input.userId,
-            })),
-          )
-          .returning()
+  return database.transaction(async (tx) => {
+    const { origins, ...feedValues } = input.details;
+    const insertedFeeds = await tx
+      .insert(feeds)
+      .values({
+        userId: input.userId,
+        ...feedValues,
+        isActive: input.isActive,
+        openLocation: PLATFORM_DEFAULT_OPEN_LOCATION[input.details.platform],
+      })
+      .returning();
+    const insertedFeed = insertedFeeds[0];
+    if (!insertedFeed) throw new Error("Couldn't find new feed");
+    const insertedOrigins = origins.length
+      ? await insertOrigins(tx, insertedFeed, origins)
       : [];
-  return { ...insertedFeed, origins: insertedOrigins };
+    return { ...insertedFeed, origins: insertedOrigins };
+  });
 }
 
 /** Flatten Feeds with nested origins into the pairs the fetch pipeline consumes. */
 export function fetchableOriginsOf(
-  feedRows: Array<DatabaseFeed & { origins: DatabaseFeedOrigin[] }>,
+  feedRows: Array<DatabaseFeed & { origins: HydratedFeedOrigin[] }>,
 ): FetchableOrigin[] {
   return feedRows.flatMap(({ origins, ...feed }) =>
     origins.map((origin) => ({ origin, feed })),

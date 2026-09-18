@@ -5,7 +5,7 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "./database";
-import { createPageImageWorkload } from "./page-image-workload";
+import { createObservationImageWorkload } from "./observation-image-workload";
 import { createIngestWorkload } from "./ingest-workload";
 
 const profiles = { small: 1_000, representative: 10_000, stress: 50_000 };
@@ -54,7 +54,7 @@ try {
     const ordered = samples.map((sample) => sample.ms).sort((a, b) => a - b);
     results[name] = { medianMs: ordered[7], p95Ms: ordered[14], samples };
   }
-  const pageImages = await createPageImageWorkload(session.database);
+  const pageImages = createObservationImageWorkload();
   const imageSamples = [];
   for (let i = 0; i < 18; i++) {
     // Prepare outside the timed operation.
@@ -78,7 +78,7 @@ try {
   const imageTimes = imageSamples
     .map((sample) => sample.ms)
     .sort((a, b) => a - b);
-  results["page-image-repair"] = {
+  results["observation-image-enrichment"] = {
     medianMs: imageTimes[7],
     p95Ms: imageTimes[14],
     samples: imageSamples,

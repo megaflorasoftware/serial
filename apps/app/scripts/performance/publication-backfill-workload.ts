@@ -9,6 +9,7 @@ import {
   user,
 } from "../../src/server/db/schema";
 import type { db } from "../../src/server/db";
+import { feedOriginRss } from "~/server/db/schema";
 
 export async function createPublicationBackfillWorkload(
   database: typeof db,
@@ -45,14 +46,20 @@ export async function createPublicationBackfillWorkload(
         })),
       )
       .returning({ id: feeds.id });
-    await database.insert(feedOrigins).values(
-      rows.map(({ id }) => ({
-        userId,
-        feedId: id,
-        kind: "rss",
-        locator: `https://example.com/feed/${id}`,
-      })),
-    );
+    const originRows = await database
+      .insert(feedOrigins)
+      .values(
+        rows.map(({ id }) => ({
+          userId,
+          feedId: id,
+          kind: "rss",
+          locator: `https://example.com/feed/${id}`,
+        })),
+      )
+      .returning({ id: feedOrigins.id });
+    await database
+      .insert(feedOriginRss)
+      .values(originRows.map((origin) => ({ originId: origin.id })));
   }
   let requests = 0;
   return {

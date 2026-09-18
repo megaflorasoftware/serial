@@ -9,6 +9,7 @@ import {
   contentCategories,
   feedCategories,
   feedItems,
+  feedOriginRss,
   feedOrigins,
   feeds,
   pageCaptures,
@@ -88,7 +89,15 @@ export async function seedBenchmarkFixture(input: {
       lastFetchedAt: BASE_TIME,
       nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
     })),
-    (chunk) => database.insert(feedOrigins).values(chunk),
+    async (chunk) => {
+      const origins = await database
+        .insert(feedOrigins)
+        .values(chunk)
+        .returning({ id: feedOrigins.id });
+      await database
+        .insert(feedOriginRss)
+        .values(origins.map((origin) => ({ originId: origin.id })));
+    },
   );
 
   await insertInChunks(

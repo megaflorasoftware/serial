@@ -1,15 +1,25 @@
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   applyMigrations,
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
-import { feedOrigins, feeds, user } from "~/server/db/schema";
+import {
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
+  feedOriginRss,
+  feedOrigins,
+  feeds,
+  feedsSchema,
+  user,
+} from "~/server/db/schema";
 import {
   attachMissingFeedOrigins,
   FEED_ORIGIN_CONFLICT,
   findFeedForOrigins,
   insertFeedWithOrigins,
+  loadOriginsForFeeds,
 } from "~/server/feeds/origins";
 import { newRssFeedDetails } from "~/server/rss/types";
 
@@ -200,4 +210,84 @@ describe("Feed origin attachment", () => {
       await findFeedForOrigins(session.database, "owner", [rss, atmosphere]),
     ).toBeUndefined();
   });
+});
+
+it("creates protocol details atomically and keeps them out of client contracts", async () => {
+  const feed = await insertFeedWithOrigins(session.database, {
+    userId: "owner",
+    isActive: true,
+    details: {
+      name: "Both",
+      platform: "website",
+      origins: [
+        {
+          ...rss,
+          etag: "rss-validator",
+          alternateLocators: ["https://example.com/atom"],
+        },
+        atmosphere,
+      ],
+    },
+  });
+  const loaded = await loadOriginsForFeeds(session.database, [feed.id]);
+  expect(loaded[0]?.rss).toMatchObject({
+    etag: "rss-validator",
+    alternateLocators: ["https://example.com/atom"],
+  });
+  expect(loaded[1]?.atproto).toMatchObject({
+    publicationDid: "did:plc:example",
+    listingEtag: null,
+    initialized: false,
+  });
+  for (const origin of feedsSchema.parse(feed).origins) {
+    expect(origin).not.toHaveProperty("rss");
+    expect(origin).not.toHaveProperty("atproto");
+    expect(origin).not.toHaveProperty("etag");
+  }
+  await expect(
+    insertFeedWithOrigins(session.database, {
+      userId: "owner",
+      isActive: true,
+      details: {
+        name: "Invalid",
+        platform: "website",
+        origins: [rss, { kind: "atproto", locator: "invalid" }],
+      },
+    }),
+  ).rejects.toThrow("Invalid publication URI");
+  expect(await session.database.select().from(feeds)).toHaveLength(1);
+  expect(await session.database.select().from(feedOrigins)).toHaveLength(2);
+});
+
+it("requires AT Protocol detail ownership for documents and cascades through it", async () => {
+  const rssFeed = await seed();
+  const feed = await attachMissingFeedOrigins(session.database, rssFeed, [
+    atmosphere,
+  ]);
+  const atproto = feed.origins.find((origin) => origin.kind === "atproto")!;
+  const record = {
+    uri: "at://did:plc:example/site.standard.document/one",
+    cid: "cid",
+    status: "retry" as const,
+  };
+  await expect(
+    session.database
+      .insert(feedOriginAtprotoDocuments)
+      .values({ ...record, originId: rssFeed.origins[0]!.id }),
+  ).rejects.toThrow();
+  await session.database
+    .insert(feedOriginAtprotoDocuments)
+    .values({ ...record, originId: atproto.id });
+  await session.database
+    .delete(feedOriginAtproto)
+    .where(eq(feedOriginAtproto.originId, atproto.id));
+  expect(
+    await session.database.select().from(feedOriginAtprotoDocuments),
+  ).toEqual([]);
+  await expect(
+    loadOriginsForFeeds(session.database, [feed.id]),
+  ).rejects.toThrow("Missing atproto details");
+  await session.database.delete(feeds).where(eq(feeds.id, feed.id));
+  expect(await session.database.select().from(feedOrigins)).toEqual([]);
+  expect(await session.database.select().from(feedOriginRss)).toEqual([]);
 });

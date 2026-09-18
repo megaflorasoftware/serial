@@ -6,6 +6,7 @@ export type ItemObservation = {
   author: string;
   description: string;
   thumbnail: string;
+  pageImageUrl?: string;
   content: string;
   firstParagraph: string;
   firstImageUrl: string;

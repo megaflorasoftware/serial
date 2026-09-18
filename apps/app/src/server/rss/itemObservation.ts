@@ -37,15 +37,15 @@ export function rssObservation(item: RSSContent): ItemObservation {
 export function composeItem(
   rss: ItemObservation | undefined,
   document: ItemObservation | undefined,
-  pageImage?: string | null,
 ) {
   const primary = document ?? rss!;
   const body = document?.content ? document : rss?.content ? rss : undefined;
+  const url = document?.url.startsWith("at://")
+    ? (rss?.url ?? document.url)
+    : primary.url;
   return {
     contentId: primary.key,
-    url: document?.url.startsWith("at://")
-      ? (rss?.url ?? document.url)
-      : primary.url,
+    url,
     title: document?.title || rss?.title || "",
     author: document?.author || rss?.author || document?.publicationName || "",
     contentSnippet:
@@ -53,7 +53,8 @@ export function composeItem(
     thumbnail:
       document?.thumbnail ||
       rss?.thumbnail ||
-      pageImage ||
+      document?.pageImageUrl ||
+      (rss?.url === url ? rss.pageImageUrl : undefined) ||
       body?.firstImageUrl ||
       "",
     content: body?.content ?? "",

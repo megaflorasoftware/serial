@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   FEED_ORIGIN_CONFLICT,
   fetchableOriginsOf,
+  withOrigins,
 } from "~/server/feeds/origins";
 import {
   organizationInvalidationSummary,
@@ -53,7 +54,7 @@ export async function addExtensionFeed(request: Request) {
     try {
       for await (const ingestionResult of fetchAndInsertFeedData(
         { db },
-        fetchableOriginsOf(result.feeds),
+        fetchableOriginsOf(await withOrigins(db, result.feeds)),
       )) {
         void ingestionResult;
       }

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { RefreshStats } from "~/server/rss/refreshUserFeeds";
+import { feedOriginRss, feedOrigins, feeds, user } from "~/server/db/schema";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
-import { feedOrigins, feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 
@@ -37,17 +37,23 @@ async function seedFeedsWithRssOrigins(
     if (inserted.length !== chunk.length) {
       throw new Error("Feed insert returned an unexpected row count");
     }
-    await database.insert(feedOrigins).values(
-      inserted.map((feed, position) => ({
-        feedId: feed.id,
-        userId: feed.userId,
-        kind: "rss",
-        locator: chunk[position]!.url,
-        nextFetchAt: chunk[position]!.nextFetchAt ?? null,
-        createdAt: chunk[position]!.createdAt ?? new Date(),
-        updatedAt: chunk[position]!.updatedAt ?? new Date(),
-      })),
-    );
+    const originRows = await database
+      .insert(feedOrigins)
+      .values(
+        inserted.map((feed, position) => ({
+          feedId: feed.id,
+          userId: feed.userId,
+          kind: "rss",
+          locator: chunk[position]!.url,
+          nextFetchAt: chunk[position]!.nextFetchAt ?? null,
+          createdAt: chunk[position]!.createdAt ?? new Date(),
+          updatedAt: chunk[position]!.updatedAt ?? new Date(),
+        })),
+      )
+      .returning({ id: feedOrigins.id });
+    await database
+      .insert(feedOriginRss)
+      .values(originRows.map((origin) => ({ originId: origin.id })));
   }
 }
 

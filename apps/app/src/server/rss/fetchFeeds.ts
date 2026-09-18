@@ -6,9 +6,10 @@ import {
 } from "@serial/bookmark-capture";
 import { runDatabaseWrite } from "../db/retry-write";
 import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
-import { feedItems, feedOrigins } from "../db/schema";
+import { feedItems, feedOriginRss, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
-import { logMessage, logWarning } from "../logger";
+import { logMessage } from "../logger";
+import { enrichObservationImages } from "./observationImages";
 import { calculateNextFetch } from "./calculateNextFetch";
 import { getCachedFeedResult, setCachedFeedResult } from "./feedCache";
 import { fetchNebulaFeedData, fetchNebulaFeedDetails } from "./parsers/nebula";
@@ -24,7 +25,6 @@ import { resolveItemDate } from "./publishedDate";
 import { writeObservedItems } from "./writeItems";
 import { rssObservation } from "./itemObservation";
 import { ingestAtmosphere } from "./ingestAtmosphere";
-import { refreshPageImages } from "./refreshPageImages";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { readFeedHttp } from "./feedHttp";
@@ -177,8 +177,9 @@ export type FeedResult = { metadataChanged?: boolean } & (
 
 type FetchStateUpdate = Pick<
   typeof feedOrigins.$inferInsert,
-  "lastFetchedAt" | "nextFetchAt" | "etag" | "lastModifiedHeader"
->;
+  "lastFetchedAt" | "nextFetchAt"
+> &
+  Pick<typeof feedOriginRss.$inferInsert, "etag" | "lastModifiedHeader">;
 
 /** Every fetch-state write lands on the origin row, never on the Feed. */
 async function writeOriginFetchState(
@@ -186,12 +187,20 @@ async function writeOriginFetchState(
   originId: number,
   update: FetchStateUpdate,
 ) {
+  const { etag, lastModifiedHeader, ...schedule } = update;
   await runDatabaseWrite(context.db, () =>
     dbSemaphore.run(() =>
-      context.db
-        .update(feedOrigins)
-        .set(update)
-        .where(eq(feedOrigins.id, originId)),
+      context.db.transaction(async (tx) => {
+        await tx
+          .update(feedOrigins)
+          .set(schedule)
+          .where(eq(feedOrigins.id, originId));
+        if (etag !== undefined || lastModifiedHeader !== undefined)
+          await tx
+            .update(feedOriginRss)
+            .set({ etag, lastModifiedHeader })
+            .where(eq(feedOriginRss.originId, originId));
+      }),
     ),
   );
 }
@@ -394,7 +403,7 @@ export async function* fetchAndInsertFeedData(
           const written = await writeObservedItems(
             context.db,
             feed,
-            observations,
+            await enrichObservationImages(observations),
           );
           return {
             feedItems: written.items,
@@ -467,8 +476,8 @@ export async function* fetchAndInsertFeedData(
 
       // Cache miss — proceed with HTTP fetch
       const cached: ConditionalHeaders = {
-        etag: origin.etag,
-        lastModifiedHeader: origin.lastModifiedHeader,
+        etag: origin.rss?.etag,
+        lastModifiedHeader: origin.rss?.lastModifiedHeader,
       };
 
       let feedData: FeedFetchResult | null = null;
@@ -570,44 +579,6 @@ export async function* fetchAndInsertFeedData(
     }
   };
 
-  const repairedFeeds = new Set<number>();
-  const processOrigin = async (
-    fetchable: FetchableOrigin,
-  ): Promise<FeedResult> => {
-    const result = await fetchOrigin(fetchable);
-    const { feed, origin } = fetchable;
-    if (
-      feed.platform !== "website" ||
-      !feed.isActive ||
-      (origin.nextFetchAt && origin.nextFetchAt > now) ||
-      repairedFeeds.has(feed.id)
-    )
-      return result;
-    repairedFeeds.add(feed.id);
-    try {
-      const repaired = await refreshPageImages(context.db, feed);
-      if (!repaired.length) return result;
-      const changed = new Map(
-        ("feedItems" in result ? (result.feedItems ?? []) : []).map((item) => [
-          item.id,
-          item,
-        ]),
-      );
-      for (const item of repaired) changed.set(item.id, item);
-      return {
-        ...result,
-        status: result.status === "error" ? "error" : "success",
-        feedItems: [...changed.values()],
-      } as FeedResult;
-    } catch (error) {
-      logWarning("Could not refresh Feed item page images", {
-        feedId: feed.id,
-        error,
-      });
-      return result;
-    }
-  };
-
   let skippedCount = 0;
   let crossUserCacheCount = 0;
   let fetchedCount = 0;
@@ -620,7 +591,7 @@ export async function* fetchAndInsertFeedData(
   for await (const result of workerPool(
     fetchableOrigins,
     FEED_INGESTION_CONCURRENCY,
-    processOrigin,
+    fetchOrigin,
   )) {
     if (result.status === "skipped") {
       skippedCount++;

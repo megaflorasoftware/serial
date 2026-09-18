@@ -110,7 +110,6 @@ export async function revalidateFeed(
               imageUrl: observed.origin.sourceImageUrl,
               description: observed.origin.sourceDescription,
               siteUrl: observed.siteUrl,
-              pdsUrl: observed.origin.pdsUrl ?? undefined,
             },
           );
         }

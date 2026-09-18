@@ -205,7 +205,6 @@ export async function backfillPublicationOrigins(
                         imageUrl: candidate.origin.sourceImageUrl,
                         description: candidate.origin.sourceDescription,
                         siteUrl: candidate.siteUrl,
-                        pdsUrl: candidate.origin.pdsUrl ?? undefined,
                       },
                     );
                     added = 1;

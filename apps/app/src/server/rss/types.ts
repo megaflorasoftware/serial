@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type {
   DatabaseFeed,
-  DatabaseFeedOrigin,
+  feedOriginRss,
   feedOrigins,
   feeds,
+  HydratedFeedOrigin,
 } from "~/server/db/schema";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import { FEED_ORIGIN_KIND } from "~/server/db/schema";
@@ -12,7 +13,8 @@ import { FEED_ORIGIN_KIND } from "~/server/db/schema";
 export type NewFeedOriginDetails = Omit<
   typeof feedOrigins.$inferInsert,
   "id" | "feedId" | "userId" | "createdAt" | "updatedAt"
->;
+> &
+  Omit<typeof feedOriginRss.$inferInsert, "originId">;
 
 /** Feed values plus the origins it starts with, as produced by feed detection. */
 export type NewFeedDetails = Omit<
@@ -51,7 +53,7 @@ export function newRssFeedDetails(input: {
 
 /** One origin paired with the Feed it belongs to: the unit the fetch pipeline works on. */
 export type FetchableOrigin = {
-  origin: DatabaseFeedOrigin;
+  origin: HydratedFeedOrigin;
   feed: DatabaseFeed;
 };
 

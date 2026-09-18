@@ -4,20 +4,13 @@ CREATE TABLE `serial_feed_origin` (
 	`user_id` text NOT NULL,
 	`kind` text(16) NOT NULL,
 	`locator` text(1024) NOT NULL,
-	`etag` text,
-	`last_modified_header` text,
 	`last_fetched_at` integer,
 	`next_fetch_at` integer,
-	`repo_rev` text,
-	`publication_did` text,
-	`publication_rkey` text,
-	`pds_url` text(512),
 	`source_name` text(256),
 	`source_image_url` text(512),
 	`source_description` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	`alternate_locators` text,
 	FOREIGN KEY (`feed_id`) REFERENCES `serial_feed`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`user_id`) REFERENCES `serial_user`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -25,6 +18,42 @@ CREATE TABLE `serial_feed_origin` (
 CREATE INDEX `feed_origin_user_id_kind_locator_idx` ON `serial_feed_origin` (`user_id`,`kind`,`locator`);--> statement-breakpoint
 CREATE INDEX `feed_origin_user_id_next_fetch_at_idx` ON `serial_feed_origin` (`user_id`,`next_fetch_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `feed_origin_feed_id_kind_unique` ON `serial_feed_origin` (`feed_id`,`kind`);--> statement-breakpoint
+CREATE TABLE `serial_feed_origin_rss` (
+  `origin_id` integer PRIMARY KEY NOT NULL,
+  `etag` text,
+  `last_modified_header` text,
+  `alternate_locators` text,
+  FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `serial_feed_origin_atproto` (
+  `origin_id` integer PRIMARY KEY NOT NULL,
+  `publication_did` text NOT NULL,
+  `listing_etag` text,
+  `repo_rev` text,
+  `cursor` text,
+  `boundary` text,
+  `newest_rkey` text,
+  `pending_rev` text,
+  `retry_cursor` text,
+  `initial_count` integer DEFAULT 0 NOT NULL,
+  `initialized` integer DEFAULT false NOT NULL,
+  FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_publication_did_idx` ON `serial_feed_origin_atproto` (`publication_did`);
+--> statement-breakpoint
+CREATE TABLE `serial_feed_origin_atproto_document` (
+  `origin_id` integer NOT NULL,
+  `uri` text NOT NULL,
+  `cid` text NOT NULL,
+  `status` text NOT NULL,
+  PRIMARY KEY (`origin_id`, `uri`),
+  FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin_atproto`(`origin_id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_document_retry_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`uri`);
+--> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `site_url` text(512);--> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `name_edited_at` integer;
 --> statement-breakpoint
@@ -54,6 +83,8 @@ SELECT
   updated_at
 FROM serial_feed;
 --> statement-breakpoint
+INSERT INTO serial_feed_origin_rss (origin_id) SELECT id FROM serial_feed_origin WHERE kind = 'rss';
+--> statement-breakpoint
 DROP INDEX `feed_user_id_url_idx`;--> statement-breakpoint
 DROP INDEX `feed_user_id_is_active_next_fetch_at_idx`;--> statement-breakpoint
 DROP INDEX `feed_user_id_is_active_idx`;--> statement-breakpoint
@@ -69,28 +100,6 @@ ALTER TABLE `serial_atproto_connections` ADD `export_subscriptions` integer DEFA
 ALTER TABLE `serial_atproto_connections` ADD `import_as_inactive` integer DEFAULT false NOT NULL;
 --> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `sync_settings_version` integer DEFAULT 0 NOT NULL;
---> statement-breakpoint
-CREATE TABLE `serial_feed_document_record` (
-	`origin_id` integer NOT NULL,
-	`uri` text NOT NULL,
-	`cid` text NOT NULL,
-	`status` text NOT NULL,
-	PRIMARY KEY(`origin_id`, `uri`),
-	FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `feed_document_retry_idx` ON `serial_feed_document_record` (`origin_id`,`status`,`uri`);--> statement-breakpoint
-CREATE TABLE `serial_feed_ingest_state` (
-	`origin_id` integer PRIMARY KEY NOT NULL,
-	`cursor` text,
-	`boundary` text,
-	`newest_rkey` text,
-	`pending_rev` text,
-	`initial_count` integer DEFAULT 0 NOT NULL,
-	`initialized` integer DEFAULT false NOT NULL,
-	`retry_cursor` text,
-	FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
-);
 --> statement-breakpoint
 CREATE TABLE `serial_feed_item_alias` (
 	`feed_id` integer NOT NULL,
@@ -172,24 +181,6 @@ ALTER TABLE `serial_atproto_connections` ADD `subscription_job_expires_at` integ
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_progress` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_result` text;--> statement-breakpoint
 CREATE INDEX `atproto_subscription_job_due_idx` ON `serial_atproto_connections` (`subscription_next_attempt_at`);
---> statement-breakpoint
-CREATE TABLE `serial_feed_item_page_image` (
-	`item_id` text PRIMARY KEY NOT NULL,
-	`feed_id` integer NOT NULL,
-	`page_url` text NOT NULL,
-	`image_url` text,
-	`next_check_at` integer DEFAULT 0 NOT NULL,
-	FOREIGN KEY (`item_id`) REFERENCES `serial_feed_item`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`feed_id`) REFERENCES `serial_feed`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `feed_item_page_image_due_idx` ON `serial_feed_item_page_image` (`feed_id`,`next_check_at`,`item_id`);
---> statement-breakpoint
-INSERT INTO serial_feed_item_page_image (item_id, feed_id, page_url, next_check_at)
-SELECT item.id, item.feed_id, item.url, 0
-FROM serial_feed_item AS item
-INNER JOIN serial_feed AS feed ON feed.id = item.feed_id
-WHERE feed.platform = 'website';
 --> statement-breakpoint
 ALTER TABLE `serial_user` ADD `onboarding_complete` integer DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_user` ADD `onboarding_step` text;
