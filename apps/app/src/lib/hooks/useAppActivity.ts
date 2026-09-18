@@ -13,8 +13,8 @@ export function useAppActivity() {
   useEffect(() => {
     mounted.current = true;
     recorder.current ??= createAppActivityRecorder({
-      record: (signal) =>
-        orpcRouterClient.user.recordActivity(undefined, { signal }),
+      record: (operationId, signal) =>
+        orpcRouterClient.user.recordActivity({ operationId }, { signal }),
       catchUp: (signal) =>
         orpcRouterClient.user.catchUpFeeds(undefined, { signal }),
     });

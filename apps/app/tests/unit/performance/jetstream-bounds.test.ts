@@ -39,6 +39,15 @@ it.each([1000, 10000, 50000])(
             ),
           ).toHaveLength(0);
       }
+      for (const bootstrap of [true, false]) {
+        session.instrumentation.reset();
+        const result = await workload.recover(bootstrap);
+        const evidence = session.instrumentation.snapshot();
+        expect(result.pages).toBe(2);
+        expect(result.images).toBeLessThanOrEqual(8);
+        expect(evidence.materializedRows).toBeLessThanOrEqual(1600);
+        expect(evidence.statementCount).toBeLessThanOrEqual(700);
+      }
     } finally {
       session.close();
       target.cleanup();

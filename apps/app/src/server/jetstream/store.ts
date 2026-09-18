@@ -188,6 +188,185 @@ export async function stageDocument(
     });
 }
 
+function olderDocuments(originId: number, seq: number) {
+  return and(
+    eq(feedOriginAtprotoDocuments.originId, originId),
+    or(
+      isNull(feedOriginAtprotoDocuments.eventSeq),
+      sql`cast(${feedOriginAtprotoDocuments.eventSeq} as integer) < ${seq}`,
+    ),
+  );
+}
+async function applyCommit(
+  tx: FeedDatabase,
+  row: StreamOrigin,
+  event: Extract<StreamEvent, { kind: "commit" }>,
+) {
+  const originId = row.origin.id;
+  if (
+    row.atproto.accountStatus === "deleted" &&
+    row.atproto.accountSeq &&
+    event.seq <= sequence(row.atproto.accountSeq)
+  )
+    return;
+  const uri = `at://${event.did}/${event.commit.collection}/${event.commit.rkey}`;
+  if (event.commit.collection === "site.standard.publication") {
+    if (uri !== row.origin.locator) return;
+    if (
+      !row.atproto.publicationSeq ||
+      sequence(row.atproto.publicationSeq) < event.seq
+    ) {
+      await tx
+        .update(feedOriginAtproto)
+        .set({
+          publicationSeq: String(event.seq),
+          publicationRecord:
+            event.commit.operation === "delete"
+              ? null
+              : {
+                  uri,
+                  cid: event.commit.cid,
+                  value: event.commit.record,
+                },
+          publicationDirty: event.commit.operation !== "delete",
+        })
+        .where(eq(feedOriginAtproto.originId, originId));
+      if (event.commit.operation === "delete")
+        await tx
+          .update(feedOriginAtprotoDocuments)
+          .set({
+            status: "deleted",
+            pendingRecord: null,
+            eventSeq: String(event.seq),
+          })
+          .where(olderDocuments(originId, event.seq));
+    }
+  } else if (event.commit.collection === "site.standard.document") {
+    if (
+      row.atproto.publicationSeq &&
+      !row.atproto.publicationRecord &&
+      event.seq <= sequence(row.atproto.publicationSeq)
+    )
+      return;
+    if (
+      row.atproto.repositoryRev &&
+      event.commit.rev < row.atproto.repositoryRev
+    )
+      return;
+    const parsed = parseDocumentRecord({
+      uri,
+      cid: event.commit.cid,
+      value: event.commit.record,
+    });
+    const belongs =
+      !parsed ||
+      documentBelongsToPublication(parsed.value.site, row.origin.locator);
+    if (!belongs || event.commit.operation === "delete") {
+      const known = await tx
+        .select({ uri: feedOriginAtprotoDocuments.uri })
+        .from(feedOriginAtprotoDocuments)
+        .where(
+          and(
+            eq(feedOriginAtprotoDocuments.originId, originId),
+            eq(feedOriginAtprotoDocuments.uri, uri),
+          ),
+        )
+        .get();
+      if (!known) return;
+    }
+    await stageDocument(tx, {
+      originId,
+      uri,
+      cid: event.commit.cid ?? "",
+      record: event.commit.record,
+      rev: event.commit.rev,
+      seq: event.seq,
+      deleted: !belongs || event.commit.operation === "delete",
+    });
+  }
+}
+async function applyMarker(
+  tx: FeedDatabase,
+  row: StreamOrigin,
+  event: Exclude<StreamEvent, { kind: "commit" }>,
+) {
+  const originId = row.origin.id;
+  if (event.kind === "identity") {
+    if (
+      !row.atproto.identitySeq ||
+      sequence(row.atproto.identitySeq) < event.seq
+    )
+      await tx
+        .update(feedOriginAtproto)
+        .set({ identitySeq: String(event.seq) })
+        .where(eq(feedOriginAtproto.originId, originId));
+    // Public PDS lookups resolve the DID without cache for each processing operation.
+  } else if (
+    !(event.kind === "account"
+      ? row.atproto.accountSeq
+      : row.atproto.repositorySeq) ||
+    sequence(
+      (event.kind === "account"
+        ? row.atproto.accountSeq
+        : row.atproto.repositorySeq)!,
+    ) < event.seq
+  ) {
+    await tx
+      .update(feedOriginAtproto)
+      .set({
+        ...(event.kind === "account"
+          ? {
+              accountSeq: String(event.seq),
+              repositoryActive: event.account.active,
+              accountStatus: event.account.status ?? null,
+            }
+          : {
+              repositorySeq: String(event.seq),
+              repositoryRev: event.sync.rev,
+            }),
+      })
+      .where(eq(feedOriginAtproto.originId, originId));
+    if (
+      event.kind === "account" &&
+      !event.account.active &&
+      event.account.status === "deleted"
+    ) {
+      await tx
+        .update(feedOriginAtprotoDocuments)
+        .set({
+          status: "deleted",
+          pendingRecord: null,
+          eventSeq: String(event.seq),
+        })
+        .where(
+          and(
+            olderDocuments(originId, event.seq),
+            eq(feedOriginAtprotoDocuments.status, "retry"),
+          ),
+        );
+    }
+    if (event.kind === "sync") {
+      await tx
+        .update(feedOriginAtprotoDocuments)
+        .set({
+          status: "deleted",
+          pendingRecord: null,
+          eventSeq: String(event.seq),
+        })
+        .where(
+          and(
+            olderDocuments(originId, event.seq),
+            or(
+              isNull(feedOriginAtprotoDocuments.eventRev),
+              lt(feedOriginAtprotoDocuments.eventRev, event.sync.rev),
+            ),
+            eq(feedOriginAtprotoDocuments.status, "retry"),
+          ),
+        );
+    }
+  }
+}
+
 async function acceptOriginEvent(
   database: StreamDatabase,
   originId: number,
@@ -208,7 +387,10 @@ async function acceptOriginEvent(
         )
           throw new CheckpointHostError();
         if (!eligible(row, plan, settings, manual)) {
-          if (row.atproto.streamMode !== "paused")
+          if (
+            row.atproto.streamMode !== "paused" &&
+            row.atproto.streamMode !== "direct"
+          )
             await tx
               .update(feedOriginAtproto)
               .set({ streamMode: "paused" })
@@ -218,162 +400,8 @@ async function acceptOriginEvent(
         // Newly created origins first establish their bootstrap boundary.
         if (!row.atproto.streamSeq) return;
         if (!recovery && sequence(row.atproto.streamSeq) >= event.seq) return;
-        const olderDocuments = and(
-          eq(feedOriginAtprotoDocuments.originId, originId),
-          or(
-            isNull(feedOriginAtprotoDocuments.eventSeq),
-            sql`cast(${feedOriginAtprotoDocuments.eventSeq} as integer) < ${event.seq}`,
-          ),
-        );
-        if (event.kind === "commit") {
-          if (row.atproto.accountStatus === "deleted" && row.atproto.accountSeq && event.seq <= sequence(row.atproto.accountSeq)) return;
-          const uri = `at://${event.did}/${event.commit.collection}/${event.commit.rkey}`;
-          if (event.commit.collection === "site.standard.publication") {
-            if (uri !== row.origin.locator) return;
-            if (
-              !row.atproto.publicationSeq ||
-              sequence(row.atproto.publicationSeq) < event.seq
-            ) {
-              await tx
-                .update(feedOriginAtproto)
-                .set({
-                  publicationSeq: String(event.seq),
-                  publicationRecord:
-                    event.commit.operation === "delete"
-                      ? null
-                      : {
-                          uri,
-                          cid: event.commit.cid,
-                          value: event.commit.record,
-                        },
-                  publicationDirty: event.commit.operation !== "delete",
-                })
-                .where(eq(feedOriginAtproto.originId, originId));
-              if (event.commit.operation === "delete")
-                await tx
-                  .update(feedOriginAtprotoDocuments)
-                  .set({
-                    status: "deleted",
-                    pendingRecord: null,
-                    eventSeq: String(event.seq),
-                  })
-                  .where(olderDocuments);
-            }
-          } else if (event.commit.collection === "site.standard.document") {
-            if (row.atproto.publicationSeq && !row.atproto.publicationRecord && event.seq <= sequence(row.atproto.publicationSeq)) return;
-            if (
-              row.atproto.repositoryRev &&
-              event.commit.rev < row.atproto.repositoryRev
-            )
-              return;
-            const parsed = parseDocumentRecord({
-              uri,
-              cid: event.commit.cid,
-              value: event.commit.record,
-            });
-            const belongs =
-              !parsed ||
-              documentBelongsToPublication(
-                parsed.value.site,
-                row.origin.locator,
-              );
-            if (!belongs || event.commit.operation === "delete") {
-              const known = await tx
-                .select({ uri: feedOriginAtprotoDocuments.uri })
-                .from(feedOriginAtprotoDocuments)
-                .where(
-                  and(
-                    eq(feedOriginAtprotoDocuments.originId, originId),
-                    eq(feedOriginAtprotoDocuments.uri, uri),
-                  ),
-                )
-                .get();
-              if (!known) return;
-            }
-            await stageDocument(tx, {
-              originId,
-              uri,
-              cid: event.commit.cid ?? "",
-              record: event.commit.record,
-              rev: event.commit.rev,
-              seq: event.seq,
-              deleted: !belongs || event.commit.operation === "delete",
-            });
-          }
-        } else if (event.kind === "identity") {
-          if (
-            !row.atproto.identitySeq ||
-            sequence(row.atproto.identitySeq) < event.seq
-          )
-            await tx
-              .update(feedOriginAtproto)
-              .set({ identitySeq: String(event.seq) })
-              .where(eq(feedOriginAtproto.originId, originId));
-          // Public PDS lookups resolve the DID without cache for each processing operation.
-        } else if (
-          !(event.kind === "account"
-            ? row.atproto.accountSeq
-            : row.atproto.repositorySeq) ||
-          sequence(
-            (event.kind === "account"
-              ? row.atproto.accountSeq
-              : row.atproto.repositorySeq)!,
-          ) < event.seq
-        ) {
-          await tx
-            .update(feedOriginAtproto)
-            .set({
-              ...(event.kind === "account"
-                ? {
-                    accountSeq: String(event.seq),
-                    repositoryActive: event.account.active,
-                    accountStatus: event.account.status ?? null,
-                  }
-                : {
-                    repositorySeq: String(event.seq),
-                    repositoryRev: event.sync.rev,
-                  }),
-            })
-            .where(eq(feedOriginAtproto.originId, originId));
-          if (
-            event.kind === "account" &&
-            !event.account.active &&
-            event.account.status === "deleted"
-          ) {
-            await tx
-              .update(feedOriginAtprotoDocuments)
-              .set({
-                status: "deleted",
-                pendingRecord: null,
-                eventSeq: String(event.seq),
-              })
-              .where(
-                and(
-                  olderDocuments,
-                  eq(feedOriginAtprotoDocuments.status, "retry"),
-                ),
-              );
-          }
-          if (event.kind === "sync") {
-            await tx
-              .update(feedOriginAtprotoDocuments)
-              .set({
-                status: "deleted",
-                pendingRecord: null,
-                eventSeq: String(event.seq),
-              })
-              .where(
-                and(
-                  olderDocuments,
-                  or(
-                    isNull(feedOriginAtprotoDocuments.eventRev),
-                    lt(feedOriginAtprotoDocuments.eventRev, event.sync.rev),
-                  ),
-                  eq(feedOriginAtprotoDocuments.status, "retry"),
-                ),
-              );
-          }
-        }
+        if (event.kind === "commit") await applyCommit(tx, row, event);
+        else await applyMarker(tx, row, event);
         if (!recovery && row.atproto.streamMode === "live")
           await tx
             .update(feedOriginAtproto)

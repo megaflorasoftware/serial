@@ -105,7 +105,7 @@ export async function recoverOrigin(
   const owned = and(
     eq(feedOriginAtproto.originId, originId),
     eq(feedOriginAtproto.workOwner, owner),
-  );
+  )!;
   const processing = { ...options, signal: combined, workOwner: owner };
   try {
     combined.throwIfAborted();
@@ -139,9 +139,10 @@ export async function recoverOrigin(
       );
       row = (await loadOrigin(database, originId))!;
     }
-    let needsDirectRecovery = false;
+    let needsDirectRecovery = row.atproto.streamMode === "direct";
     if (
       !transport.hasReplay &&
+      !needsDirectRecovery &&
       row.atproto.initialized &&
       row.atproto.streamMode !== "live"
     ) {
@@ -179,7 +180,7 @@ export async function recoverOrigin(
         await runDatabaseWrite(database, () =>
           database
             .update(feedOriginAtproto)
-            .set({ streamSeq: String(boundary) })
+            .set({ streamSeq: String(boundary), streamMode: "direct" })
             .where(owned),
         );
         row = (await loadOrigin(database, originId))!;
@@ -203,8 +204,20 @@ export async function recoverOrigin(
             await runDatabaseWrite(database, () =>
               database
                 .update(feedOriginAtproto)
-                .set({ publicationRecord: publication, publicationDirty: true, publicationSeq: String(boundary) })
-                .where(and(owned, or(isNull(feedOriginAtproto.publicationSeq), sql`cast(${feedOriginAtproto.publicationSeq} as integer) <= ${boundary}`))),
+                .set({
+                  publicationRecord: publication,
+                  publicationDirty: true,
+                  publicationSeq: String(boundary),
+                })
+                .where(
+                  and(
+                    owned,
+                    or(
+                      isNull(feedOriginAtproto.publicationSeq),
+                      sql`cast(${feedOriginAtproto.publicationSeq} as integer) <= ${boundary}`,
+                    ),
+                  ),
+                ),
             );
           },
           records: async (records, rev) => {
@@ -221,6 +234,8 @@ export async function recoverOrigin(
                   )
                     throw new Error("Feed no longer eligible");
                   for (const record of records)
+                    // Preserve write order inside this SQLite transaction.
+                    // react-doctor-disable-next-line react-doctor/async-await-in-loop
                     await stageDocument(tx, {
                       originId,
                       uri: record.uri,

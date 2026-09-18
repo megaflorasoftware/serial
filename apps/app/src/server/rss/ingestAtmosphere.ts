@@ -32,6 +32,7 @@ import {
 } from "./atmospherePolicy";
 import type { ItemObservation } from "./itemObservation";
 import type { PublicationClient } from "./atprotoClient";
+import type { SQL } from "drizzle-orm";
 import type { db } from "../db";
 import type { ApplicationFeedItem } from "../db/schema";
 import type { FetchableOrigin } from "./types";
@@ -52,7 +53,7 @@ export async function ingestAtmosphere(
   client: PublicationClient = createPublicationClient(),
   readPage: typeof readFeedHttp = readFeedHttp,
   staging?: {
-    guard: import("drizzle-orm").SQL;
+    guard: SQL;
     signal: AbortSignal;
     publication: (
       record: NonNullable<ReturnType<typeof parsePublicationRecord>>,
@@ -306,9 +307,7 @@ export async function ingestAtmosphere(
           await tx
             .update(feedOriginAtproto)
             .set({ ...state, initialCount })
-            .where(
-              and(eq(feedOriginAtproto.originId, origin.id), staging?.guard),
-            );
+            .where(eq(feedOriginAtproto.originId, origin.id));
         }),
       );
       state.initialCount = initialCount;

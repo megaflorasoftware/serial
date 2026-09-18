@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, ne } from "drizzle-orm";
 import {
   atprotoStreamState,
   feedOriginAtproto,
@@ -161,8 +161,12 @@ export async function catchUpUser(
       .orderBy(asc(feedOrigins.id))
       .limit(ORIGIN_PAGE_SIZE);
     if (!origins.length) return;
-    try { await establishBoundary(database, config, signal); }
-    catch (error) { if (!signal.aborted) config.transport.report(error, "user-boundary"); return; }
+    try {
+      await establishBoundary(database, config, signal);
+    } catch (error) {
+      if (!signal.aborted) config.transport.report(error, "user-boundary");
+      return;
+    }
     for await (const unused of workerPool(origins, 4, async (origin) => {
       try {
         await recoverOrigin(
@@ -272,7 +276,10 @@ export function startStreamWorker(
           // A lost live window requires direct recovery for every retained user position.
           await runDatabaseWrite(database, () =>
             database.transaction(async (tx) => {
-              await tx.update(feedOriginAtproto).set({ streamMode: "paused" });
+              await tx
+                .update(feedOriginAtproto)
+                .set({ streamMode: "paused" })
+                .where(ne(feedOriginAtproto.streamMode, "direct"));
               await tx
                 .update(atprotoStreamState)
                 .set({ seq: null })

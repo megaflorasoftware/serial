@@ -86,11 +86,9 @@ export function retryAfter(value: string | null, now = Date.now()) {
 
 export function errorChain(error: unknown): object[] {
   const chain: object[] = [];
-  while (
-    error !== null &&
-    typeof error === "object" &&
-    !chain.includes(error)
-  ) {
+  const seen = new Set<object>();
+  while (error !== null && typeof error === "object" && !seen.has(error)) {
+    seen.add(error);
     chain.push(error);
     error = "cause" in error ? error.cause : undefined;
   }

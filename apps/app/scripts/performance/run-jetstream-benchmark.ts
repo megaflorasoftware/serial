@@ -32,6 +32,8 @@ try {
     for (let index = 0; index < 7; index++) {
       session.instrumentation.reset();
       const started = performance.now();
+      // Each sample depends on the previous revision and isolated instrumentation.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       const result = await workload.run(mode);
       const measurement = session.instrumentation.snapshot();
       const itemWrites = measurement.statements.filter((entry) =>
@@ -46,6 +48,31 @@ try {
         statements: measurement.statementCount,
         rows: measurement.materializedRows,
         itemWrites,
+        ...result,
+      });
+    }
+    const times = samples.map((sample) => sample.ms).sort((a, b) => a - b);
+    results[mode] = { medianMs: times[3], p95Ms: times[6], samples };
+  }
+  for (const mode of ["bootstrap", "direct-recovery"] as const) {
+    const samples = [];
+    for (let index = 0; index < 7; index++) {
+      session.instrumentation.reset();
+      const started = performance.now();
+      // Reset counters and finish this recovery before measuring the next sample.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      const result = await workload.recover(mode === "bootstrap");
+      const evidence = session.instrumentation.snapshot();
+      if (
+        result.pages > 2 ||
+        result.images > 8 ||
+        evidence.materializedRows > 1600
+      )
+        throw new Error("Unbounded direct recovery");
+      samples.push({
+        ms: performance.now() - started,
+        rows: evidence.materializedRows,
+        statements: evidence.statementCount,
         ...result,
       });
     }

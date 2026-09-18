@@ -100,6 +100,9 @@ describe("authenticated layout activity", () => {
       await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
     });
     expect(mocks.record).toHaveBeenCalledTimes(2);
+    expect(mocks.record.mock.calls[0]![0]).toEqual(
+      mocks.record.mock.calls[1]![0],
+    );
     expect(mocks.catchUp).toHaveBeenCalledTimes(1);
   });
 });

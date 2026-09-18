@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import type { Server } from "node:http";
 
 /** Local v2 wire with inclusive resume; no external Jetstream dependency in E2E. */

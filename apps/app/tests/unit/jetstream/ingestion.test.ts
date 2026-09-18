@@ -5,6 +5,7 @@ import type { StreamTransport } from "~/server/jetstream/transport";
 import type { StreamSettings } from "~/server/jetstream/store";
 import type { StreamEvent } from "~/server/jetstream/protocol";
 import type { PublicationClient } from "~/server/rss/atprotoClient";
+import { recordUserActivity } from "~/server/jetstream/activity";
 import { recoverOrigin } from "~/server/jetstream/recovery";
 import {
   CheckpointHostError,
@@ -614,14 +615,12 @@ describe("failure isolation", () => {
     expect((await state()).streamSeq).toBe("1");
   });
   it("retains a saved Feed when its initial recovery boundary is unavailable", async () => {
-    await fixture.database
-      .update(feedOriginAtproto)
-      .set({
-        initialized: false,
-        streamMode: "paused",
-        streamSeq: null,
-        streamService: null,
-      });
+    await fixture.database.update(feedOriginAtproto).set({
+      initialized: false,
+      streamMode: "paused",
+      streamSeq: null,
+      streamService: null,
+    });
     await expect(
       recoverOrigin(
         fixture.database,
@@ -637,14 +636,12 @@ describe("failure isolation", () => {
   });
   it("queues only the latest 200 initial documents and applies concurrent edits before rendering", async () => {
     await fixture.database.update(atprotoStreamState).set({ seq: "1" });
-    await fixture.database
-      .update(feedOriginAtproto)
-      .set({
-        initialized: false,
-        streamMode: "paused",
-        streamSeq: null,
-        streamService: null,
-      });
+    await fixture.database.update(feedOriginAtproto).set({
+      initialized: false,
+      streamMode: "paused",
+      streamSeq: null,
+      streamService: null,
+    });
     const remote: PublicationClient = {
       ...client,
       list: vi.fn(async (_did, cursor) => ({
@@ -654,7 +651,7 @@ describe("failure isolation", () => {
           if (value.kind !== "commit") throw new Error();
           return { uri: uri(key), cid: "initial", value: value.commit.record };
         }),
-        notModified: false,
+        notModified: false as const,
         cursor: String(Number(cursor ?? 0) + 100),
         etag: null,
       })),
@@ -733,10 +730,23 @@ describe("marker ordering", () => {
     ).toMatchObject({ eventSeq: "30", status: "retry" });
   });
   it("does not resurrect unknown documents from before an account deletion", async () => {
-    const deletion: StreamEvent = { seq: 20, did: DID, time: NOW.toISOString(), kind: "account", account: { active: false, status: "deleted" } };
+    const deletion: StreamEvent = {
+      seq: 20,
+      did: DID,
+      time: NOW.toISOString(),
+      kind: "account",
+      account: { active: false, status: "deleted" },
+    };
     await accept(deletion);
-    await acceptBatch(fixture.database, { events: [event(10)], lastCursor: 10 }, settings, { originId });
-    expect(await fixture.database.select().from(feedOriginAtprotoDocuments)).toHaveLength(0);
+    await acceptBatch(
+      fixture.database,
+      { events: [event(10)], lastCursor: 10 },
+      settings,
+      { originId },
+    );
+    expect(
+      await fixture.database.select().from(feedOriginAtprotoDocuments),
+    ).toHaveLength(0);
   });
   it("preserves pending work through temporary account deactivation", async () => {
     await accept(event(10));
@@ -796,7 +806,7 @@ describe("marker ordering", () => {
           records: [
             { uri: uri("post"), cid: "initial", value: post.commit.record },
           ],
-          notModified: false,
+          notModified: false as const,
           etag: null,
         };
       },
@@ -819,4 +829,163 @@ describe("marker ordering", () => {
       await fixture.database.select().from(feedOriginAtprotoDocuments),
     ).toHaveLength(0);
   });
+});
+
+describe("recovery review regressions", () => {
+  it("finishes a no-key repository scan across bounded attempts", async () => {
+    await pause(20);
+    let attempt = 0;
+    const transport: StreamTransport = {
+      ...replay([], 30),
+      hasReplay: false,
+      async *recover() {
+        if (attempt++ === 0) throw new StreamFailure("cursor-expired", 400);
+        yield { events: [], lastCursor: 30 };
+      },
+    };
+    const remote: PublicationClient = {
+      ...client,
+      list: async (_did, cursor) => {
+        const offset = Number(cursor ?? 0);
+        return {
+          notModified: false as const,
+          etag: null,
+          cursor: offset + 100 < 450 ? String(offset + 100) : undefined,
+          records: Array.from(
+            { length: Math.min(100, 450 - offset) },
+            (_, index) => {
+              const key = String(999 - offset - index);
+              const post = event(1, key);
+              if (post.kind !== "commit") throw new Error();
+              return {
+                uri: uri(key),
+                cid: "initial",
+                value: post.commit.record,
+              };
+            },
+          ),
+        };
+      },
+    };
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client: remote, readPage },
+    );
+    expect((await state()).streamMode).toBe("direct");
+    expect((await state()).cursor).toBeTruthy();
+    for (
+      let index = 0;
+      index < 6 && (await state()).streamMode !== "live";
+      index++
+    )
+      await recoverOrigin(
+        fixture.database,
+        originId,
+        settings,
+        transport,
+        new AbortController().signal,
+        { client: remote, readPage },
+      );
+    expect((await state()).streamMode).toBe("live");
+    expect(
+      await fixture.database.select().from(feedOriginAtprotoDocuments),
+    ).toHaveLength(450);
+  }, 30000);
+  it("retries direct recovery after failure before the first repository page", async () => {
+    await pause(20);
+    let attempt = 0;
+    const transport: StreamTransport = {
+      ...replay([], 30),
+      hasReplay: false,
+      async *recover() {
+        if (attempt++ === 0) throw new StreamFailure("cursor-expired", 400);
+        yield { events: [], lastCursor: 30 };
+      },
+    };
+    const latestRev = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Offline"))
+      .mockResolvedValue("rev");
+    const list = vi.fn(client.list);
+    await expect(
+      recoverOrigin(
+        fixture.database,
+        originId,
+        settings,
+        transport,
+        new AbortController().signal,
+        { client: { ...client, latestRev, list }, readPage },
+      ),
+    ).rejects.toThrow("Offline");
+    expect((await state()).streamMode).toBe("direct");
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ recoveryRetryAt: null });
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client: { ...client, latestRev, list }, readPage },
+    );
+    expect(list).toHaveBeenCalled();
+    expect((await state()).streamMode).toBe("live");
+  });
+  it("rejects a conversion after its admin reader loses eligibility", async () => {
+    await fixture.database
+      .update(user)
+      .set({ role: "admin", lastActiveAt: null });
+    await accept(event(10));
+    await processOriginDocuments(fixture.database, originId, settings, {
+      client,
+      readPage: async () => {
+        await fixture.database.update(user).set({ role: "user" });
+        throw new Error("No optional image");
+      },
+    });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(0);
+  });
+});
+
+it("deduplicates an app-load retry after its successful response was lost", async () => {
+  const operationId = "committed-load";
+  await recordUserActivity(fixture.database, "reader", NOW, operationId);
+  await recordUserActivity(
+    fixture.database,
+    "reader",
+    new Date(NOW.getTime() + 3000),
+    operationId,
+  );
+  expect(
+    (await fixture.database.select().from(user).get())!.lastActiveAt,
+  ).toEqual(NOW);
+  await recordUserActivity(
+    fixture.database,
+    "reader",
+    new Date(NOW.getTime() + 5000),
+    "next-load",
+  );
+  expect(
+    (await fixture.database.select().from(user).get())!.lastActiveAt,
+  ).toEqual(new Date(NOW.getTime() + 5000));
+});
+
+it("deduplicates a lost-response retry after a second tab records its load", async () => {
+  await recordUserActivity(fixture.database, "reader", NOW, "tab-a");
+  const later = new Date(NOW.getTime() + 1000);
+  await recordUserActivity(fixture.database, "reader", later, "tab-b");
+  await recordUserActivity(
+    fixture.database,
+    "reader",
+    new Date(NOW.getTime() + 3000),
+    "tab-a",
+  );
+  expect(
+    (await fixture.database.select().from(user).get())!.lastActiveAt,
+  ).toEqual(later);
 });

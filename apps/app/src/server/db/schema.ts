@@ -379,7 +379,9 @@ export const feedOriginAtproto = sqliteTable(
     recoveryAttempts: integer("recovery_attempts").notNull().default(0),
     streamService: text("stream_service"),
     streamSeq: text("stream_seq"),
-    streamMode: text("stream_mode", { enum: ["paused", "catchup", "live"] })
+    streamMode: text("stream_mode", {
+      enum: ["paused", "direct", "catchup", "live"],
+    })
       .notNull()
       .default("paused"),
     publicationRecord: text("publication_record", {
@@ -421,6 +423,22 @@ export type HydratedFeedOrigin = DatabaseFeedOrigin & {
 };
 
 /** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
+/** Short-lived receipts make app-load retries idempotent across concurrent tabs. */
+export const appActivityOperations = sqliteTable(
+  "app_activity_operation",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    operationId: text("operation_id").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.operationId] }),
+    index("app_activity_operation_created_idx").on(table.createdAt),
+  ],
+);
+
 export const atprotoStreamState = sqliteTable("atproto_stream_state", {
   id: text("id").primaryKey(),
   service: text("service").notNull(),

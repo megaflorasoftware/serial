@@ -1,6 +1,6 @@
 /** One operation per authenticated user and layout mount, even when effect setup repeats. */
 export function createAppActivityRecorder(dependencies: {
-  record: (signal: AbortSignal) => Promise<unknown>;
+  record: (operationId: string, signal: AbortSignal) => Promise<unknown>;
   catchUp: (signal: AbortSignal) => Promise<unknown>;
   wait?: (milliseconds: number) => Promise<void>;
 }) {
@@ -12,11 +12,15 @@ export function createAppActivityRecorder(dependencies: {
       if (current?.userId === userId) return current.work;
       current?.controller.abort();
       const controller = new AbortController();
+      const operationId = crypto.randomUUID();
       const work = (async () => {
         for (let attempt = 0; attempt < 3; attempt++) {
           if (controller.signal.aborted) return;
           try {
-            await dependencies.record(controller.signal);
+            await dependencies.record(
+              operationId,
+              AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+            );
             break;
           } catch (error) {
             if (controller.signal.aborted) return;

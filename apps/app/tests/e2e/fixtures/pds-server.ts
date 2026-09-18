@@ -2,9 +2,9 @@
 import { createServer } from "node:http";
 import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
 import { z } from "zod";
-import { attachJetstream } from "./jetstream-server";
 import { CID } from "multiformats/cid";
 import { create as createDigest } from "multiformats/hashes/digest";
+import { attachJetstream } from "./jetstream-server";
 import type { IncomingMessage } from "node:http";
 
 const port = Number(process.argv[2]);

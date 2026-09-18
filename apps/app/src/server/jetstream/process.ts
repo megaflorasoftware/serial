@@ -74,6 +74,7 @@ export async function processOriginDocuments(
           const latest = await loadOrigin(tx, originId);
           if (
             !latest ||
+            latest.account.role !== row.account.role ||
             options.signal?.aborted ||
             (options.workOwner !== undefined &&
               latest.atproto.workOwner !== options.workOwner) ||
@@ -177,6 +178,7 @@ export async function processOriginDocuments(
           const latest = await loadOrigin(tx, originId);
           if (
             !latest ||
+            latest.account.role !== row.account.role ||
             options.signal?.aborted ||
             (options.workOwner !== undefined &&
               latest.atproto.workOwner !== options.workOwner) ||
