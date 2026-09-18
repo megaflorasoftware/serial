@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as FeedOrigins from "~/server/feeds/origins";
 import { addExtensionFeed } from "~/app/api.extension.feeds";
 import { authenticatedExtensionUser } from "~/server/auth/extensionRequest";
 import { withOrigins } from "~/server/feeds/origins";
-import type * as FeedOrigins from "~/server/feeds/origins";
 import { createFeedsForUser } from "~/server/feeds/create";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
