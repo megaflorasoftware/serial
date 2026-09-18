@@ -400,12 +400,9 @@ export const feedOriginAtproto = sqliteTable(
       .default(true),
     identitySeq: text("identity_seq"),
     listingEtag: text("listing_etag"),
-    repoRev: text("repo_rev"),
     cursor: text("cursor"),
     boundary: text("boundary"),
     newestRkey: text("newest_rkey"),
-    pendingRev: text("pending_rev"),
-    retryCursor: text("retry_cursor"),
     initialCount: integer("initial_count").notNull().default(0),
     initialized: integer("initialized", { mode: "boolean" })
       .notNull()
@@ -422,7 +419,6 @@ export type HydratedFeedOrigin = DatabaseFeedOrigin & {
   atproto: typeof feedOriginAtproto.$inferSelect | null;
 };
 
-/** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
 /** Short-lived receipts make app-load retries idempotent across concurrent tabs. */
 export const appActivityOperations = sqliteTable(
   "app_activity_operation",
@@ -439,6 +435,7 @@ export const appActivityOperations = sqliteTable(
   ],
 );
 
+/** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
 export const atprotoStreamState = sqliteTable("atproto_stream_state", {
   id: text("id").primaryKey(),
   service: text("service").notNull(),
@@ -470,11 +467,6 @@ export const feedOriginAtprotoDocuments = sqliteTable(
       table.originId,
       table.status,
       table.retryAt,
-      table.uri,
-    ),
-    index("feed_origin_atproto_document_retry_idx").on(
-      table.originId,
-      table.status,
       table.uri,
     ),
   ],

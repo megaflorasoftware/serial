@@ -2,9 +2,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { feedOriginAtproto } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
-import { ingestAtmosphere } from "../rss/ingestAtmosphere";
+import { scanAtmosphere } from "../rss/scanAtmosphere";
 import { createPublicationClient } from "../rss/atprotoClient";
-import { readFeedHttp } from "../rss/feedHttp";
 import {
   CheckpointHostError,
   sequence,
@@ -192,66 +191,59 @@ export async function recoverOrigin(
       const boundary = sequence(row.atproto.streamSeq!);
       const client = options.client ?? createPublicationClient();
       const currentPlan = await planFor(row, settings);
-      const result = await ingestAtmosphere(
-        database,
-        row,
-        client,
-        options.readPage ?? readFeedHttp,
-        {
-          guard: owned,
-          signal: combined,
-          publication: async (publication) => {
-            await runDatabaseWrite(database, () =>
-              database
-                .update(feedOriginAtproto)
-                .set({
-                  publicationRecord: publication,
-                  publicationDirty: true,
-                  publicationSeq: String(boundary),
-                })
-                .where(
-                  and(
-                    owned,
-                    or(
-                      isNull(feedOriginAtproto.publicationSeq),
-                      sql`cast(${feedOriginAtproto.publicationSeq} as integer) <= ${boundary}`,
-                    ),
+      await scanAtmosphere(database, row, client, {
+        guard: owned,
+        signal: combined,
+        publication: async (publication) => {
+          await runDatabaseWrite(database, () =>
+            database
+              .update(feedOriginAtproto)
+              .set({
+                publicationRecord: publication,
+                publicationDirty: true,
+                publicationSeq: String(boundary),
+              })
+              .where(
+                and(
+                  owned,
+                  or(
+                    isNull(feedOriginAtproto.publicationSeq),
+                    sql`cast(${feedOriginAtproto.publicationSeq} as integer) <= ${boundary}`,
                   ),
                 ),
-            );
-          },
-          records: async (records, rev) => {
-            if (combined.aborted) throw combined.reason;
-            await runDatabaseWrite(database, () =>
-              database.transaction(
-                async (tx) => {
-                  const latest = await loadOrigin(tx, originId);
-                  if (
-                    !latest ||
-                    latest.atproto.workOwner !== owner ||
-                    combined.aborted ||
-                    !eligible(latest, currentPlan, settings, options.manual)
-                  )
-                    throw new Error("Feed no longer eligible");
-                  for (const record of records)
-                    // Preserve write order inside this SQLite transaction.
-                    // react-doctor-disable-next-line react-doctor/async-await-in-loop
-                    await stageDocument(tx, {
-                      originId,
-                      uri: record.uri,
-                      cid: record.cid,
-                      record: record.value,
-                      rev,
-                      seq: boundary,
-                    });
-                },
-                { behavior: "immediate" },
               ),
-            );
-          },
+          );
         },
-      );
-      if (result.status === "error") throw result.error;
+        records: async (records, rev) => {
+          if (combined.aborted) throw combined.reason;
+          await runDatabaseWrite(database, () =>
+            database.transaction(
+              async (tx) => {
+                const latest = await loadOrigin(tx, originId);
+                if (
+                  !latest ||
+                  latest.atproto.workOwner !== owner ||
+                  combined.aborted ||
+                  !eligible(latest, currentPlan, settings, options.manual)
+                )
+                  throw new Error("Feed no longer eligible");
+                for (const record of records)
+                  // Preserve write order inside this SQLite transaction.
+                  // react-doctor-disable-next-line react-doctor/async-await-in-loop
+                  await stageDocument(tx, {
+                    originId,
+                    uri: record.uri,
+                    cid: record.cid,
+                    record: record.value,
+                    rev,
+                    seq: boundary,
+                  });
+              },
+              { behavior: "immediate" },
+            ),
+          );
+        },
+      });
       row = (await loadOrigin(database, originId))!;
       if (!row.atproto.initialized || row.atproto.cursor) return;
     }

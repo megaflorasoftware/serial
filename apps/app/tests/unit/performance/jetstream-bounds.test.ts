@@ -39,6 +39,7 @@ it.each([1000, 10000, 50000])(
             ),
           ).toHaveLength(0);
       }
+      const lookups: string[] = [];
       for (const bootstrap of [true, false]) {
         session.instrumentation.reset();
         const result = await workload.recover(bootstrap);
@@ -47,6 +48,22 @@ it.each([1000, 10000, 50000])(
         expect(result.images).toBeLessThanOrEqual(8);
         expect(evidence.materializedRows).toBeLessThanOrEqual(1600);
         expect(evidence.statementCount).toBeLessThanOrEqual(700);
+        const lookup = evidence.statements.find((entry) =>
+          entry.sql.includes(" union "),
+        );
+        expect(lookup).toBeDefined();
+        lookups.push(lookup!.sql);
+      }
+      // Inspect plans after writes: local libSQL EXPLAIN can retain a read lock.
+      for (const lookup of lookups) {
+        const plan = await session.baseClient.execute({
+          sql: `EXPLAIN QUERY PLAN ${lookup}`,
+          args: Array.from(lookup.matchAll(/\?/g), () => "lookup"),
+        });
+        const details = plan.rows.map((row) => String(row.detail)).join("\n");
+        expect(details).toContain("feed_item_feed_normalized_url_idx");
+        expect(details).toContain("feed_item_feed_atproto_uri_unique");
+        expect(details).not.toMatch(/SCAN serial_feed_item/);
       }
     } finally {
       session.close();

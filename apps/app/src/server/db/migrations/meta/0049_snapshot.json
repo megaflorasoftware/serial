@@ -3102,13 +3102,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "repo_rev": {
-          "name": "repo_rev",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "listing_etag": {
           "name": "listing_etag",
           "type": "text",
@@ -3132,20 +3125,6 @@
         },
         "newest_rkey": {
           "name": "newest_rkey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pending_rev": {
-          "name": "pending_rev",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "retry_cursor": {
-          "name": "retry_cursor",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -3433,15 +3412,6 @@
         }
       },
       "indexes": {
-        "feed_origin_atproto_document_retry_idx": {
-          "name": "feed_origin_atproto_document_retry_idx",
-          "columns": [
-            "origin_id",
-            "status",
-            "uri"
-          ],
-          "isUnique": false
-        },
         "feed_origin_atproto_document_due_idx": {
           "name": "feed_origin_atproto_document_due_idx",
           "columns": [

@@ -30,12 +30,9 @@ CREATE TABLE `serial_feed_origin_atproto` (
   `origin_id` integer PRIMARY KEY NOT NULL,
   `publication_did` text NOT NULL,
   `listing_etag` text,
-  `repo_rev` text,
   `cursor` text,
   `boundary` text,
   `newest_rkey` text,
-  `pending_rev` text,
-  `retry_cursor` text,
   `initial_count` integer DEFAULT 0 NOT NULL,
   `initialized` integer DEFAULT false NOT NULL,
   FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
@@ -51,8 +48,6 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
   PRIMARY KEY (`origin_id`, `uri`),
   FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin_atproto`(`origin_id`) ON UPDATE no action ON DELETE cascade
 );
---> statement-breakpoint
-CREATE INDEX `feed_origin_atproto_document_retry_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`uri`);
 --> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `site_url` text(512);--> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `name_edited_at` integer;
