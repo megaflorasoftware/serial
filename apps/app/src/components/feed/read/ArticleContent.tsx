@@ -4,6 +4,7 @@ import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
+import { replaceReaderCodeBlock } from "~/components/content-reader/ReaderCodeBlock";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import classes from "~/components/feed/read/article.module.css";
@@ -38,11 +39,20 @@ function isImageContainer(node: Element): boolean {
   return false;
 }
 
-export function ArticleContent({ content }: { content: string }) {
+export function ArticleContent({
+  content,
+  simplified = false,
+}: {
+  content: string;
+  simplified?: boolean;
+}) {
   const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
 
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
+      const codeBlock = replaceReaderCodeBlock(domNode);
+      if (codeBlock) return codeBlock;
+      if (simplified) return;
       if (!(domNode instanceof Element)) return;
 
       // Open external links in new tabs. In-page links include footnote refs.

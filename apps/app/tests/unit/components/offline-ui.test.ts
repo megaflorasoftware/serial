@@ -46,7 +46,7 @@ describe("Offline banner", () => {
 });
 
 describe("article image fallback", () => {
-  it("keeps a failed image in flow as a square muted block", () => {
+  it("keeps a failed image in flow as a full-width landscape block", () => {
     const container = render(
       createElement(ArticleImageLightbox, {
         src: "https://example.com/unavailable.jpg",
@@ -59,7 +59,8 @@ describe("article image fallback", () => {
     act(() => image?.dispatchEvent(new Event("error")));
 
     const fallback = container.querySelector("[data-image-fallback]");
-    expect(fallback?.className).toContain("aspect-square");
+    expect(fallback?.className).toContain("aspect-video");
+    expect(fallback?.className).toContain("w-full");
     expect(fallback?.className).toContain("bg-muted");
     expect(fallback?.getAttribute("aria-label")).toBe(
       "Unavailable illustration",

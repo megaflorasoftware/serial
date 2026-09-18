@@ -32,6 +32,8 @@ export function ArticleImageLightbox({
         aria-disabled={failed}
         style={{
           display: "block",
+          width: failed ? "100%" : undefined,
+          maxWidth: failed ? "100%" : undefined,
           cursor: failed ? "default" : "zoom-in",
         }}
         onClick={toggle}
@@ -41,7 +43,7 @@ export function ArticleImageLightbox({
             data-image-fallback
             role="img"
             aria-label={alt}
-            className="bg-muted block aspect-square size-48 max-w-full rounded"
+            className="bg-muted block aspect-video w-full rounded"
           />
         ) : (
           <img
