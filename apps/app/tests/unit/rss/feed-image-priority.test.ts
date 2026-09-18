@@ -3,6 +3,7 @@ import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type * as AtprotoClientModule from "~/server/rss/atprotoClient";
 import type { FetchableOrigin } from "~/server/rss/types";
 import type { ItemObservation } from "~/server/rss/itemObservation";
+import { ingestAtmosphere } from "~/server/rss/ingestAtmosphere";
 import {
   attachMissingFeedOrigins,
   insertFeedWithOrigins,
@@ -69,6 +70,9 @@ function observation(index = 0): ItemObservation {
   });
 }
 async function refresh() {
+  // These cases exercise image composition during direct repository fetching.
+  if (fetchable.origin.kind === "atproto")
+    return ingestAtmosphere(fixture.database, fetchable);
   const results = [];
   for await (const result of fetchAndInsertFeedData({ db: fixture.database }, [
     fetchable,

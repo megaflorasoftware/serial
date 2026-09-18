@@ -6,6 +6,7 @@ import { buildConflictUpdateColumns } from "../db/utils";
 import { composeItem, legacyObservation } from "./itemObservation";
 import { computeItemHash } from "./hash";
 import { resolveItemDate } from "./publishedDate";
+import type { FeedDatabase } from "../feeds/origins";
 import type { ItemObservation } from "./itemObservation";
 import type { db } from "../db";
 import type {
@@ -40,12 +41,18 @@ export async function writeObservedItems(
   database: typeof db,
   feed: DatabaseFeed,
   incoming: ItemObservation[],
+  commit?: {
+    canWrite: (transaction: FeedDatabase) => Promise<boolean>;
+    didWrite: (transaction: FeedDatabase) => Promise<void>;
+  },
 ) {
   if (!incoming.length) return { items: [], removedItemIds: [] as string[] };
   return runDatabaseWrite(database, () =>
     dbSemaphore.run(() =>
       database.transaction(
         async (tx) => {
+          if (commit && !(await commit.canWrite(tx)))
+            return { items: [], removedItemIds: [] as string[] };
           const locators = [
             ...new Set(
               incoming.flatMap((item) =>
@@ -310,6 +317,7 @@ export async function writeObservedItems(
                 set: { itemId: sql`excluded.item_id` },
               });
           }
+          await commit?.didWrite(tx);
           return {
             items: written.map(
               (item) =>

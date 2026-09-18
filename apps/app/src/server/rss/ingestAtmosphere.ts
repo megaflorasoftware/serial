@@ -1,15 +1,12 @@
 import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
-  buildCanonicalDocumentUrl,
-  convertDocumentContent,
   documentBelongsToPublication,
   listedRecordSchema,
   parseDocumentRecord,
   parseDocumentUri,
   parsePublicationRecord,
   parsePublicationUri,
-  sanitizeEmbeddedHtml,
 } from "@serial/standard-site";
 import { runDatabaseWrite } from "../db/retry-write";
 import {
@@ -17,6 +14,7 @@ import {
   feedOriginAtprotoDocuments,
   feedOrigins,
 } from "../db/schema";
+import { documentObservation } from "./documentObservation";
 import { enrichObservationImages } from "./observationImages";
 import { readFeedHttp } from "./feedHttp";
 import {
@@ -25,8 +23,6 @@ import {
 } from "./atprotoClient";
 import { writeObservedItems } from "./writeItems";
 import { refreshOriginMetadata } from "./originMetadata";
-import { boundFeedItems } from "./feedBounds";
-import { itemUrl } from "./itemObservation";
 import { calculateNextFetch } from "./calculateNextFetch";
 import {
   ATMOSPHERE_DOCUMENT_CONCURRENCY,
@@ -55,45 +51,71 @@ export async function ingestAtmosphere(
   fetchable: FetchableOrigin,
   client: PublicationClient = createPublicationClient(),
   readPage: typeof readFeedHttp = readFeedHttp,
+  staging?: {
+    guard: import("drizzle-orm").SQL;
+    signal: AbortSignal;
+    publication: (
+      record: NonNullable<ReturnType<typeof parsePublicationRecord>>,
+    ) => Promise<void>;
+    records: (
+      records: Array<typeof listedRecordSchema._output>,
+      rev: string | null,
+    ) => Promise<void>;
+  },
 ) {
   const { origin, feed } = fetchable;
   const publicationUri = parsePublicationUri(origin.locator);
   if (!publicationUri) throw new Error("Invalid publication URI");
   const now = new Date();
   if (!origin.atproto) throw new Error("Missing AT Protocol origin details");
-  const state = { ...origin.atproto };
+  const state = {
+    cursor: origin.atproto.cursor,
+    boundary: origin.atproto.boundary,
+    newestRkey: origin.atproto.newestRkey,
+    pendingRev: origin.atproto.pendingRev,
+    retryCursor: origin.atproto.retryCursor,
+    initialCount: origin.atproto.initialCount,
+    initialized: origin.atproto.initialized,
+  };
   const rev = await client.latestRev(publicationUri.did);
   const retryWhere = and(
     eq(feedOriginAtprotoDocuments.originId, origin.id),
     eq(feedOriginAtprotoDocuments.status, "retry"),
   );
-  const retries = await dbSemaphore.run(async () => {
-    const afterCursor = await database
-      .select()
-      .from(feedOriginAtprotoDocuments)
-      .where(
-        state.retryCursor
-          ? and(
+  const retries = staging
+    ? []
+    : await dbSemaphore.run(async () => {
+        const afterCursor = await database
+          .select()
+          .from(feedOriginAtprotoDocuments)
+          .where(
+            state.retryCursor
+              ? and(
+                  retryWhere,
+                  gt(feedOriginAtprotoDocuments.uri, state.retryCursor),
+                )
+              : retryWhere,
+          )
+          .orderBy(asc(feedOriginAtprotoDocuments.uri))
+          .limit(100);
+        if (!state.retryCursor || afterCursor.length === 100)
+          return afterCursor;
+        const wrapped = await database
+          .select()
+          .from(feedOriginAtprotoDocuments)
+          .where(
+            and(
               retryWhere,
-              gt(feedOriginAtprotoDocuments.uri, state.retryCursor),
-            )
-          : retryWhere,
-      )
-      .orderBy(asc(feedOriginAtprotoDocuments.uri))
-      .limit(100);
-    if (!state.retryCursor || afterCursor.length === 100) return afterCursor;
-    const wrapped = await database
-      .select()
-      .from(feedOriginAtprotoDocuments)
-      .where(
-        and(retryWhere, lte(feedOriginAtprotoDocuments.uri, state.retryCursor)),
-      )
-      .orderBy(asc(feedOriginAtprotoDocuments.uri))
-      .limit(100 - afterCursor.length);
-    return [...afterCursor, ...wrapped];
-  });
+              lte(feedOriginAtprotoDocuments.uri, state.retryCursor),
+            ),
+          )
+          .orderBy(asc(feedOriginAtprotoDocuments.uri))
+          .limit(100 - afterCursor.length);
+        return [...afterCursor, ...wrapped];
+      });
   if (retries.length) state.retryCursor = retries.at(-1)!.uri;
   if (
+    !staging &&
     state.initialized &&
     !state.cursor &&
     !retries.length &&
@@ -116,18 +138,20 @@ export async function ingestAtmosphere(
   const publicationChanged =
     origin.sourceName !== publication.value.name ||
     feed.siteUrl !== publication.value.url;
-  const metadataChanged = await refreshOriginMetadata(database, fetchable, {
-    name: publication.value.name,
-    imageUrl: publication.value.icon
-      ? buildBlueskyCdnImageUrl(
-          publicationUri.did,
-          publication.value.icon.ref.$link,
-          "avatar",
-        )
-      : null,
-    description: publication.value.description,
-    siteUrl: publication.value.url,
-  });
+  const metadataChanged = staging
+    ? (await staging.publication(publication), false)
+    : await refreshOriginMetadata(database, fetchable, {
+        name: publication.value.name,
+        imageUrl: publication.value.icon
+          ? buildBlueskyCdnImageUrl(
+              publicationUri.did,
+              publication.value.icon.ref.$link,
+              "avatar",
+            )
+          : null,
+        description: publication.value.description,
+        siteUrl: publication.value.url,
+      });
   const items = new Map<string, ApplicationFeedItem>();
   const removedItemIds = new Set<string>();
   let failed = false;
@@ -203,6 +227,12 @@ export async function ingestAtmosphere(
       }
       return true;
     });
+    if (staging) {
+      await staging.records(candidates, rev);
+      state.initialCount = initialCount;
+      processedDocuments += candidates.length;
+      return new Set(existing.map((entry) => entry.uri));
+    }
     const observations: ItemObservation[] = [];
     processedDocuments += candidates.length;
     for await (const result of workerPool(
@@ -221,50 +251,12 @@ export async function ingestAtmosphere(
           return { ...base, status: "invalid" as const };
         }
         try {
-          const converted = await convertDocumentContent(document.value, {
-            did: publicationUri!.did,
-            loadBlob: client.loadBlob,
-            resolveRecord: client.resolveRecord,
-          });
-          const canonical = buildCanonicalDocumentUrl(
-            publication!.value.url,
-            document.value.path,
+          const observation = await documentObservation(
+            document,
+            publication!,
+            publicationUri!.did,
+            client,
           );
-          const observation: ItemObservation = {
-            kind: "atproto",
-            key: record.uri,
-            url: itemUrl(canonical ?? record.uri),
-            title: document.value.title,
-            author:
-              document.value.contributors
-                ?.map((entry) => entry.displayName?.trim())
-                .filter(Boolean)
-                .join(", ") ?? "",
-            description: document.value.description ?? "",
-            thumbnail: document.value.coverImage
-              ? (buildBlueskyCdnImageUrl(
-                  publicationUri!.did,
-                  document.value.coverImage.ref.$link,
-                ) ?? "")
-              : "",
-            content: sanitizeEmbeddedHtml(
-              boundFeedItems([
-                {
-                  id: record.uri,
-                  title: "",
-                  url: record.uri,
-                  author: "",
-                  publishedDate: document.value.publishedAt,
-                  content: converted?.html ?? "",
-                },
-              ])[0]!.content ?? "",
-            ),
-            firstParagraph: converted?.firstParagraph ?? "",
-            firstImageUrl: converted?.firstImageUrl ?? "",
-            publishedAt: document.value.publishedAt,
-            tags: document.value.tags ?? [],
-            publicationName: publication!.value.name,
-          };
           return { ...base, status: "ready" as const, observation };
         } catch (error) {
           failed = true;
@@ -314,7 +306,9 @@ export async function ingestAtmosphere(
           await tx
             .update(feedOriginAtproto)
             .set({ ...state, initialCount })
-            .where(eq(feedOriginAtproto.originId, origin.id));
+            .where(
+              and(eq(feedOriginAtproto.originId, origin.id), staging?.guard),
+            );
         }),
       );
       state.initialCount = initialCount;
@@ -379,6 +373,7 @@ export async function ingestAtmosphere(
         processedDocuments + 100 > ATMOSPHERE_DOCUMENTS_PER_REFRESH
       )
         break;
+      staging?.signal.throwIfAborted();
       const page = await client.list(
         publicationUri.did,
         cursor,
@@ -428,11 +423,14 @@ export async function ingestAtmosphere(
         database
           .update(feedOriginAtproto)
           .set(state)
-          .where(eq(feedOriginAtproto.originId, origin.id)),
+          .where(
+            and(eq(feedOriginAtproto.originId, origin.id), staging?.guard),
+          ),
       );
       if (complete) break;
     }
   } catch (error) {
+    if (staging) throw error;
     failed = true;
     logWarning("Publication scan will be retried", {
       originId: origin.id,
@@ -440,16 +438,18 @@ export async function ingestAtmosphere(
     });
   }
   // Do not claim a repo revision until both the scan and all retries are complete.
-  const pendingRetry = await database
-    .select({ uri: feedOriginAtprotoDocuments.uri })
-    .from(feedOriginAtprotoDocuments)
-    .where(
-      and(
-        eq(feedOriginAtprotoDocuments.originId, origin.id),
-        eq(feedOriginAtprotoDocuments.status, "retry"),
-      ),
-    )
-    .limit(1);
+  const pendingRetry = staging
+    ? []
+    : await database
+        .select({ uri: feedOriginAtprotoDocuments.uri })
+        .from(feedOriginAtprotoDocuments)
+        .where(
+          and(
+            eq(feedOriginAtprotoDocuments.originId, origin.id),
+            eq(feedOriginAtprotoDocuments.status, "retry"),
+          ),
+        )
+        .limit(1);
   failed ||= pendingRetry.length > 0;
   if (complete) {
     state.initialized = true;
@@ -469,16 +469,17 @@ export async function ingestAtmosphere(
           repoRev: completedRev,
           listingEtag: complete && !failed ? firstEtag : null,
         })
-        .where(eq(feedOriginAtproto.originId, origin.id));
-      await tx
-        .update(feedOrigins)
-        .set({
-          lastFetchedAt: now,
-          nextFetchAt: failed
-            ? new Date(now.getTime() + 3_600_000)
-            : calculateNextFetch({}, now),
-        })
-        .where(eq(feedOrigins.id, origin.id));
+        .where(and(eq(feedOriginAtproto.originId, origin.id), staging?.guard));
+      if (!staging)
+        await tx
+          .update(feedOrigins)
+          .set({
+            lastFetchedAt: now,
+            nextFetchAt: failed
+              ? new Date(now.getTime() + 3_600_000)
+              : calculateNextFetch({}, now),
+          })
+          .where(eq(feedOrigins.id, origin.id));
     }),
   );
   return {

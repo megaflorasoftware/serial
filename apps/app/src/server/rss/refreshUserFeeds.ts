@@ -28,10 +28,12 @@ export async function refreshUserFeeds({
   db,
   feedsList,
   channel,
+  manual = false,
 }: {
   db: typeof Database;
   feedsList: FetchableOrigin[];
   channel?: string;
+  manual?: boolean;
 }): Promise<RefreshStats> {
   const activeOrigins = feedsList.filter(({ feed }) => feed.isActive);
 
@@ -61,7 +63,10 @@ export async function refreshUserFeeds({
   const results = new Map<number, FeedResult[]>();
   for (const { feed } of activeOrigins)
     pending.set(feed.id, (pending.get(feed.id) ?? 0) + 1);
-  for await (const result of fetchAndInsertFeedData({ db }, activeOrigins)) {
+  for await (const result of fetchAndInsertFeedData(
+    { db, manual },
+    activeOrigins,
+  )) {
     if (result.metadataChanged) stats.metadataChanged = true;
     const group = results.get(result.id) ?? [];
     group.push(result);

@@ -167,6 +167,8 @@ const childEnvironment = {
   SERIAL_TEST_RSS_ALLOW_LOOPBACK: "1",
   SERIAL_TEST_RSS_ORIGIN: `http://127.0.0.1:${rssPort}`,
   SERIAL_E2E_FAULT_CONTROLS: "1",
+  ATPROTO_JETSTREAM_ENDPOINT: `http://127.0.0.1:${rssPort}`,
+  ATPROTO_JETSTREAM_API_KEY: "",
   PORT: String(appPort),
 };
 

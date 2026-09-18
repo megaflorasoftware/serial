@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
 import { z } from "zod";
+import { attachJetstream } from "./jetstream-server";
 import { CID } from "multiformats/cid";
 import { create as createDigest } from "multiformats/hashes/digest";
 import type { IncomingMessage } from "node:http";
@@ -135,11 +136,14 @@ function store(
     value,
   };
   records.set(uri, record);
+  stream.commit(repo, collection, rkey, revision, record);
   return record;
 }
 function remove(repo: string, uri: string) {
   records.delete(uri);
   revisions.set(repo, (revisions.get(repo) ?? 0) + 1);
+  const [, , , collection, rkey] = uri.split("/");
+  stream.commit(repo, collection!, rkey!, revisions.get(repo)!);
 }
 
 const server = createServer(async (request, response) => {
@@ -426,4 +430,5 @@ const server = createServer(async (request, response) => {
     );
   }
 });
+const stream = attachJetstream(server);
 server.listen(port, "127.0.0.1");

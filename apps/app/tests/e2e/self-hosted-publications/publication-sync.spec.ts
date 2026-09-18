@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { feedItems } from "../../../src/server/db/schema";
 import { expect, test } from "@playwright/test";
 import {
   readPublicationConnection as connection,
+  withPublicationDatabase,
   fillPublicationQuota,
   localPublicationOrigins,
   pdsControl,
@@ -313,4 +316,33 @@ test("onboarding resumes after real consent denial and completes after approval"
   });
   await page.reload();
   await expect(syncHeading).toHaveCount(0);
+});
+
+
+test("manual Jetstream recovery imports, updates, and retains deleted reader items", async ({ page }) => {
+  test.setTimeout(120_000);
+  const did = await linkUser(page);
+  const userId = (await connection(did))!.userId!;
+  const publication = await seedPublication(did, "content");
+  const feed = await seedLocalPublication(userId, publication);
+  const put = async (title: string) => pdsControl({ operation: "put", repo: did, collection: "site.standard.document", rkey: "post", value: {
+    $type: "site.standard.document", site: publication.uri, title, path: "/post", publishedAt: new Date().toISOString(),
+    content: { $type: "pub.leaflet.content", pages: [{ $type: "pub.leaflet.pages.linearDocument", blocks: [{ block: { $type: "pub.leaflet.blocks.text", plaintext: title } }] }] },
+  } });
+  const items = () => withPublicationDatabase((db) => db.select().from(feedItems).where(eq(feedItems.feedId, feed.id)));
+  const refresh = async () => { await page.goto("/"); await page.getByRole("button", { name: "Refresh", exact: true }).click(); };
+  await put("Initial document");
+  await refresh();
+  await expect.poll(async () => (await items()).map((item) => item.title), { timeout: 30000 }).toEqual(["Initial document"]);
+  const initial = (await items())[0]!;
+  const activity = (await readPublicationUser(userId))!.lastActiveAt;
+  expect(activity).not.toBeNull();
+  await put("Updated document");
+  await refresh();
+  await expect.poll(async () => (await items()).map((item) => item.title), { timeout: 30000 }).toEqual(["Updated document"]);
+  expect((await items())[0]!.id).toBe(initial.id);
+  await pdsControl({ operation: "delete", repo: did, collection: "site.standard.document", rkey: "post" });
+  await refresh();
+  await expect.poll(async () => (await readPublicationUser(userId))!.lastActiveAt!.getTime()).toBeGreaterThan(activity!.getTime());
+  expect((await items()).map((item) => item.id)).toEqual([initial.id]);
 });

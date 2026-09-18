@@ -15,6 +15,7 @@ import { AppDialogs } from "../components/feed/AppDialogs";
 import { Header } from "../components/feed/Header";
 import { GlobalImportDropzone } from "../components/feed/import/GlobalImportDropzone";
 import type React from "react";
+import { useAppActivity } from "~/lib/hooks/useAppActivity";
 import { PublicationSyncProgress } from "~/components/connections/PublicationSyncProgress";
 import { refreshPublicationSyncProgress } from "~/lib/data/publication-sync";
 import { Onboarding } from "~/components/onboarding/Onboarding";
@@ -350,6 +351,7 @@ function CheckoutSuccessDialog({
 }
 
 function RootLayout() {
+  useAppActivity();
   useAltKeyHeld();
   usePortalReturn();
   useAtprotoLinkReturn();

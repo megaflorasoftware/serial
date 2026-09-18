@@ -82,6 +82,7 @@ export const user = sqliteTable(
     banReason: text("ban_reason"),
     banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
     nextRefreshAt: integer("next_refresh_at", { mode: "timestamp" }),
+    lastActiveAt: integer("last_active_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     index("user_created_at_idx").on(table.createdAt),
@@ -314,6 +315,7 @@ export const feedOrigins = sqliteTable(
   },
   (table) => [
     unique("feed_origin_feed_id_kind_unique").on(table.feedId, table.kind),
+    index("feed_origin_kind_locator_idx").on(table.kind, table.locator),
     index("feed_origin_user_id_kind_locator_idx").on(
       table.userId,
       table.kind,
@@ -371,6 +373,30 @@ export const feedOriginAtproto = sqliteTable(
       .primaryKey()
       .references(() => feedOrigins.id, { onDelete: "cascade" }),
     publicationDid: text("publication_did").notNull(),
+    workOwner: text("work_owner"),
+    workUntil: integer("work_until", { mode: "timestamp_ms" }),
+    recoveryRetryAt: integer("recovery_retry_at", { mode: "timestamp_ms" }),
+    recoveryAttempts: integer("recovery_attempts").notNull().default(0),
+    streamService: text("stream_service"),
+    streamSeq: text("stream_seq"),
+    streamMode: text("stream_mode", { enum: ["paused", "catchup", "live"] })
+      .notNull()
+      .default("paused"),
+    publicationRecord: text("publication_record", {
+      mode: "json",
+    }).$type<unknown>(),
+    publicationSeq: text("publication_seq"),
+    publicationDirty: integer("publication_dirty", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    accountSeq: text("account_seq"),
+    accountStatus: text("account_status"),
+    repositorySeq: text("repository_seq"),
+    repositoryRev: text("repository_rev"),
+    repositoryActive: integer("repository_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    identitySeq: text("identity_seq"),
     listingEtag: text("listing_etag"),
     repoRev: text("repo_rev"),
     cursor: text("cursor"),
@@ -394,6 +420,15 @@ export type HydratedFeedOrigin = DatabaseFeedOrigin & {
   atproto: typeof feedOriginAtproto.$inferSelect | null;
 };
 
+/** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
+export const atprotoStreamState = sqliteTable("atproto_stream_state", {
+  id: text("id").primaryKey(),
+  service: text("service").notNull(),
+  seq: text("seq"),
+  leaseOwner: text("lease_owner"),
+  leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
+});
+
 export const feedOriginAtprotoDocuments = sqliteTable(
   "feed_origin_atproto_document",
   {
@@ -402,10 +437,23 @@ export const feedOriginAtprotoDocuments = sqliteTable(
       .references(() => feedOriginAtproto.originId, { onDelete: "cascade" }),
     uri: text("uri").notNull(),
     cid: text("cid").notNull(),
-    status: text("status", { enum: ["ready", "retry", "invalid"] }).notNull(),
+    status: text("status", {
+      enum: ["ready", "retry", "invalid", "deleted"],
+    }).notNull(),
+    eventSeq: text("event_seq"),
+    eventRev: text("event_rev"),
+    pendingRecord: text("pending_record", { mode: "json" }).$type<unknown>(),
+    retryAt: integer("retry_at", { mode: "timestamp_ms" }),
+    attempts: integer("attempts").notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.originId, table.uri] }),
+    index("feed_origin_atproto_document_due_idx").on(
+      table.originId,
+      table.status,
+      table.retryAt,
+      table.uri,
+    ),
     index("feed_origin_atproto_document_retry_idx").on(
       table.originId,
       table.status,
