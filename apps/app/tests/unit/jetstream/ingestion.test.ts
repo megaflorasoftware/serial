@@ -989,3 +989,28 @@ it("deduplicates a lost-response retry after a second tab records its load", asy
     (await fixture.database.select().from(user).get())!.lastActiveAt,
   ).toEqual(later);
 });
+
+it("falls back on the first manual refresh after a no-key outage with background work disabled", async () => {
+  await fixture.database.update(atprotoStreamState).set({ seq: "1" });
+  let attempts = 0;
+  const transport: StreamTransport = {
+    ...replay([], 30),
+    hasReplay: false,
+    async *recover(after, through) {
+      if (after < through && attempts++ === 0)
+        throw new StreamFailure("cursor-expired", 400);
+      yield { events: [], lastCursor: through };
+    },
+  };
+  const list = vi.fn(client.list);
+  await recoverOrigin(
+    fixture.database,
+    originId,
+    { ...settings, backgroundEnabled: false },
+    transport,
+    new AbortController().signal,
+    { manual: true, client: { ...client, list }, readPage },
+  );
+  expect(list).toHaveBeenCalled();
+  expect((await state()).streamMode).toBe("live");
+});

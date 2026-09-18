@@ -144,7 +144,7 @@ export async function recoverOrigin(
       !transport.hasReplay &&
       !needsDirectRecovery &&
       row.atproto.initialized &&
-      row.atproto.streamMode !== "live"
+      (row.atproto.streamMode !== "live" || options.manual)
     ) {
       await runDatabaseWrite(database, () =>
         database
@@ -155,7 +155,7 @@ export async function recoverOrigin(
       try {
         for await (const batch of transport.recover(
           sequence(row.atproto.streamSeq!),
-          sequence(state.seq),
+          options.manual ? await transport.tip(combined) : sequence(state.seq),
           combined,
           row.atproto.publicationDid,
         )) {

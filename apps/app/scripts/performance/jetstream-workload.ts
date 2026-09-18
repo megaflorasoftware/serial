@@ -34,6 +34,8 @@ export async function createJetstreamWorkload(
   let firstFeed = 0;
   for (let index = 0; index < fanout; index++) {
     const userId = `stream-benchmark-${index}`;
+    // Seed dependent user/origin identities in deterministic order.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await database.insert(user).values({
       id: userId,
       name: userId,
@@ -43,6 +45,8 @@ export async function createJetstreamWorkload(
       updatedAt: now,
       lastActiveAt: now,
     });
+    // The Feed references the user just inserted.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const feed = await insertFeedWithOrigins(database, {
       userId,
       isActive: true,
@@ -56,6 +60,8 @@ export async function createJetstreamWorkload(
     firstFeed ||= feed.id;
     const originId = feed.origins[0]!.id;
     origins.push(originId);
+    // The origin update depends on the generated Feed id.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await database
       .update(feedOriginAtproto)
       .set({

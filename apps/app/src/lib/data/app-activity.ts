@@ -13,9 +13,10 @@ export function createAppActivityRecorder(dependencies: {
       current?.controller.abort();
       const controller = new AbortController();
       const operationId = crypto.randomUUID();
+      const retryDeadline = Date.now() + 60_000;
       const work = (async () => {
         for (let attempt = 0; attempt < 3; attempt++) {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted || Date.now() >= retryDeadline) return;
           try {
             await dependencies.record(
               operationId,

@@ -200,7 +200,6 @@ export function startStreamWorker(
       const connection = new AbortController();
       const signal = AbortSignal.any([shutdown, connection.signal]);
       let heartbeat: ReturnType<typeof setInterval> | undefined;
-      let refreshFilters: ReturnType<typeof setTimeout> | undefined;
       try {
         if (
           !(await claimStream(
@@ -224,21 +223,20 @@ export function startStreamWorker(
             });
         }, 15_000);
         const tracked = await database
-          .selectDistinct({ did: feedOriginAtproto.publicationDid })
+          .select({ id: feedOriginAtproto.originId })
           .from(feedOriginAtproto)
-          .limit(10_001);
+          .limit(1);
         if (!tracked.length) {
           await delay(10_000, undefined, { signal });
           continue;
         }
         await establishBoundary(database, config, signal);
         const state = await ensureStream(database, config.settings.service);
-        // Periodically include newly followed repositories. Durable replay covers reconnects.
-        refreshFilters = setTimeout(() => connection.abort(), 60_000);
+        // Keep collection filters stable as readers follow new Publications. A DID-filter
+        // refresh could skip the new repository while the global cursor advances.
         for await (const batch of config.transport.stream(
           sequence(state.seq!),
           signal,
-          tracked.length <= 10_000 ? tracked.map((row) => row.did) : undefined,
         )) {
           await acceptBatch(database, batch, config.settings, {
             owner,
@@ -295,7 +293,6 @@ export function startStreamWorker(
         await retryStream(error, attempt++, shutdown).catch(() => {});
       } finally {
         if (heartbeat) clearInterval(heartbeat);
-        if (refreshFilters) clearTimeout(refreshFilters);
         connection.abort();
       }
     }
