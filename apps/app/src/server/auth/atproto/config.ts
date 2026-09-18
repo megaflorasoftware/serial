@@ -1,4 +1,6 @@
 import { createHmac } from "node:crypto";
+import { REPO_ACTIONS, RepoPermission } from "@atproto/oauth-scopes";
+import { STANDARD_SITE_COLLECTIONS } from "@serial/standard-site";
 import {
   buildAtprotoLoopbackClientMetadata,
   JoseKey,
@@ -64,13 +66,31 @@ function scopeTokens(scope: string): string[] {
  * the authorization server's own claim about what it granted, so it
  * decides only whether Serial can skip the consent step. An authorization
  * server that overstates a grant merely skips its own user's consent
- * screen and fails their later writes; it reaches no other repository,
- * and no token it names survives `retainAllowedAtprotoScope`.
+ * screen and fails their later writes; it reaches no other repository.
+ * Permission sets may be expanded into repo grants by the provider.
  */
 export function hasAtprotoWriteScope(
   scope: string | null | undefined,
 ): boolean {
-  return !!scope && scopeTokens(scope).includes(ATPROTO_SOCIAL_SCOPE);
+  const tokens = scopeTokens(scope ?? "");
+  if (tokens.includes(ATPROTO_SOCIAL_SCOPE)) return true;
+  const permissions = tokens.flatMap((token) => {
+    try {
+      const permission = RepoPermission.fromString(token);
+      return permission ? [permission] : [];
+    } catch {
+      // Invalid percent encoding in a positional collection can throw.
+      return [];
+    }
+  });
+  return REPO_ACTIONS.every((action) =>
+    permissions.some((permission) =>
+      permission.matches({
+        collection: STANDARD_SITE_COLLECTIONS.subscription,
+        action,
+      }),
+    ),
+  );
 }
 
 /**
@@ -81,6 +101,8 @@ export function hasAtprotoWriteScope(
 export function retainAllowedAtprotoScope(
   scope: string | null | undefined,
 ): string {
+  // Request the declared permission set again, never arbitrary expanded tokens.
+  if (hasAtprotoWriteScope(scope)) return ATPROTO_FULL_SCOPE;
   const allowed = scopeTokens(scope ?? "").filter((token) =>
     ATPROTO_ALLOWED_SCOPES.has(token),
   );

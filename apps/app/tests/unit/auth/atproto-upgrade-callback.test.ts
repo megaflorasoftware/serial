@@ -162,13 +162,23 @@ describe("upgrade callback failure cleanup", () => {
   });
 });
 
-it("persists sync work before redirecting from successful consent", async () => {
+it.each([
+  "atproto include:site.standard.authSocial",
+  "repo?collection=site.standard.graph.recommend&collection=site.standard.graph.subscription atproto",
+])("persists sync work after consent with %s", async (grantedScope) => {
+  finishAuth.mockResolvedValue({
+    did: DID,
+    grantedScope,
+    upgradeUserId: "user-1",
+    pendingSyncSettingsVersion: 0,
+    pendingSyncPreferences: { method: "export", importAsInactive: false },
+  });
   await session.database.insert(atprotoConnections).values({
     did: DID,
     userId: "user-1",
     session: "new-session",
     status: "active",
-    scopes: "atproto include:site.standard.authSocial",
+    scopes: grantedScope,
   });
   await expectCallbackRedirect("success");
   const row = await session.database

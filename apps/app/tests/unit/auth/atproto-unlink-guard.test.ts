@@ -279,10 +279,13 @@ describe("atproto connection procedures", () => {
     },
   );
 
-  it("a reconnect with only the account row left recovers the grant from it", async () => {
+  it.each([
+    "atproto include:site.standard.authSocial",
+    "repo?collection=site.standard.graph.recommend&collection=site.standard.graph.subscription atproto",
+  ])("a reconnect recovers the account's grant: %s", async (scopes) => {
     await seedLinked({
       extraProviderId: "credential",
-      scopes: "atproto include:site.standard.authSocial",
+      scopes,
     });
     // The connection row was swept after its credentials were lost; the
     // sign-in account row still names the DID and its granted scope.
@@ -360,6 +363,24 @@ describe("atproto connection procedures", () => {
       hasWriteScope: true,
       syncPreferences: { method: "bidirectional", importAsInactive: false },
     });
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("saves a write method without consent for an expanded PDS grant", async () => {
+    await seedLinked({
+      extraProviderId: "credential",
+      scopes:
+        "repo?collection=site.standard.graph.recommend&collection=site.standard.graph.subscription atproto",
+    });
+    expect(await api().atproto.getConnectionStatus()).toMatchObject({
+      hasWriteScope: true,
+    });
+    expect(
+      await api().atproto.saveSyncSettings({
+        method: "bidirectional",
+        importAsInactive: false,
+      }),
+    ).toEqual({ saved: true, consentUrl: null });
     expect(authorizeMock).not.toHaveBeenCalled();
   });
 

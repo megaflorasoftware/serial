@@ -52,6 +52,9 @@ importers:
       '@atproto/oauth-client-node':
         specifier: ^0.5.3
         version: 0.5.3
+      '@atproto/oauth-scopes':
+        specifier: ^0.5.12
+        version: 0.5.12
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@date-fns/tz@1.5.0)(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1061,6 +1064,10 @@ packages:
 
   '@atproto/oauth-client@0.8.3':
     resolution: {integrity: sha512-26ise6t6jvsCURx6ykR5UiQZjwSDChm1pRFZ0EZ2Cr1aqFXTK0v3pUtzqTDUxSR/i9gSCtBygHrgIV2DfW9roA==}
+    engines: {node: '>=22'}
+
+  '@atproto/oauth-scopes@0.5.12':
+    resolution: {integrity: sha512-IGMq3w0qSizOejm6MRoGVMGbqyAPafEAXnlqn2x2AtDlPIBD1jtBE9ekWBXoaawkkLeeGZP+NECoiotBgBJHxA==}
     engines: {node: '>=22'}
 
   '@atproto/oauth-types@0.7.5':
@@ -10801,6 +10808,11 @@ snapshots:
       core-js: 3.50.0
       multiformats: 13.4.2
       zod: 3.25.76
+
+  '@atproto/oauth-scopes@0.5.12':
+    dependencies:
+      '@atproto/did': 0.5.5
+      '@atproto/syntax': 0.7.6
 
   '@atproto/oauth-types@0.7.5':
     dependencies:
