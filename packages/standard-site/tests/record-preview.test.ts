@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   parseRecordCard,
   recordCard,
-  resolveRecordPreview,
+  recordPreview,
   sanitizeArticleHtml,
 } from "../src";
 import { renderRichText } from "../src/convert/facets";
@@ -31,11 +31,11 @@ const publication = {
 };
 
 describe("record previews", () => {
-  it("derives complete document metadata and uses each blob's owning repository", async () => {
-    const read = vi.fn(async (target) =>
+  it("derives complete document metadata and uses each blob's owning repository", () => {
+    const read = vi.fn((target: string) =>
       target === uri ? record : publication,
     );
-    const preview = await resolveRecordPreview(uri, read);
+    const preview = recordPreview(uri, read);
     expect(preview).toMatchObject({
       url: "https://example.com/post",
       title: "Title",
@@ -48,49 +48,46 @@ describe("record previews", () => {
     expect(preview?.iconUrl).toContain("/did:plc:publisher/");
     expect(read).toHaveBeenCalledTimes(2);
   });
-  it("opens documents with direct website URLs without a publication lookup", async () => {
-    const read = vi.fn(async () => ({
+  it("opens documents with direct website URLs without a publication lookup", () => {
+    const read = vi.fn(() => ({
       ...record,
       value: { ...record.value, site: "https://example.com" },
     }));
-    expect(await resolveRecordPreview(uri, read)).toMatchObject({
+    expect(recordPreview(uri, read)).toMatchObject({
       url: "https://example.com/post",
     });
     expect(read).toHaveBeenCalledExactlyOnceWith(uri);
   });
-  it("keeps document metadata when its publication is unavailable", async () => {
-    const preview = await resolveRecordPreview(uri, async (target) => {
-      if (target === uri) return record;
-      throw new Error("unavailable");
-    });
+  it("keeps document metadata when its publication is unavailable", () => {
+    const preview = recordPreview(uri, (target) =>
+      target === uri ? record : undefined,
+    );
     expect(preview).toMatchObject({
       title: "Title",
       description: "Summary",
       url: `https://pdsls.dev/${uri}`,
     });
   });
-  it("keeps publication descriptions and icons", async () => {
-    expect(
-      await resolveRecordPreview(site, async () => publication),
-    ).toMatchObject({
+  it("keeps publication descriptions and icons", () => {
+    expect(recordPreview(site, () => publication)).toMatchObject({
       title: "Publication",
       url: "https://example.com",
       iconUrl: expect.stringContaining("/avatar/"),
     });
   });
-  it("accepts arbitrary record collections without guessing their metadata", async () => {
+  it("accepts arbitrary record collections without guessing their metadata", () => {
     const target = `at://${did}/blog.pckt.note/note`;
-    const read = vi.fn(async () => ({
+    const read = vi.fn(() => ({
       uri: target,
       cid: "bafy",
       value: { $type: "blog.pckt.note", title: "Not a standard document" },
     }));
-    expect(await resolveRecordPreview(target, read)).toBeNull();
+    expect(recordPreview(target, read)).toBeNull();
     expect(read).toHaveBeenCalledExactlyOnceWith(target);
   });
-  it("does not fetch malformed URIs", async () => {
+  it("does not look up malformed URIs", () => {
     const read = vi.fn();
-    expect(await resolveRecordPreview("javascript:alert(1)", read)).toBeNull();
+    expect(recordPreview("javascript:alert(1)", read)).toBeNull();
     expect(read).not.toHaveBeenCalled();
   });
 });

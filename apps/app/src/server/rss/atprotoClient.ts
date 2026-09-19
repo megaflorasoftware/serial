@@ -119,7 +119,10 @@ export function createPublicationClient(
       });
       if (!response.ok)
         throw new Error(`Blob fetch failed: ${response.status}`);
-      return new Uint8Array(await response.arrayBuffer());
+      return {
+        bytes: new Uint8Array(await response.arrayBuffer()),
+        mimeType: response.headers.get("content-type"),
+      };
     },
   };
 }

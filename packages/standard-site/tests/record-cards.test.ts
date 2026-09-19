@@ -5,6 +5,7 @@ import {
   referencedPublications,
 } from "../src";
 import type { RecordLookup } from "../src";
+import { buildBlueskyCdnImageUrl } from "../src/uris";
 
 const did = "did:plc:alice";
 const uri = `at://${did}/site.standard.document/article`;
@@ -316,10 +317,11 @@ it("renders pckt galleries from their referenced record", async () => {
       }),
     },
   );
-  expect(result?.html).toMatch(
-    /^<figure><img src="https:\/\/cdn\.bsky\.app\/[^"]+" alt="One"><img src="https:\/\/example\.com\/two\.png" alt=""><figcaption>Two &#x3C;pictures><\/figcaption><\/figure>$/,
+  // Gallery blobs belong to the gallery's repository, not the document's.
+  expect(result?.html).toBe(
+    `<figure><img src="${buildBlueskyCdnImageUrl("did:plc:bob", "bafyone")}" alt="One"><img src="https://example.com/two.png" alt=""><figcaption>Two &#x3C;pictures></figcaption></figure>`,
   );
-  expect(result?.firstImageUrl).toContain("cdn.bsky.app");
+  expect(result?.firstImageUrl).toContain("/did:plc:bob/");
 });
 
 it("discovers galleries and renders nothing without their record", async () => {

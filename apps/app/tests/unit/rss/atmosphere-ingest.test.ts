@@ -143,7 +143,7 @@ function client(records: unknown[] = []): PublicationClient {
         icon: { ref: { $link: "bafyicon" }, mimeType: "image/png" },
       },
     })),
-    loadBlob: vi.fn(async () => new Uint8Array()),
+    loadBlob: vi.fn(async () => ({ bytes: new Uint8Array(), mimeType: null })),
     list: vi.fn(async () => ({
       records,
       notModified: false as const,
@@ -367,11 +367,12 @@ describe("Atmosphere repository recovery", () => {
       cursor: undefined,
     }));
     // An overflowed Leaflet body is the page array itself, not a wrapper object.
-    remote.loadBlob = vi.fn(async () =>
-      new TextEncoder().encode(
+    remote.loadBlob = vi.fn(async () => ({
+      bytes: new TextEncoder().encode(
         JSON.stringify(record("002").value.content.pages),
       ),
-    );
+      mimeType: "application/json",
+    }));
     await fixture.database
       .update(feedOriginAtprotoDocuments)
       .set({ retryAt: null });

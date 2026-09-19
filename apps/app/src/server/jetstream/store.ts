@@ -1,9 +1,8 @@
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
-  DOCUMENT_SOURCE_BUDGET_BYTES,
   documentBelongsToPublication,
-  documentSourceBytes,
   parseDocumentRecord,
+  stringifyLosslessJson,
 } from "@serial/standard-site";
 import {
   atprotoStreamState,
@@ -18,6 +17,7 @@ import { runDatabaseWrite } from "../db/retry-write";
 import { getEffectivePlanConfig } from "../subscriptions/plans";
 import {
   captureRecordValue,
+  isRecordOverBudget,
   pruneDocumentSources,
   stageDocumentSources,
 } from "./document-source";
@@ -185,10 +185,7 @@ function stagedValues(
         cid: input.cid,
         value: input.record?.value,
       });
-  const oversized =
-    document !== null &&
-    documentSourceBytes({ record: input.record!.text, blobs: [] }) >
-      DOCUMENT_SOURCE_BUDGET_BYTES;
+  const oversized = document !== null && isRecordOverBudget(input.record!.text);
   const status = input.deleted
     ? "deleted"
     : document &&
@@ -296,6 +293,11 @@ export async function stageDocument(
   await stageDocuments(database, [input]);
 }
 
+/** Rounds a lossless value through ordinary JSON, for columns that store it that way. */
+function plainJson(value: unknown): unknown {
+  return JSON.parse(stringifyLosslessJson(value));
+}
+
 function olderDocuments(originId: number, seq: number) {
   return and(
     eq(feedOriginAtprotoDocuments.originId, originId),
@@ -328,13 +330,14 @@ async function applyCommit(
         .update(feedOriginAtproto)
         .set({
           publicationSeq: String(event.seq),
+          // The publication column is ordinary JSON; only documents keep 64-bit digits.
           publicationRecord:
             event.commit.operation === "delete"
               ? null
               : {
                   uri,
                   cid: event.commit.cid,
-                  value: event.commit.record,
+                  value: plainJson(event.commit.record),
                 },
           publicationDirty: event.commit.operation !== "delete",
         })

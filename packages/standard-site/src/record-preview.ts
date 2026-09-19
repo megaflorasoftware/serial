@@ -116,22 +116,3 @@ export function recordPreview(
     publishedAt: value.publishedAt,
   };
 }
-
-/** Live lookup of one record and, for documents, its publication. */
-export async function resolveRecordPreview(
-  uri: string,
-  readRecord: (uri: string) => Promise<unknown>,
-): Promise<RecordPreview | null> {
-  const parts = parseAtUri(uri);
-  if (!parts || !buildPdslsUrl(uri)) return null;
-  const records = new Map<string, unknown>();
-  records.set(uri, await readRecord(uri));
-  const document =
-    parts.collection === STANDARD_SITE_COLLECTIONS.document
-      ? parseDocumentRecord(records.get(uri))
-      : null;
-  const site = document ? documentPublicationUri(document.value) : null;
-  // Publication failure must not discard the document's own preview metadata.
-  if (site) records.set(site, await readRecord(site).catch(() => null));
-  return recordPreview(uri, (target) => records.get(target));
-}

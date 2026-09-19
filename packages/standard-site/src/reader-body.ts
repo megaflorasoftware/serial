@@ -76,7 +76,6 @@ export const readerBodySchema = z.discriminatedUnion("form", [
   }),
 ]);
 export type ReaderBody = z.infer<typeof readerBodySchema>;
-export type HtmlReaderBody = Extract<ReaderBody, { form: "html" }>;
 export type SourceReaderBody = Extract<ReaderBody, { form: "source" }>;
 
 const BASE64_CHUNK = 0x8000;

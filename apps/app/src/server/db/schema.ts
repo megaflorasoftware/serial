@@ -680,7 +680,7 @@ export const applicationFeedItemSchema = feedItemSchema
       platform: contentPlatformSchema,
       contentType: contentTypeSchema,
       orientation: videoOrientationSchema.nullable(),
-      /** Null until loaded through the body endpoint or a direct open. Validated at the transport boundary. */
+      /** Null until loaded through the body endpoint or a direct open; typed, not parsed, at this boundary. */
       body: z.custom<ReaderBody>().nullable(),
     }),
   )

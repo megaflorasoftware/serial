@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReaderBody } from "@serial/standard-site";
 import type { useFeeds } from "~/lib/data/feeds";
 import type { useFeedItemValue } from "~/lib/data/store";
 import { useEditFeedMutation } from "~/lib/data/feeds/mutations";
@@ -14,6 +15,19 @@ import { Button } from "~/components/ui/button";
 
 type ReaderFeed = ReturnType<typeof useFeeds>["feeds"][number];
 type ReaderFeedItem = ReturnType<typeof useFeedItemValue>;
+
+/**
+ * Only a loaded HTML body can be partial. An unloaded body says nothing yet,
+ * and a Document source is always the whole document.
+ */
+export function isTruncatedReaderBody(
+  body: ReaderBody | null,
+  contentSnippet: string,
+) {
+  return (
+    body?.form === "html" && detectTruncatedContent(body.html, contentSnippet)
+  );
+}
 
 export function useTruncationAlert({
   feed,
@@ -42,15 +56,10 @@ export function useTruncationAlert({
     !!feedId &&
     !hasTruncationAlertResponse &&
     !!feedItem;
-  // Only an HTML body can be partial; a Document source is always the full
-  // document, so it never raises the alert.
-  const htmlBody =
-    feedItem?.body?.form === "html" ? feedItem.body.html : undefined;
   const shouldShowTruncationAlert =
     shouldCheckTruncatedContent &&
     feedItem !== undefined &&
-    feedItem.body?.form !== "source" &&
-    detectTruncatedContent(htmlBody, feedItem.contentSnippet);
+    isTruncatedReaderBody(feedItem.body, feedItem.contentSnippet);
 
   const handleAlertResponse = (openLocation: "serial" | "origin") => {
     if (!feedId || !canMutate) return;

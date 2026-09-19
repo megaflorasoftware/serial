@@ -363,17 +363,19 @@ export const getByFeedId = protectedProcedure
           ),
         )
       : undefined;
+    // Bodies never ride list queries; they travel through the body endpoint.
     const itemsData = await context.db.query.feedItems.findMany({
       where: and(eq(feedItems.feedId, input.feedId), cursorFilter),
       orderBy: [desc(feedItems.postedAt), desc(feedItems.id)],
       limit: limit + 1,
+      columns: { content: false },
     });
     const hasMore = itemsData.length > limit;
     const itemsToReturn = itemsData.slice(0, limit);
     const lastItem = itemsToReturn.at(-1);
 
     const existingApplicationFeedItems = itemsToReturn.map((item) =>
-      toApplicationFeedItem(item, feed.platform),
+      toApplicationFeedItem({ ...item, content: "" }, feed.platform),
     );
 
     for (const chunk of prepareArrayChunks(existingApplicationFeedItems, 50)) {

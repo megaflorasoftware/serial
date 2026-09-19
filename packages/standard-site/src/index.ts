@@ -11,7 +11,6 @@ export {
   discoverReferences,
   INTERACTIVE_PLACEHOLDER_TEXT,
   overflowBlobCid,
-  parseDocumentSourceRecord,
   parseYouTubeReference,
   referencedPublications,
   resolveDocumentSourceContent,

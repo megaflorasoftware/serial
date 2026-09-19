@@ -16,10 +16,7 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
-import {
-  capReaderBodies,
-  loadReaderBodies,
-} from "~/server/feeds/reader-bodies";
+import { loadCappedReaderBodies } from "~/server/feeds/reader-bodies";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
@@ -1085,15 +1082,15 @@ export const requestFullTextForItems = protectedProcedure
       // Request order decides which bodies fit under the response cap.
       const position = new Map(input.itemIds.map((id, index) => [id, index]));
       rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
-      const bodies = await loadReaderBodies(context.db, rows);
-      const { items, omitted } = capReaderBodies(
-        rows.map((row) => ({
-          id: row.id,
-          body: bodies.get(row.id) ?? null,
-          contentSnippet: row.contentSnippet,
+      const { items, omitted } = await loadCappedReaderBodies(context.db, rows);
+      return {
+        items: items.map((entry) => ({
+          id: entry.row.id,
+          body: entry.body,
+          contentSnippet: entry.row.contentSnippet,
         })),
-      );
-      return { items, omitted: omitted.map((entry) => entry.id) };
+        omitted: omitted.map((row) => row.id),
+      };
     } catch (error) {
       captureException(error);
       throw error;

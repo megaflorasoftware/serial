@@ -164,18 +164,9 @@ export async function convertDocumentContent(
 
 const documentValueSchema = z.looseObject({ content: z.unknown().optional() });
 
-/** The record value a Document source holds, parsed losslessly. */
-export function parseDocumentSourceRecord(
-  source: Pick<DocumentSource, "record">,
-) {
-  return parseLosslessJson(source.record);
-}
-
 /** Content with the retained overflow blob inlined, or null when the source is unusable. */
 export function resolveDocumentSourceContent(source: DocumentSource) {
-  const value = documentValueSchema.safeParse(
-    parseDocumentSourceRecord(source),
-  );
+  const value = documentValueSchema.safeParse(parseLosslessJson(source.record));
   if (!value.success) return null;
   const content = value.data.content;
   if (!isBlockNativeContentType((content as { $type?: string })?.$type))

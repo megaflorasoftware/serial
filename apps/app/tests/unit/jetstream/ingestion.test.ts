@@ -65,7 +65,7 @@ const client: PublicationClient = {
   resolvePds: vi.fn(async () => "https://pds.example.com"),
   latestRev: vi.fn(async () => "rev"),
   getRecord: vi.fn(async () => publication),
-  loadBlob: vi.fn(async () => new Uint8Array()),
+  loadBlob: vi.fn(async () => ({ bytes: new Uint8Array(), mimeType: null })),
   list: vi.fn(async () => ({
     records: [],
     notModified: false as const,
@@ -600,6 +600,52 @@ describe("failure isolation", () => {
     expect(await fixture.database.select().from(feedItems)).toMatchObject([
       { sourceCid: "cid10" },
     ]);
+  });
+  it("reads the record itself when its staged source row is gone", async () => {
+    await accept(event(10));
+    await fixture.database.delete(feedOriginAtprotoDocumentSources);
+    const fetched = vi.fn(async () => {
+      const staged = event(10);
+      if (staged.kind !== "commit") throw new Error();
+      return { uri: uri("post"), cid: "cid10", value: staged.commit.record };
+    });
+    await processOriginDocuments(fixture.database, originId, settings, {
+      client: { ...client, getRecord: fetched },
+      readPage,
+    });
+    expect(fetched).toHaveBeenCalledWith(uri("post"), { cid: "cid10" });
+    expect(await ledger(uri("post"))).toMatchObject({
+      status: "ready",
+      bodyCid: "cid10",
+    });
+    // The retained source is the record value, not the lookup envelope.
+    expect((await sources(uri("post")))[0]?.record).toMatch(/^\{"\$type"/);
+    expect(await fixture.database.select().from(feedItems)).toMatchObject([
+      { sourceCid: "cid10" },
+    ]);
+  });
+  it("stores publication records as plain JSON even when the wire carried big integers", async () => {
+    const commit = event(10);
+    if (commit.kind !== "commit") throw new Error();
+    const record = {
+      $type: "site.standard.publication",
+      name: "Publication",
+      url: "https://example.com",
+      subscribers: 9007199254740993n,
+    };
+    await accept({
+      ...commit,
+      commit: {
+        ...commit.commit,
+        collection: "site.standard.publication",
+        rkey: "site",
+        record,
+        recordText: '{"subscribers":9007199254740993}',
+      },
+    });
+    expect((await state()).publicationRecord).toMatchObject({
+      value: { name: "Publication", subscribers: 9007199254740992 },
+    });
   });
   it("keeps the last readable version when a newer one fails the adapter", async () => {
     await accept(event(10));

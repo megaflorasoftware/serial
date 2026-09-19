@@ -4,8 +4,6 @@ import {
   READER_BODY_RESPONSE_BUDGET_BYTES,
   readerBodyBytes,
   REFERENCE_REFRESH_INTERVAL_MS,
-  referencedPublications,
-  snapshotLookup,
 } from "@serial/standard-site";
 import { feedItems, feedOrigins, feeds } from "../db/schema";
 import { loadDocumentSources, sourceKeyOf } from "../jetstream/document-source";
@@ -13,12 +11,9 @@ import {
   loadReferenceSnapshots,
   markReferenceSnapshotsRead,
   resolveSourceReferences,
-  toReferenceSnapshot,
+  sourceReferences,
 } from "../jetstream/reference-snapshots";
-import {
-  documentReferences,
-  sourceReaderBody,
-} from "../rss/documentObservation";
+import { sourceReaderBody } from "../rss/documentObservation";
 import { createPublicationClient } from "../rss/atprotoClient";
 import type { ApplicationFeedItem, DatabaseFeedItem } from "../db/schema";
 import type {
@@ -34,16 +29,17 @@ type BodyRow = Pick<
   "id" | "feedId" | "content" | "contentHash" | "atprotoUri" | "sourceCid"
 >;
 
-/** The client item without its body; lists and pages never carry one. */
+/** The client item; lists and pages never carry a body, direct open and the body endpoint do. */
 export function toApplicationFeedItem(
   row: DatabaseFeedItem,
   platform: string,
   body: ReaderBody | null = null,
 ): ApplicationFeedItem {
-  const { content, normalizedUrl, ...rest } = row;
-  void content;
-  void normalizedUrl;
-  return { ...rest, platform, body } as ApplicationFeedItem;
+  const item: Record<string, unknown> = { ...row, platform, body };
+  // The stored HTML and the normalization override are server-side columns.
+  delete item.content;
+  delete item.normalizedUrl;
+  return item as ApplicationFeedItem;
 }
 
 function htmlBody(row: BodyRow): ReaderBody | null {
@@ -83,39 +79,25 @@ async function sourceKeys(database: typeof db, rows: BodyRow[]) {
 
 type SourcedRow = { source: DocumentSource; did: string };
 
-/**
- * Snapshots for many sources in two reads: the records the bodies reference
- * directly, then the publications those documents name. Returns each source's
- * references in render order.
- */
+/** Saved snapshots per source in render order; served rows are marked read. */
 async function snapshotsFor(
   database: typeof db,
   bodies: SourcedRow[],
   now: Date,
 ) {
-  const direct = bodies.map(({ source, did }) =>
-    documentReferences(source, did),
-  );
-  const snapshots = await loadReferenceSnapshots(database, direct.flat());
-  const lookup = snapshotLookup(
-    [...snapshots.values()].map(toReferenceSnapshot),
-  );
-  const complete = direct.map((references) => [
-    ...references,
-    ...referencedPublications(references, lookup),
-  ]);
-  const publications = complete.flat().filter((uri) => !snapshots.has(uri));
-  for (const [uri, row] of await loadReferenceSnapshots(database, publications))
-    snapshots.set(uri, row);
-  await markReferenceSnapshotsRead(database, [...snapshots.keys()], now);
-  return new Map(
-    bodies.map(({ source }, index) => [
-      source.uri,
-      complete[index]!.map((uri) => snapshots.get(uri))
-        .filter((row) => row !== undefined)
-        .map(toReferenceSnapshot),
-    ]),
-  );
+  const served = new Set<string>();
+  const references = new Map<string, ReferenceSnapshot[]>();
+  for (const { source, did } of bodies) {
+    // Each body needs its own two-pass order; rows are cheap to reread by key.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const snapshots = await sourceReferences(database, source, did, (uris) =>
+      loadReferenceSnapshots(database, uris),
+    );
+    for (const snapshot of snapshots) served.add(snapshot.uri);
+    references.set(source.uri, snapshots);
+  }
+  await markReferenceSnapshotsRead(database, [...served], now);
+  return references;
 }
 
 /**
@@ -163,6 +145,44 @@ export function capReaderBodies<T extends { body: ReaderBody | null }>(
     }
   }
   return { items: entries.slice(0, cut), omitted: entries.slice(cut) };
+}
+
+/** Rows loaded per slice, so a request never materializes bodies it will not send. */
+const BODY_LOAD_SLICE = 25;
+
+/**
+ * Loads bodies one slice at a time in request order and stops at the first
+ * slice that crosses the response budget. Work stays bounded by the bytes
+ * that ship, not by the number of ids asked for.
+ */
+export async function loadCappedReaderBodies<T extends BodyRow>(
+  database: typeof db,
+  rows: T[],
+  now = new Date(),
+) {
+  const items: Array<{ row: T; body: ReaderBody | null }> = [];
+  let bytes = 0;
+  for (let offset = 0; offset < rows.length; offset += BODY_LOAD_SLICE) {
+    const slice = rows.slice(offset, offset + BODY_LOAD_SLICE);
+    // Slices are sequential by design: the next one loads only if this one fit.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const bodies = await loadReaderBodies(database, slice, now);
+    const entries = slice.map((row) => ({
+      row,
+      body: bodies.get(row.id) ?? null,
+    }));
+    const capped = capReaderBodies(
+      entries,
+      READER_BODY_RESPONSE_BUDGET_BYTES - bytes,
+    );
+    items.push(...capped.items);
+    if (capped.omitted.length) break;
+    bytes += capped.items.reduce(
+      (total, entry) => total + (entry.body ? readerBodyBytes(entry.body) : 0),
+      0,
+    );
+  }
+  return { items, omitted: rows.slice(items.length) };
 }
 
 /**

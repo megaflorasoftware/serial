@@ -33,7 +33,11 @@ import {
   blobRefSchema,
   listedRecordSchema,
 } from "../lexicons";
-import { buildBlueskyProfileUrl } from "../uris";
+import {
+  buildBlueskyCdnImageUrl,
+  buildBlueskyProfileUrl,
+  parseAtUri,
+} from "../uris";
 import { validEntriesSchema } from "../parse";
 
 const PREFIX = "blog.pckt.block.";
@@ -106,20 +110,25 @@ function renderBlocks(blocks: Block[], context: ConversionContext) {
   );
 }
 
-function renderImage(value: unknown, context: ConversionContext) {
+/** One image whose blob lives in `did`'s repository: the document's, or a gallery's. */
+function renderImage(
+  value: unknown,
+  context: ConversionContext,
+  did: string = context.did,
+) {
   const attrs = imageAttrsSchema.safeParse(value);
   if (!attrs.success) return "";
   const { src, blob, alt, title } = attrs.data;
   const cid =
     blob?.ref.$link ?? (src.startsWith("blob:") ? src.slice(5) : null);
-  const url = cid ? context.imageUrl(cid) : safeSourceUrl(src);
+  const url = cid ? buildBlueskyCdnImageUrl(did, cid) : safeSourceUrl(src);
   if (!url) return "";
   context.noteImage(url);
   // `title` is hover text per the lexicon, not a caption.
   return voidElement("img", { src: url, alt: alt ?? "", title });
 }
 
-function renderImageAttrs(value: unknown, context: ConversionContext) {
+function renderImageFigure(value: unknown, context: ConversionContext) {
   const img = renderImage(value, context);
   return img ? figure(img, undefined) : "";
 }
@@ -129,17 +138,18 @@ const gallerySchema = z.object({
   caption: z.string().optional(),
 });
 
-/** A gallery block points at a standalone record; its images render as one figure. */
+/** A gallery block points at a standalone record whose repository owns its image blobs. */
 function renderGallery(block: Block, context: ConversionContext) {
   const uri = stringProperty(block, "ref");
-  if (!uri || !buildPdslsUrl(uri)) return "";
+  const owner = uri ? parseAtUri(uri)?.did : undefined;
+  if (!uri || !owner || !buildPdslsUrl(uri)) return "";
   const record = listedRecordSchema.safeParse(context.records(uri));
   const gallery = record.success
     ? gallerySchema.safeParse(record.data.value)
     : null;
   if (!gallery?.success) return "";
   const rendered = gallery.data.images
-    .map((image) => renderImage(image, context))
+    .map((image) => renderImage(image, context, owner))
     .join("");
   if (!rendered) return "";
   const caption = gallery.data.caption?.trim();
@@ -253,7 +263,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "horizontalRule":
       return voidElement("hr");
     case "image":
-      return renderImageAttrs(block.attrs, context);
+      return renderImageFigure(block.attrs, context);
     case "iframe": {
       const url = stringProperty(block, "url");
       return url ? embedPlaceholder(url, url) : interactivePlaceholder(null);

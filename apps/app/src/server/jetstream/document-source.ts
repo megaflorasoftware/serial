@@ -38,13 +38,12 @@ export class OversizedDocumentSourceError extends Error {
   }
 }
 
-/** Throws when the record alone is over budget, before any blob is fetched. */
-export function assertRecordWithinBudget(text: string) {
-  if (
+/** The record alone is over budget; nothing of it is retained, blobs unfetched. */
+export function isRecordOverBudget(text: string) {
+  return (
     documentSourceBytes({ record: text, blobs: [] }) >
     DOCUMENT_SOURCE_BUDGET_BYTES
-  )
-    throw new OversizedDocumentSourceError();
+  );
 }
 
 type DocumentKey = { originId: number; uri: string; cid: string };
@@ -209,13 +208,4 @@ export async function loadDocumentSources(
     });
   }
   return sources;
-}
-
-export async function loadDocumentSource(
-  database: FeedDatabase,
-  key: SourceKey,
-) {
-  return (
-    (await loadDocumentSources(database, [key])).get(sourceKeyOf(key)) ?? null
-  );
 }

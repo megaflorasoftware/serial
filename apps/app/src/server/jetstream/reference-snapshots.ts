@@ -4,7 +4,6 @@ import {
   MissingPublicRecordError,
   parseAtUri,
   PublicRecordVersionUnavailableError,
-  REFERENCE_IMPORT_REUSE_MS,
   REFERENCE_UNREAD_RETENTION_MS,
   referencedPublications,
   snapshotLookup,
@@ -78,21 +77,13 @@ export async function markReferenceSnapshotsRead(
   );
 }
 
-/** Rows nobody has read for the retention window are dropped. */
+/** Rows nobody has read for the retention window are dropped, however fresh. */
 export async function sweepReferenceSnapshots(database: typeof db, now: Date) {
   const threshold = new Date(now.getTime() - REFERENCE_UNREAD_RETENTION_MS);
   await runDatabaseWrite(database, () =>
     database
       .delete(atprotoReferenceSnapshots)
-      .where(
-        and(
-          lt(atprotoReferenceSnapshots.resolvedAt, threshold),
-          or(
-            isNull(atprotoReferenceSnapshots.readAt),
-            lt(atprotoReferenceSnapshots.readAt, threshold),
-          ),
-        ),
-      ),
+      .where(lt(atprotoReferenceSnapshots.readAt, threshold)),
   );
 }
 
@@ -197,14 +188,31 @@ export async function refreshReferenceSnapshots(
   return existing;
 }
 
-/** Import reuse window: a day for resolved records, outcome rules otherwise. */
-export const IMPORT_REUSE_MS = REFERENCE_IMPORT_REUSE_MS;
-
 /**
- * The snapshots a source renders, in render order, refreshing rows older
- * than the reuse window. Documents referenced by cards name their
- * publications, which resolve in a second pass once the documents are known.
+ * The snapshots a source renders, in render order. Documents referenced by
+ * cards name their publications, which are known only once those documents
+ * are in hand, so the lookup runs in two passes over the same rows.
  */
+export async function sourceReferences(
+  database: FeedDatabase,
+  source: DocumentSource,
+  did: string,
+  lookup: (uris: string[]) => Promise<Map<string, SnapshotRow>>,
+): Promise<ReferenceSnapshot[]> {
+  const direct = documentReferences(source, did);
+  const snapshots = await lookup(direct);
+  const publications = referencedPublications(
+    direct,
+    snapshotLookup([...snapshots.values()].map(toReferenceSnapshot)),
+  );
+  for (const [uri, row] of await lookup(publications)) snapshots.set(uri, row);
+  return [...direct, ...publications]
+    .map((uri) => snapshots.get(uri))
+    .filter((row) => row !== undefined)
+    .map(toReferenceSnapshot);
+}
+
+/** Import and open-time refresh: resolve what is absent or stale, then read in render order. */
 export async function resolveSourceReferences(
   database: typeof db,
   source: DocumentSource,
@@ -212,27 +220,7 @@ export async function resolveSourceReferences(
   readRecord: ReferenceReader,
   options: { now: Date; reuseMs: number },
 ): Promise<ReferenceSnapshot[]> {
-  const direct = documentReferences(source, did);
-  const snapshots = await refreshReferenceSnapshots(
-    database,
-    direct,
-    readRecord,
-    options,
+  return sourceReferences(database, source, did, (uris) =>
+    refreshReferenceSnapshots(database, uris, readRecord, options),
   );
-  const lookup = snapshotLookup(
-    [...snapshots.values()].map(toReferenceSnapshot),
-  );
-  const publications = referencedPublications(direct, lookup);
-  const references = [...direct, ...publications];
-  for (const [uri, row] of await refreshReferenceSnapshots(
-    database,
-    publications,
-    readRecord,
-    options,
-  ))
-    snapshots.set(uri, row);
-  return references
-    .map((uri) => snapshots.get(uri))
-    .filter((row) => row !== undefined)
-    .map(toReferenceSnapshot);
 }

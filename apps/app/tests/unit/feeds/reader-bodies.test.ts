@@ -13,11 +13,13 @@ import {
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   capReaderBodies,
+  loadCappedReaderBodies,
   loadReaderBodies,
   ownedBodyRow,
   refreshDocumentReferences,
   toApplicationFeedItem,
 } from "~/server/feeds/reader-bodies";
+import { sweepReferenceSnapshots } from "~/server/jetstream/reference-snapshots";
 import {
   stageDocumentSource,
   storeDocumentBlobs,
@@ -319,6 +321,46 @@ describe("reader bodies", () => {
         .where(eq(atprotoReferenceSnapshots.uri, REF))
         .get(),
     ).toMatchObject({ outcome: "unavailable" });
+  });
+
+  it("sweeps snapshots unread for the retention window, however fresh", async () => {
+    const day = 24 * 60 * 60_000;
+    await snapshot(REF, referenced, NOW);
+    await snapshot(OTHER_PUB, otherPublication, NOW);
+    await fixture.database
+      .update(atprotoReferenceSnapshots)
+      .set({ readAt: new Date(NOW.getTime() - 91 * day) })
+      .where(eq(atprotoReferenceSnapshots.uri, REF));
+    await fixture.database
+      .update(atprotoReferenceSnapshots)
+      .set({ readAt: new Date(NOW.getTime() - 89 * day) })
+      .where(eq(atprotoReferenceSnapshots.uri, OTHER_PUB));
+    await sweepReferenceSnapshots(fixture.database, NOW);
+    expect(
+      (await fixture.database.select().from(atprotoReferenceSnapshots)).map(
+        (row) => row.uri,
+      ),
+    ).toEqual([OTHER_PUB]);
+  });
+
+  it("loads bodies slice by slice and stops at the first slice over budget", async () => {
+    for (let index = 0; index < 60; index++)
+      // Sequential inserts keep ids ordered for the request below.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      await insertItem({
+        id: `rss-${String(index).padStart(2, "0")}`,
+        content: `<p>${"x".repeat(1000)}</p>`,
+      });
+    const rows = (await fixture.database.select().from(feedItems)).sort(
+      (a, b) => a.id.localeCompare(b.id),
+    );
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      rows,
+      NOW,
+    );
+    expect(items).toHaveLength(60);
+    expect(omitted).toEqual([]);
   });
 
   it("returns null for items without a source and for other users' items", async () => {

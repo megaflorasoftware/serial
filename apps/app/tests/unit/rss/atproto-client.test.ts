@@ -7,16 +7,16 @@ import {
   it,
   vi,
 } from "vitest";
-import { recordPreview } from "@serial/standard-site";
+import {
+  recordPreview,
+  REFERENCE_IMPORT_REUSE_MS,
+} from "@serial/standard-site";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import {
   createPublicationClient,
   MissingPublicationRecordError,
 } from "~/server/rss/atprotoClient";
-import {
-  IMPORT_REUSE_MS,
-  refreshReferenceSnapshots,
-} from "~/server/jetstream/reference-snapshots";
+import { refreshReferenceSnapshots } from "~/server/jetstream/reference-snapshots";
 import { atprotoReferenceSnapshots } from "~/server/db/schema";
 
 const uri = "at://did:plc:alice/site.standard.publication/site";
@@ -46,7 +46,7 @@ describe("publication transport", () => {
       fixture.database,
       [uri],
       (target) => remote.getRecord(target),
-      { now: NOW, reuseMs: IMPORT_REUSE_MS },
+      { now: NOW, reuseMs: REFERENCE_IMPORT_REUSE_MS },
     );
     return snapshots.get(uri);
   }

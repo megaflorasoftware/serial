@@ -1,15 +1,13 @@
 import {
   buildBlueskyCdnImageUrl,
   buildCanonicalDocumentUrl,
+  bytesToBase64,
   convertReaderBody,
   discoverReferences,
   DOCUMENT_SOURCE_BUDGET_BYTES,
-  documentSourceBytes,
   isBlockNativeDocument,
   overflowBlobCid,
-  referencedPublications,
   resolveDocumentSourceContent,
-  snapshotLookup,
 } from "@serial/standard-site";
 import { OversizedDocumentSourceError } from "../jetstream/document-source";
 import { itemUrl } from "./itemObservation";
@@ -40,25 +38,33 @@ export async function fetchDocumentBlobs(
 ): Promise<FetchedBlob[]> {
   const cid = overflowBlobCid(document.value.content);
   if (!cid) return [];
-  const bytes = await client.loadBlob(did, cid);
-  const blobs = [{ cid, mimeType: "application/json", bytes }];
-  const size = documentSourceBytes({
-    record,
-    blobs: [{ bytes: Buffer.from(bytes).toString("base64") }],
-  });
+  const { bytes, mimeType } = await client.loadBlob(did, cid);
+  const size = utf8Length(record) + bytes.byteLength;
   if (size > DOCUMENT_SOURCE_BUDGET_BYTES)
     throw new OversizedDocumentSourceError();
-  return blobs;
+  return [{ cid, mimeType, bytes }];
 }
 
-/** The records this content renders, one level out: cards, mentions, galleries and their publications. */
-export function contentReferences(
-  content: unknown,
-  did: string,
-  records: (uri: string) => unknown,
-) {
-  const direct = discoverReferences(content, did);
-  return [...direct, ...referencedPublications(direct, records)];
+function utf8Length(text: string) {
+  return new TextEncoder().encode(text).byteLength;
+}
+
+/** The Document source as the Reader body and the store carry it. */
+export function retainedSource(
+  key: { uri: string; cid: string },
+  record: string,
+  blobs: FetchedBlob[],
+): DocumentSource {
+  return {
+    uri: key.uri,
+    cid: key.cid,
+    record,
+    blobs: blobs.map((blob) => ({
+      cid: blob.cid,
+      mimeType: blob.mimeType,
+      bytes: bytesToBase64(blob.bytes),
+    })),
+  };
 }
 
 /** Direct references of a retained source; empty when the source is not renderable. */
@@ -140,5 +146,3 @@ export function sourceReaderBody(
 ): SourceReaderBody {
   return { form: "source", source, references, revision: source.cid };
 }
-
-export { snapshotLookup };

@@ -1,9 +1,10 @@
 import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
-  bytesToBase64,
+  listedRecordSchema,
   parseDocumentRecord,
   parsePublicationRecord,
+  REFERENCE_IMPORT_REUSE_MS,
 } from "@serial/standard-site";
 import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
@@ -12,18 +13,17 @@ import {
   deriveDocumentBody,
   documentObservation,
   fetchDocumentBlobs,
+  retainedSource,
   sourceReaderBody,
 } from "../rss/documentObservation";
 import { enrichObservationImages } from "../rss/observationImages";
 import { writeObservedItems } from "../rss/writeItems";
 import { applyOriginMetadata } from "../rss/originMetadata";
 import { readFeedHttp } from "../rss/feedHttp";
-import {
-  IMPORT_REUSE_MS,
-  resolveSourceReferences,
-} from "./reference-snapshots";
+import { resolveSourceReferences } from "./reference-snapshots";
 import {
   captureRecordValue,
+  isRecordOverBudget,
   OversizedDocumentSourceError,
   pruneDocumentSources,
   readStagedRecord,
@@ -33,7 +33,6 @@ import {
 import { CheckpointHostError } from "./protocol";
 import { eligible, loadOrigin, nowFor, planFor } from "./store";
 import { createStreamReporter } from "./report";
-import type { DocumentSource } from "@serial/standard-site";
 import type { FetchedBlob } from "./document-source";
 import type { StreamDatabase, StreamSettings } from "./store";
 import type {
@@ -181,10 +180,13 @@ export async function processOriginDocuments(
     ) => {
       await runDatabaseWrite(database, () =>
         database.transaction(async (tx) => {
-          await tx
+          const marked = await tx
             .update(feedOriginAtprotoDocuments)
             .set({ status: "invalid", reason })
-            .where(identity);
+            .where(identity)
+            .returning({ uri: feedOriginAtprotoDocuments.uri });
+          // A version staged meanwhile owns the row now; leave its source alone.
+          if (!marked.length) return;
           // The readable source stays; the failed version is not retained.
           await pruneDocumentSources(tx, originId, [
             { uri: entry.uri, keep: [entry.bodyCid] },
@@ -195,11 +197,19 @@ export async function processOriginDocuments(
     };
     try {
       // A staged record read is one narrow row; the ledger never carries it.
+      // A missing row (older ledger entries, a pruned version) reads the
+      // record itself, which the budget then bounds like staging does.
       const captured =
         (await readStagedRecord(database, key)) ??
         captureRecordValue(
-          await client.getRecord(entry.uri, { cid: entry.cid }),
+          listedRecordSchema.parse(
+            await client.getRecord(entry.uri, { cid: entry.cid }),
+          ).value,
         );
+      if (isRecordOverBudget(captured.text)) {
+        await invalidate("oversized", new OversizedDocumentSourceError());
+        return;
+      }
       const document = parseDocumentRecord({
         uri: entry.uri,
         cid: entry.cid,
@@ -217,23 +227,14 @@ export async function processOriginDocuments(
         await invalidate("oversized", error);
         return;
       }
-      const source: DocumentSource = {
-        uri: entry.uri,
-        cid: entry.cid,
-        record: captured.text,
-        blobs: blobs.map((blob) => ({
-          cid: blob.cid,
-          mimeType: blob.mimeType,
-          bytes: bytesToBase64(blob.bytes),
-        })),
-      };
+      const source = retainedSource(key, captured.text, blobs);
       const references = await resolveSourceReferences(
         database,
         source,
         did,
         // Lookup budgets are wall-clock; `now` only stamps stored rows.
         (uri) => client.getRecord(uri, { deadline: Date.now() + 5_000 }),
-        { now, reuseMs: IMPORT_REUSE_MS },
+        { now, reuseMs: REFERENCE_IMPORT_REUSE_MS },
       );
       const body = sourceReaderBody(source, references);
       const outcome = deriveDocumentBody(document, body, did);
