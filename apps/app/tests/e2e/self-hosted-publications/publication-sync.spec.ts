@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, test } from "@playwright/test";
-import { feedItems, user } from "../../../src/server/db/schema";
+import { feedItems, feedOrigins, user } from "../../../src/server/db/schema";
 import {
   readPublicationConnection as connection,
   fillPublicationQuota,
@@ -360,7 +360,20 @@ test("manual Jetstream recovery imports, updates, and retains deleted reader ite
     withPublicationDatabase((db) =>
       db.select().from(feedItems).where(eq(feedItems.feedId, feed.id)),
     );
-  const refresh = async () => {
+  const refresh = async (due = true) => {
+    if (due) {
+      // Advance the existing schedule instead of bypassing its cooldowns.
+      await withPublicationDatabase(async (db) => {
+        await db
+          .update(user)
+          .set({ nextRefreshAt: null })
+          .where(eq(user.id, userId));
+        await db
+          .update(feedOrigins)
+          .set({ nextFetchAt: null })
+          .where(eq(feedOrigins.feedId, feed.id));
+      });
+    }
     const response = await page.request.post(
       "/api/rpc/initial/fetchDueSources",
       { data: { json: { trigger: "manual" } } },
@@ -368,6 +381,8 @@ test("manual Jetstream recovery imports, updates, and retains deleted reader ite
     expect(response.ok()).toBe(true);
   };
   await put("Initial document");
+  await refresh(false);
+  expect(await items()).toEqual([]);
   await refresh();
   await expect
     .poll(async () => (await items()).map((item) => item.title), {

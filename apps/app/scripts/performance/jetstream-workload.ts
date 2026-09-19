@@ -8,6 +8,7 @@ import {
   atprotoStreamState,
   feedItems,
   feedOriginAtproto,
+  feedOriginAtprotoDocuments,
   user,
 } from "~/server/db/schema";
 import { acceptBatch, ensureStream } from "~/server/jetstream/store";
@@ -212,6 +213,53 @@ export async function createJetstreamWorkload(
         },
       );
       return { pages, images, publications };
+    },
+    async prepareHealthy() {
+      await database.update(atprotoStreamState).set({
+        seq: String(seq),
+        connected: true,
+        leaseOwner: "benchmark",
+        leaseUntil: new Date(now.getTime() + 60_000),
+      });
+      await database
+        .update(feedOriginAtproto)
+        .set({ streamMode: "live", streamGeneration: 0 });
+      // Recovery samples leave staged work; a healthy idle check has none.
+      await database
+        .update(feedOriginAtprotoDocuments)
+        .set({ status: "ready", pendingRecord: null });
+    },
+    async check() {
+      const unexpected = () => {
+        throw new Error("Healthy Feed fetched remote data");
+      };
+      const transport: StreamTransport = {
+        service,
+        hasReplay: false,
+        report: unexpected,
+        stream: unexpected,
+        recover: unexpected,
+        tip: unexpected,
+      };
+      await recoverOrigin(
+        database,
+        origins[0]!,
+        settings,
+        transport,
+        new AbortController().signal,
+        {
+          manual: true,
+          client: {
+            resolvePds: unexpected,
+            latestRev: unexpected,
+            getRecord: unexpected,
+            list: unexpected,
+            loadBlob: unexpected,
+            resolveRecord: unexpected,
+          },
+        },
+      );
+      return { requests: 0 };
     },
     async run(mode: "changed" | "duplicate" | "ineligible" | "idle") {
       let publications = 0;

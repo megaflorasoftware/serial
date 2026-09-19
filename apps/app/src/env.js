@@ -1,5 +1,6 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+import { normalizeJetstreamEndpoint } from "./lib/jetstream-endpoint";
 import { parseExtensionRedirectUriList } from "./lib/extension-auth";
 
 const optionalBoolean = z.union([z.boolean(), z.stringbool()]).default(false);
@@ -151,16 +152,13 @@ export const env = createEnv({
       z
         .url()
         .refine((value) => {
-          const url = URL.parse(value);
-          return (
-            !!url &&
-            ["http:", "https:"].includes(url.protocol) &&
-            !url.username &&
-            !url.password &&
-            !url.search &&
-            !url.hash
-          );
-        }, "Expected an HTTP(S) service URL without credentials, query or fragment")
+          try {
+            normalizeJetstreamEndpoint(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "Expected an HTTP(S) or WS(S) Jetstream URL without credentials, query or fragment")
         .default("https://jetstream.us-east.bsky.network"),
     ),
     ATPROTO_JETSTREAM_API_KEY: z.string().trim().min(1).optional(),

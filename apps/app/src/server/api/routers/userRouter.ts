@@ -3,7 +3,6 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { userNameSchema } from "../schemas";
-import { catchUpUser } from "~/server/jetstream/service";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { protectedProcedure, publicProcedure } from "~/server/orpc/base";
 import { auth } from "~/server/auth";
@@ -86,7 +85,8 @@ export const requestVerificationCode = protectedProcedure.handler(
   },
 );
 
-export const catchUpFeeds = protectedProcedure.handler(async ({ context }) => {
-  await recordUserActivity(context.db, context.user.id);
-  await catchUpUser(context.db, context.user.id);
-});
+export const recordActivity = protectedProcedure.handler(
+  async ({ context }) => {
+    await recordUserActivity(context.db, context.user.id);
+  },
+);

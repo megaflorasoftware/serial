@@ -15,7 +15,6 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
-import { catchUpUser } from "~/server/jetstream/service";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
@@ -118,7 +117,6 @@ export const fetchDueSources = protectedProcedure
   .handler(async ({ context, input }) => {
     if (input.trigger === "manual") {
       await recordUserActivity(context.db, context.user.id);
-      await catchUpUser(context.db, context.user.id, true);
     }
     return runFetchDueSources({
       database: context.db,

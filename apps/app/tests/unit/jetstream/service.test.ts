@@ -20,9 +20,12 @@ vi.mock("~/env", () => ({
     BACKGROUND_REFRESH_ENABLED: true,
   },
 }));
+vi.mock("~/server/jetstream/endpoint", () => ({
+  resolveStreamService: async (url: string) => url,
+}));
 vi.mock("~/server/jetstream/transport", () => ({
   createStreamTransport: () => state.transport,
-  retryStream: vi.fn(),
+  retryStream: vi.fn(async () => {}),
 }));
 vi.mock("~/server/api/publisher", () => ({ publisher: { publish: vi.fn() } }));
 vi.mock("~/server/subscriptions/helpers", () => ({
@@ -134,3 +137,86 @@ it("receives events for a Publication followed after the connection starts", asy
     shutdown.abort();
   }
 });
+
+it.each([true, false])(
+  "restarts and reconnects live without repository/archive recovery, archive=%s",
+  async (hasReplay) => {
+    fixture = await createBookmarkTestDatabase();
+    const database = fixture.database;
+    const service = "https://jetstream.example.com";
+    const shutdown = new AbortController();
+    const now = new Date();
+    await database.insert(user).values({
+      id: "reader",
+      name: "Reader",
+      email: "reader@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const locator = "at://did:plc:alice/site.standard.publication/site";
+    const feed = await insertFeedWithOrigins(database, {
+      userId: "reader",
+      isActive: true,
+      details: {
+        name: "Publication",
+        platform: "website",
+        imageUrl: "",
+        origins: [{ kind: "atproto", locator }],
+      },
+    });
+    await database.update(feedOriginAtproto).set({
+      initialized: true,
+      streamService: service,
+      streamSeq: "1",
+      streamMode: "live",
+      publicationRecord: {
+        uri: locator,
+        cid: "pub",
+        value: { name: "Publication", url: "https://example.com" },
+      },
+    });
+    await database
+      .insert(atprotoStreamState)
+      .values({ id: "primary", service, seq: "1" });
+    const before = await database.select().from(feedOriginAtproto);
+    let attempts = 0;
+    const recover = vi.fn(() => {
+      throw new Error("Recovery must wait for a normal fetch");
+    });
+    const tip = vi.fn(async () => 1);
+    state.transport = {
+      service,
+      hasReplay,
+      recover,
+      tip,
+      report: vi.fn(),
+      async *stream(_after, _signal, _dids, onOpen) {
+        await onOpen?.();
+        expect(
+          (await database.select().from(atprotoStreamState))[0]?.connected,
+        ).toBe(true);
+        attempts++;
+        yield { events: [], lastCursor: attempts + 1 };
+        if (attempts === 1) throw new Error("upstream disconnected");
+        shutdown.abort();
+      },
+    };
+    try {
+      await startStreamWorker(database, shutdown.signal);
+      expect(attempts).toBe(2);
+      expect(recover).not.toHaveBeenCalled();
+      expect(tip).not.toHaveBeenCalled();
+      expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+      expect(
+        (await database.select().from(atprotoStreamState))[0],
+      ).toMatchObject({ connected: false });
+      expect(
+        (await database.select().from(atprotoStreamState))[0]!.generation,
+      ).toBeGreaterThan(0);
+      expect(feed.origins).toHaveLength(1);
+    } finally {
+      shutdown.abort();
+    }
+  },
+);

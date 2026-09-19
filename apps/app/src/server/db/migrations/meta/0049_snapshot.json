@@ -3261,6 +3261,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "stream_generation": {
+          "name": "stream_generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {
@@ -3487,6 +3495,22 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "connected": {
+          "name": "connected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {},

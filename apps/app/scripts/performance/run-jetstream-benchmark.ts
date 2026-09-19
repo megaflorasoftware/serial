@@ -5,6 +5,7 @@ import {
   openBenchmarkDatabase,
 } from "./database";
 import { createJetstreamWorkload } from "./jetstream-workload";
+import { interruptStream } from "~/server/jetstream/store";
 
 const profiles = {
   small: { fanout: 5, history: 1000 },
@@ -79,6 +80,39 @@ try {
     const times = samples.map((sample) => sample.ms).sort((a, b) => a - b);
     results[mode] = { medianMs: times[3], p95Ms: times[6], samples };
   }
+  await workload.prepareHealthy();
+  const healthy = [];
+  for (let index = 0; index < 7; index++) {
+    session.instrumentation.reset();
+    const started = performance.now();
+    // Each sample measures a single normal fetch against the same healthy stream.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const result = await workload.check();
+    const evidence = session.instrumentation.snapshot();
+    healthy.push({
+      ms: performance.now() - started,
+      statements: evidence.statementCount,
+      rows: evidence.materializedRows,
+      ...result,
+    });
+  }
+  const times = healthy.map((sample) => sample.ms).sort((a, b) => a - b);
+  results["healthy-fetch"] = {
+    medianMs: times[3],
+    p95Ms: times[6],
+    samples: healthy,
+  };
+  session.instrumentation.reset();
+  const interruptionStarted = performance.now();
+  await interruptStream(session.database, "benchmark", true);
+  const interruption = session.instrumentation.snapshot();
+  if (interruption.statementCount !== 1 || interruption.materializedRows !== 1)
+    throw new Error("Interruption work must not scale with Feed count");
+  results.interruption = {
+    ms: performance.now() - interruptionStarted,
+    statements: interruption.statementCount,
+    rows: interruption.materializedRows,
+  };
   mkdirSync("benchmarks/results", { recursive: true });
   writeFileSync(
     `benchmarks/results/jetstream-${profile}.json`,

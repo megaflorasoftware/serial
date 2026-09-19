@@ -37,6 +37,7 @@ CREATE TABLE `serial_feed_origin_atproto` (
   `recovery_attempts` integer DEFAULT 0 NOT NULL,
   `stream_service` text,
   `stream_seq` text,
+  `stream_generation` integer DEFAULT 0 NOT NULL,
   `stream_mode` text DEFAULT 'paused' NOT NULL,
   `publication_record` text,
   `publication_seq` text,
@@ -211,6 +212,8 @@ CREATE TABLE `serial_atproto_stream_state` (
 	`id` text PRIMARY KEY NOT NULL,
 	`service` text NOT NULL,
 	`seq` text,
+	`generation` integer DEFAULT 0 NOT NULL,
+	`connected` integer DEFAULT false NOT NULL,
 	`lease_owner` text,
 	`lease_until` integer
 );

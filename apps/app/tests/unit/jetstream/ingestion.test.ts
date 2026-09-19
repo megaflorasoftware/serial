@@ -15,6 +15,7 @@ import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   acceptBatch,
   ensureStream,
+  interruptStream,
   stageDocument,
 } from "~/server/jetstream/store";
 import { processOriginDocuments } from "~/server/jetstream/process";
@@ -172,6 +173,7 @@ async function state(id = originId) {
     .get())!;
 }
 beforeEach(async () => {
+  vi.clearAllMocks();
   fixture = await createBookmarkTestDatabase();
   await ensureStream(fixture.database, SERVICE);
   ({ originId, feedId } = await addReader("reader"));
@@ -493,9 +495,13 @@ describe("Feed recovery", () => {
     expect(writes).not.toHaveBeenCalled();
     expect(await state()).toEqual(before);
   });
-  it("uses live resume without a replay key before resorting to direct repository recovery", async () => {
+  it("uses a bounded repository fetch for no-key gaps without probing cursor expiry", async () => {
     await pause(20);
-    const transport = { ...replay([event(10)], 20), hasReplay: false };
+    const transport = {
+      ...replay([event(21)], 22),
+      hasReplay: false,
+      tip: vi.fn().mockResolvedValueOnce(20).mockResolvedValue(22),
+    };
     const list = vi.mocked(client.list);
     list.mockClear();
     await recoverOrigin(
@@ -506,21 +512,19 @@ describe("Feed recovery", () => {
       new AbortController().signal,
       { client, readPage },
     );
-    expect(list).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledTimes(1);
     expect(await state()).toMatchObject({
-      streamSeq: "20",
+      streamSeq: "22",
       streamMode: "live",
     });
     expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
   });
-  it("uses direct recovery for an expired no-key cursor and then covers concurrent changes", async () => {
+  it("uses direct recovery for a no-key gap and then covers concurrent changes", async () => {
     await pause(20);
-    let attempt = 0;
     const transport: StreamTransport = {
       ...replay([], 30),
       hasReplay: false,
       async *recover() {
-        if (attempt++ === 0) throw new StreamFailure("cursor-expired", 400);
         yield { events: [event(30)], lastCursor: 30 };
       },
     };
@@ -834,12 +838,10 @@ describe("marker ordering", () => {
 describe("recovery review regressions", () => {
   it("finishes a no-key repository scan across bounded attempts", async () => {
     await pause(20);
-    let attempt = 0;
     const transport: StreamTransport = {
       ...replay([], 30),
       hasReplay: false,
       async *recover() {
-        if (attempt++ === 0) throw new StreamFailure("cursor-expired", 400);
         yield { events: [], lastCursor: 30 };
       },
     };
@@ -897,12 +899,10 @@ describe("recovery review regressions", () => {
   }, 30000);
   it("retries direct recovery after failure before the first repository page", async () => {
     await pause(20);
-    let attempt = 0;
     const transport: StreamTransport = {
       ...replay([], 30),
       hasReplay: false,
       async *recover() {
-        if (attempt++ === 0) throw new StreamFailure("cursor-expired", 400);
         yield { events: [], lastCursor: 30 };
       },
     };
@@ -1015,5 +1015,172 @@ it("falls back on the first manual refresh after a no-key outage with background
     { manual: true, client: { ...client, list }, readPage },
   );
   expect(list).toHaveBeenCalled();
+  expect((await state()).streamMode).toBe("live");
+});
+
+describe("normal fetch recovery after stream interruptions", () => {
+  it.each([true, false])(
+    "skips reconciliation for a healthy stream, archive=%s",
+    async (hasReplay) => {
+      await fixture.database.update(atprotoStreamState).set({
+        seq: "20",
+        connected: true,
+        leaseUntil: new Date(NOW.getTime() + 60_000),
+      });
+      const transport = { ...replay([], 20), hasReplay };
+      const recover = vi.spyOn(transport, "recover");
+      const list = vi.fn(client.list);
+      await recoverOrigin(
+        fixture.database,
+        originId,
+        settings,
+        transport,
+        new AbortController().signal,
+        { manual: true, client: { ...client, list }, readPage },
+      );
+      expect(recover).not.toHaveBeenCalled();
+      expect(transport.tip).not.toHaveBeenCalled();
+      expect(list).not.toHaveBeenCalled();
+    },
+  );
+
+  it("records a restart without updating Feeds, and preserves the pre-gap archive cursor as live events arrive", async () => {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "1",
+      leaseOwner: "worker",
+      connected: true,
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+    const before = await state();
+    await interruptStream(fixture.database, "worker", true);
+    expect(await state()).toEqual(before);
+    await accept(event(20, "live"));
+    await process();
+    expect((await state()).streamSeq).toBe("1");
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+    const transport = replay([event(10, "missed"), event(20, "live")], 20);
+    const recover = vi.spyOn(transport, "recover");
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { manual: true, client, readPage },
+    );
+    expect(recover.mock.calls[0]?.[0]).toBe(1);
+    expect(await state()).toMatchObject({
+      streamGeneration: 1,
+      streamMode: "live",
+    });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
+  });
+
+  it("keeps a newer interruption pending when it happens during repository reconciliation", async () => {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "1",
+      generation: 1,
+      connected: true,
+      leaseOwner: "worker",
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+    const transport = { ...replay([], 30), hasReplay: false };
+    const list = vi.fn(async () => {
+      await interruptStream(fixture.database, "worker");
+      return {
+        records: [],
+        notModified: false as const,
+        cursor: undefined,
+        etag: null,
+      };
+    });
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { manual: true, client: { ...client, list }, readPage },
+    );
+    expect((await state()).streamGeneration).toBe(1);
+    expect((await ensureStream(fixture.database, SERVICE)).generation).toBe(2);
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { manual: true, client: { ...client, list }, readPage },
+    );
+    expect(list).toHaveBeenCalledTimes(2);
+    expect((await state()).streamGeneration).toBe(2);
+  });
+
+  it("preserves live updates that arrive while a no-key snapshot is being read", async () => {
+    await fixture.database
+      .update(atprotoStreamState)
+      .set({ seq: "1", generation: 1 });
+    const transport = {
+      ...replay([], 30),
+      hasReplay: false,
+      tip: vi.fn().mockResolvedValueOnce(10).mockResolvedValue(30),
+    };
+    const list = async () => {
+      await accept(event(20, "post", "New live title"));
+      const old = event(2, "post", "Old snapshot title");
+      if (old.kind !== "commit") throw new Error();
+      return {
+        records: [{ uri: uri("post"), cid: "old", value: old.commit.record }],
+        notModified: false as const,
+        cursor: undefined,
+        etag: null,
+      };
+    };
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { manual: true, client: { ...client, list }, readPage },
+    );
+    expect((await fixture.database.select().from(feedItems))[0]?.title).toBe(
+      "New live title",
+    );
+  });
+});
+
+it("resumes a failed no-key handoff without fetching an already completed snapshot again", async () => {
+  await pause(20);
+  const transport = { ...replay([], 30), hasReplay: false };
+  const recover = vi.spyOn(transport, "recover");
+  recover.mockImplementationOnce(async function* () {
+    yield { events: [], lastCursor: 30 };
+    throw new StreamFailure("connection", 503);
+  });
+  const list = vi.fn(client.list);
+  await expect(
+    recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client: { ...client, list }, readPage },
+    ),
+  ).rejects.toThrow("503");
+  expect((await state()).streamMode).toBe("catchup");
+  await fixture.database
+    .update(feedOriginAtproto)
+    .set({ recoveryRetryAt: null });
+  await recoverOrigin(
+    fixture.database,
+    originId,
+    settings,
+    transport,
+    new AbortController().signal,
+    { client: { ...client, list }, readPage },
+  );
+  expect(list).toHaveBeenCalledTimes(1);
   expect((await state()).streamMode).toBe("live");
 });

@@ -124,6 +124,37 @@ export async function claimStream(
   });
 }
 
+/** One durable interruption marker, independent of the number of subscribed Feeds. */
+export async function interruptStream(
+  database: StreamDatabase,
+  owner: string,
+  starting = false,
+) {
+  return runDatabaseWrite(database, () =>
+    database
+      .update(atprotoStreamState)
+      .set({
+        generation: sql`${atprotoStreamState.generation} + 1`,
+        connected: false,
+      })
+      .where(
+        and(
+          eq(atprotoStreamState.id, "primary"),
+          eq(atprotoStreamState.leaseOwner, owner),
+          starting ? undefined : eq(atprotoStreamState.connected, true),
+        ),
+      )
+      .returning({ generation: atprotoStreamState.generation }),
+  );
+}
+
+export function streamIsConnected(
+  state: typeof atprotoStreamState.$inferSelect,
+  now: Date,
+) {
+  return state.connected && state.leaseUntil !== null && state.leaseUntil > now;
+}
+
 /** Runs inside the caller's transaction. Supplied records are kept only while processing is pending. */
 export async function stageDocument(
   database: FeedDatabase,
@@ -406,7 +437,13 @@ async function acceptOriginEvent(
           await tx
             .update(feedOriginAtproto)
             .set({ streamSeq: String(event.seq) })
-            .where(eq(feedOriginAtproto.originId, originId));
+            .where(
+              and(
+                eq(feedOriginAtproto.originId, originId),
+                // Keep the pre-gap cursor even while newer live events are applied.
+                sql`${feedOriginAtproto.streamGeneration} = (select ${atprotoStreamState.generation} from ${atprotoStreamState} where ${atprotoStreamState.id} = 'primary')`,
+              ),
+            );
       },
       { behavior: "immediate" },
     ),

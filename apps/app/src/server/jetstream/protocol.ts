@@ -49,18 +49,7 @@ export function sequence(value: string | number) {
     typeof value === "string" ? Number(value) : value,
   );
 }
-export function normalizeService(value: string) {
-  const url = new URL(value);
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new Error("Invalid Jetstream service URL");
-  return url.href.replace(/\/+$/, "");
-}
+export { normalizeJetstreamEndpoint as normalizeService } from "~/lib/jetstream-endpoint";
 export class CheckpointHostError extends Error {
   constructor() {
     super("Jetstream checkpoint belongs to a different service");
