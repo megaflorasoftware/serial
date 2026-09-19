@@ -171,15 +171,23 @@ describe("mergeFeedItem", () => {
     },
   );
 
-  it("keeps a loaded body when neither side names a content revision", () => {
+  it("keeps a loaded body but takes the incoming record when no revision is known", () => {
     // Rows ingested before hashing and list payloads both lack a hash; the
-    // body loaded by a direct open must survive the next list refresh.
+    // body loaded by a direct open must survive the next list refresh, while
+    // descriptor changes such as orientation still land.
     const existingItem = makeItem({ contentHash: null });
-    const incomingItem = makeItem({ body: undefined, contentHash: null });
+    const incomingItem = makeItem({
+      body: undefined,
+      contentHash: null,
+      title: "Incoming title",
+      orientation: "vertical",
+    });
 
-    expect(mergeFeedItem(existingItem, incomingItem).body).toEqual(
-      htmlBody("Original content"),
-    );
+    const mergedItem = mergeFeedItem(existingItem, incomingItem);
+
+    expect(mergedItem.body).toEqual(htmlBody("Original content"));
+    expect(mergedItem.title).toBe("Incoming title");
+    expect(mergedItem.orientation).toBe("vertical");
   });
 
   it("takes a freshly served body and its hash over a cached one", () => {
