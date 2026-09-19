@@ -86,7 +86,7 @@ function FeedOriginGlyphs({
 }) {
   if (publicationName === undefined && !hasRss) return null;
   return (
-    <span className="text-sidebar-accent group-hover/feed:text-background ml-auto flex shrink-0 items-center gap-2">
+    <span className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground ml-auto flex shrink-0 items-center gap-2">
       {publicationName !== undefined && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -151,7 +151,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
             <TooltipTrigger asChild>
               <AlertCircleIcon
                 size={16}
-                className="text-sidebar-accent group-hover/feed:text-background"
+                className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
               />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-center">
@@ -164,12 +164,12 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
         {!hasFetchError && !hasEntries && (
           <CircleSmall
             size={16}
-            className="text-sidebar-accent group-hover/feed:text-background"
+            className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
           />
         )}
         {!hasFetchError && hasEntries && (
           <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent group-hover/feed:bg-background size-2.5 rounded-full" />
+            <div className="bg-sidebar-accent group-hover/feed:bg-sidebar-accent-foreground size-2.5 rounded-full" />
           </div>
         )}
         <div className="line-clamp-1">{name}</div>
@@ -209,12 +209,12 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
         {!hasEntries && (
           <CircleSmall
             size={16}
-            className="text-sidebar-accent group-hover/feed:text-background"
+            className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
           />
         )}
         {hasEntries && (
           <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent group-hover/feed:bg-background size-2.5 rounded-full" />
+            <div className="bg-sidebar-accent group-hover/feed:bg-sidebar-accent-foreground size-2.5 rounded-full" />
           </div>
         )}
         <div className="text-muted-foreground line-clamp-1">{name}</div>
@@ -444,12 +444,12 @@ export function SidebarFeeds() {
               {!hasAnyItems && (
                 <CircleSmall
                   size={16}
-                  className="text-sidebar-accent group-hover/feed:text-background"
+                  className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
                 />
               )}
               {hasAnyItems && (
                 <div className="grid size-4 place-items-center">
-                  <div className="bg-sidebar-accent group-hover/feed:bg-background size-2.5 rounded-full" />
+                  <div className="bg-sidebar-accent group-hover/feed:bg-sidebar-accent-foreground size-2.5 rounded-full" />
                 </div>
               )}
               All
