@@ -1,5 +1,6 @@
 import { convertReaderBody, parseAtUri } from "@serial/standard-site";
 import type { ReaderBody } from "@serial/standard-site";
+import { detectTruncatedContent } from "~/lib/utils/detectTruncatedContent";
 
 /**
  * A body is loaded when it carries something the reader can render. `null`
@@ -23,4 +24,17 @@ export function readerBodyHtml(body: ReaderBody | null | undefined) {
   const did = parseAtUri(body.source.uri)?.did;
   if (!did) return "";
   return convertReaderBody(body, did)?.html ?? "";
+}
+
+/**
+ * Only a loaded HTML body can be partial. An unloaded body says nothing yet,
+ * and a Document source is always the whole document.
+ */
+export function isTruncatedReaderBody(
+  body: ReaderBody | null | undefined,
+  contentSnippet: string,
+) {
+  return (
+    body?.form === "html" && detectTruncatedContent(body.html, contentSnippet)
+  );
 }

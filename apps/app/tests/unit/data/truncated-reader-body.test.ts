@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTruncatedReaderBody } from "~/components/feed/read/TruncationAlert";
+import { isTruncatedReaderBody } from "~/lib/data/feed-items/readerBody";
 
 const snippet = "A short summary of the post.";
 
