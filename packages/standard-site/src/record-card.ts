@@ -1,4 +1,4 @@
-import { parseAtUri } from "./uris";
+import { buildPdslsUrl, parseAtUri } from "./uris";
 import { z } from "zod";
 import { element, linkCard, safeSourceUrl } from "./convert/html";
 import type { RecordPreview } from "./record-preview";
@@ -55,8 +55,17 @@ export function recordCard(
   size: unknown = "row",
 ) {
   const parsed = recordCardSchema.safeParse({ ...preview, size });
-  if (!parsed.success) return "";
-  const card = parsed.data;
+  const fallback = buildPdslsUrl(preview.uri);
+  if (!parsed.success && !fallback) return "";
+  const card: RecordCard = parsed.success
+    ? parsed.data
+    : {
+        uri: preview.uri,
+        url: fallback!,
+        title: "Embedded record",
+        description: preview.uri,
+        size: "row",
+      };
   return element(
     "div",
     {

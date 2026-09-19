@@ -67,6 +67,9 @@ describe("publication transport", () => {
         value: { name: "Site", url: "javascript:alert(1)" },
       }),
     );
-    expect(await remote.resolveRecord(uri)).toBeNull();
+    expect(await remote.resolveRecord(uri)).toMatchObject({
+      title: "Site",
+      url: `https://pdsls.dev/${uri}`,
+    });
   });
 });

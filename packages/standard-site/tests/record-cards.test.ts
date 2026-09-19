@@ -280,3 +280,40 @@ it("resolves mentions inside nested lists and footnotes but not empty byte range
   expect(result?.html).toContain('href="https://example.com/list"');
   expect(result?.html).toContain('href="https://example.com/note"');
 });
+
+
+it("keeps a generic row when required preview metadata is invalid", async () => {
+  const result = await convertDocumentContent(document([uri]), {
+    did,
+    loadBlob: vi.fn(),
+    resolveRecord: async () => ({ url: "https://example.com/post", title: "x".repeat(10_001) }),
+  });
+  expect(result?.html).toContain('data-size="row"');
+  expect(result?.html).toContain(`href="https://pdsls.dev/${uri}"`);
+});
+
+it("drops oversized optional metadata without dropping the card", async () => {
+  const result = await convertDocumentContent(document([uri]), {
+    did,
+    loadBlob: vi.fn(),
+    resolveRecord: async () => ({ url: "https://example.com/post", title: "Title", description: "x".repeat(10_001) }),
+  });
+  expect(result?.html).toContain('data-title="Title"');
+  expect(result?.html).not.toContain('data-description=');
+});
+
+it("shares the timeout window across the capped reference lookups", async () => {
+  vi.useFakeTimers();
+  try {
+    const resolveRecord = vi.fn(() => new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)));
+    const conversion = convertDocumentContent(document(Array.from({ length: 100 }, (_, i) => `${uri}${i}`)), {
+      did, loadBlob: vi.fn(), resolveRecord,
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(resolveRecord).toHaveBeenCalledTimes(16);
+    const result = await conversion;
+    expect(result?.html.match(/data-serial-embed="record"/g)).toHaveLength(100);
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -52,15 +52,15 @@ export async function resolveRecordPreview(
     "/site.standard.publication/",
   );
   // Publication failure must not discard the document's own preview metadata.
+  const siteParts = parseAtUri(site);
   const publication =
-    parseAtUri(site)?.collection === "site.standard.publication"
+    siteParts?.collection === "site.standard.publication"
       ? parsePublicationRecord(await readRecord(site).catch(() => null))
       : null;
-  const publicationDid = parseAtUri(site)?.did;
+  const publicationDid = siteParts?.did;
   return {
     url:
-      (publication &&
-        buildCanonicalDocumentUrl(publication.value.url, value.path)) ||
+      buildCanonicalDocumentUrl(publication?.value.url ?? site, value.path) ??
       fallback,
     title: value.title,
     description: value.description,

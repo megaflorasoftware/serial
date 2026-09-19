@@ -490,32 +490,38 @@ function resolvingClient(
   };
 }
 
-it("retries temporary embedded-link failures and then stores the canonical card", async () => {
+it("imports the article with a fallback card when an embedded lookup fails", async () => {
   const documents = [linkedDocument("001", 1)];
   await refresh(resolvingClient(documents, true));
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(0);
-  await fixture.database
-    .update(feedOriginAtprotoDocuments)
-    .set({ retryAt: null });
-  await refresh(resolvingClient(documents));
+  const items = await fixture.database.select().from(feedItems);
+  expect(items).toHaveLength(1);
+  expect(items[0]?.content).toContain('data-size="row"');
+  expect(items[0]?.content).toContain(
+    `href="https://pdsls.dev/at://${DID}/site.standard.publication/ref001-0"`,
+  );
   expect(
-    (await fixture.database.select().from(feedItems).get())?.content,
-  ).toContain('href="https://example.com/"');
-  await refresh(resolvingClient(documents));
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+    await fixture.database
+      .select()
+      .from(feedOriginAtprotoDocuments)
+      .where(eq(feedOriginAtprotoDocuments.status, "retry")),
+  ).toHaveLength(0);
 });
 
-it("eventually completes documents that exceed the refresh reference budget", async () => {
+it("imports documents beyond the refresh reference budget using fallback cards", async () => {
   const documents = Array.from({ length: 8 }, (_, i) =>
     linkedDocument(String(100 - i), 16),
   );
   await refresh(resolvingClient(documents));
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(4);
-  await fixture.database
-    .update(feedOriginAtprotoDocuments)
-    .set({ retryAt: null });
-  await refresh(resolvingClient(documents));
-  expect(await fixture.database.select().from(feedItems)).toHaveLength(8);
+  const items = await fixture.database.select().from(feedItems);
+  expect(items).toHaveLength(8);
+  expect(
+    items.filter((item) =>
+      item.content?.includes('href="https://example.com/"'),
+    ),
+  ).toHaveLength(4);
+  expect(
+    items.filter((item) => item.content?.includes('href="https://pdsls.dev/')),
+  ).toHaveLength(4);
   expect(
     await fixture.database
       .select()

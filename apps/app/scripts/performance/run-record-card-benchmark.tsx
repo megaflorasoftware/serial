@@ -54,6 +54,8 @@ for (let index = 0; index < 23; index++) {
   globalThis.gc?.();
   let lookups = 0;
   const start = performance.now();
+  // Measure each sample in isolation so concurrent samples cannot distort timings.
+  // react-doctor-disable-next-line react-doctor/async-await-in-loop
   const converted = await convertDocumentContent(document, {
     did,
     loadBlob: () => Promise.reject(new Error("Unexpected blob request")),

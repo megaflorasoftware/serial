@@ -130,11 +130,15 @@ export async function convertDocumentContent(
   if (!initial || !initial.html.trim()) return null;
   const records = new Map<string, ResolvedRecordCard>();
   if (options.resolveRecord) {
-    for (const uri of references) {
-      // An optional preview must never prevent the parent document from rendering.
-      const card = await options.resolveRecord(uri).catch(() => null);
-      if (card) records.set(uri, card);
-    }
+    const resolveRecord = options.resolveRecord;
+    // The capped references share one lookup window instead of serial timeouts.
+    await Promise.all(
+      [...references].map(async (uri) => {
+        // Optional previews must never prevent the parent document from rendering.
+        const card = await resolveRecord(uri).catch(() => null);
+        if (card) records.set(uri, card);
+      }),
+    );
   }
   const converted = records.size
     ? convertResolvedContent(resolved, options.did, records)!
