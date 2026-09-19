@@ -49,8 +49,13 @@ describe("record previews", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
   it("opens documents with direct website URLs without a publication lookup", async () => {
-    const read = vi.fn(async () => ({ ...record, value: { ...record.value, site: "https://example.com" } }));
-    expect(await resolveRecordPreview(uri, read)).toMatchObject({ url: "https://example.com/post" });
+    const read = vi.fn(async () => ({
+      ...record,
+      value: { ...record.value, site: "https://example.com" },
+    }));
+    expect(await resolveRecordPreview(uri, read)).toMatchObject({
+      url: "https://example.com/post",
+    });
     expect(read).toHaveBeenCalledExactlyOnceWith(uri);
   });
   it("keeps document metadata when its publication is unavailable", async () => {

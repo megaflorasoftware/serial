@@ -28,7 +28,11 @@ import {
   type Block,
 } from "./shared";
 import type { RecordLookup } from "../record-preview";
-import { strongRefSchema, blobRefSchema, listedRecordSchema } from "../lexicons";
+import {
+  strongRefSchema,
+  blobRefSchema,
+  listedRecordSchema,
+} from "../lexicons";
 import { buildBlueskyProfileUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 

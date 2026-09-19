@@ -78,7 +78,8 @@
     "benchmark:publication-sync": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-publication-sync-benchmark.ts",
     "benchmark:feed-revalidation": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-feed-revalidation-benchmark.ts",
     "benchmark:feed-import": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-feed-import-benchmark.ts",
-    "benchmark:jetstream": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-jetstream-benchmark.ts"
+    "benchmark:jetstream": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-jetstream-benchmark.ts",
+    "benchmark:reader-body": "dotenv -e .env.test -- node --expose-gc --import=tsx scripts/performance/run-reader-body-benchmark.ts"
   },
   "dependencies": {
     "@atproto-labs/did-resolver": "^0.3.7",

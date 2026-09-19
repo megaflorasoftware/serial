@@ -28,10 +28,7 @@ function document(uris: string[]) {
     },
   };
 }
-function documentRecord(
-  target: string,
-  value: Record<string, unknown> = {},
-) {
+function documentRecord(target: string, value: Record<string, unknown> = {}) {
   return {
     uri: target,
     cid: "bafy",

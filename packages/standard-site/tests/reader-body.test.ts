@@ -163,10 +163,16 @@ describe("source-form Reader bodies", () => {
       isReferenceSnapshotStale({ outcome: "resolved", resolvedAt: at(5) }, now),
     ).toBe(false);
     expect(
-      isReferenceSnapshotStale({ outcome: "resolved", resolvedAt: at(16) }, now),
+      isReferenceSnapshotStale(
+        { outcome: "resolved", resolvedAt: at(16) },
+        now,
+      ),
     ).toBe(true);
     expect(
-      isReferenceSnapshotStale({ outcome: "unavailable", resolvedAt: at(0) }, now),
+      isReferenceSnapshotStale(
+        { outcome: "unavailable", resolvedAt: at(0) },
+        now,
+      ),
     ).toBe(true);
     expect(
       isReferenceSnapshotStale(
@@ -181,7 +187,10 @@ describe("source-form Reader bodies", () => {
       ),
     ).toBe(true);
     expect(
-      isReferenceSnapshotStale({ outcome: "resolved", resolvedAt: "never" }, now),
+      isReferenceSnapshotStale(
+        { outcome: "resolved", resolvedAt: "never" },
+        now,
+      ),
     ).toBe(true);
   });
 });
