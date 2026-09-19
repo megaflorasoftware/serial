@@ -1,4 +1,7 @@
-import { hasReaderBodyContent } from "./feed-items/readerBody";
+import {
+  hasContentRevisionChanged,
+  hasReaderBodyContent,
+} from "./feed-items/readerBody";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import type { ConnectionState } from "./atoms";
@@ -27,10 +30,11 @@ export function retainEligibleFeedBody(
   if (nextItem.contentType !== "text" || nextItem.isWatched) {
     return nextItem;
   }
+  // List rows never carry a body; keep the loaded one unless the revision moved.
   if (
     !hasReaderBodyContent(nextItem.body) &&
-    previousItem?.contentHash &&
-    previousItem.contentHash === nextItem.contentHash &&
+    previousItem &&
+    !hasContentRevisionChanged(previousItem, nextItem) &&
     isEligibleFeedBody(previousItem)
   ) {
     return {

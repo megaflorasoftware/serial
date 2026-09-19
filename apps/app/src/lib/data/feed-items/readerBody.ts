@@ -38,3 +38,19 @@ export function isTruncatedReaderBody(
     body?.form === "html" && detectTruncatedContent(body.html, contentSnippet)
   );
 }
+
+/**
+ * A body belongs to a content revision named by `contentHash`. Only two known,
+ * different hashes prove the body is stale; an unknown hash on either side
+ * (rows ingested before hashing, fixtures) keeps whatever body is loaded.
+ */
+export function hasContentRevisionChanged(
+  previous: { contentHash: string | null } | undefined,
+  next: { contentHash: string | null },
+) {
+  return (
+    !!previous?.contentHash &&
+    !!next.contentHash &&
+    previous.contentHash !== next.contentHash
+  );
+}

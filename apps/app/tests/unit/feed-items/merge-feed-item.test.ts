@@ -170,6 +170,17 @@ describe("mergeFeedItem", () => {
     },
   );
 
+  it("keeps a loaded body when neither side names a content revision", () => {
+    // Rows ingested before hashing and list payloads both lack a hash; the
+    // body loaded by a direct open must survive the next list refresh.
+    const existingItem = makeItem({ contentHash: null });
+    const incomingItem = makeItem({ body: undefined, contentHash: null });
+
+    expect(mergeFeedItem(existingItem, incomingItem).body).toEqual(
+      htmlBody("Original content"),
+    );
+  });
+
   it("drops the cached body when the hash changes", () => {
     const existingItem = makeItem({ body: sourceBody() });
     const incomingItem = makeItem({ body: undefined, contentHash: "hash-2" });

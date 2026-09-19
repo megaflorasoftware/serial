@@ -1,5 +1,5 @@
 import { applyPendingFeedItemOverrides } from "./pendingMutations";
-import { hasReaderBodyContent } from "./readerBody";
+import { hasContentRevisionChanged, hasReaderBodyContent } from "./readerBody";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 
 /** List and page payloads never carry bodies; only body endpoints do. */
@@ -29,17 +29,6 @@ function normalizeIncomingFeedItem(
   };
 }
 
-function hasMatchingContentHash(
-  existingItem: ApplicationFeedItem | undefined,
-  incomingItem: IncomingFeedItem,
-) {
-  return (
-    !!existingItem?.contentHash &&
-    !!incomingItem.contentHash &&
-    existingItem.contentHash === incomingItem.contentHash
-  );
-}
-
 function mergeItemMetadata(
   baseItem: ApplicationFeedItem,
   metadataItem: ApplicationFeedItem,
@@ -59,7 +48,7 @@ export function mergeFeedItem(
 ): ApplicationFeedItem {
   const normalizedIncomingItem = normalizeIncomingFeedItem(incomingItem);
 
-  if (!existingItem || !hasMatchingContentHash(existingItem, incomingItem)) {
+  if (!existingItem || hasContentRevisionChanged(existingItem, incomingItem)) {
     return applyPendingFeedItemOverrides(normalizedIncomingItem);
   }
 
