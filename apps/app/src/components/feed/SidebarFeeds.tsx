@@ -86,7 +86,7 @@ function FeedOriginGlyphs({
 }) {
   if (publicationName === undefined && !hasRss) return null;
   return (
-    <span className="text-sidebar-accent ml-auto flex shrink-0 items-center gap-2">
+    <span className="text-sidebar-accent group-hover/feed:text-background ml-auto flex shrink-0 items-center gap-2">
       {publicationName !== undefined && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -143,12 +143,16 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
     <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
+        className="group/feed"
         onClick={() => onSelect(feedId)}
       >
         {hasFetchError && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <AlertCircleIcon size={16} className="text-sidebar-accent" />
+              <AlertCircleIcon
+                size={16}
+                className="text-sidebar-accent group-hover/feed:text-background"
+              />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-center">
               Something went wrong fetching content for this feed. If this
@@ -158,11 +162,14 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
           </Tooltip>
         )}
         {!hasFetchError && !hasEntries && (
-          <CircleSmall size={16} className="text-sidebar-accent" />
+          <CircleSmall
+            size={16}
+            className="text-sidebar-accent group-hover/feed:text-background"
+          />
         )}
         {!hasFetchError && hasEntries && (
           <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent size-2.5 rounded-full" />
+            <div className="bg-sidebar-accent group-hover/feed:bg-background size-2.5 rounded-full" />
           </div>
         )}
         <div className="line-clamp-1">{name}</div>
@@ -196,14 +203,18 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
     <SidebarMenuItem className="group flex gap-1 opacity-50">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
+        className="group/feed"
         onClick={() => onSelect(feedId)}
       >
         {!hasEntries && (
-          <CircleSmall size={16} className="text-sidebar-accent" />
+          <CircleSmall
+            size={16}
+            className="text-sidebar-accent group-hover/feed:text-background"
+          />
         )}
         {hasEntries && (
           <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent size-2.5 rounded-full" />
+            <div className="bg-sidebar-accent group-hover/feed:bg-background size-2.5 rounded-full" />
           </div>
         )}
         <div className="text-muted-foreground line-clamp-1">{name}</div>
@@ -422,6 +433,7 @@ export function SidebarFeeds() {
           <SidebarMenuItem>
             <SidebarMenuButton
               variant={feedFilter === -1 ? "outline" : "default"}
+              className="group/feed"
               onClick={() => {
                 setFeedFilter(-1);
                 if (!viewFilter && categoryFilter < 0) {
@@ -430,11 +442,14 @@ export function SidebarFeeds() {
               }}
             >
               {!hasAnyItems && (
-                <CircleSmall size={16} className="text-sidebar-accent" />
+                <CircleSmall
+                  size={16}
+                  className="text-sidebar-accent group-hover/feed:text-background"
+                />
               )}
               {hasAnyItems && (
                 <div className="grid size-4 place-items-center">
-                  <div className="bg-sidebar-accent size-2.5 rounded-full" />
+                  <div className="bg-sidebar-accent group-hover/feed:bg-background size-2.5 rounded-full" />
                 </div>
               )}
               All
