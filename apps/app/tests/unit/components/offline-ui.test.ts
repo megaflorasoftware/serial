@@ -65,5 +65,6 @@ describe("article image fallback", () => {
     expect(fallback?.getAttribute("aria-label")).toBe(
       "Unavailable illustration",
     );
+    expect(fallback?.textContent).toBe("Unavailable illustration");
   });
 });

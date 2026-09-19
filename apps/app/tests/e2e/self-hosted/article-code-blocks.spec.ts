@@ -105,8 +105,25 @@ test.describe("article code and image layout", () => {
           const placeholder = page.locator("[data-image-fallback]");
           await placeholder.scrollIntoViewIfNeeded();
           await expect(placeholder).toBeVisible();
+          await expect(placeholder).toHaveText("Unavailable illustration");
+          const label = placeholder.locator("span").first();
+          expect(
+            await label.evaluate((node) =>
+              parseFloat(getComputedStyle(node).paddingLeft),
+            ),
+          ).toBe(width < 640 ? 32 : 64);
+          const textBox = await label.locator("span").boundingBox();
           const box = await placeholder.boundingBox();
           expect(box).not.toBeNull();
+          expect(textBox).not.toBeNull();
+          expect(
+            Math.abs(textBox!.x + textBox!.width / 2 - box!.x - box!.width / 2),
+          ).toBeLessThanOrEqual(1);
+          expect(
+            Math.abs(
+              textBox!.y + textBox!.height / 2 - box!.y - box!.height / 2,
+            ),
+          ).toBeLessThanOrEqual(1);
           expect(Math.abs(box!.width - geometry.available)).toBeLessThanOrEqual(
             1,
           );
