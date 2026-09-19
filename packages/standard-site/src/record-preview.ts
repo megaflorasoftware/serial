@@ -1,4 +1,13 @@
-import { parseDocumentRecord, parsePublicationRecord } from "./lexicons";
+import {
+  parseDocumentRecord,
+  parsePublicationRecord,
+  STANDARD_SITE_COLLECTIONS,
+} from "./lexicons";
+import type {
+  DocumentRecord,
+  ListedRecord,
+  PublicationRecord,
+} from "./lexicons";
 import {
   buildBlueskyCdnImageUrl,
   buildCanonicalDocumentUrl,
@@ -18,50 +27,72 @@ export type RecordPreview = {
   publishedAt?: string;
 };
 
-/** Shared metadata extraction. The caller supplies its cached Slingshot/PDS reader. */
-export async function resolveRecordPreview(
+/** Records already in hand, keyed by URI: Reference snapshots or an import batch. */
+export type RecordLookup = (uri: string) => unknown;
+
+/** The publication a document names, normalized from the legacy Leaflet collection. */
+export function documentPublicationUri(document: Pick<DocumentRecord, "site">) {
+  const site = document.site.replace(
+    "/pub.leaflet.publication/",
+    `/${STANDARD_SITE_COLLECTIONS.publication}/`,
+  );
+  const parts = parseAtUri(site);
+  return parts?.collection === STANDARD_SITE_COLLECTIONS.publication
+    ? site
+    : null;
+}
+
+function publicationPreview(
+  publication: ListedRecord<PublicationRecord>,
+  did: string,
+  fallback: string,
+): RecordPreview {
+  return {
+    url: normalizePublicationUrl(publication.value.url) ?? fallback,
+    title: publication.value.name,
+    description: publication.value.description,
+    iconUrl: publication.value.icon
+      ? (buildBlueskyCdnImageUrl(
+          did,
+          publication.value.icon.ref.$link,
+          "avatar",
+        ) ?? undefined)
+      : undefined,
+  };
+}
+
+/**
+ * Derives card metadata from records already resolved. A document's publication
+ * is read through the same lookup; its absence keeps the document's own fields.
+ */
+export function recordPreview(
   uri: string,
-  readRecord: (uri: string) => Promise<unknown>,
-): Promise<RecordPreview | null> {
+  records: RecordLookup,
+): RecordPreview | null {
   const parts = parseAtUri(uri);
   const fallback = buildPdslsUrl(uri);
   if (!parts || !fallback) return null;
-  const record = await readRecord(uri);
-  if (parts.collection === "site.standard.publication") {
+  const record = records(uri);
+  if (record === undefined || record === null) return null;
+  if (parts.collection === STANDARD_SITE_COLLECTIONS.publication) {
     const publication = parsePublicationRecord(record);
-    if (!publication) return null;
-    return {
-      url: normalizePublicationUrl(publication.value.url) ?? fallback,
-      title: publication.value.name,
-      description: publication.value.description,
-      iconUrl: publication.value.icon
-        ? (buildBlueskyCdnImageUrl(
-            parts.did,
-            publication.value.icon.ref.$link,
-            "avatar",
-          ) ?? undefined)
-        : undefined,
-    };
+    return publication
+      ? publicationPreview(publication, parts.did, fallback)
+      : null;
   }
-  if (parts.collection !== "site.standard.document") return null;
+  if (parts.collection !== STANDARD_SITE_COLLECTIONS.document) return null;
   const document = parseDocumentRecord(record);
   if (!document) return null;
   const value = document.value;
-  const site = value.site.replace(
-    "/pub.leaflet.publication/",
-    "/site.standard.publication/",
-  );
-  // Publication failure must not discard the document's own preview metadata.
-  const siteParts = parseAtUri(site);
-  const publication =
-    siteParts?.collection === "site.standard.publication"
-      ? parsePublicationRecord(await readRecord(site).catch(() => null))
-      : null;
-  const publicationDid = siteParts?.did;
+  const site = documentPublicationUri(value);
+  const publication = site ? parsePublicationRecord(records(site)) : null;
+  const publicationDid = site ? parseAtUri(site)?.did : undefined;
   return {
     url:
-      buildCanonicalDocumentUrl(publication?.value.url ?? site, value.path) ??
-      fallback,
+      buildCanonicalDocumentUrl(
+        publication?.value.url ?? value.site,
+        value.path,
+      ) ?? fallback,
     title: value.title,
     description: value.description,
     imageUrl: value.coverImage
@@ -84,4 +115,23 @@ export async function resolveRecordPreview(
         .join(", ") || undefined,
     publishedAt: value.publishedAt,
   };
+}
+
+/** Live lookup of one record and, for documents, its publication. */
+export async function resolveRecordPreview(
+  uri: string,
+  readRecord: (uri: string) => Promise<unknown>,
+): Promise<RecordPreview | null> {
+  const parts = parseAtUri(uri);
+  if (!parts || !buildPdslsUrl(uri)) return null;
+  const records = new Map<string, unknown>();
+  records.set(uri, await readRecord(uri));
+  const document =
+    parts.collection === STANDARD_SITE_COLLECTIONS.document
+      ? parseDocumentRecord(records.get(uri))
+      : null;
+  const site = document ? documentPublicationUri(document.value) : null;
+  // Publication failure must not discard the document's own preview metadata.
+  if (site) records.set(site, await readRecord(site).catch(() => null));
+  return recordPreview(uri, (target) => records.get(target));
 }

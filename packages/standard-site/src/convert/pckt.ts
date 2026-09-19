@@ -27,7 +27,8 @@ import {
   unknownBlock,
   type Block,
 } from "./shared";
-import { strongRefSchema, blobRefSchema } from "../lexicons";
+import type { RecordLookup } from "../record-preview";
+import { strongRefSchema, blobRefSchema, listedRecordSchema } from "../lexicons";
 import { buildBlueskyProfileUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 
@@ -101,7 +102,7 @@ function renderBlocks(blocks: Block[], context: ConversionContext) {
   );
 }
 
-function renderImageAttrs(value: unknown, context: ConversionContext) {
+function renderImage(value: unknown, context: ConversionContext) {
   const attrs = imageAttrsSchema.safeParse(value);
   if (!attrs.success) return "";
   const { src, blob, alt, title } = attrs.data;
@@ -111,10 +112,34 @@ function renderImageAttrs(value: unknown, context: ConversionContext) {
   if (!url) return "";
   context.noteImage(url);
   // `title` is hover text per the lexicon, not a caption.
-  return figure(
-    voidElement("img", { src: url, alt: alt ?? "", title }),
-    undefined,
-  );
+  return voidElement("img", { src: url, alt: alt ?? "", title });
+}
+
+function renderImageAttrs(value: unknown, context: ConversionContext) {
+  const img = renderImage(value, context);
+  return img ? figure(img, undefined) : "";
+}
+
+const gallerySchema = z.object({
+  images: z.array(z.unknown()),
+  caption: z.string().optional(),
+});
+
+/** A gallery block points at a standalone record; its images render as one figure. */
+function renderGallery(block: Block, context: ConversionContext) {
+  const uri = stringProperty(block, "ref");
+  if (!uri || !buildPdslsUrl(uri)) return "";
+  const record = listedRecordSchema.safeParse(context.records(uri));
+  const gallery = record.success
+    ? gallerySchema.safeParse(record.data.value)
+    : null;
+  if (!gallery?.success) return "";
+  const rendered = gallery.data.images
+    .map((image) => renderImage(image, context))
+    .join("");
+  if (!rendered) return "";
+  const caption = gallery.data.caption?.trim();
+  return figure(rendered, caption ? escapeText(caption) : undefined);
 }
 
 function renderListItems(
@@ -253,7 +278,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return ref.success ? recordReferenceCard(ref.data.uri, context) : "";
     }
     case "gallery":
-      return "";
+      return renderGallery(block, context);
     default:
       return unknownBlock(block, context);
   }
@@ -262,7 +287,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
 export function convertPcktItems(
   items: Block[],
   did: string,
-  records?: ConversionContext["records"],
+  records?: RecordLookup,
 ) {
   const context = new ConversionContext(did, records);
   const html = items.map((item) => renderBlock(item, context)).join("");

@@ -8,7 +8,8 @@ import {
   safeLinkUrl,
   type Attributes,
 } from "./html";
-import type { RecordPreviews } from "./shared";
+import { recordPreview } from "../record-preview";
+import type { RecordLookup } from "../record-preview";
 import { buildPdslsUrl, buildBlueskyProfileUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 
@@ -44,7 +45,7 @@ export type Footnote = { id: string; text: RichText };
 
 export type FacetRenderContext = {
   footnotes: Footnote[];
-  records?: RecordPreviews;
+  records?: RecordLookup;
   /** Index of the append-only footnotes collected during this conversion. */
   footnoteNumbers?: Map<string, number>;
 };
@@ -118,7 +119,10 @@ function wrapperFor(
     case "atMention": {
       const uri = stringField(feature, "atURI");
       const fallback = uri ? buildPdslsUrl(uri) : null;
-      const preview = fallback ? context.records?.get(uri!) : undefined;
+      const preview =
+        fallback && context.records
+          ? recordPreview(uri!, context.records)
+          : null;
       const wrapper = link(
         safeLinkUrl(preview?.url) && preview?.url !== fallback
           ? safeLinkUrl(preview?.url)

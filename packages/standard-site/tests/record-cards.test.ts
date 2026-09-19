@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
-import { convertDocumentContent } from "../src";
+import { describe, expect, it } from "vitest";
+import {
+  convertDocumentContent,
+  discoverReferences,
+  referencedPublications,
+} from "../src";
+import type { RecordLookup } from "../src";
 
 const did = "did:plc:alice";
 const uri = `at://${did}/site.standard.document/article`;
+const site = `at://did:plc:publisher/site.standard.publication/site`;
 const card = (uri: string): Record<string, unknown> => ({
   $type: "pub.leaflet.blocks.standardSitePost",
   uri,
@@ -22,39 +28,53 @@ function document(uris: string[]) {
     },
   };
 }
-describe("embedded standard.site records", () => {
-  it("uses canonical record links and deduplicates direct references", async () => {
-    const resolveRecord = vi.fn(async () => ({
-      url: "https://example.com/article",
+function documentRecord(
+  target: string,
+  value: Record<string, unknown> = {},
+) {
+  return {
+    uri: target,
+    cid: "bafy",
+    value: {
+      site: "https://example.com",
       title: "An article",
-    }));
+      path: "/article",
+      publishedAt: "2026-09-18T00:00:00Z",
+      ...value,
+    },
+  };
+}
+function lookup(records: Record<string, unknown>): RecordLookup {
+  return (target) => records[target];
+}
+
+describe("embedded standard.site records", () => {
+  it("renders resolved records as canonical cards", async () => {
     const result = await convertDocumentContent(document([uri, uri]), {
       did,
-      loadBlob: vi.fn(),
-      resolveRecord,
+      loadBlob: () => Promise.reject(new Error("no blobs")),
+      records: lookup({ [uri]: documentRecord(uri) }),
     });
-    expect(resolveRecord).toHaveBeenCalledExactlyOnceWith(uri);
     expect(result?.html).toContain('href="https://example.com/article"');
     expect(result?.html).toContain("An article");
   });
-  it("retains the existing link card when a reference cannot resolve", async () => {
+  it("retains the existing link card when a reference is unresolved", async () => {
     const result = await convertDocumentContent(document([uri]), {
       did,
-      loadBlob: vi.fn(),
-      resolveRecord: async () => null,
+      loadBlob: () => Promise.reject(new Error("no blobs")),
     });
     expect(result?.html).toContain(`https://pdsls.dev/${uri}`);
+    expect(result?.html).toContain('data-size="row"');
   });
-  it("bounds direct resolution to sixteen distinct references", async () => {
-    const resolveRecord = vi.fn(async () => null);
-    await convertDocumentContent(
-      document(Array.from({ length: 100 }, (_, i) => `${uri}${i}`)),
-      { did, loadBlob: vi.fn(), resolveRecord },
-    );
-    expect(resolveRecord).toHaveBeenCalledTimes(16);
+  it("discovers distinct rendered references, capped at sixteen", () => {
+    const many = Array.from({ length: 100 }, (_, i) => `${uri}${i}`);
+    expect(discoverReferences(document(many).content, did)).toHaveLength(16);
+    expect(discoverReferences(document([uri, uri]).content, did)).toEqual([
+      uri,
+    ]);
   });
 
-  it("resolves only cards emitted from linear pages", async () => {
+  it("discovers only cards emitted from linear pages", () => {
     const visible = `${uri}-visible`;
     const decoy = `${uri}-decoy`;
     const input = document([visible]);
@@ -77,43 +97,35 @@ describe("embedded standard.site records", () => {
         })),
       },
     });
-    const resolveRecord = vi.fn(async (candidate: string) => {
-      if (candidate !== visible)
-        throw new Error("unrendered reference fetched");
-      return { url: "https://example.com/visible", title: "Visible" };
-    });
-    const result = await convertDocumentContent(input, {
-      did,
-      loadBlob: vi.fn(),
-      resolveRecord,
-    });
-    expect(resolveRecord).toHaveBeenCalledExactlyOnceWith(visible);
-    expect(result?.html).toContain('href="https://example.com/visible"');
+    expect(discoverReferences(input.content, did)).toEqual([visible]);
   });
 
-  it("resolves cards from overflowed Leaflet pages", async () => {
-    const resolveRecord = vi.fn(async () => ({
-      url: "https://example.com/overflow",
-      title: "Overflow",
-    }));
-    const pages = document([uri]).content.pages;
-    const result = await convertDocumentContent(
-      {
-        content: {
-          $type: "pub.leaflet.content",
-          blobPages: { ref: { $link: "bafypages" } },
+  it("names the publications of referenced documents", () => {
+    const records = lookup({
+      [uri]: documentRecord(uri, { site }),
+      [`${uri}-direct`]: documentRecord(`${uri}-direct`),
+    });
+    expect(referencedPublications([uri, `${uri}-direct`], records)).toEqual([
+      site,
+    ]);
+    expect(referencedPublications([uri, site], records)).toEqual([]);
+  });
+
+  it("renders publication names from their snapshots", async () => {
+    const result = await convertDocumentContent(document([uri]), {
+      did,
+      loadBlob: () => Promise.reject(new Error("no blobs")),
+      records: lookup({
+        [uri]: documentRecord(uri, { site }),
+        [site]: {
+          uri: site,
+          cid: "bafy",
+          value: { name: "Publication", url: "https://pub.example.com" },
         },
-      },
-      {
-        did,
-        loadBlob: vi.fn(async () =>
-          new TextEncoder().encode(JSON.stringify(pages)),
-        ),
-        resolveRecord,
-      },
-    );
-    expect(resolveRecord).toHaveBeenCalledExactlyOnceWith(uri);
-    expect(result?.html).toContain('href="https://example.com/overflow"');
+      }),
+    });
+    expect(result?.html).toContain('data-publication-name="Publication"');
+    expect(result?.html).toContain('href="https://pub.example.com/article"');
   });
 });
 
@@ -124,37 +136,22 @@ it.each(["small", "medium", "large", undefined, "invalid"])(
     input.content.pages[0]!.blocks[0]!.block.size = size;
     const result = await convertDocumentContent(input, {
       did,
-      loadBlob: vi.fn(),
-      resolveRecord: async () => ({
-        url: "https://example.com/post",
-        title: "A <title>",
-        description: "Summary",
-        imageUrl: "https://example.com/cover.jpg",
+      loadBlob: () => Promise.reject(new Error("no blobs")),
+      records: lookup({
+        [uri]: documentRecord(uri, {
+          title: "A <title>",
+          description: "Summary",
+          coverImage: { ref: { $link: "bafycover" }, mimeType: "image/jpeg" },
+        }),
       }),
     });
     expect(result?.html).toContain(
       `data-size="${size && size !== "invalid" ? size : "row"}"`,
     );
-    expect(result?.html).toContain(
-      'data-image-url="https://example.com/cover.jpg"',
-    );
+    expect(result?.html).toContain('data-image-url="https://cdn.bsky.app/');
     expect(result?.html).toContain("<strong>A &#x3C;title></strong>");
   },
 );
-
-it("keeps the body and row fallback when record services fail", async () => {
-  const input = document([uri]);
-  input.content.pages[0]!.blocks[0]!.block.size = "large";
-  const result = await convertDocumentContent(input, {
-    did,
-    loadBlob: vi.fn(),
-    resolveRecord: async () => {
-      throw new Error("offline");
-    },
-  });
-  expect(result?.html).toContain('data-size="row"');
-  expect(result?.html).toContain(`href="https://pdsls.dev/${uri}"`);
-});
 
 it.each(["pub.leaflet", "blog.pckt"])(
   "resolves %s AT mentions and preserves UTF-8 text",
@@ -192,23 +189,25 @@ it.each(["pub.leaflet", "blog.pckt"])(
               },
             ],
           };
-    const resolveRecord = vi.fn(async () => ({
-      url: "https://example.com/notes",
-      title: "Replacement title",
-    }));
+    expect(discoverReferences(content, did)).toEqual([uri]);
     const result = await convertDocumentContent(
       { content },
-      { did, loadBlob: vi.fn(), resolveRecord },
+      {
+        did,
+        loadBlob: () => Promise.reject(new Error("no blobs")),
+        records: lookup({
+          [uri]: documentRecord(uri, { path: "/notes", title: "Replacement" }),
+        }),
+      },
     );
     expect(result?.html).toContain(
       `🌿 <a href="https://example.com/notes" data-record-uri="${uri}">Field Notes</a>!`,
     );
-    expect(resolveRecord).toHaveBeenCalledExactlyOnceWith(uri);
     expect(result?.html).toContain('data-serial-embed="record"');
   },
 );
 
-it("resolves mentions inside nested lists and footnotes but not empty byte ranges", async () => {
+it("discovers mentions inside nested lists and footnotes but not empty byte ranges", () => {
   const mention = (target: string) => ({
     index: { byteStart: 0, byteEnd: 4 },
     features: [
@@ -216,77 +215,62 @@ it("resolves mentions inside nested lists and footnotes but not empty byte range
     ],
   });
   const footnoteUri = `${uri}-footnote`;
-  const result = await convertDocumentContent(
-    {
-      content: {
-        $type: "pub.leaflet.content",
-        pages: [
+  const content = {
+    $type: "pub.leaflet.content",
+    pages: [
+      {
+        $type: "pub.leaflet.pages.linearDocument",
+        blocks: [
           {
-            $type: "pub.leaflet.pages.linearDocument",
-            blocks: [
-              {
-                block: {
-                  $type: "pub.leaflet.blocks.unorderedList",
-                  children: [
+            block: {
+              $type: "pub.leaflet.blocks.unorderedList",
+              children: [
+                {
+                  content: {
+                    $type: "pub.leaflet.blocks.text",
+                    plaintext: "Link",
+                    facets: [mention(uri)],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            block: {
+              $type: "pub.leaflet.blocks.text",
+              plaintext: "Note",
+              facets: [
+                {
+                  index: { byteStart: 0, byteEnd: 4 },
+                  features: [
                     {
-                      content: {
-                        $type: "pub.leaflet.blocks.text",
-                        plaintext: "Link",
-                        facets: [mention(uri)],
-                      },
+                      $type: "pub.leaflet.richtext.facet#footnote",
+                      contentPlaintext: "Link",
+                      contentFacets: [mention(footnoteUri)],
                     },
                   ],
                 },
-              },
-              {
-                block: {
-                  $type: "pub.leaflet.blocks.text",
-                  plaintext: "Note",
-                  facets: [
-                    {
-                      index: { byteStart: 0, byteEnd: 4 },
-                      features: [
-                        {
-                          $type: "pub.leaflet.richtext.facet#footnote",
-                          contentPlaintext: "Link",
-                          contentFacets: [mention(footnoteUri)],
-                        },
-                      ],
-                    },
-                    {
-                      ...mention(`${uri}-hidden`),
-                      index: { byteStart: 0, byteEnd: 0 },
-                    },
-                  ],
+                {
+                  ...mention(`${uri}-hidden`),
+                  index: { byteStart: 0, byteEnd: 0 },
                 },
-              },
-            ],
+              ],
+            },
           },
         ],
       },
-    },
-    {
-      did,
-      loadBlob: vi.fn(),
-      resolveRecord: async (target) => {
-        expect([uri, footnoteUri]).toContain(target);
-        return {
-          url: `https://example.com/${target === uri ? "list" : "note"}`,
-          title: "Title",
-        };
-      },
-    },
-  );
-  expect(result?.html).toContain('href="https://example.com/list"');
-  expect(result?.html).toContain('href="https://example.com/note"');
+    ],
+  };
+  expect(discoverReferences(content, did)).toEqual([uri, footnoteUri]);
 });
-
 
 it("keeps a generic row when required preview metadata is invalid", async () => {
   const result = await convertDocumentContent(document([uri]), {
     did,
-    loadBlob: vi.fn(),
-    resolveRecord: async () => ({ url: "https://example.com/post", title: "x".repeat(10_001) }),
+    loadBlob: () => Promise.reject(new Error("no blobs")),
+    records: lookup({
+      [uri]: documentRecord(uri, { title: "x".repeat(10_001) }),
+    }),
   });
   expect(result?.html).toContain('data-size="row"');
   expect(result?.html).toContain(`href="https://pdsls.dev/${uri}"`);
@@ -295,25 +279,65 @@ it("keeps a generic row when required preview metadata is invalid", async () => 
 it("drops oversized optional metadata without dropping the card", async () => {
   const result = await convertDocumentContent(document([uri]), {
     did,
-    loadBlob: vi.fn(),
-    resolveRecord: async () => ({ url: "https://example.com/post", title: "Title", description: "x".repeat(10_001) }),
+    loadBlob: () => Promise.reject(new Error("no blobs")),
+    records: lookup({
+      [uri]: documentRecord(uri, {
+        title: "Title",
+        description: "x".repeat(10_001),
+      }),
+    }),
   });
   expect(result?.html).toContain('data-title="Title"');
-  expect(result?.html).not.toContain('data-description=');
+  expect(result?.html).not.toContain("data-description=");
 });
 
-it("shares the timeout window across the capped reference lookups", async () => {
-  vi.useFakeTimers();
-  try {
-    const resolveRecord = vi.fn(() => new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)));
-    const conversion = convertDocumentContent(document(Array.from({ length: 100 }, (_, i) => `${uri}${i}`)), {
-      did, loadBlob: vi.fn(), resolveRecord,
-    });
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(resolveRecord).toHaveBeenCalledTimes(16);
-    const result = await conversion;
-    expect(result?.html.match(/data-serial-embed="record"/g)).toHaveLength(100);
-  } finally {
-    vi.useRealTimers();
-  }
+it("renders pckt galleries from their referenced record", async () => {
+  const gallery = `${did.replace("alice", "bob")}/blog.pckt.gallery/one`;
+  const galleryUri = `at://${gallery}`;
+  const result = await convertDocumentContent(
+    {
+      content: {
+        $type: "blog.pckt.content",
+        items: [{ $type: "blog.pckt.block.gallery", ref: galleryUri }],
+      },
+    },
+    {
+      did,
+      loadBlob: () => Promise.reject(new Error("no blobs")),
+      records: lookup({
+        [galleryUri]: {
+          uri: galleryUri,
+          cid: "bafy",
+          value: {
+            images: [
+              { src: "blob:bafyone", alt: "One" },
+              { src: "https://example.com/two.png" },
+            ],
+            caption: "Two <pictures>",
+          },
+        },
+      }),
+    },
+  );
+  expect(result?.html).toMatch(
+    /^<figure><img src="https:\/\/cdn\.bsky\.app\/[^"]+" alt="One"><img src="https:\/\/example\.com\/two\.png" alt=""><figcaption>Two &#x3C;pictures><\/figcaption><\/figure>$/,
+  );
+  expect(result?.firstImageUrl).toContain("cdn.bsky.app");
+});
+
+it("discovers galleries and renders nothing without their record", async () => {
+  const galleryUri = `at://${did}/blog.pckt.gallery/one`;
+  const content = {
+    $type: "blog.pckt.content",
+    items: [
+      { $type: "blog.pckt.block.text", plaintext: "Text" },
+      { $type: "blog.pckt.block.gallery", ref: galleryUri },
+    ],
+  };
+  expect(discoverReferences(content, did)).toEqual([galleryUri]);
+  const result = await convertDocumentContent(
+    { content },
+    { did, loadBlob: () => Promise.reject(new Error("no blobs")) },
+  );
+  expect(result?.html).toBe("<p>Text</p>");
 });
