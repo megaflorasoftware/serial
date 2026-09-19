@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   AlertCircleIcon,
-  CircleSmall,
   Edit2Icon,
   OrbitIcon,
   PauseIcon,
@@ -13,6 +12,10 @@ import {
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
+import {
+  SidebarContentIndicator,
+  sidebarIndicatorClassName,
+} from "./SidebarContentIndicator";
 import type { ApplicationFeed } from "~/server/db/schema";
 import type { NavigationSnapshot } from "~/server/navigation/snapshot";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
@@ -86,7 +89,9 @@ function FeedOriginGlyphs({
 }) {
   if (publicationName === undefined && !hasRss) return null;
   return (
-    <span className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground ml-auto flex shrink-0 items-center gap-2">
+    <span
+      className={`${sidebarIndicatorClassName} ml-auto flex items-center gap-2`}
+    >
       {publicationName !== undefined && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -143,7 +148,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
     <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
-        className="group/feed"
+        className="group/sidebar-row"
         onClick={() => onSelect(feedId)}
       >
         {hasFetchError && (
@@ -151,7 +156,7 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
             <TooltipTrigger asChild>
               <AlertCircleIcon
                 size={16}
-                className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
+                className={sidebarIndicatorClassName}
               />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-center">
@@ -161,18 +166,8 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
             </TooltipContent>
           </Tooltip>
         )}
-        {!hasFetchError && !hasEntries && (
-          <CircleSmall
-            size={16}
-            className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
-          />
-        )}
-        {!hasFetchError && hasEntries && (
-          <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent group-hover/feed:bg-sidebar-accent-foreground size-2.5 rounded-full" />
-          </div>
-        )}
-        <div className="line-clamp-1">{name}</div>
+        {!hasFetchError && <SidebarContentIndicator hasContent={hasEntries} />}
+        <div className="min-w-0 truncate">{name}</div>
         <FeedOriginGlyphs publicationName={publicationName} hasRss={hasRss} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
@@ -203,21 +198,11 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
     <SidebarMenuItem className="group flex gap-1 opacity-50">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
-        className="group/feed"
+        className="group/sidebar-row"
         onClick={() => onSelect(feedId)}
       >
-        {!hasEntries && (
-          <CircleSmall
-            size={16}
-            className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
-          />
-        )}
-        {hasEntries && (
-          <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent group-hover/feed:bg-sidebar-accent-foreground size-2.5 rounded-full" />
-          </div>
-        )}
-        <div className="text-muted-foreground line-clamp-1">{name}</div>
+        <SidebarContentIndicator hasContent={hasEntries} />
+        <div className="text-muted-foreground min-w-0 truncate">{name}</div>
         <Tooltip>
           <TooltipTrigger asChild>
             <PauseIcon
@@ -433,7 +418,7 @@ export function SidebarFeeds() {
           <SidebarMenuItem>
             <SidebarMenuButton
               variant={feedFilter === -1 ? "outline" : "default"}
-              className="group/feed"
+              className="group/sidebar-row"
               onClick={() => {
                 setFeedFilter(-1);
                 if (!viewFilter && categoryFilter < 0) {
@@ -441,17 +426,7 @@ export function SidebarFeeds() {
                 }
               }}
             >
-              {!hasAnyItems && (
-                <CircleSmall
-                  size={16}
-                  className="text-sidebar-accent group-hover/feed:text-sidebar-accent-foreground"
-                />
-              )}
-              {hasAnyItems && (
-                <div className="grid size-4 place-items-center">
-                  <div className="bg-sidebar-accent group-hover/feed:bg-sidebar-accent-foreground size-2.5 rounded-full" />
-                </div>
-              )}
+              <SidebarContentIndicator hasContent={hasAnyItems} />
               All
             </SidebarMenuButton>
           </SidebarMenuItem>

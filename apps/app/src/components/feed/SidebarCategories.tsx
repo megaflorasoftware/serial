@@ -3,9 +3,10 @@
 import { useState } from "react";
 
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { CircleSmall, Edit2Icon, PlusIcon, SettingsIcon } from "lucide-react";
+import { Edit2Icon, PlusIcon, SettingsIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useDialogStore } from "./dialogStore";
+import { SidebarContentIndicator } from "./SidebarContentIndicator";
 import { EditContentCategoryDialog } from "~/components/AddContentCategoryDialog";
 import {
   SidebarGroup,
@@ -105,19 +106,13 @@ export function SidebarCategories() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   variant={categoryFilter === -1 ? "outline" : "default"}
+                  className="group/sidebar-row"
                   onClick={() => {
                     updateCategoryFilter(-1);
                     setDateFilter(1);
                   }}
                 >
-                  {!hasAnyItems && (
-                    <CircleSmall size={16} className="text-sidebar-accent" />
-                  )}
-                  {hasAnyItems && (
-                    <div className="grid size-4 place-items-center">
-                      <div className="bg-sidebar-accent size-2.5 rounded-full" />
-                    </div>
-                  )}
+                  <SidebarContentIndicator hasContent={hasAnyItems} />
                   All
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -128,20 +123,11 @@ export function SidebarCategories() {
                       variant={
                         option.id === categoryFilter ? "outline" : "default"
                       }
+                      className="group/sidebar-row"
                       onClick={() => updateCategoryFilter(option.id)}
                     >
-                      {!option.hasEntries && (
-                        <CircleSmall
-                          size={16}
-                          className="text-sidebar-accent"
-                        />
-                      )}
-                      {option.hasEntries && (
-                        <div className="grid size-4 place-items-center">
-                          <div className="bg-sidebar-accent size-2.5 rounded-full" />
-                        </div>
-                      )}
-                      {option.name}
+                      <SidebarContentIndicator hasContent={option.hasEntries} />
+                      <span className="min-w-0 truncate">{option.name}</span>
                     </SidebarMenuButton>
                     <div className="group/button flex w-fit items-center justify-end">
                       <SidebarMenuButton
