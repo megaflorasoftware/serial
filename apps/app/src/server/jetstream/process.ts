@@ -1,13 +1,35 @@
 import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
+  bytesToBase64,
   parseDocumentRecord,
   parsePublicationRecord,
 } from "@serial/standard-site";
-import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
+import {
+  DOCUMENT_LEDGER_REASONS,
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
+} from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { createPublicationClient } from "../rss/atprotoClient";
-import { documentObservation } from "../rss/documentObservation";
+import {
+  DocumentAdapterError,
+  documentObservation,
+  fetchDocumentBlobs,
+  sourceReaderBody,
+} from "../rss/documentObservation";
+import {
+  captureRecordValue,
+  OversizedDocumentSourceError,
+  pruneDocumentSources,
+  readStagedRecord,
+  stageDocumentSource,
+  storeDocumentBlobs,
+} from "./document-source";
+import { IMPORT_REUSE_MS, resolveSourceReferences } from "./reference-snapshots";
+import type { FetchedBlob } from "./document-source";
+import type { ItemObservation } from "../rss/itemObservation";
+import type { DocumentSource } from "@serial/standard-site";
 import { enrichObservationImages } from "../rss/observationImages";
 import { writeObservedItems } from "../rss/writeItems";
 import { applyOriginMetadata } from "../rss/originMetadata";
@@ -139,7 +161,10 @@ export async function processOriginDocuments(
   };
   const committed = new Map<string, ApplicationFeedItem>();
   const removed = new Set<string>();
+  const now = nowFor(settings);
+  const did = row.atproto.publicationDid;
   for await (const unused of workerPool(pending, 4, async (entry) => {
+    const key = { originId, uri: entry.uri, cid: entry.cid };
     const identity = and(
       eq(feedOriginAtprotoDocuments.originId, originId),
       eq(feedOriginAtprotoDocuments.uri, entry.uri),
@@ -149,28 +174,71 @@ export async function processOriginDocuments(
       eq(feedOriginAtprotoDocuments.cid, entry.cid),
       eq(feedOriginAtprotoDocuments.status, "retry"),
     );
-    try {
-      const document = parseDocumentRecord(
-        entry.pendingRecord
-          ? { uri: entry.uri, cid: entry.cid, value: entry.pendingRecord }
-          : await client.getRecord(entry.uri, { cid: entry.cid }),
-      );
-      if (!document) {
-        await runDatabaseWrite(database, () =>
-          database
+    const invalidate = async (
+      reason: (typeof DOCUMENT_LEDGER_REASONS)[number],
+      error: Error,
+    ) => {
+      await runDatabaseWrite(database, () =>
+        database.transaction(async (tx) => {
+          await tx
             .update(feedOriginAtprotoDocuments)
-            .set({ status: "invalid", pendingRecord: null })
-            .where(identity),
-        );
-        report(new Error("Invalid document"), "document-validation");
+            .set({ status: "invalid", reason })
+            .where(identity);
+          // The readable source stays; the failed version is not retained.
+          await pruneDocumentSources(tx, key, [entry.bodyCid]);
+        }),
+      );
+      report(error, "document-validation");
+    };
+    try {
+      // A staged record read is one narrow row; the ledger never carries it.
+      const captured =
+        (await readStagedRecord(database, key)) ??
+        captureRecordValue(await client.getRecord(entry.uri, { cid: entry.cid }));
+      const document = parseDocumentRecord({
+        uri: entry.uri,
+        cid: entry.cid,
+        value: captured.value,
+      });
+      if (!document) {
+        await invalidate("invalid", new Error("Invalid document"));
         return;
       }
-      const observation = await documentObservation(
-        document,
-        publication,
-        row.atproto.publicationDid,
-        client,
+      let blobs: FetchedBlob[];
+      try {
+        blobs = await fetchDocumentBlobs(document, captured.text, did, client);
+      } catch (error) {
+        if (!(error instanceof OversizedDocumentSourceError)) throw error;
+        await invalidate("oversized", error);
+        return;
+      }
+      const source: DocumentSource = {
+        uri: entry.uri,
+        cid: entry.cid,
+        record: captured.text,
+        blobs: blobs.map((blob) => ({
+          cid: blob.cid,
+          mimeType: blob.mimeType,
+          bytes: bytesToBase64(blob.bytes),
+        })),
+      };
+      const references = await resolveSourceReferences(
+        database,
+        source,
+        did,
+        (uri) => client.getRecord(uri, { deadline: now.getTime() + 5_000 }),
+        { now, reuseMs: IMPORT_REUSE_MS },
       );
+      const body = sourceReaderBody(source, references);
+      let observation: ItemObservation;
+      try {
+        observation = documentObservation(document, publication, did, body);
+      } catch (error) {
+        if (!(error instanceof DocumentAdapterError)) throw error;
+        // Precedence falls to the RSS body or body-less; the last readable body stays.
+        await invalidate("adapter", error);
+        return;
+      }
       const incoming = await enrichObservationImages([observation], readPage);
       const currentPlan = await planFor(row, settings);
       const written = await writeObservedItems(database, row.feed, incoming, {
@@ -185,7 +253,6 @@ export async function processOriginDocuments(
             !latest.atproto.repositoryActive ||
             latest.atproto.accountSeq !== row.atproto.accountSeq ||
             !eligible(latest, currentPlan, settings, options.manual) ||
-            !latest.atproto.repositoryActive ||
             latest.atproto.streamMode !== "live" ||
             latest.atproto.publicationSeq !== row.atproto.publicationSeq ||
             latest.atproto.repositorySeq !== row.atproto.repositorySeq
@@ -200,15 +267,20 @@ export async function processOriginDocuments(
           );
         },
         didWrite: async (tx) => {
+          // Source and blobs become readable in the same transaction as the item.
+          await stageDocumentSource(tx, key, captured.text, now);
+          await storeDocumentBlobs(tx, key, blobs);
           await tx
             .update(feedOriginAtprotoDocuments)
             .set({
               status: "ready",
-              pendingRecord: null,
+              bodyCid: entry.cid,
+              reason: null,
               attempts: 0,
               retryAt: null,
             })
             .where(identity);
+          await pruneDocumentSources(tx, key, [entry.cid]);
         },
       });
       for (const id of written.removedItemIds) {
@@ -225,7 +297,7 @@ export async function processOriginDocuments(
           .set({
             attempts: entry.attempts + 1,
             retryAt: new Date(
-              nowFor(settings).getTime() +
+              now.getTime() +
                 Math.min(3_600_000, 5000 * 2 ** Math.min(entry.attempts, 10)),
             ),
           })

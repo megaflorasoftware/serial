@@ -4,6 +4,8 @@
 import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
 import {
+  blob,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -17,6 +19,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
+import type { ReaderBody } from "@serial/standard-site";
 import {
   VIEW_LAYOUT,
   VIEW_LAYOUT_ITEM_TYPE,
@@ -431,6 +434,16 @@ export const atprotoStreamState = sqliteTable("atproto_stream_state", {
   leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
 });
 
+export const DOCUMENT_LEDGER_REASONS = [
+  "invalid",
+  "oversized",
+  "adapter",
+] as const;
+
+/**
+ * Work ledger per document. It never carries record data: the Document source
+ * lives in its own rows so due-work scans stay narrow.
+ */
 export const feedOriginAtprotoDocuments = sqliteTable(
   "feed_origin_atproto_document",
   {
@@ -444,7 +457,9 @@ export const feedOriginAtprotoDocuments = sqliteTable(
     }).notNull(),
     eventSeq: text("event_seq"),
     eventRev: text("event_rev"),
-    pendingRecord: text("pending_record", { mode: "json" }).$type<unknown>(),
+    /** The source version underlying the last readable body; never replaced by a failed import. */
+    bodyCid: text("body_cid"),
+    reason: text("reason", { enum: DOCUMENT_LEDGER_REASONS }),
     retryAt: integer("retry_at", { mode: "timestamp_ms" }),
     attempts: integer("attempts").notNull().default(0),
   },
@@ -457,6 +472,72 @@ export const feedOriginAtprotoDocuments = sqliteTable(
       table.uri,
     ),
   ],
+);
+
+/** The record as the platform wrote it, as lossless JSON text, per Feed and version. */
+export const feedOriginAtprotoDocumentSources = sqliteTable(
+  "feed_origin_atproto_document_source",
+  {
+    originId: integer("origin_id").notNull(),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    record: text("record").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.originId, table.uri, table.cid] }),
+    foreignKey({
+      columns: [table.originId, table.uri],
+      foreignColumns: [
+        feedOriginAtprotoDocuments.originId,
+        feedOriginAtprotoDocuments.uri,
+      ],
+      name: "feed_origin_atproto_document_source_document_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+/** Overflow blob bytes fetched during import, exactly as served, keyed by the source version. */
+export const feedOriginAtprotoDocumentBlobs = sqliteTable(
+  "feed_origin_atproto_document_blob",
+  {
+    originId: integer("origin_id").notNull(),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    blobCid: text("blob_cid").notNull(),
+    mimeType: text("mime_type"),
+    bytes: blob("bytes", { mode: "buffer" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.originId, table.uri, table.cid, table.blobCid],
+    }),
+    foreignKey({
+      columns: [table.originId, table.uri, table.cid],
+      foreignColumns: [
+        feedOriginAtprotoDocumentSources.originId,
+        feedOriginAtprotoDocumentSources.uri,
+        feedOriginAtprotoDocumentSources.cid,
+      ],
+      name: "feed_origin_atproto_document_blob_source_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+/** The last state resolved for a referenced record, shared by every document that refers to it. */
+export const atprotoReferenceSnapshots = sqliteTable(
+  "atproto_reference_snapshot",
+  {
+    uri: text("uri").primaryKey(),
+    cid: text("cid"),
+    outcome: text("outcome", {
+      enum: ["resolved", "missing", "unsupported", "unavailable"],
+    }).notNull(),
+    record: text("record"),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }).notNull(),
+    readAt: integer("read_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [index("atproto_reference_snapshot_read_at_idx").on(table.readAt)],
 );
 
 export const feedItems = sqliteTable(
@@ -515,6 +596,8 @@ export const feedItems = sqliteTable(
       .$type<string[]>()
       .notNull()
       .default([]),
+    /** Set when the Reader body is a Document source; the body revision for clients. */
+    sourceCid: text("source_cid"),
   },
   (example) => [
     unique().on(example.url, example.feedId),
@@ -591,12 +674,14 @@ export const feedItemSchema = createSelectSchema(feedItems);
 export type DatabaseFeedItem = typeof feedItems.$inferSelect;
 
 export const applicationFeedItemSchema = feedItemSchema
-  .omit({ normalizedUrl: true })
+  .omit({ normalizedUrl: true, content: true })
   .merge(
     z.object({
       platform: contentPlatformSchema,
       contentType: contentTypeSchema,
       orientation: videoOrientationSchema.nullable(),
+      /** Null until loaded through the body endpoint or a direct open. Validated at the transport boundary. */
+      body: z.custom<ReaderBody>().nullable(),
     }),
   )
   .required();

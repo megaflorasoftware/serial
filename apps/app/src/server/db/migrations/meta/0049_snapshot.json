@@ -1567,6 +1567,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[]'"
+        },
+        "source_cid": {
+          "name": "source_cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1739,6 +1746,14 @@
         }
       },
       "indexes": {
+        "feed_origin_kind_locator_idx": {
+          "name": "feed_origin_kind_locator_idx",
+          "columns": [
+            "kind",
+            "locator"
+          ],
+          "isUnique": false
+        },
         "feed_origin_user_id_kind_locator_idx": {
           "name": "feed_origin_user_id_kind_locator_idx",
           "columns": [
@@ -1763,14 +1778,6 @@
             "kind"
           ],
           "isUnique": true
-        },
-        "feed_origin_kind_locator_idx": {
-          "name": "feed_origin_kind_locator_idx",
-          "columns": [
-            "kind",
-            "locator"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -2474,6 +2481,21 @@
           "autoincrement": false,
           "default": false
         },
+        "onboarding_complete": {
+          "name": "onboarding_complete",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "onboarding_step": {
+          "name": "onboarding_step",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "image": {
           "name": "image",
           "type": "text",
@@ -2527,21 +2549,6 @@
         "next_refresh_at": {
           "name": "next_refresh_at",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "onboarding_complete": {
-          "name": "onboarding_complete",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "onboarding_step": {
-          "name": "onboarding_step",
-          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -3102,50 +3109,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "listing_etag": {
-          "name": "listing_etag",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cursor": {
-          "name": "cursor",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "boundary": {
-          "name": "boundary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "newest_rkey": {
-          "name": "newest_rkey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "initial_count": {
-          "name": "initial_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "initialized": {
-          "name": "initialized",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "work_owner": {
           "name": "work_owner",
           "type": "text",
@@ -3188,6 +3151,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "stream_generation": {
+          "name": "stream_generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "stream_mode": {
           "name": "stream_mode",
@@ -3262,13 +3233,49 @@
           "notNull": false,
           "autoincrement": false
         },
-        "stream_generation": {
-          "name": "stream_generation",
+        "listing_etag": {
+          "name": "listing_etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cursor": {
+          "name": "cursor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "boundary": {
+          "name": "boundary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "newest_rkey": {
+          "name": "newest_rkey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "initial_count": {
+          "name": "initial_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "initialized": {
+          "name": "initialized",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {
@@ -3396,8 +3403,15 @@
           "notNull": false,
           "autoincrement": false
         },
-        "pending_record": {
-          "name": "pending_record",
+        "body_cid": {
+          "name": "body_cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -3482,20 +3496,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "lease_owner": {
-          "name": "lease_owner",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "lease_until": {
-          "name": "lease_until",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "generation": {
           "name": "generation",
           "type": "integer",
@@ -3511,11 +3511,235 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "serial_atproto_reference_snapshot": {
+      "name": "serial_atproto_reference_snapshot",
+      "columns": {
+        "uri": {
+          "name": "uri",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cid": {
+          "name": "cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "record": {
+          "name": "record",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "atproto_reference_snapshot_read_at_idx": {
+          "name": "atproto_reference_snapshot_read_at_idx",
+          "columns": [
+            "read_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "serial_feed_origin_atproto_document_blob": {
+      "name": "serial_feed_origin_atproto_document_blob",
+      "columns": {
+        "origin_id": {
+          "name": "origin_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "uri": {
+          "name": "uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cid": {
+          "name": "cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "blob_cid": {
+          "name": "blob_cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "feed_origin_atproto_document_blob_source_fk": {
+          "name": "feed_origin_atproto_document_blob_source_fk",
+          "tableFrom": "serial_feed_origin_atproto_document_blob",
+          "tableTo": "serial_feed_origin_atproto_document_source",
+          "columnsFrom": [
+            "origin_id",
+            "uri",
+            "cid"
+          ],
+          "columnsTo": [
+            "origin_id",
+            "uri",
+            "cid"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "serial_feed_origin_atproto_document_blob_origin_id_uri_cid_blob_cid_pk": {
+          "columns": [
+            "origin_id",
+            "uri",
+            "cid",
+            "blob_cid"
+          ],
+          "name": "serial_feed_origin_atproto_document_blob_origin_id_uri_cid_blob_cid_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "serial_feed_origin_atproto_document_source": {
+      "name": "serial_feed_origin_atproto_document_source",
+      "columns": {
+        "origin_id": {
+          "name": "origin_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "uri": {
+          "name": "uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cid": {
+          "name": "cid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "record": {
+          "name": "record",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "feed_origin_atproto_document_source_document_fk": {
+          "name": "feed_origin_atproto_document_source_document_fk",
+          "tableFrom": "serial_feed_origin_atproto_document_source",
+          "tableTo": "serial_feed_origin_atproto_document",
+          "columnsFrom": [
+            "origin_id",
+            "uri"
+          ],
+          "columnsTo": [
+            "origin_id",
+            "uri"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "serial_feed_origin_atproto_document_source_origin_id_uri_cid_pk": {
+          "columns": [
+            "origin_id",
+            "uri",
+            "cid"
+          ],
+          "name": "serial_feed_origin_atproto_document_source_origin_id_uri_cid_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     }

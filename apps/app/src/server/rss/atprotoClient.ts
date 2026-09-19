@@ -1,14 +1,9 @@
 import { z } from "zod";
-import {
-  MissingPublicRecordError as MissingPublicationRecordError,
-  parseAtUri,
-  resolveRecordPreview,
-} from "@serial/standard-site";
+import { parseLosslessJson } from "@serial/standard-site";
 import { createHardenedFetch } from "../auth/atproto/hardened-fetch";
 import { resolvePublicPds } from "../auth/atproto/did-resolver";
 
 import { createPublicRecordReader } from "../auth/atproto/public-record";
-import { ATMOSPHERE_EMBEDDED_RECORDS_PER_REFRESH } from "./atmospherePolicy";
 import type { PublicRecordRequest } from "@serial/standard-site";
 import type { PublicRecordOptions } from "../auth/atproto/public-record";
 
@@ -20,7 +15,7 @@ const pageSchema = z.object({
 });
 export type PublicationClient = ReturnType<typeof createPublicationClient>;
 
-/** One refresh caches identity and referenced records; it never follows embedded content. */
+/** One refresh caches identity and record reads; it never follows embedded content. */
 export function createPublicationClient(
   dependencies = {
     fetch: createHardenedFetch(undefined, {
@@ -31,7 +26,6 @@ export function createPublicationClient(
 ) {
   const pds = new Map<string, Promise<string>>();
   const records = new Map<string, Promise<unknown>>();
-  const embeddedUris = new Set<string>();
   const resolvePds = (did: string) => {
     if (!pds.has(did)) pds.set(did, dependencies.resolvePds(did));
     return pds.get(did)!;
@@ -109,8 +103,9 @@ export function createPublicationClient(
         };
       if (!response.ok)
         throw new Error(`Document listing failed: ${response.status}`);
+      // Record values keep their digits so staging can retain them losslessly.
       return {
-        ...pageSchema.parse(await response.json()),
+        ...pageSchema.parse(parseLosslessJson(await response.text())),
         notModified: false as const,
         etag: response.headers.get("etag"),
       };
@@ -125,30 +120,6 @@ export function createPublicationClient(
       if (!response.ok)
         throw new Error(`Blob fetch failed: ${response.status}`);
       return new Uint8Array(await response.arrayBuffer());
-    },
-    async resolveRecord(uri: string) {
-      const parts = parseAtUri(uri);
-      if (!parts) return null;
-      if (!embeddedUris.has(uri)) {
-        if (embeddedUris.size >= ATMOSPHERE_EMBEDDED_RECORDS_PER_REFRESH)
-          throw new Error(
-            "Embedded record resolution deferred to the next refresh",
-          );
-        embeddedUris.add(uri);
-      }
-      try {
-        const deadline = Date.now() + 5_000;
-        return await resolveRecordPreview(uri, (reference) =>
-          getRecord(reference, { deadline }),
-        );
-      } catch (error) {
-        if (
-          error instanceof MissingPublicationRecordError ||
-          error instanceof SyntaxError
-        )
-          return null;
-        throw error;
-      }
     },
   };
 }

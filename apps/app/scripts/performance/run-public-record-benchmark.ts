@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { recordPreview } from "@serial/standard-site";
 import { createPublicationClient } from "../../src/server/rss/atprotoClient";
 
 const uri = "at://did:plc:benchmark/site.standard.publication/site";
@@ -32,10 +33,13 @@ for (const mode of ["healthy", "unavailable", "stalled"] as const) {
     const start = performance.now();
     // Measure the conversion caller and its per-refresh coalescing, including fallback.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    const cards = await Promise.all([
-      client.resolveRecord(uri),
-      client.resolveRecord(uri),
+    const records = await Promise.all([
+      client.getRecord(uri, { deadline: Date.now() + 5_000 }),
+      client.getRecord(uri, { deadline: Date.now() + 5_000 }),
     ]);
+    const cards = records.map((value) =>
+      recordPreview(uri, (target) => (target === uri ? value : undefined)),
+    );
     const ms = performance.now() - start;
     if (cards.some((card) => card?.title !== "Benchmark"))
       throw new Error("Missing record card");

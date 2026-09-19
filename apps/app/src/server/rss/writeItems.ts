@@ -6,14 +6,11 @@ import { buildConflictUpdateColumns } from "../db/utils";
 import { composeItem, legacyObservation } from "./itemObservation";
 import { computeItemHash } from "./hash";
 import { resolveItemDate } from "./publishedDate";
+import { toApplicationFeedItem } from "../feeds/reader-bodies";
 import type { FeedDatabase } from "../feeds/origins";
 import type { ItemObservation } from "./itemObservation";
 import type { db } from "../db";
-import type {
-  ApplicationFeedItem,
-  DatabaseFeed,
-  DatabaseFeedItem,
-} from "../db/schema";
+import type { DatabaseFeed, DatabaseFeedItem } from "../db/schema";
 import { dbSemaphore } from "~/lib/semaphore";
 
 type Sources = Partial<Record<ItemObservation["kind"], ItemObservation>>;
@@ -248,6 +245,7 @@ export async function writeObservedItems(
                   "title",
                   "author",
                   "content",
+                  "sourceCid",
                   "contentSnippet",
                   "thumbnail",
                   "postedAt",
@@ -319,9 +317,8 @@ export async function writeObservedItems(
           }
           await commit?.didWrite(tx);
           return {
-            items: written.map(
-              (item) =>
-                ({ ...item, platform: feed.platform }) as ApplicationFeedItem,
+            items: written.map((item) =>
+              toApplicationFeedItem(item, feed.platform),
             ),
             removedItemIds,
           };

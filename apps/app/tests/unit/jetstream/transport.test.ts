@@ -318,3 +318,85 @@ it("reports a successful quiet connection before receiving any events", async ()
     );
   }
 });
+
+it("keeps 64-bit integers from live frames and archived records", async () => {
+  const { createRecordStash, lexToLossless } = await import(
+    "~/server/jetstream/transport"
+  );
+  const { parseLosslessJson } = await import("@serial/standard-site");
+  const stash = createRecordStash();
+  const frame = `{"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#commit","seq":7,"did":"did:plc:alice","time":"2026-09-18T12:00:00Z","rev":"2222222222222","operation":"create","collection":"site.standard.document","rkey":"post","cid":"bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku","record":{"$type":"site.standard.document","views":9007199254740993,"nested":{"$link":"bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"}}}}`;
+  stash.note(frame);
+  expect(stash.take(7)).toBe(
+    '{"$type":"site.standard.document","views":9007199254740993,"nested":{"$link":"bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"}}',
+  );
+  expect(stash.take(7)).toBeUndefined();
+  stash.note(
+    `{"did":"did:plc:alice","time_us":${Number.MAX_SAFE_INTEGER},"kind":"commit","commit":{"operation":"create","collection":"site.standard.document","rkey":"post","rev":"1","cid":"x","record":{"count":-9223372036854775808}}}`,
+  );
+  expect(stash.take(Number.MAX_SAFE_INTEGER)).toBe(
+    '{"count":-9223372036854775808}',
+  );
+  stash.note("not json");
+  stash.note('{"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#account","seq":8}}');
+  expect(stash.take(8)).toBeUndefined();
+  const { parseCid } = await import("@atproto/lex");
+  const lossless = lexToLossless({
+    big: 9007199254740993n,
+    link: parseCid(
+      "bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku",
+    ),
+    bytes: new Uint8Array([1, 2, 3]),
+    list: [null, true, "text"],
+  });
+  expect(lossless).toEqual({
+    big: 9007199254740993n,
+    link: {
+      $link: "bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku",
+    },
+    bytes: { $bytes: "AQID" },
+    list: [null, true, "text"],
+  });
+  expect(parseLosslessJson(JSON.stringify({ n: 1 }))).toEqual({ n: 1 });
+});
+
+it("carries lossless record text on decoded live commits", async () => {
+  const server = createServer();
+  const sockets = new WebSocketServer({
+    server,
+    handleProtocols: () => "xrpc.v1.json",
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error();
+  sockets.on("connection", (socket) => {
+    socket.send(
+      `{"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#commit","seq":11,"did":"did:plc:alice","time":"2026-09-18T12:00:00Z","rev":"2222222222222","operation":"create","collection":"site.standard.document","rkey":"post","cid":"bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku","record":{"$type":"site.standard.document","title":"Article","views":9007199254740993}}}`,
+    );
+  });
+  const controller = new AbortController();
+  try {
+    const transport = createStreamTransport({
+      service: `http://127.0.0.1:${address.port}`,
+    });
+    for await (const batch of transport.stream(10, controller.signal)) {
+      const event = batch.events[0];
+      if (event?.kind !== "commit") throw new Error("expected a commit");
+      expect(event.commit.recordText).toBe(
+        '{"$type":"site.standard.document","title":"Article","views":9007199254740993}',
+      );
+      expect(event.commit.record).toEqual({
+        $type: "site.standard.document",
+        title: "Article",
+        views: 9007199254740993n,
+      });
+      break;
+    }
+  } finally {
+    controller.abort();
+    for (const socket of sockets.clients) socket.terminate();
+    await new Promise<void>((resolve) =>
+      sockets.close(() => server.close(() => resolve())),
+    );
+  }
+});

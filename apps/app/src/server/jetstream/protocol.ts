@@ -26,6 +26,8 @@ export const eventSchema = z
           rev: z.string(),
           cid: z.string().optional(),
           record: z.unknown().optional(),
+          /** Lossless JSON of `record`, captured before any rounding parse. */
+          recordText: z.string().optional(),
         }),
       }),
       z.object({

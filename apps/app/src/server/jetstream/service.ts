@@ -14,6 +14,9 @@ import {
 } from "./store";
 import { recoverOrigin } from "./recovery";
 import { processOriginDocuments } from "./process";
+import { sweepReferenceSnapshots } from "./reference-snapshots";
+
+const SNAPSHOT_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 import { createStreamTransport, retryStream } from "./transport";
 import { normalizeService, sequence, StreamFailure } from "./protocol";
 import { createStreamReporter } from "./report";
@@ -278,9 +281,15 @@ export async function startStreamWorker(
     }
   }
   async function sweep() {
+    let lastSnapshotSweep = 0;
     while (!shutdown.aborted) {
       let after = 0;
       try {
+        // Reference snapshots nobody has read for the retention window go once a day.
+        if (Date.now() - lastSnapshotSweep >= SNAPSHOT_SWEEP_INTERVAL_MS) {
+          lastSnapshotSweep = Date.now();
+          await sweepReferenceSnapshots(database, new Date());
+        }
         while (!shutdown.aborted) {
           const rows = await database
             .select({ id: feedOriginAtproto.originId })

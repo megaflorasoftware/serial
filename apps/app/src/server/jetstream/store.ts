@@ -1,6 +1,8 @@
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import {
+  DOCUMENT_SOURCE_BUDGET_BYTES,
   documentBelongsToPublication,
+  documentSourceBytes,
   parseDocumentRecord,
 } from "@serial/standard-site";
 import {
@@ -12,6 +14,12 @@ import {
   user,
 } from "../db/schema";
 import { hydrateOrigin } from "../feeds/origins";
+import {
+  captureRecordValue,
+  pruneDocumentSources,
+  stageDocumentSource,
+} from "./document-source";
+import type { CapturedRecord } from "./document-source";
 import { runDatabaseWrite } from "../db/retry-write";
 import { getEffectivePlanConfig } from "../subscriptions/plans";
 import { createStreamReporter } from "./report";
@@ -155,17 +163,21 @@ export function streamIsConnected(
   return state.connected && state.leaseUntil !== null && state.leaseUntil > now;
 }
 
-/** Runs inside the caller's transaction. Supplied records are kept only while processing is pending. */
+/**
+ * Runs inside the caller's transaction. The staged record lives in its own
+ * source row; the ledger only records that work is pending.
+ */
 export async function stageDocument(
   database: FeedDatabase,
   input: {
     originId: number;
     uri: string;
     cid: string;
-    record?: unknown;
+    record?: CapturedRecord;
     rev?: string | null;
     seq: number;
     deleted?: boolean;
+    now?: Date;
   },
 ) {
   const old = await database
@@ -189,11 +201,17 @@ export async function stageDocument(
     : parseDocumentRecord({
         uri: input.uri,
         cid: input.cid,
-        value: input.record,
+        value: input.record?.value,
       });
+  const oversized =
+    document !== null &&
+    documentSourceBytes({ record: input.record!.text, blobs: [] }) >
+      DOCUMENT_SOURCE_BUDGET_BYTES;
   const status = input.deleted
     ? "deleted"
-    : document && Number.isFinite(Date.parse(document.value.publishedAt))
+    : document &&
+        !oversized &&
+        Number.isFinite(Date.parse(document.value.publishedAt))
       ? "retry"
       : "invalid";
   const values = {
@@ -203,7 +221,8 @@ export async function stageDocument(
     status,
     eventSeq: String(input.seq),
     eventRev: input.rev ?? null,
-    pendingRecord: status === "retry" ? input.record : null,
+    bodyCid: old?.bodyCid ?? null,
+    reason: status === "invalid" ? (oversized ? "oversized" : "invalid") : null,
     attempts: 0,
     retryAt: null,
   } as const;
@@ -217,6 +236,19 @@ export async function stageDocument(
       ],
       set: values,
     });
+  const key = { originId: input.originId, uri: input.uri };
+  if (status === "retry")
+    await stageDocumentSource(
+      database,
+      { ...key, cid: input.cid },
+      input.record!.text,
+      input.now ?? new Date(),
+    );
+  // The readable version survives; a newer staged version replaces older staging.
+  await pruneDocumentSources(database, key, [
+    values.bodyCid,
+    status === "retry" ? input.cid : null,
+  ]);
 }
 
 function olderDocuments(originId: number, seq: number) {
@@ -267,7 +299,6 @@ async function applyCommit(
           .update(feedOriginAtprotoDocuments)
           .set({
             status: "deleted",
-            pendingRecord: null,
             eventSeq: String(event.seq),
           })
           .where(olderDocuments(originId, event.seq));
@@ -309,7 +340,12 @@ async function applyCommit(
       originId,
       uri,
       cid: event.commit.cid ?? "",
-      record: event.commit.record,
+      record:
+        event.commit.record === undefined
+          ? undefined
+          : event.commit.recordText !== undefined
+            ? { text: event.commit.recordText, value: event.commit.record }
+            : captureRecordValue(event.commit.record),
       rev: event.commit.rev,
       seq: event.seq,
       deleted: !belongs || event.commit.operation === "delete",
@@ -366,7 +402,6 @@ async function applyMarker(
         .update(feedOriginAtprotoDocuments)
         .set({
           status: "deleted",
-          pendingRecord: null,
           eventSeq: String(event.seq),
         })
         .where(
@@ -381,7 +416,6 @@ async function applyMarker(
         .update(feedOriginAtprotoDocuments)
         .set({
           status: "deleted",
-          pendingRecord: null,
           eventSeq: String(event.seq),
         })
         .where(

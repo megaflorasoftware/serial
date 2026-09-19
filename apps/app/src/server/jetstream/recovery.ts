@@ -16,6 +16,7 @@ import {
   streamIsConnected,
 } from "./store";
 import { processOriginDocuments } from "./process";
+import { captureRecordValue } from "./document-source";
 import type { StreamTransport } from "./transport";
 import type { StreamDatabase, StreamSettings } from "./store";
 import type { ProcessingOptions } from "./process";
@@ -197,9 +198,10 @@ export async function recoverOrigin(
                     originId,
                     uri: record.uri,
                     cid: record.cid,
-                    record: record.value,
+                    record: captureRecordValue(record.value),
                     rev,
                     seq: boundary,
+                    now: nowFor(settings),
                   });
               },
               { behavior: "immediate" },

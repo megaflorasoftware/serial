@@ -23,6 +23,7 @@ import {
 import { computeItemHash } from "./hash";
 import { resolveItemDate } from "./publishedDate";
 import { writeObservedItems } from "./writeItems";
+import { toApplicationFeedItem } from "../feeds/reader-bodies";
 import { rssObservation } from "./itemObservation";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
@@ -347,11 +348,7 @@ async function insertFeedItems(
 
   return feedItemsList.map((item) => {
     const itemFeed = databaseFeeds.find((f) => f.id === item.feedId);
-
-    return {
-      ...item,
-      platform: itemFeed?.platform ?? "youtube",
-    } as ApplicationFeedItem;
+    return toApplicationFeedItem(item, itemFeed?.platform ?? "youtube");
   });
 }
 
