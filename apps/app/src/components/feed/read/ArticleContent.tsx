@@ -1,7 +1,9 @@
 "use client";
 
+import { parseRecordCard } from "@serial/standard-site";
 import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
+import { RecordCard } from "~/components/content-reader/RecordCard";
 import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
@@ -38,7 +40,13 @@ function isImageContainer(node: Element): boolean {
   return false;
 }
 
-export function ArticleContent({ content }: { content: string }) {
+export function ArticleContent({
+  content,
+  simplified = false,
+}: {
+  content: string;
+  simplified?: boolean;
+}) {
   const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
 
   const options: HTMLReactParserOptions = {
@@ -54,6 +62,12 @@ export function ArticleContent({ content }: { content: string }) {
         domNode.attribs.target = "_blank";
         domNode.attribs.rel = "noopener noreferrer";
       }
+
+      if (domNode.attribs["data-serial-embed"] === "record") {
+        const card = parseRecordCard(domNode.attribs);
+        if (card) return <RecordCard card={card} />;
+      }
+      if (simplified) return;
 
       if (domNode.name === "img") {
         const src = domNode.attribs.src ?? "";
@@ -112,5 +126,5 @@ export function ArticleContent({ content }: { content: string }) {
   const parsed = parse(content, options);
   const nodes = Array.isArray(parsed) ? parsed : [parsed];
 
-  return <>{flattenReaderImages(nodes)}</>;
+  return <>{simplified ? nodes : flattenReaderImages(nodes)}</>;
 }

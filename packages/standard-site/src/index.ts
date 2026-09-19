@@ -15,3 +15,6 @@ export type {
   ConvertedDocument,
 } from "./convert";
 export * from "./public-record";
+
+export * from "./record-preview";
+export * from "./record-card";

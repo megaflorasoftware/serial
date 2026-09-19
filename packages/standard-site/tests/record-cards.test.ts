@@ -116,3 +116,167 @@ describe("embedded standard.site records", () => {
     expect(result?.html).toContain('href="https://example.com/overflow"');
   });
 });
+
+it.each(["small", "medium", "large", undefined, "invalid"])(
+  "preserves size %s through sanitization",
+  async (size) => {
+    const input = document([uri]);
+    input.content.pages[0]!.blocks[0]!.block.size = size;
+    const result = await convertDocumentContent(input, {
+      did,
+      loadBlob: vi.fn(),
+      resolveRecord: async () => ({
+        url: "https://example.com/post",
+        title: "A <title>",
+        description: "Summary",
+        imageUrl: "https://example.com/cover.jpg",
+      }),
+    });
+    expect(result?.html).toContain(
+      `data-size="${size && size !== "invalid" ? size : "row"}"`,
+    );
+    expect(result?.html).toContain(
+      'data-image-url="https://example.com/cover.jpg"',
+    );
+    expect(result?.html).toContain("<strong>A &#x3C;title></strong>");
+  },
+);
+
+it("keeps the body and row fallback when record services fail", async () => {
+  const input = document([uri]);
+  input.content.pages[0]!.blocks[0]!.block.size = "large";
+  const result = await convertDocumentContent(input, {
+    did,
+    loadBlob: vi.fn(),
+    resolveRecord: async () => {
+      throw new Error("offline");
+    },
+  });
+  expect(result?.html).toContain('data-size="row"');
+  expect(result?.html).toContain(`href="https://pdsls.dev/${uri}"`);
+});
+
+it.each(["pub.leaflet", "blog.pckt"])(
+  "resolves %s AT mentions and preserves UTF-8 text",
+  async (prefix) => {
+    const text = {
+      $type: `${prefix === "pub.leaflet" ? "pub.leaflet.blocks" : "blog.pckt.block"}.text`,
+      plaintext: "🌿 Field Notes!",
+      facets: [
+        {
+          index: { byteStart: 5, byteEnd: 16 },
+          features: [
+            { $type: `${prefix}.richtext.facet#atMention`, atURI: uri },
+          ],
+        },
+      ],
+    };
+    const content =
+      prefix === "pub.leaflet"
+        ? {
+            $type: "pub.leaflet.content",
+            pages: [
+              {
+                $type: "pub.leaflet.pages.linearDocument",
+                blocks: [{ block: text }, { block: card(uri) }],
+              },
+            ],
+          }
+        : {
+            $type: "blog.pckt.content",
+            items: [
+              text,
+              {
+                $type: "blog.pckt.block.noteEmbed",
+                noteRef: { uri, cid: "bafy" },
+              },
+            ],
+          };
+    const resolveRecord = vi.fn(async () => ({
+      url: "https://example.com/notes",
+      title: "Replacement title",
+    }));
+    const result = await convertDocumentContent(
+      { content },
+      { did, loadBlob: vi.fn(), resolveRecord },
+    );
+    expect(result?.html).toContain(
+      `🌿 <a href="https://example.com/notes" data-record-uri="${uri}">Field Notes</a>!`,
+    );
+    expect(resolveRecord).toHaveBeenCalledExactlyOnceWith(uri);
+    expect(result?.html).toContain('data-serial-embed="record"');
+  },
+);
+
+it("resolves mentions inside nested lists and footnotes but not empty byte ranges", async () => {
+  const mention = (target: string) => ({
+    index: { byteStart: 0, byteEnd: 4 },
+    features: [
+      { $type: "pub.leaflet.richtext.facet#atMention", atURI: target },
+    ],
+  });
+  const footnoteUri = `${uri}-footnote`;
+  const result = await convertDocumentContent(
+    {
+      content: {
+        $type: "pub.leaflet.content",
+        pages: [
+          {
+            $type: "pub.leaflet.pages.linearDocument",
+            blocks: [
+              {
+                block: {
+                  $type: "pub.leaflet.blocks.unorderedList",
+                  children: [
+                    {
+                      content: {
+                        $type: "pub.leaflet.blocks.text",
+                        plaintext: "Link",
+                        facets: [mention(uri)],
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                block: {
+                  $type: "pub.leaflet.blocks.text",
+                  plaintext: "Note",
+                  facets: [
+                    {
+                      index: { byteStart: 0, byteEnd: 4 },
+                      features: [
+                        {
+                          $type: "pub.leaflet.richtext.facet#footnote",
+                          contentPlaintext: "Link",
+                          contentFacets: [mention(footnoteUri)],
+                        },
+                      ],
+                    },
+                    {
+                      ...mention(`${uri}-hidden`),
+                      index: { byteStart: 0, byteEnd: 0 },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      did,
+      loadBlob: vi.fn(),
+      resolveRecord: async (target) => {
+        expect([uri, footnoteUri]).toContain(target);
+        return {
+          url: `https://example.com/${target === uri ? "list" : "note"}`,
+          title: "Title",
+        };
+      },
+    },
+  );
+  expect(result?.html).toContain('href="https://example.com/list"');
+  expect(result?.html).toContain('href="https://example.com/note"');
+});

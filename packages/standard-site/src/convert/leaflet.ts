@@ -17,6 +17,7 @@ import {
   blockSchema,
   blueskyPostCard,
   ConversionContext,
+  recordReferenceCard,
   richTextHeading,
   richTextParagraph,
   stringProperty,
@@ -242,6 +243,8 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "horizontalRule":
       return voidElement("hr");
     case "website": {
+      const src = stringProperty(block, "src");
+      if (src && buildPdslsUrl(src)) return recordReferenceCard(src, context);
       const preview = blobRefSchema.safeParse(block.previewImage);
       return linkCard({
         href: stringProperty(block, "src") ?? "",
@@ -263,17 +266,14 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "standardSitePublication": {
       const uri = embeddedRecordCardUri(block);
       if (!uri) return "";
-      const href = buildPdslsUrl(uri)!;
-      const resolved = context.records.get(uri);
-      return linkCard({
-        href: resolved?.url ?? href,
-        title:
-          resolved?.title ??
-          (blockName(block, PREFIX) === "standardSitePost"
-            ? "Embedded document"
-            : "Embedded publication"),
-        description: resolved?.description ?? uri,
-      });
+      return recordReferenceCard(
+        uri,
+        context,
+        block.size,
+        blockName(block, PREFIX) === "standardSitePost"
+          ? "Embedded document"
+          : "Embedded publication",
+      );
     }
     case "iframe": {
       // The deprecated inline `html` takes precedence over `url`.
