@@ -86,7 +86,7 @@ function FeedOriginGlyphs({
 }) {
   if (publicationName === undefined && !hasRss) return null;
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-2">
+    <span className="text-sidebar-accent ml-auto flex shrink-0 items-center gap-2">
       {publicationName !== undefined && (
         <Tooltip>
           <TooltipTrigger asChild>
