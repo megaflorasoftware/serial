@@ -76,54 +76,70 @@ test.describe("publication Feed surfaces", () => {
     });
   }
 
-  for (const body of ["", "<p>Delayed publication body</p>"]) {
-    test(`waits for body loading before ${body ? "rendering content" : "showing the external fallback"}`, async ({
-      page,
-    }) => {
-      const fixture = await seedArticleData(
-        SELF_HOSTED_TURSO_PORT,
-        SELF_HOSTED_APP_PORT,
-      );
-      email = fixture.email;
-      await setFeedItemContent(
-        SELF_HOSTED_TURSO_PORT,
-        fixture.feedItemId,
-        body,
-      );
-      await signIn({ page, email, password: fixture.password });
-      let release: () => void = () => undefined;
-      const pending = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      let received: () => void = () => undefined;
-      const requested = new Promise<void>((resolve) => {
-        received = resolve;
-      });
-      await page.route("**/feedItem/getById**", async (route) => {
-        received();
-        await pending;
-        await route.continue();
-      });
-      await page.goto(`/read/${fixture.feedItemId}`);
-      await requested;
-      const fallback = page.getByRole("link", {
-        name: "Open in Website",
-        exact: true,
-      });
-      try {
+  for (const atmosphere of [false, true]) {
+    for (const body of ["", "<p>Delayed publication body</p>"]) {
+      test(`keeps the ${atmosphere ? "Atmosphere" : "RSS"} article shell ${body ? "while loading its body" : "without a body"}`, async ({
+        page,
+      }) => {
+        const fixture = await seedArticleData(
+          SELF_HOSTED_TURSO_PORT,
+          SELF_HOSTED_APP_PORT,
+        );
+        email = fixture.email;
+        if (atmosphere)
+          await addArticlePublicationOrigin(
+            SELF_HOSTED_TURSO_PORT,
+            fixture.feedItemId,
+            { rss: false, active: false },
+          );
+        await setFeedItemContent(
+          SELF_HOSTED_TURSO_PORT,
+          fixture.feedItemId,
+          body,
+        );
+        await signIn({ page, email, password: fixture.password });
+        let release: () => void = () => undefined;
+        const pending = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let received: () => void = () => undefined;
+        const requested = new Promise<void>((resolve) => {
+          received = resolve;
+        });
+        await page.route("**/feedItem/getById**", async (route) => {
+          received();
+          await pending;
+          await route.continue();
+        });
+        await page.goto(`/read/${fixture.feedItemId}`);
+        await requested;
+        const fallback = page.getByRole("link", {
+          name: "Open in Website",
+          exact: true,
+        });
+        try {
+          await expect(fallback).toHaveCount(0);
+        } finally {
+          release();
+        }
+        if (body) {
+          await expect(
+            page.getByText("Delayed publication body"),
+          ).toBeVisible();
+          await expect(fallback).toHaveCount(0);
+        }
+        await expect(
+          page.getByRole("heading", {
+            name: "Test Article",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("heading", { name: "Test Author", exact: true }),
+        ).toBeVisible();
         await expect(fallback).toHaveCount(0);
-      } finally {
-        release();
-      }
-      if (body) {
-        await expect(page.getByText("Delayed publication body")).toBeVisible();
-        await expect(fallback).toHaveCount(0);
-      } else {
-        await expect(fallback).toBeVisible();
-        await expect(fallback).toHaveAttribute("href", /\/test-blog\//);
-        await expect(fallback).toHaveAttribute("target", "_blank");
-      }
-      await expect(page).toHaveURL(`/read/${fixture.feedItemId}`);
-    });
+        await expect(page).toHaveURL(`/read/${fixture.feedItemId}`);
+      });
+    }
   }
 });

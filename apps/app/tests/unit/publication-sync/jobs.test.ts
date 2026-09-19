@@ -50,10 +50,18 @@ it("persists work atomically with settings and runs without a browser", async ()
   await save();
   expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
     pending: true,
+    running: false,
     result: null,
   });
   const sync = vi.fn<typeof syncPublicationSubscriptions>(
     async ({ onProgress, runId }) => {
+      expect(
+        await getPublicationSyncJob(fixture.database, "owner"),
+      ).toMatchObject({
+        pending: true,
+        running: true,
+        progress: null,
+      });
       await onProgress?.({ runId: runId!, completed: 1, total: 1 });
       return completed();
     },
@@ -62,6 +70,7 @@ it("persists work atomically with settings and runs without a browser", async ()
   expect(sync).toHaveBeenCalledTimes(1);
   expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
     pending: false,
+    running: false,
     progress: { completed: 1, total: 1 },
     result: { exported: 1 },
   });
@@ -118,6 +127,7 @@ it("persists backfill continuation with accumulated successful writes", async ()
   }));
   expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
     pending: true,
+    running: false,
     result: { exported: 1 },
   });
   await fixture.database

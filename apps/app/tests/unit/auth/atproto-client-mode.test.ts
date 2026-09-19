@@ -198,12 +198,44 @@ describe("assertAllowedAtprotoScope", () => {
 });
 
 describe("stored scope helpers", () => {
+  it("recognizes expanded subscription permissions and retains them on reconnect", () => {
+    const scope =
+      "repo?collection=site.standard.graph.recommend&collection=site.standard.graph.subscription atproto";
+    expect(hasAtprotoWriteScope(scope)).toBe(true);
+    expect(retainAllowedAtprotoScope(scope)).toBe(
+      "atproto include:site.standard.authSocial",
+    );
+  });
+
   it("detects write scope only when the social set was granted", () => {
     expect(hasAtprotoWriteScope("atproto")).toBe(false);
     expect(hasAtprotoWriteScope(null)).toBe(false);
     expect(
       hasAtprotoWriteScope("atproto include:site.standard.authSocial"),
     ).toBe(true);
+  });
+
+  it.each([
+    "repo:site.standard.graph.subscription",
+    "repo?collection=site.standard.graph.subscription&action=create&action=update&action=delete",
+    "repo?collection=site.standard.graph.subscription&action=create repo?collection=site.standard.graph.subscription&action=update repo?collection=site.standard.graph.subscription&action=delete",
+    "repo:*",
+  ])("recognizes complete subscription-write capabilities in %s", (grant) => {
+    expect(hasAtprotoWriteScope(`atproto ${grant}`)).toBe(true);
+  });
+
+  it.each([
+    "repo?collection=site.standard.graph.recommend",
+    "repo?collection=site.standard.graph.subscription&action=create",
+    "repo?collection=site.standard.graph.subscription&action=create&action=delete",
+    "repo?collection=site.standard.graph.subscription&action=read",
+    "repo?collection=site.standard.graph.subscription&unknown=true",
+    "repo?collection=site.standard.graph.*",
+    "repo:%ZZ",
+    "repo:site.standard.graph.subscription?collection=site.standard.graph.recommend",
+  ])("rejects unrelated, incomplete, or malformed grants: %s", (grant) => {
+    expect(hasAtprotoWriteScope(`atproto ${grant}`)).toBe(false);
+    expect(retainAllowedAtprotoScope(`atproto ${grant}`)).toBe("atproto");
   });
 
   it("re-requests only the allowed tokens of a previous grant on reconnect", () => {
@@ -214,6 +246,6 @@ describe("stored scope helpers", () => {
     ).toBe("atproto include:site.standard.authSocial");
     // A token this instance never allowlisted is never forwarded, even if
     // an older grant carried it.
-    expect(retainAllowedAtprotoScope("atproto repo:*")).toBe("atproto");
+    expect(retainAllowedAtprotoScope("atproto unknown:scope")).toBe("atproto");
   });
 });

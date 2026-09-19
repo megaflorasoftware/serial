@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  AtprotoSyncSettingsForm,
-  useAtprotoSyncSettingsSave,
-} from "~/components/connections/AtprotoSyncSettingsForm";
-import { useAtprotoReconnect } from "~/components/connections/AtprotoConnection";
-import { ReconnectBanner } from "~/components/connections/ConnectedAccountRow";
+import { ConnectedAtmospherePane } from "~/components/connections/AtprotoConnection";
 import { Button } from "~/components/ui/button";
 import {
   advanceOnboarding,
@@ -33,10 +28,6 @@ export function OnboardingSyncSlide({
     !status.isFetching &&
     !status.isError;
   if (receivedFreshStatus && !hasFreshStatus) setHasFreshStatus(true);
-  const reconnect = useAtprotoReconnect();
-  const save = useAtprotoSyncSettingsSave(() =>
-    advanceSavedOnboardingStep(run, "atmosphere-sync-setup", "next-steps"),
-  );
   useEffect(() => {
     if (status.data && receivedFreshStatus) {
       if (!status.data.isConnected && !status.data.needsReconnect)
@@ -52,23 +43,12 @@ export function OnboardingSyncSlide({
     );
   if (!status.data || !hasFreshStatus) return <p>Loading your connection...</p>;
   return (
-    <div className="grid gap-6">
-      {status.data.needsReconnect && (
-        <ReconnectBanner
-          disabled={reconnect.isPending}
-          reconnecting={reconnect.isPending}
-          onReconnect={() => reconnect.mutate(undefined)}
-        />
-      )}
-      <AtprotoSyncSettingsForm
-        key={JSON.stringify(status.data.syncPreferences)}
-        onboarding
-        savedPreferences={status.data.syncPreferences}
-        hasWriteScope={status.data.hasWriteScope}
-        disabled={status.data.needsReconnect}
-        saving={save.busy}
-        onSave={save.save}
-      />
-    </div>
+    <ConnectedAtmospherePane
+      status={status.data}
+      onboarding
+      onSaved={() =>
+        advanceSavedOnboardingStep(run, "atmosphere-sync-setup", "next-steps")
+      }
+    />
   );
 }

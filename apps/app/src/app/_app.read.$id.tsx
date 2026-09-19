@@ -1,7 +1,6 @@
 "use client";
 
 import { ARTICLE_SANITIZE_SCHEMA } from "@serial/standard-site";
-import { httpUrl } from "@serial/feed-discovery";
 
 import clsx from "clsx";
 
@@ -14,8 +13,6 @@ import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 import { useZoom } from "../components/feed/watch/[id]/useZoom";
 import { ContentActions } from "../components/feed/watch/[id]/ContentActions";
-import { getOriginActionLabel } from "~/lib/content/capabilities";
-import { getFeedWebsiteUrl } from "~/lib/feeds/origins";
 import { useFeeds } from "~/lib/data/feeds";
 import { barsHiddenAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
@@ -91,7 +88,6 @@ function ReadPage() {
     <FeedReader
       id={params.id}
       hasRefreshedFeedItem={feedItemRefresh.complete}
-      hasLoadedFeedItem={feedItemRefresh.succeeded}
     />
   );
 }
@@ -121,11 +117,9 @@ function useReaderBars() {
 function FeedReader({
   id,
   hasRefreshedFeedItem,
-  hasLoadedFeedItem,
 }: {
   id: string;
   hasRefreshedFeedItem: boolean;
-  hasLoadedFeedItem: boolean;
 }) {
   const canMutate = useCanMutate();
   useRetentionPin("feed-item", id);
@@ -182,23 +176,6 @@ function FeedReader({
   const { shouldShowTruncationAlert, handleAlertResponse } = useTruncationAlert(
     { feed, feedItem, canMutate },
   );
-
-  if (hasLoadedFeedItem && feedItem && !content.trim()) {
-    const originalUrl =
-      httpUrl(feedItem.url) ?? (feed && getFeedWebsiteUrl(feed));
-    if (originalUrl) {
-      return (
-        <ContentRendererFallback
-          destination={{
-            renderer: "origin",
-            external: true,
-            href: originalUrl,
-            actionLabel: getOriginActionLabel(feedItem),
-          }}
-        />
-      );
-    }
-  }
 
   return (
     <div

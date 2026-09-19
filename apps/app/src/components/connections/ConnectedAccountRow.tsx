@@ -9,7 +9,7 @@ import { Button } from "../ui/button";
 export function ConnectedAccountRow({
   label,
   disabled = false,
-  disconnecting,
+  disconnecting = false,
   onDisconnect,
   onReconnect,
   reconnecting = false,
@@ -18,8 +18,8 @@ export function ConnectedAccountRow({
   /** Holds both actions, for instance while the other one is under way. */
   disabled?: boolean;
   /** The disconnect itself is in flight; shows on its own button only. */
-  disconnecting: boolean;
-  onDisconnect: () => void;
+  disconnecting?: boolean;
+  onDisconnect?: () => void;
   /** Present only while the connection needs reconnecting. */
   onReconnect?: () => void;
   /** The reconnect itself is in flight; shows on its own button only. */
@@ -29,11 +29,13 @@ export function ConnectedAccountRow({
     <div className="overflow-hidden rounded-lg border">
       <div className="flex items-center justify-between p-4">
         <span className="font-medium">{label}</span>
-        <DisconnectButton
-          disabled={disabled || disconnecting}
-          disconnecting={disconnecting}
-          onDisconnect={onDisconnect}
-        />
+        {onDisconnect && (
+          <DisconnectButton
+            disabled={disabled || disconnecting}
+            disconnecting={disconnecting}
+            onDisconnect={onDisconnect}
+          />
+        )}
       </div>
       {onReconnect && (
         <ReconnectBanner

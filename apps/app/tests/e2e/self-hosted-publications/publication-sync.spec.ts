@@ -20,6 +20,31 @@ import { openSidebar } from "../fixtures/sidebar";
 import { PUBLICATIONS_APP_PORT } from "../fixtures/ports";
 import type { Page } from "@playwright/test";
 
+async function refreshSources(
+  page: Page,
+  due?: { userId: string; feedId?: number },
+) {
+  if (due) {
+    // Advance the real schedule instead of waiting for rounded UI cooldowns.
+    await withPublicationDatabase(async (db) => {
+      await db
+        .update(user)
+        .set({ nextRefreshAt: null })
+        .where(eq(user.id, due.userId));
+      if (due.feedId !== undefined) {
+        await db
+          .update(feedOrigins)
+          .set({ nextFetchAt: null })
+          .where(eq(feedOrigins.feedId, due.feedId));
+      }
+    });
+  }
+  const response = await page.request.post("/api/rpc/initial/fetchDueSources", {
+    data: { json: { trigger: "manual" } },
+  });
+  expect(response.ok()).toBe(true);
+}
+
 async function openAtmosphere(page: Page) {
   await page.goto("/");
   await expect(async () => {
@@ -192,7 +217,7 @@ for (const method of [
         rkey: "remote-sub",
       });
       await page.goto("/");
-      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await refreshSources(page, { userId });
       await expect
         .poll(
           async () =>
@@ -215,7 +240,7 @@ for (const method of [
       await dialog.getByRole("button", { name: "Delete", exact: true }).click();
       await expect(dialog).toBeHidden();
       await page.goto("/");
-      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await refreshSources(page, { userId });
       await expect
         .poll(
           async () =>
@@ -360,26 +385,8 @@ test("manual Jetstream recovery imports, updates, and retains deleted reader ite
     withPublicationDatabase((db) =>
       db.select().from(feedItems).where(eq(feedItems.feedId, feed.id)),
     );
-  const refresh = async (due = true) => {
-    if (due) {
-      // Advance the existing schedule instead of bypassing its cooldowns.
-      await withPublicationDatabase(async (db) => {
-        await db
-          .update(user)
-          .set({ nextRefreshAt: null })
-          .where(eq(user.id, userId));
-        await db
-          .update(feedOrigins)
-          .set({ nextFetchAt: null })
-          .where(eq(feedOrigins.feedId, feed.id));
-      });
-    }
-    const response = await page.request.post(
-      "/api/rpc/initial/fetchDueSources",
-      { data: { json: { trigger: "manual" } } },
-    );
-    expect(response.ok()).toBe(true);
-  };
+  const refresh = (due = true) =>
+    refreshSources(page, due ? { userId, feedId: feed.id } : undefined);
   await put("Initial document");
   await refresh(false);
   expect(await items()).toEqual([]);

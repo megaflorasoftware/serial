@@ -2,9 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   AlertCircleIcon,
-  CircleSmall,
   Edit2Icon,
-  MinusIcon,
   OrbitIcon,
   PauseIcon,
   PlusIcon,
@@ -14,6 +12,10 @@ import {
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
+import {
+  SidebarContentIndicator,
+  sidebarIndicatorClassName,
+} from "./SidebarContentIndicator";
 import type { ApplicationFeed } from "~/server/db/schema";
 import type { NavigationSnapshot } from "~/server/navigation/snapshot";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
@@ -87,7 +89,9 @@ function FeedOriginGlyphs({
 }) {
   if (publicationName === undefined && !hasRss) return null;
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-2">
+    <span
+      className={`${sidebarIndicatorClassName} ml-auto flex items-center gap-2`}
+    >
       {publicationName !== undefined && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -138,18 +142,22 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   onEdit: (feedId: number) => void;
 }) {
   const feedStatus = useFeedStatus(feedId);
-  const isSuccess = feedStatus === "success" || feedStatus === "skipped";
+  const hasFetchError = feedStatus === "error";
 
   return (
     <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
+        className="group/sidebar-row"
         onClick={() => onSelect(feedId)}
       >
-        {feedStatus === "error" && (
+        {hasFetchError && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <AlertCircleIcon size={16} className="text-sidebar-accent" />
+              <AlertCircleIcon
+                size={16}
+                className={sidebarIndicatorClassName}
+              />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-center">
               Something went wrong fetching content for this feed. If this
@@ -158,25 +166,8 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
             </TooltipContent>
           </Tooltip>
         )}
-        {feedStatus === "empty" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <MinusIcon size={16} className="text-sidebar-accent" />
-            </TooltipTrigger>
-            <TooltipContent>
-              This feed has no new content within the last 30 days.
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {isSuccess && !hasEntries && (
-          <CircleSmall size={16} className="text-sidebar-accent" />
-        )}
-        {isSuccess && hasEntries && (
-          <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent size-2.5 rounded-full" />
-          </div>
-        )}
-        <div className="line-clamp-1">{name}</div>
+        {!hasFetchError && <SidebarContentIndicator hasContent={hasEntries} />}
+        <div className="min-w-0 truncate">{name}</div>
         <FeedOriginGlyphs publicationName={publicationName} hasRss={hasRss} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
@@ -207,17 +198,11 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
     <SidebarMenuItem className="group flex gap-1 opacity-50">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
+        className="group/sidebar-row"
         onClick={() => onSelect(feedId)}
       >
-        {!hasEntries && (
-          <CircleSmall size={16} className="text-sidebar-accent" />
-        )}
-        {hasEntries && (
-          <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent size-2.5 rounded-full" />
-          </div>
-        )}
-        <div className="text-muted-foreground line-clamp-1">{name}</div>
+        <SidebarContentIndicator hasContent={hasEntries} />
+        <div className="text-muted-foreground min-w-0 truncate">{name}</div>
         <Tooltip>
           <TooltipTrigger asChild>
             <PauseIcon
@@ -433,6 +418,7 @@ export function SidebarFeeds() {
           <SidebarMenuItem>
             <SidebarMenuButton
               variant={feedFilter === -1 ? "outline" : "default"}
+              className="group/sidebar-row"
               onClick={() => {
                 setFeedFilter(-1);
                 if (!viewFilter && categoryFilter < 0) {
@@ -440,14 +426,7 @@ export function SidebarFeeds() {
                 }
               }}
             >
-              {!hasAnyItems && (
-                <CircleSmall size={16} className="text-sidebar-accent" />
-              )}
-              {hasAnyItems && (
-                <div className="grid size-4 place-items-center">
-                  <div className="bg-sidebar-accent size-2.5 rounded-full" />
-                </div>
-              )}
+              <SidebarContentIndicator hasContent={hasAnyItems} />
               All
             </SidebarMenuButton>
           </SidebarMenuItem>

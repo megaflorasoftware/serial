@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { DragHandleDots2Icon } from "@radix-ui/react-icons";
 import { useAtom, useAtomValue } from "jotai";
-import { CircleSmall, Edit2Icon, PlusIcon, SettingsIcon } from "lucide-react";
+import { Edit2Icon, PlusIcon, SettingsIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import {
@@ -28,6 +28,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDialogStore } from "./dialogStore";
+import { SidebarContentIndicator } from "./SidebarContentIndicator";
 import type { Dispatch, SetStateAction } from "react";
 import type { DragEndEvent } from "@dnd-kit/core";
 
@@ -81,15 +82,11 @@ function ViewSidebarItem({
       <SidebarMenuItem className="group flex gap-1">
         <SidebarMenuButton
           variant={isActive ? "outline" : "default"}
+          className="group/sidebar-row"
           onClick={() => updateViewFilter(view.id)}
         >
-          {!view.hasEntries && <CircleSmall className="text-sidebar-accent" />}
-          {view.hasEntries && (
-            <div className="grid size-4 place-items-center">
-              <div className="bg-sidebar-accent size-2.5 rounded-full" />
-            </div>
-          )}
-          {view.name}
+          <SidebarContentIndicator hasContent={view.hasEntries} />
+          <span className="min-w-0 truncate">{view.name}</span>
         </SidebarMenuButton>
         {!view.isDefault && (
           <div className="group/button flex w-fit items-center justify-end">

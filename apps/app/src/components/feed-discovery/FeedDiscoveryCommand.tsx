@@ -20,6 +20,7 @@ import type { ReactNode, Ref } from "react";
 import type { DiscoveredFeed } from "./FeedDiscoveryResults";
 import type { StaticFeedSearchOption } from "./feedSearchOptions";
 import type { ContentPlatform } from "~/lib/content/descriptor";
+import { TYPEAHEAD_DEBOUNCE_MS } from "~/lib/constants/search";
 import {
   Command,
   CommandEmpty,
@@ -114,7 +115,6 @@ interface FeedDiscoveryCommandProps {
   loadingLabel?: string;
 }
 
-const AUTO_DISCOVERY_DELAY_MS = 500;
 const BOOKMARK_ACTION_LABEL: Record<ContentPlatform, string> = {
   website: "Bookmark page to read later",
   youtube: "Bookmark video to watch later",
@@ -220,7 +220,7 @@ function useAutomaticDiscovery(
     const timeout = window.setTimeout(() => {
       setLastQuery(query);
       onDiscover();
-    }, AUTO_DISCOVERY_DELAY_MS);
+    }, TYPEAHEAD_DEBOUNCE_MS);
     return () => window.clearTimeout(timeout);
   }, [query, canDiscover, lastQuery, onDiscover]);
   return { isPending, reset: () => setLastQuery(null) };

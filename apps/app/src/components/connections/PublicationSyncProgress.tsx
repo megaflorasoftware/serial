@@ -20,8 +20,10 @@ export function PublicationSyncProgress() {
   useEffect(() => {
     const job = status.data;
     if (job?.pending) {
-      observed.current = job.runId;
-      showPublicationSyncProgress(job);
+      // Polling a deferred retry must not keep extending its result toast.
+      const notification = JSON.stringify(job);
+      if (observed.current !== notification) showPublicationSyncProgress(job);
+      observed.current = notification;
     } else if (observed.current) {
       // Cancellation, unlink, or a replacement run may change the request ID.
       if (job?.result) showPublicationSyncProgress(job);

@@ -24,6 +24,7 @@ export async function getPublicationSyncJob(
     .select({
       runId: connections.subscriptionRequestId,
       next: connections.subscriptionNextAttemptAt,
+      leaseExpires: connections.subscriptionJobExpiresAt,
       progress: connections.subscriptionJobProgress,
       result: connections.subscriptionJobResult,
     })
@@ -34,6 +35,7 @@ export async function getPublicationSyncJob(
     ? {
         runId: row.runId,
         pending: row.next !== null,
+        running: row.leaseExpires !== null && row.leaseExpires > new Date(),
         progress: row.progress,
         result: row.result,
       }
@@ -73,6 +75,7 @@ export async function runPublicationSyncJobs(
         .set({
           subscriptionJobToken: token,
           subscriptionJobExpiresAt: new Date(Date.now() + JOB_LEASE_MS),
+          subscriptionJobProgress: null,
         })
         .where(and(eq(connections.id, id), available))
         .returning();

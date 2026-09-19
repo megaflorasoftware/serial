@@ -86,6 +86,7 @@
     "@atproto-labs/identity-resolver": "^0.4.7",
     "@atproto/lex": "^0.3.11",
     "@atproto/oauth-client-node": "^0.5.3",
+    "@atproto/oauth-scopes": "^0.5.12",
     "@base-ui/react": "^1.6.0",
     "@bsky/jetstream": "^1.0.0",
     "@dnd-kit/core": "^6.3.1",

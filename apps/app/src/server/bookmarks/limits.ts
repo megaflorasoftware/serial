@@ -12,7 +12,7 @@ const SURFACE_POLICIES: Record<CaptureSurface, SurfacePolicy> = {
   app: { attempts: 10, windowMs: 10 * 60 * 1_000, activePerUser: 1 },
   extension: { attempts: 30, windowMs: 10 * 60 * 1_000, activePerUser: 2 },
   revalidation: { attempts: 10, windowMs: 10 * 60 * 1_000, activePerUser: 1 },
-  discovery: { attempts: 30, windowMs: 10 * 60 * 1_000, activePerUser: 2 },
+  discovery: { attempts: 180, windowMs: 60 * 1_000, activePerUser: 2 },
 };
 
 export type CaptureLease =

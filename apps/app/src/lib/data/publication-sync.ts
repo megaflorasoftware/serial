@@ -19,7 +19,8 @@ export async function refreshPublicationSyncProgress(queryClient: QueryClient) {
         meta: { persist: false },
       }),
     );
-    if (job && !job.pending) showPublicationSyncProgress(job);
+    if (job && (!job.pending || (!job.running && job.result)))
+      showPublicationSyncProgress(job);
   } catch (error) {
     console.error("Unable to refresh publication sync progress", error);
   }
@@ -33,7 +34,7 @@ export function publicationSyncMessage(result: PublicationSyncResult) {
 
 /** Progress observes persisted server work; it never occupies the global loading state. */
 export function showPublicationSyncProgress(job: PublicationSyncJobStatus) {
-  if (job.pending) {
+  if (job.pending && (job.running || !job.result)) {
     const progress = job.progress;
     toast.loading(
       progress?.total

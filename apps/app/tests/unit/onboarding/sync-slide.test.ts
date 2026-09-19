@@ -30,22 +30,15 @@ vi.mock("~/lib/onboarding/store", () => ({
   advanceSavedOnboardingStep,
 }));
 vi.mock("~/components/connections/AtprotoConnection", () => ({
-  useAtprotoReconnect: () => ({ isPending: false, mutate: vi.fn() }),
-}));
-vi.mock("~/components/connections/ConnectedAccountRow", () => ({
-  ReconnectBanner: () => createElement("div", null, "Reconnect"),
-}));
-vi.mock("~/components/connections/AtprotoSyncSettingsForm", () => ({
-  useAtprotoSyncSettingsSave: () => ({ busy: false, save: vi.fn() }),
-  AtprotoSyncSettingsForm: ({
-    savedPreferences,
+  ConnectedAtmospherePane: ({
+    status,
   }: {
-    savedPreferences: { method: string };
+    status: { syncPreferences: { method: string } };
   }) =>
     createElement(
       "div",
       { "data-testid": "sync-form" },
-      savedPreferences.method,
+      status.syncPreferences.method,
     ),
 }));
 
