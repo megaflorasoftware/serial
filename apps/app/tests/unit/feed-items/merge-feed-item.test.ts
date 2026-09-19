@@ -85,7 +85,8 @@ describe("mergeFeedItem", () => {
     const mergedItem = mergeFeedItem(existingItem, incomingItem);
 
     expect(mergedItem.title).toBe("Original title");
-    expect(mergedItem.body).toEqual(htmlBody("Original content"));
+    // Same revision, but the server sent a body: the served body is freshest.
+    expect(mergedItem.body).toEqual(htmlBody("Incoming content"));
     expect(mergedItem.contentSnippet).toBe("Original snippet");
     expect(mergedItem.thumbnail).toBe("https://example.com/original.jpg");
     expect(mergedItem.isWatched).toBe(true);
@@ -179,6 +180,26 @@ describe("mergeFeedItem", () => {
     expect(mergeFeedItem(existingItem, incomingItem).body).toEqual(
       htmlBody("Original content"),
     );
+  });
+
+  it("takes a freshly served body and its hash over a cached one", () => {
+    const existingItem = makeItem({ contentHash: null });
+    const incomingItem = makeItem({
+      body: htmlBody("Edited content"),
+      contentHash: "hash-2",
+    });
+
+    const mergedItem = mergeFeedItem(existingItem, incomingItem);
+
+    expect(mergedItem.body).toEqual(htmlBody("Edited content"));
+    expect(mergedItem.contentHash).toBe("hash-2");
+    // The next list refresh can now tell a further revision apart.
+    expect(
+      mergeFeedItem(
+        mergedItem,
+        makeItem({ body: undefined, contentHash: "hash-3" }),
+      ).body,
+    ).toBeNull();
   });
 
   it("drops the cached body when the hash changes", () => {

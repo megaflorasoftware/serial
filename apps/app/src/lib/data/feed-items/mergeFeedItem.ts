@@ -52,13 +52,17 @@ export function mergeFeedItem(
     return applyPendingFeedItemOverrides(normalizedIncomingItem);
   }
 
+  // A body the server just sent is the freshest; a list row without one keeps
+  // the loaded body. The hash rides along so the next revision is detectable.
   return applyPendingFeedItemOverrides(
     mergeItemMetadata(
       {
         ...existingItem,
-        body: hasReaderBodyContent(existingItem.body)
-          ? existingItem.body
-          : normalizedIncomingItem.body,
+        body: hasReaderBodyContent(normalizedIncomingItem.body)
+          ? normalizedIncomingItem.body
+          : existingItem.body,
+        contentHash:
+          normalizedIncomingItem.contentHash ?? existingItem.contentHash,
         contentSnippet:
           existingItem.contentSnippet || normalizedIncomingItem.contentSnippet,
       },
