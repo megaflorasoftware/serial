@@ -1,11 +1,8 @@
 import { z } from "zod";
 import {
-  buildCanonicalDocumentUrl,
   MissingPublicRecordError as MissingPublicationRecordError,
-  normalizePublicationUrl,
   parseAtUri,
-  parseDocumentRecord,
-  parsePublicationRecord,
+  resolveRecordPreview,
 } from "@serial/standard-site";
 import { createHardenedFetch } from "../auth/atproto/hardened-fetch";
 import { resolvePublicPds } from "../auth/atproto/did-resolver";
@@ -131,13 +128,7 @@ export function createPublicationClient(
     },
     async resolveRecord(uri: string) {
       const parts = parseAtUri(uri);
-      if (
-        !parts ||
-        !["site.standard.document", "site.standard.publication"].includes(
-          parts.collection,
-        )
-      )
-        return null;
+      if (!parts) return null;
       if (!embeddedUris.has(uri)) {
         if (embeddedUris.size >= ATMOSPHERE_EMBEDDED_RECORDS_PER_REFRESH)
           throw new Error(
@@ -146,27 +137,10 @@ export function createPublicationClient(
         embeddedUris.add(uri);
       }
       try {
-        const record = await getRecord(uri);
-        if (parts.collection === "site.standard.publication") {
-          const publication = parsePublicationRecord(record);
-          const url =
-            publication && normalizePublicationUrl(publication.value.url);
-          return url ? { url, title: publication.value.name } : null;
-        }
-        const document = parseDocumentRecord(record);
-        if (!document) return null;
-        const owner = parsePublicationRecord(
-          await getRecord(
-            document.value.site.replace(
-              "/pub.leaflet.publication/",
-              "/site.standard.publication/",
-            ),
-          ),
+        const deadline = Date.now() + 5_000;
+        return await resolveRecordPreview(uri, (reference) =>
+          getRecord(reference, { deadline }),
         );
-        const url =
-          owner &&
-          buildCanonicalDocumentUrl(owner.value.url, document.value.path);
-        return url ? { url, title: document.value.title } : null;
       } catch (error) {
         if (
           error instanceof MissingPublicationRecordError ||

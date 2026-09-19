@@ -1,3 +1,4 @@
+import { RECORD_CARD_FIELDS, RECORD_CARD_SIZES } from "./record-card";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
@@ -5,7 +6,7 @@ import { unified } from "unified";
 import type { Options as SanitizeSchema } from "rehype-sanitize";
 import { safeSourceUrl } from "./convert/html";
 
-export const SERIAL_EMBED_KINDS = ["youtube", "interactive"] as const;
+export const SERIAL_EMBED_KINDS = ["youtube", "interactive", "record"] as const;
 export type SerialEmbedKind = (typeof SERIAL_EMBED_KINDS)[number];
 
 /**
@@ -31,12 +32,20 @@ export const ARTICLE_SANITIZE_SCHEMA: SanitizeSchema = {
   ],
   attributes: {
     ...defaultSchema.attributes,
+    a: [...(defaultSchema.attributes?.a ?? []), "dataRecordUri"],
     div: [
       ...(defaultSchema.attributes?.div ?? []),
       ["dataSerialEmbed", ...SERIAL_EMBED_KINDS],
       "dataVideoId",
       "dataStart",
-      "dataHref",
+      ...Object.values(RECORD_CARD_FIELDS)
+        .filter((attribute) => attribute !== "data-size")
+        .map((attribute) =>
+          attribute.replace(/-([a-z])/g, (_, letter: string) =>
+            letter.toUpperCase(),
+          ),
+        ),
+      ["dataSize", ...RECORD_CARD_SIZES],
     ],
   },
 };

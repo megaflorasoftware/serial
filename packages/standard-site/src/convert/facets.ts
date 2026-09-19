@@ -8,7 +8,8 @@ import {
   safeLinkUrl,
   type Attributes,
 } from "./html";
-import { buildBlueskyProfileUrl } from "../uris";
+import type { RecordPreviews } from "./shared";
+import { buildPdslsUrl, buildBlueskyProfileUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 
 /**
@@ -43,6 +44,7 @@ export type Footnote = { id: string; text: RichText };
 
 export type FacetRenderContext = {
   footnotes: Footnote[];
+  records?: RecordPreviews;
   /** Index of the append-only footnotes collected during this conversion. */
   footnoteNumbers?: Map<string, number>;
 };
@@ -88,7 +90,10 @@ function link(href: string | null): Wrapper | null {
   return href ? { tag: "a", attributes: { href } } : null;
 }
 
-function wrapperFor(feature: Feature): Wrapper | null {
+function wrapperFor(
+  feature: Feature,
+  context: FacetRenderContext,
+): Wrapper | null {
   switch (featureName(feature)) {
     case "bold":
       return inlineTag("strong");
@@ -110,8 +115,19 @@ function wrapperFor(feature: Feature): Wrapper | null {
       const did = stringField(feature, "did");
       return did ? link(buildBlueskyProfileUrl(did)) : null;
     }
-    case "atMention":
-      return link(safeLinkUrl(stringField(feature, "href")));
+    case "atMention": {
+      const uri = stringField(feature, "atURI");
+      const fallback = uri ? buildPdslsUrl(uri) : null;
+      const preview = fallback ? context.records?.get(uri!) : undefined;
+      const wrapper = link(
+        safeLinkUrl(preview?.url) && preview?.url !== fallback
+          ? safeLinkUrl(preview?.url)
+          : (safeLinkUrl(stringField(feature, "href")) ?? fallback),
+      );
+      if (wrapper && fallback)
+        wrapper.attributes = { ...wrapper.attributes, "data-record-uri": uri };
+      return wrapper;
+    }
     case "footnote": {
       const text = stringField(feature, "contentPlaintext");
       if (text === undefined) return null;
@@ -159,7 +175,11 @@ function snapToCodePoint(bytes: Uint8Array, offset: number) {
 
 type ResolvedFacet = { start: number; end: number; wrappers: Wrapper[] };
 
-function resolveFacets(facets: Facet[], bytes: Uint8Array): ResolvedFacet[] {
+function resolveFacets(
+  facets: Facet[],
+  bytes: Uint8Array,
+  context: FacetRenderContext,
+): ResolvedFacet[] {
   return facets
     .map((facet) => ({
       start: snapToCodePoint(bytes, facet.index.byteStart),
@@ -171,7 +191,7 @@ function resolveFacets(facets: Facet[], bytes: Uint8Array): ResolvedFacet[] {
       start,
       end,
       wrappers: features
-        .map(wrapperFor)
+        .map((feature) => wrapperFor(feature, context))
         .filter((wrapper): wrapper is Wrapper => wrapper !== null),
     }))
     .filter((facet) => facet.wrappers.length > 0)
@@ -201,7 +221,7 @@ export function renderRichText(
   context: FacetRenderContext = { footnotes: [] },
 ) {
   const bytes = new TextEncoder().encode(text.plaintext);
-  const facets = resolveFacets(text.facets ?? [], bytes);
+  const facets = resolveFacets(text.facets ?? [], bytes, context);
   if (facets.length === 0) return escapeText(text.plaintext);
 
   const boundaries = new Set<number>([0, bytes.length]);

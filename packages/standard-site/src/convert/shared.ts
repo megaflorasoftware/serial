@@ -6,11 +6,27 @@ import { strongRefSchema } from "../lexicons";
 import { buildBlueskyCdnImageUrl, buildBlueskyPostUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 
-export type ResolvedRecordCard = {
-  url: string;
-  title: string;
-  description?: string;
-};
+import type { RecordPreview } from "../record-preview";
+import { recordCard } from "../record-card";
+import { buildPdslsUrl } from "../uris";
+
+export type ResolvedRecordCard = RecordPreview;
+export type RecordPreviews = Pick<ReadonlyMap<string, RecordPreview>, "get">;
+
+export function recordReferenceCard(
+  uri: string,
+  context: ConversionContext,
+  size?: unknown,
+  title = "Embedded record",
+) {
+  const fallback = buildPdslsUrl(uri);
+  if (!fallback) return "";
+  const preview = context.records.get(uri);
+  return recordCard(
+    { ...(preview ?? { url: fallback, title, description: uri }), uri },
+    preview ? size : "row",
+  );
+}
 
 export type ConvertedDocument = {
   html: string;
@@ -37,7 +53,7 @@ export class ConversionContext implements FacetRenderContext {
 
   constructor(
     readonly did: string,
-    readonly records: ReadonlyMap<string, ResolvedRecordCard> = new Map(),
+    readonly records: RecordPreviews = new Map(),
   ) {}
 
   /** CDN URL for a blob in this repo, or undefined when the cid is malformed. */

@@ -1,3 +1,4 @@
+import { buildPdslsUrl } from "../uris";
 import { z } from "zod";
 import { renderRichText, richTextSchema } from "./facets";
 import {
@@ -19,13 +20,14 @@ import {
   blockArraySchema,
   blueskyPostCard,
   ConversionContext,
+  recordReferenceCard,
   richTextHeading,
   richTextParagraph,
   stringProperty,
   unknownBlock,
   type Block,
 } from "./shared";
-import { blobRefSchema } from "../lexicons";
+import { strongRefSchema, blobRefSchema } from "../lexicons";
 import { buildBlueskyProfileUrl } from "../uris";
 import { validEntriesSchema } from "../parse";
 
@@ -228,6 +230,8 @@ function renderBlock(block: Block, context: ConversionContext): string {
       return url ? embedPlaceholder(url, url) : interactivePlaceholder(null);
     }
     case "website":
+      if (typeof block.src === "string" && buildPdslsUrl(block.src))
+        return recordReferenceCard(block.src, context);
       return linkCard({
         href: stringProperty(block, "src") ?? "",
         title: stringProperty(block, "title"),
@@ -244,16 +248,23 @@ function renderBlock(block: Block, context: ConversionContext): string {
       const handle = stringProperty(block, "handle") ?? did;
       return paragraph(element("a", { href }, escapeText(`@${handle}`)));
     }
+    case "noteEmbed": {
+      const ref = strongRefSchema.safeParse(block.noteRef);
+      return ref.success ? recordReferenceCard(ref.data.uri, context) : "";
+    }
     case "gallery":
-    case "noteEmbed":
       return "";
     default:
       return unknownBlock(block, context);
   }
 }
 
-export function convertPcktItems(items: Block[], did: string) {
-  const context = new ConversionContext(did);
+export function convertPcktItems(
+  items: Block[],
+  did: string,
+  records?: ConversionContext["records"],
+) {
+  const context = new ConversionContext(did, records);
   const html = items.map((item) => renderBlock(item, context)).join("");
   return context.finish(html);
 }

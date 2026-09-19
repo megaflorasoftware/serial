@@ -1,3 +1,4 @@
+import { buildPdslsUrl } from "../uris";
 import { z } from "zod";
 import { facetArraySchema, renderRichText, richTextSchema } from "./facets";
 import {
@@ -17,6 +18,7 @@ import {
   blockArraySchema,
   blueskyPostCard,
   ConversionContext,
+  recordReferenceCard,
   richTextHeading,
   richTextParagraph,
   stringProperty,
@@ -201,6 +203,9 @@ function renderBlock(block: Block, context: ConversionContext): string {
     case "imageDiff":
       return renderImageSet(block, context);
     case "webBookmark": {
+      const href = stringProperty(block, "href");
+      if (href && buildPdslsUrl(href))
+        return recordReferenceCard(href, context);
       const preview = blobRefSchema.safeParse(block.preview);
       return linkCard({
         href: stringProperty(block, "href") ?? "",
@@ -231,8 +236,12 @@ function renderBlock(block: Block, context: ConversionContext): string {
   }
 }
 
-export function convertOffprintContent(content: OffprintContent, did: string) {
-  const context = new ConversionContext(did);
+export function convertOffprintContent(
+  content: OffprintContent,
+  did: string,
+  records?: ConversionContext["records"],
+) {
+  const context = new ConversionContext(did, records);
   const html = content.items.map((item) => renderBlock(item, context)).join("");
   return context.finish(html);
 }

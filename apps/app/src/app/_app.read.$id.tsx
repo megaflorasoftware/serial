@@ -1,5 +1,6 @@
 "use client";
 
+import { ARTICLE_SANITIZE_SCHEMA } from "@serial/standard-site";
 import { httpUrl } from "@serial/feed-discovery";
 
 import clsx from "clsx";
@@ -50,7 +51,7 @@ import {
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
-  .use(rehypeSanitize)
+  .use(rehypeSanitize, ARTICLE_SANITIZE_SCHEMA)
   .use(rehypeStringify);
 
 function getReaderContent(
@@ -232,17 +233,10 @@ function FeedReader({
         >
           <h1 data-serial-header>{feedItem?.title}</h1>
           <h6 data-serial-header>{feedItem?.author || feed?.name || ""}</h6>
-          {articleStyle === "simplified" ? (
-            // Content is sanitized by the module-level rehype pipeline above.
-            // react-doctor-disable-next-line react-doctor/dangerous-html-sink
-            <div
-              dangerouslySetInnerHTML={{
-                __html: content,
-              }}
-            />
-          ) : (
-            <ArticleContent content={content} />
-          )}
+          <ArticleContent
+            content={content}
+            simplified={articleStyle === "simplified"}
+          />
         </div>
       </div>
       {shouldShowTruncationAlert && (
