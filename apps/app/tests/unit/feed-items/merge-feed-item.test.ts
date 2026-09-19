@@ -42,6 +42,7 @@ function makeItem(
   };
 }
 
+/** An HTML body's revision is its item's content hash, as the server sets it. */
 function htmlBody(html: string, revision = "hash-1"): ReaderBody {
   return { form: "html", html, revision };
 }
@@ -171,6 +172,15 @@ describe("mergeFeedItem", () => {
     },
   );
 
+  it("drops a loaded body when the server names its first revision", () => {
+    // A row ingested before hashing gains a hash on its next edit; the body
+    // loaded under no revision cannot be trusted against the new one.
+    const existingItem = makeItem({ contentHash: null });
+    const incomingItem = makeItem({ body: undefined, contentHash: "hash-1" });
+
+    expect(mergeFeedItem(existingItem, incomingItem).body).toBeNull();
+  });
+
   it("keeps a loaded body but takes the incoming record when no revision is known", () => {
     // Rows ingested before hashing and list payloads both lack a hash; the
     // body loaded by a direct open must survive the next list refresh, while
@@ -193,13 +203,13 @@ describe("mergeFeedItem", () => {
   it("takes a freshly served body and its hash over a cached one", () => {
     const existingItem = makeItem({ contentHash: null });
     const incomingItem = makeItem({
-      body: htmlBody("Edited content"),
+      body: htmlBody("Edited content", "hash-2"),
       contentHash: "hash-2",
     });
 
     const mergedItem = mergeFeedItem(existingItem, incomingItem);
 
-    expect(mergedItem.body).toEqual(htmlBody("Edited content"));
+    expect(mergedItem.body).toEqual(htmlBody("Edited content", "hash-2"));
     expect(mergedItem.contentHash).toBe("hash-2");
     // The next list refresh can now tell a further revision apart.
     expect(

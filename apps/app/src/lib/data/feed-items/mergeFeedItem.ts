@@ -53,12 +53,13 @@ function hasSameKnownRevision(
 }
 
 /**
- * Three cases by content revision. Known and different: the incoming record
- * replaces everything, so a stale body cannot survive. Known and equal: the
- * existing record stays and only user state moves. Unknown on either side:
- * the incoming record wins field by field, but a body already loaded is kept
- * because list rows never carry one. A body the server just sent is always
- * the freshest, and the hash rides along so the next revision is detectable.
+ * Three cases by content revision. The server names a revision the client
+ * has not seen: the incoming record replaces everything, so a stale body
+ * cannot survive. Known and equal: the existing record stays and only user
+ * state moves. Unknown on the server side: the incoming record wins field by
+ * field, but a body already loaded is kept because list rows never carry
+ * one. A body the server just sent is always the freshest, and the hash
+ * rides along so the next revision is detectable.
  */
 export function mergeFeedItem(
   existingItem: ApplicationFeedItem | undefined,

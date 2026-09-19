@@ -40,17 +40,14 @@ export function isTruncatedReaderBody(
 }
 
 /**
- * A body belongs to a content revision named by `contentHash`. Only two known,
- * different hashes prove the body is stale; an unknown hash on either side
- * (rows ingested before hashing, fixtures) keeps whatever body is loaded.
+ * A body belongs to the content revision named by `contentHash`. The server
+ * naming a revision the client has not seen (a different hash, or a first
+ * hash for a row loaded before hashing) proves the body is stale. Two unknown
+ * hashes prove nothing, so the loaded body is kept.
  */
 export function hasContentRevisionChanged(
   previous: { contentHash: string | null } | undefined,
   next: { contentHash: string | null },
 ) {
-  return (
-    !!previous?.contentHash &&
-    !!next.contentHash &&
-    previous.contentHash !== next.contentHash
-  );
+  return !!next.contentHash && previous?.contentHash !== next.contentHash;
 }
