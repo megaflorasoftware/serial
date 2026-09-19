@@ -360,6 +360,7 @@ export async function seedBookmarkProjectionData(
   tursoPort: number,
   email: string,
   feedItemId: string,
+  contentHtml?: string,
 ) {
   const { db, client } = getDb(tursoPort);
   const [testUser, item, userView] = await Promise.all([
@@ -405,7 +406,9 @@ export async function seedBookmarkProjectionData(
   });
   await db.insert(schema.pageCaptures).values({
     bookmarkId,
-    contentHtml: `<p>Captured Bookmark body</p>
+    contentHtml:
+      contentHtml ??
+      `<p>Captured Bookmark body</p>
       <p><a href="https://example.com/next">External reader link</a></p>
       <a href="https://example.com/image-target">
         <img src="https://images.example.com/reader.jpg" alt="Reader image" onerror="steal()">

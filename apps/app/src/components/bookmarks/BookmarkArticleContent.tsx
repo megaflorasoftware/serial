@@ -6,6 +6,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
+import { replaceReaderCodeBlock } from "~/components/content-reader/ReaderCodeBlock";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import {
@@ -43,6 +44,8 @@ export function BookmarkArticleContent({ content }: { content: string }) {
 
   const options: HTMLReactParserOptions = {
     replace: (node) => {
+      const codeBlock = replaceReaderCodeBlock(node);
+      if (codeBlock) return codeBlock;
       if (!(node instanceof Element)) return;
       if (node.name === "a" && node.attribs.href?.startsWith("http")) {
         node.attribs.target = "_blank";
