@@ -8,9 +8,11 @@ import type { PublicationClient } from "~/server/rss/atprotoClient";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { createPublicationClient } from "~/server/rss/atprotoClient";
 import {
+  atprotoReferenceSnapshots,
   feedItems,
   feedOriginAtproto,
   feedOriginAtprotoDocuments,
+  feedOriginAtprotoDocumentSources,
   feeds,
   user,
 } from "~/server/db/schema";
@@ -94,33 +96,38 @@ function document(overrides: Partial<ItemObservation> = {}): ItemObservation {
   };
 }
 function record(rkey: string, overrides = {}) {
+  const value = {
+    $type: "site.standard.document",
+    title: rkey,
+    site: PUB,
+    path: `/${rkey}`,
+    publishedAt: DATE,
+    content: {
+      $type: "pub.leaflet.content",
+      pages: [
+        {
+          $type: "pub.leaflet.pages.linearDocument",
+          blocks: [
+            {
+              block: {
+                $type: "pub.leaflet.blocks.text",
+                plaintext: `Body ${rkey}`,
+              },
+            },
+          ],
+        },
+      ],
+    },
+    ...overrides,
+  };
   return {
     uri: uri(rkey),
     cid: `cid${rkey}`,
-    value: {
-      $type: "site.standard.document",
-      title: rkey,
-      site: PUB,
-      path: `/${rkey}`,
-      publishedAt: DATE,
-      content: {
-        $type: "pub.leaflet.content",
-        pages: [
-          {
-            $type: "pub.leaflet.pages.linearDocument",
-            blocks: [
-              {
-                block: {
-                  $type: "pub.leaflet.blocks.text",
-                  plaintext: `Body ${rkey}`,
-                },
-              },
-            ],
-          },
-        ],
-      },
-      ...overrides,
-    },
+    // A record read from the wire never carries undefined; an override of
+    // undefined means the field is absent, as lossless capture requires.
+    value: Object.fromEntries(
+      Object.entries(value).filter(([, field]) => field !== undefined),
+    ) as typeof value,
   };
 }
 function client(records: unknown[] = []): PublicationClient {
@@ -136,8 +143,7 @@ function client(records: unknown[] = []): PublicationClient {
         icon: { ref: { $link: "bafyicon" }, mimeType: "image/png" },
       },
     })),
-    loadBlob: vi.fn(async () => new Uint8Array()),
-    resolveRecord: vi.fn(async () => null),
+    loadBlob: vi.fn(async () => ({ bytes: new Uint8Array(), mimeType: null })),
     list: vi.fn(async () => ({
       records,
       notModified: false as const,
@@ -323,7 +329,8 @@ describe("Atmosphere repository recovery", () => {
         .from(feedOriginAtprotoDocuments)
         .where(eq(feedOriginAtprotoDocuments.status, "retry")),
     ).toHaveLength(0);
-  });
+    // Eight import batches over 200 documents need more than the default budget.
+  }, 15_000);
   it("keeps successes and retries a failed body after it leaves the first page", async () => {
     const broken = record("002", {
       content: {
@@ -343,18 +350,29 @@ describe("Atmosphere repository recovery", () => {
         .from(feedOriginAtprotoDocuments)
         .where(eq(feedOriginAtprotoDocuments.uri, broken.uri))
         .get(),
-    ).toMatchObject({ status: "retry", pendingRecord: broken.value });
+    ).toMatchObject({ status: "retry" });
+    // The staged source, not the ledger, carries the record across the retry.
+    expect(
+      await fixture.database
+        .select()
+        .from(feedOriginAtprotoDocumentSources)
+        .where(eq(feedOriginAtprotoDocumentSources.uri, broken.uri)),
+    ).toMatchObject([
+      { cid: broken.cid, record: expect.stringContaining("bafybody") },
+    ]);
     remote.list = vi.fn(async () => ({
       records: [record("003")],
       etag: null,
       notModified: false as const,
       cursor: undefined,
     }));
-    remote.loadBlob = vi.fn(async () =>
-      new TextEncoder().encode(
-        JSON.stringify({ pages: record("002").value.content.pages }),
+    // An overflowed Leaflet body is the page array itself, not a wrapper object.
+    remote.loadBlob = vi.fn(async () => ({
+      bytes: new TextEncoder().encode(
+        JSON.stringify(record("002").value.content.pages),
       ),
-    );
+      mimeType: "application/json",
+    }));
     await fixture.database
       .update(feedOriginAtprotoDocuments)
       .set({ retryAt: null });
@@ -454,33 +472,72 @@ function linkedDocument(rkey: string, count: number) {
   });
 }
 
-function resolvingClient(
+/** A card pointing at another document, which names its own publication. */
+function citingDocument(rkey: string, target: string) {
+  return record(rkey, {
+    content: {
+      $type: "pub.leaflet.content",
+      pages: [
+        {
+          $type: "pub.leaflet.pages.linearDocument",
+          blocks: [
+            {
+              block: {
+                $type: "pub.leaflet.blocks.standardSitePost",
+                uri: target,
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+const RECORD_CID =
+  "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const publicationRecord = {
+  uri: PUB,
+  cid: RECORD_CID,
+  value: { name: "Publication", url: "https://example.com" },
+};
+/** Records only validate against a real CID, so every listed version shares one. */
+function withRecordCid(documents: Array<ReturnType<typeof record>>) {
+  return documents.map((document) => ({ ...document, cid: RECORD_CID }));
+}
+
+/** Routes public record reads by at-uri; `ref…` rkeys are the embedded references. */
+function resolvingFetch(
   documents: Array<ReturnType<typeof record>>,
   failReference = false,
 ) {
-  documents = documents.map((document) => ({
-    ...document,
-    cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  }));
-  const publication = {
-    uri: PUB,
-    cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    value: { name: "Publication", url: "https://example.com" },
-  };
+  return vi.fn(async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    const key = `at://${url.searchParams.get("repo")}/${url.searchParams.get("collection")}/${url.searchParams.get("rkey")}`;
+    if (key.includes("/ref"))
+      return failReference
+        ? new Response("temporary", { status: 503 })
+        : Response.json({ ...publicationRecord, uri: key });
+    return Response.json(
+      key === PUB
+        ? publicationRecord
+        : documents.find((doc) => doc.uri === key),
+    );
+  });
+}
+function referenceReads(fetch: ReturnType<typeof resolvingFetch>) {
+  return fetch.mock.calls.filter(([input]) =>
+    String(input).includes("rkey=ref"),
+  ).length;
+}
+
+function resolvingClient(
+  documents: Array<ReturnType<typeof record>>,
+  fetch: ReturnType<typeof resolvingFetch>,
+) {
   const transport = createPublicationClient({
     resolvePds: async () => "https://pds.example.com",
-    fetch: vi.fn(async (input) => {
-      const url = new URL(String(input));
-      const key = `at://${url.searchParams.get("repo")}/${url.searchParams.get("collection")}/${url.searchParams.get("rkey")}`;
-      if (key.includes("/ref")) {
-        return failReference
-          ? new Response("temporary", { status: 503 })
-          : Response.json({ ...publication, uri: key });
-      }
-      return Response.json(
-        key === PUB ? publication : documents.find((doc) => doc.uri === key),
-      );
-    }),
+    fetch,
   });
   return {
     ...client(documents),
@@ -490,15 +547,22 @@ function resolvingClient(
   };
 }
 
-it("imports the article with a fallback card when an embedded lookup fails", async () => {
-  const documents = [linkedDocument("001", 1)];
-  await refresh(resolvingClient(documents, true));
-  const items = await fixture.database.select().from(feedItems);
-  expect(items).toHaveLength(1);
-  expect(items[0]?.content).toContain('data-size="row"');
-  expect(items[0]?.content).toContain(
-    `href="https://pdsls.dev/at://${DID}/site.standard.publication/ref001-0"`,
-  );
+it("imports the article and records the failed lookup as an unavailable snapshot", async () => {
+  const documents = withRecordCid([linkedDocument("001", 1)]);
+  await refresh(resolvingClient(documents, resolvingFetch(documents, true)));
+  expect(await fixture.database.select().from(feedItems)).toMatchObject([
+    { content: "", sourceCid: RECORD_CID },
+  ]);
+  expect(
+    await fixture.database.select().from(atprotoReferenceSnapshots),
+  ).toMatchObject([
+    {
+      uri: `at://${DID}/site.standard.publication/ref001-0`,
+      outcome: "unavailable",
+      cid: null,
+      record: null,
+    },
+  ]);
   expect(
     await fixture.database
       .select()
@@ -507,27 +571,44 @@ it("imports the article with a fallback card when an embedded lookup fails", asy
   ).toHaveLength(0);
 });
 
-it("imports documents beyond the refresh reference budget using fallback cards", async () => {
-  const documents = Array.from({ length: 8 }, (_, i) =>
-    linkedDocument(String(100 - i), 16),
+it("resolves every reference of every document and reuses fresh snapshots", async () => {
+  const documents = withRecordCid(
+    Array.from({ length: 8 }, (_, i) => linkedDocument(String(100 - i), 16)),
   );
-  await refresh(resolvingClient(documents));
-  const items = await fixture.database.select().from(feedItems);
-  expect(items).toHaveLength(8);
+  const fetch = resolvingFetch(documents);
+  await refresh(resolvingClient(documents, fetch));
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(8);
+  const snapshots = await fixture.database
+    .select()
+    .from(atprotoReferenceSnapshots);
+  expect(snapshots).toHaveLength(128);
+  expect(snapshots.filter((row) => row.outcome === "resolved")).toHaveLength(
+    128,
+  );
+  const reads = referenceReads(fetch);
+  expect(reads).toBe(128);
+  // A second import of the same documents reads no reference younger than a day.
+  await refresh(resolvingClient(documents, fetch));
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(8);
+  expect(referenceReads(fetch)).toBe(reads);
+});
+
+it("resolves a referenced document and the publication it names", async () => {
+  const cited = record("cited");
+  const documents = withRecordCid([citingDocument("001", cited.uri), cited]);
+  await refresh(resolvingClient(documents, resolvingFetch(documents)));
+  expect(await fixture.database.select().from(feedItems)).toHaveLength(2);
+  const snapshots = await fixture.database
+    .select()
+    .from(atprotoReferenceSnapshots);
   expect(
-    items.filter((item) =>
-      item.content?.includes('href="https://example.com/"'),
-    ),
-  ).toHaveLength(4);
-  expect(
-    items.filter((item) => item.content?.includes('href="https://pdsls.dev/')),
-  ).toHaveLength(4);
-  expect(
-    await fixture.database
-      .select()
-      .from(feedOriginAtprotoDocuments)
-      .where(eq(feedOriginAtprotoDocuments.status, "retry")),
-  ).toHaveLength(0);
+    snapshots
+      .map((row) => ({ uri: row.uri, outcome: row.outcome }))
+      .sort((a, b) => a.uri.localeCompare(b.uri)),
+  ).toEqual([
+    { uri: cited.uri, outcome: "resolved" },
+    { uri: PUB, outcome: "resolved" },
+  ]);
 });
 
 it("combines concurrent RSS and document writes into one item", async () => {

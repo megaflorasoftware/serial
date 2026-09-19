@@ -24,9 +24,12 @@ const fixturesDirectory = resolve(
   "fixtures",
 );
 
+export function readFixtureText(name: string): string {
+  return readFileSync(resolve(fixturesDirectory, `${name}.json`), "utf8");
+}
+
 export function readFixture(name: string): unknown {
-  const path = resolve(fixturesDirectory, `${name}.json`);
-  return JSON.parse(readFileSync(path, "utf8"));
+  return JSON.parse(readFixtureText(name));
 }
 
 export function loadDocumentFixture(name: FixtureName) {

@@ -39,7 +39,12 @@ export function composeItem(
   document: ItemObservation | undefined,
 ) {
   const primary = document ?? rss!;
-  const body = document?.content ? document : rss?.content ? rss : undefined;
+  const body =
+    document?.content || document?.sourceCid
+      ? document
+      : rss?.content
+        ? rss
+        : undefined;
   const url = document?.url.startsWith("at://")
     ? (rss?.url ?? document.url)
     : primary.url;
@@ -58,6 +63,7 @@ export function composeItem(
       body?.firstImageUrl ||
       "",
     content: body?.content ?? "",
+    sourceCid: body?.sourceCid ?? null,
     postedAt: new Date(document?.publishedAt || rss?.publishedAt || 0),
     sourceKind: document && rss ? ("both" as const) : primary.kind,
     bodySource: body?.kind ?? ("none" as const),

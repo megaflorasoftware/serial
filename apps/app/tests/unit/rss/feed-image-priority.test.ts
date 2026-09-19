@@ -235,8 +235,7 @@ it.each([true, false])(
           },
         ],
       }),
-      loadBlob: async () => new Uint8Array(),
-      resolveRecord: async () => null,
+      loadBlob: async () => ({ bytes: new Uint8Array(), mimeType: null }),
     });
     await refresh();
     expect(await stored()).toMatchObject({

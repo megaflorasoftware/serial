@@ -119,13 +119,15 @@ async function getFeedBodyPersistence(page: Page, itemId: string) {
         transaction.oncomplete = () => {
           const item = itemRequest.result as
             | {
-                content?: string;
+                body?: { form: string; html?: string } | null;
                 isWatchLater?: boolean;
                 isWatched?: boolean;
               }
             | undefined;
           resolve({
-            hasBody: item?.content?.includes("Paragraph 1:") === true,
+            hasBody:
+              item?.body?.form === "html" &&
+              item.body.html?.includes("Paragraph 1:") === true,
             isWatchLater: item?.isWatchLater,
             isWatched: item?.isWatched,
             retained: retainedBodyRequest.result === true,

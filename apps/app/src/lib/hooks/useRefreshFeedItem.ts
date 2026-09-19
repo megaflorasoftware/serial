@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { mergeFeedItem } from "~/lib/data/feed-items/mergeFeedItem";
+import { refreshFeedItemReferences } from "~/lib/data/feed-items/referenceRefresh";
 import { feedItemsStore, retainLoadedFeedItemBody } from "~/lib/data/store";
 import { orpcRouterClient } from "~/lib/orpc";
 
@@ -52,7 +53,7 @@ export function useRefreshFeedItem(id: string | undefined) {
         hasNewerMetadata && currentItem
           ? {
               ...currentItem,
-              content: item.content,
+              body: item.body,
               contentSnippet: item.contentSnippet,
             }
           : item;
@@ -89,6 +90,9 @@ export function useRefreshFeedItem(id: string | undefined) {
         );
       retainLoadedFeedItemBody(id);
       succeeded = true;
+      // Nonblocking: the render never waits on fresher Reference snapshots,
+      // and a refresh keeps the revision, so progress and offline rules hold.
+      void refreshFeedItemReferences(id);
     };
 
     void refresh(true)

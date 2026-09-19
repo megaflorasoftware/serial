@@ -22,7 +22,7 @@ const item = {
   author: "Author",
   url: "https://example.com/article",
   thumbnail: "",
-  content: "",
+  body: null,
   contentSnippet: "preview",
   contentType: "text",
   isWatched: false,
@@ -37,7 +37,7 @@ const item = {
   isWatchLaterUpdatedAt: null,
   contentHash: "content-hash",
   platform: "website",
-} as ApplicationFeedItem;
+} as unknown as ApplicationFeedItem;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -47,15 +47,28 @@ beforeEach(() => {
 
 describe("retainFeedItemBody", () => {
   it("retains the fetched body", async () => {
-    mocks.requestFullTextForItems.mockResolvedValue([
-      { id: item.id, content: "<p>Body</p>", contentSnippet: "Body" },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [
+        {
+          id: item.id,
+          body: {
+            form: "html",
+            html: "<p>Body</p>",
+            revision: "content-hash",
+          },
+          contentSnippet: "Body",
+        },
+      ],
+      omitted: [],
+    });
 
     await retainFeedItemBody(item.id);
 
-    expect(feedItemsStore.getState().feedItemsDict[item.id]?.content).toBe(
-      "<p>Body</p>",
-    );
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toEqual({
+      form: "html",
+      html: "<p>Body</p>",
+      revision: "content-hash",
+    });
     expect(feedItemsStore.getState().retainedFeedItemBodyIds[item.id]).toBe(
       true,
     );
@@ -66,7 +79,7 @@ describe("retainFeedItemBody", () => {
 
     await expect(retainFeedItemBody(item.id)).resolves.toBeUndefined();
 
-    expect(feedItemsStore.getState().feedItemsDict[item.id]?.content).toBe("");
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toBeNull();
     expect(
       feedItemsStore.getState().retainedFeedItemBodyIds[item.id],
     ).toBeUndefined();

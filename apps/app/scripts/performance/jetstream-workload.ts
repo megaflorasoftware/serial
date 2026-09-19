@@ -173,7 +173,6 @@ export async function createJetstreamWorkload(
         loadBlob: async () => {
           throw new Error("Unexpected blob");
         },
-        resolveRecord: async () => null,
         list: async (_did, cursor) => {
           pages++;
           const offset = Number(cursor ?? 0);
@@ -227,7 +226,7 @@ export async function createJetstreamWorkload(
       // Recovery samples leave staged work; a healthy idle check has none.
       await database
         .update(feedOriginAtprotoDocuments)
-        .set({ status: "ready", pendingRecord: null });
+        .set({ status: "ready" });
     },
     async check() {
       const unexpected = () => {
@@ -255,7 +254,6 @@ export async function createJetstreamWorkload(
             getRecord: unexpected,
             list: unexpected,
             loadBlob: unexpected,
-            resolveRecord: unexpected,
           },
         },
       );

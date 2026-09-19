@@ -66,7 +66,8 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
   `status` text NOT NULL,
   `event_seq` text,
   `event_rev` text,
-  `pending_record` text,
+  `body_cid` text,
+  `reason` text,
   `retry_at` integer,
   `attempts` integer DEFAULT 0 NOT NULL,
   PRIMARY KEY (`origin_id`, `uri`),
@@ -74,6 +75,38 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
 );
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,`uri`);
+--> statement-breakpoint
+CREATE TABLE `serial_feed_origin_atproto_document_source` (
+  `origin_id` integer NOT NULL,
+  `uri` text NOT NULL,
+  `cid` text NOT NULL,
+  `record` text NOT NULL,
+  `created_at` integer NOT NULL,
+  PRIMARY KEY (`origin_id`, `uri`, `cid`),
+  FOREIGN KEY (`origin_id`,`uri`) REFERENCES `serial_feed_origin_atproto_document`(`origin_id`,`uri`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `serial_feed_origin_atproto_document_blob` (
+  `origin_id` integer NOT NULL,
+  `uri` text NOT NULL,
+  `cid` text NOT NULL,
+  `blob_cid` text NOT NULL,
+  `mime_type` text,
+  `bytes` blob NOT NULL,
+  PRIMARY KEY (`origin_id`, `uri`, `cid`, `blob_cid`),
+  FOREIGN KEY (`origin_id`,`uri`,`cid`) REFERENCES `serial_feed_origin_atproto_document_source`(`origin_id`,`uri`,`cid`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `serial_atproto_reference_snapshot` (
+  `uri` text PRIMARY KEY NOT NULL,
+  `cid` text,
+  `outcome` text NOT NULL,
+  `record` text,
+  `resolved_at` integer NOT NULL,
+  `read_at` integer
+);
+--> statement-breakpoint
+CREATE INDEX `atproto_reference_snapshot_read_at_idx` ON `serial_atproto_reference_snapshot` (`read_at`);
 --> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `site_url` text(512);--> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `name_edited_at` integer;
@@ -144,6 +177,7 @@ ALTER TABLE `serial_feed_item` ADD `source_kind` text DEFAULT 'rss' NOT NULL;-->
 ALTER TABLE `serial_feed_item` ADD `atproto_uri` text;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `body_source` text DEFAULT 'none' NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `tags` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
+ALTER TABLE `serial_feed_item` ADD `source_cid` text;--> statement-breakpoint
 CREATE INDEX `feed_item_feed_normalized_url_idx` ON `serial_feed_item` (`feed_id`,`normalized_url`);--> statement-breakpoint
 CREATE UNIQUE INDEX `feed_item_feed_atproto_uri_unique` ON `serial_feed_item` (`feed_id`,`atproto_uri`);
 --> statement-breakpoint

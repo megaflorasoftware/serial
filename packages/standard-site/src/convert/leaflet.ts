@@ -24,6 +24,7 @@ import {
   unknownBlock,
   type Block,
 } from "./shared";
+import type { RecordLookup } from "../record-preview";
 import { blobRefSchema } from "../lexicons";
 import { sanitizeEmbeddedContent } from "../sanitize";
 import { buildPdslsUrl } from "../uris";
@@ -304,7 +305,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
 export function convertLeafletContent(
   content: LeafletContent,
   did: string,
-  records?: ConversionContext["records"],
+  records?: RecordLookup,
 ) {
   const context = new ConversionContext(did, records);
   let html = "";

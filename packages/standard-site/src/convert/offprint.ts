@@ -25,6 +25,7 @@ import {
   unknownBlock,
   type Block,
 } from "./shared";
+import type { RecordLookup } from "../record-preview";
 import { blobRefSchema } from "../lexicons";
 
 const PREFIX = "app.offprint.block.";
@@ -239,7 +240,7 @@ function renderBlock(block: Block, context: ConversionContext): string {
 export function convertOffprintContent(
   content: OffprintContent,
   did: string,
-  records?: ConversionContext["records"],
+  records?: RecordLookup,
 ) {
   const context = new ConversionContext(did, records);
   const html = content.items.map((item) => renderBlock(item, context)).join("");

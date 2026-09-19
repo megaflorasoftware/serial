@@ -1,19 +1,23 @@
+import {
+  hasContentRevisionChanged,
+  hasReaderBodyContent,
+} from "./feed-items/readerBody";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import type { ConnectionState } from "./atoms";
 
 export function isEligibleFeedBody(
-  item: Pick<ApplicationFeedItem, "content" | "contentType" | "isWatched">,
+  item: Pick<ApplicationFeedItem, "body" | "contentType" | "isWatched">,
 ) {
   return (
     item.contentType === "text" &&
     !item.isWatched &&
-    item.content.trim().length > 0
+    hasReaderBodyContent(item.body)
   );
 }
 
 export function hasRetainedFeedBody(
-  item: Pick<ApplicationFeedItem, "content" | "contentType" | "isWatched">,
+  item: Pick<ApplicationFeedItem, "body" | "contentType" | "isWatched">,
   isRetained: boolean,
 ) {
   return isRetained && isEligibleFeedBody(item);
@@ -26,15 +30,16 @@ export function retainEligibleFeedBody(
   if (nextItem.contentType !== "text" || nextItem.isWatched) {
     return nextItem;
   }
+  // List rows never carry a body; keep the loaded one unless the revision moved.
   if (
-    !nextItem.content &&
-    previousItem?.contentHash &&
-    previousItem.contentHash === nextItem.contentHash &&
+    !hasReaderBodyContent(nextItem.body) &&
+    previousItem &&
+    !hasContentRevisionChanged(previousItem, nextItem) &&
     isEligibleFeedBody(previousItem)
   ) {
     return {
       ...nextItem,
-      content: previousItem.content,
+      body: previousItem.body,
       contentSnippet: nextItem.contentSnippet || previousItem.contentSnippet,
     };
   }
@@ -56,10 +61,10 @@ const strippedBodiesForPersistence = new WeakMap<
 export function stripIneligibleFeedBodyForPersistence(
   item: ApplicationFeedItem,
 ) {
-  if (isEligibleFeedBody(item) || !item.content) return item;
+  if (isEligibleFeedBody(item) || item.body === null) return item;
   let stripped = strippedBodiesForPersistence.get(item);
   if (!stripped) {
-    stripped = { ...item, content: "" };
+    stripped = { ...item, body: null };
     strippedBodiesForPersistence.set(item, stripped);
   }
   return stripped;

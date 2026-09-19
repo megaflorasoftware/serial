@@ -70,14 +70,14 @@ afterEach(() => vi.useRealTimers());
 
 const callers = {
   discovery: () => resolvePublication(uri),
-  conversion: () => client().resolveRecord(uri),
+  conversion: () => client().getRecord(uri),
 };
 for (const [name, call] of Object.entries(callers)) {
   describe(name, () => {
     it("uses a valid Slingshot hit in one request", async () => {
       mocks.fetch.mockResolvedValue(Response.json(record));
       expect(await call()).toMatchObject(
-        name === "discovery" ? { name: "Site" } : { title: "Site" },
+        name === "discovery" ? { name: "Site" } : { value: { name: "Site" } },
       );
       expect(mocks.fetch).toHaveBeenCalledTimes(1);
       expect(new URL(mocks.fetch.mock.calls[0]![0]).origin).toBe(endpoint);

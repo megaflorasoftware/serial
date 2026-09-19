@@ -8,6 +8,8 @@ export type ItemObservation = {
   thumbnail: string;
   pageImageUrl?: string;
   content: string;
+  /** Set when the body is a retained Document source rather than HTML. */
+  sourceCid?: string;
   firstParagraph: string;
   firstImageUrl: string;
   publishedAt: string;

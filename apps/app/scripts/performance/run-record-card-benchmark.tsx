@@ -17,6 +17,21 @@ const preview = {
   publishedAt: "2026-09-18T00:00:00Z",
   imageUrl: "https://example.com/image.jpg",
 };
+/** Snapshot records as the reader reads them: one document per referenced uri. */
+function referenced(uri: string) {
+  return {
+    uri,
+    cid: "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    value: {
+      site: "https://example.com",
+      title: preview.title,
+      description: preview.description,
+      path: "/post",
+      publishedAt: preview.publishedAt,
+      contributors: [{ did, displayName: preview.author }],
+    },
+  };
+}
 const blocks = Array.from({ length: 100 }, (_, index) => [
   {
     block: {
@@ -59,9 +74,9 @@ for (let index = 0; index < 23; index++) {
   const converted = await convertDocumentContent(document, {
     did,
     loadBlob: () => Promise.reject(new Error("Unexpected blob request")),
-    resolveRecord: () => {
+    records: (uri) => {
       lookups++;
-      return Promise.resolve(preview);
+      return referenced(uri);
     },
   });
   const convertedAt = performance.now();
@@ -73,7 +88,7 @@ for (let index = 0; index < 23; index++) {
     </>,
   );
   const end = performance.now();
-  if (lookups !== 16 || !converted?.html || !rendered)
+  if (lookups !== 100 || !converted?.html || !rendered)
     throw new Error("Invalid benchmark workload");
   if (index >= 3)
     samples.push({
@@ -103,6 +118,6 @@ console.log(
   JSON.stringify({
     conversion: result.conversion,
     render: result.render,
-    lookups: 16,
+    lookups: 100,
   }),
 );
