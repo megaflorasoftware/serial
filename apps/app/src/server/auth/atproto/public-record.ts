@@ -2,6 +2,7 @@ import {
   lookupPublicRecord,
   MissingPublicRecordError,
   parseAtUri,
+  parseLosslessJson,
   PublicRecordHttpError,
   PublicRecordVersionUnavailableError,
 } from "@serial/standard-site";
@@ -38,7 +39,7 @@ async function readRecordResponse(
   response: Response,
   request: PublicRecordRequest,
 ) {
-  if (response.ok) return response.json();
+  if (response.ok) return parseLosslessJson(await response.text());
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;

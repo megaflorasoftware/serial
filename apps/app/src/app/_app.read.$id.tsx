@@ -5,7 +5,7 @@ import { ARTICLE_SANITIZE_SCHEMA } from "@serial/standard-site";
 import clsx from "clsx";
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize from "rehype-sanitize";
@@ -18,6 +18,7 @@ import { barsHiddenAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import classes from "~/components/feed/read/article.module.css";
 import { useFeedItemValue } from "~/lib/data/store";
+import { readerBodyHtml } from "~/lib/data/feed-items/readerBody";
 import { ArticleContent } from "~/components/feed/read/ArticleContent";
 import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import {
@@ -52,13 +53,13 @@ const parser = unified()
   .use(rehypeStringify);
 
 function getReaderContent(
-  feedItem: { content?: string } | undefined,
+  bodyHtml: string,
   articleStyle: "simplified" | "full",
 ) {
   if (articleStyle === "simplified") {
-    return String(parser.processSync(feedItem?.content ?? ""));
+    return String(parser.processSync(bodyHtml));
   }
-  return feedItem?.content ?? "";
+  return bodyHtml;
 }
 
 export const Route = createFileRoute("/_app/read/$id")({
@@ -135,7 +136,11 @@ function FeedReader({
   const { zoom } = useZoom();
   const articleWidthLayout = getArticleWidthLayout(zoom);
 
-  const content = getReaderContent(feedItem, articleStyle);
+  // Deriving a Document source is the expensive step, so it is keyed on the
+  // body identity rather than on the zoom and style the reader also reads.
+  const body = feedItem?.body;
+  const bodyHtml = useMemo(() => readerBodyHtml(body), [body]);
+  const content = getReaderContent(bodyHtml, articleStyle);
 
   const articleRef = useRef<HTMLDivElement>(null);
   const [articleElement, setArticleElement] = useState<HTMLDivElement | null>(

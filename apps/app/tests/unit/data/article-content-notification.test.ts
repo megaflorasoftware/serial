@@ -24,7 +24,8 @@ function feedItem(): ApplicationFeedItem {
     author: "Author",
     url: "https://example.com/article",
     thumbnail: "",
-    content: "",
+    sourceCid: null,
+    body: null,
     contentSnippet: "Preview",
     contentType: "text",
     isWatched: false,
@@ -44,7 +45,11 @@ function feedItem(): ApplicationFeedItem {
 
 function MountedArticle() {
   const item = useFeedItemValue("article-one");
-  return createElement("article", null, item?.content);
+  return createElement(
+    "article",
+    null,
+    item?.body?.form === "html" ? item.body.html : "",
+  );
 }
 
 afterEach(() => {
@@ -66,7 +71,11 @@ describe("article content notification", () => {
       feedItemsStore.getState().applyFulltextItems([
         {
           id: "article-one",
-          content: "Complete article body",
+          body: {
+            form: "html",
+            html: "Complete article body",
+            revision: "content-hash",
+          },
           contentSnippet: "Complete preview",
         },
       ]);

@@ -7,6 +7,7 @@ import {
   insertFeedWithCategories,
   runInChunks,
 } from "./feed-router/utils";
+import type { ReaderBody } from "@serial/standard-site";
 import type { PublishedChunk } from "../publisher";
 import type { InsertFeedWithCategoriesResult } from "./feed-router/utils";
 import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
@@ -15,6 +16,7 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
+import { loadCappedReaderBodies } from "~/server/feeds/reader-bodies";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
@@ -129,11 +131,17 @@ export const fetchDueSources = protectedProcedure
     });
   });
 
-/** Fulltext content patch for items that need it after the lightweight fetch. */
+/** Reader body patch for items that need it after the lightweight fetch. */
 export type FeedItemFulltext = {
   id: string;
-  content: string;
+  body: ReaderBody | null;
   contentSnippet: string;
+};
+
+/** Ids past the response byte cap are named so the client asks again. */
+export type FeedItemFulltextResponse = {
+  items: FeedItemFulltext[];
+  omitted: string[];
 };
 
 export type ImportProgressChunk =
@@ -1051,13 +1059,17 @@ export const requestFullTextForItems = protectedProcedure
       itemIds: z.array(z.string()).max(500),
     }),
   )
-  .handler(async ({ context, input }) => {
+  .handler(async ({ context, input }): Promise<FeedItemFulltextResponse> => {
     try {
-      const items = await context.db
+      const rows = await context.db
         .select({
           id: feedItems.id,
+          feedId: feedItems.feedId,
           content: feedItems.content,
+          contentHash: feedItems.contentHash,
           contentSnippet: feedItems.contentSnippet,
+          atprotoUri: feedItems.atprotoUri,
+          sourceCid: feedItems.sourceCid,
         })
         .from(feedItems)
         .innerJoin(feeds, eq(feedItems.feedId, feeds.id))
@@ -1067,8 +1079,18 @@ export const requestFullTextForItems = protectedProcedure
             eq(feeds.userId, context.user.id),
           ),
         );
-
-      return items;
+      // Request order decides which bodies fit under the response cap.
+      const position = new Map(input.itemIds.map((id, index) => [id, index]));
+      rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+      const { items, omitted } = await loadCappedReaderBodies(context.db, rows);
+      return {
+        items: items.map((entry) => ({
+          id: entry.row.id,
+          body: entry.body,
+          contentSnippet: entry.row.contentSnippet,
+        })),
+        omitted: omitted.map((row) => row.id),
+      };
     } catch (error) {
       captureException(error);
       throw error;

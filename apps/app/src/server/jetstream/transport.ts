@@ -1,7 +1,12 @@
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket from "ws";
 import { Jetstream, JetstreamV1, parseRawRecord } from "@bsky/jetstream";
-import { lexToJson } from "@atproto/lex";
+import { isCid, toBase64 } from "@atproto/lex";
+import {
+  parseLosslessJson,
+  stringifyLosslessJson,
+} from "@serial/standard-site";
+import { captureRecordText, captureRecordValue } from "./document-source";
 import {
   COLLECTIONS,
   eventSchema,
@@ -17,16 +22,83 @@ import type {
   LiveTransport,
   RawEvent,
   RawEventV1,
+  RawRecord,
 } from "@bsky/jetstream";
 import type { StreamBatch } from "./protocol";
 import { isLegacyJetstream } from "~/lib/jetstream-endpoint";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
+const MAX_STASHED_RECORDS = 4096;
+
+/**
+ * The SDK parses frames with `JSON.parse`, which rounds 64-bit integers. Each
+ * commit's record is captured from the frame text first and matched back to
+ * the decoded event by sequence.
+ */
+export function createRecordStash() {
+  const texts = new Map<number, string>();
+  return {
+    note(frame: string) {
+      let parsed: unknown;
+      try {
+        parsed = parseLosslessJson(frame);
+      } catch {
+        return; // The SDK reports malformed frames.
+      }
+      const located = locateCommitRecord(parsed);
+      if (!located) return;
+      if (texts.size >= MAX_STASHED_RECORDS)
+        texts.delete(texts.keys().next().value!);
+      texts.set(located.seq, stringifyLosslessJson(located.record));
+    },
+    take(seq: number) {
+      const text = texts.get(seq);
+      texts.delete(seq);
+      return text;
+    },
+  };
+}
+
+type Frame = { [key: string]: unknown };
+
+function asFrame(value: unknown): Frame | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Frame)
+    : null;
+}
+
+/** v2 wraps the commit in `payload`; v1 carries it at the top level with `time_us`. */
+function locateCommitRecord(frame: unknown) {
+  const outer = asFrame(frame);
+  if (!outer) return null;
+  const payload = asFrame(outer.payload);
+  if (payload && typeof payload.$type === "string") {
+    if (!payload.$type.endsWith("#commit") || payload.record === undefined)
+      return null;
+    return { seq: Number(payload.seq), record: payload.record };
+  }
+  const commit = asFrame(outer.commit);
+  if (outer.kind !== "commit" || !commit || commit.record === undefined)
+    return null;
+  return { seq: Number(outer.time_us), record: commit.record };
+}
+
+/** Lex values from DAG-CBOR keep integers as bigint and links and bytes as their JSON forms. */
+export function lexToLossless(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(lexToLossless);
+  if (isCid(value)) return { $link: value.toString() };
+  if (value instanceof Uint8Array) return { $bytes: toBase64(value) };
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, lexToLossless(entry)]),
+  );
+}
 
 /** No hidden reconnects: the caller resumes from durable, applied progress. */
 export function liveTransport(
   legacy = false,
   onOpen?: () => Promise<void>,
+  onFrame?: (frame: string) => void,
 ): LiveTransport {
   return {
     async *stream(getUrl, signal, options) {
@@ -88,6 +160,7 @@ export function liveTransport(
           fail(new StreamFailure("live-buffer"));
           return;
         }
+        onFrame?.(message);
         queue.push(message);
         wake();
       });
@@ -163,6 +236,18 @@ export function createStreamTransport(input: {
     blockConcurrency: 2,
     snapshotBufferBytes: 4 * 1024 * 1024,
   });
+  const stash = createRecordStash();
+  /** Wire JSON comes from the stash; archive CBOR is decoded and serialized losslessly. */
+  function captureCommitRecord(seq: number, raw: RawRecord) {
+    const captured =
+      raw instanceof Uint8Array
+        ? captureRecordValue(lexToLossless(parseRawRecord(raw)))
+        : (() => {
+            const text = stash.take(seq);
+            return text ? captureRecordText(text) : captureRecordValue(raw);
+          })();
+    return { record: captured.value, recordText: captured.text };
+  }
   async function* decode(
     batches: AsyncIterable<EventBatch<RawEvent | RawEventV1>>,
   ): AsyncGenerator<StreamBatch> {
@@ -177,7 +262,7 @@ export function createStreamTransport(input: {
                   ...raw,
                   commit: {
                     ...raw.commit,
-                    record: lexToJson(parseRawRecord(raw.commit.record)),
+                    ...captureCommitRecord(raw.seq, raw.commit.record),
                   },
                 }
               : raw;
@@ -209,7 +294,7 @@ export function createStreamTransport(input: {
     return {
       collections: COLLECTIONS,
       signal,
-      liveTransport: liveTransport(legacy, onOpen),
+      liveTransport: liveTransport(legacy, onOpen, stash.note),
       onError: (error: Error) => {
         if (!signal.aborted) report(error, "replay-decode");
       },

@@ -1,22 +1,44 @@
 import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
+  listedRecordSchema,
   parseDocumentRecord,
   parsePublicationRecord,
+  REFERENCE_IMPORT_REUSE_MS,
 } from "@serial/standard-site";
 import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { createPublicationClient } from "../rss/atprotoClient";
-import { documentObservation } from "../rss/documentObservation";
+import {
+  deriveDocumentBody,
+  documentObservation,
+  fetchDocumentBlobs,
+  retainedSource,
+  sourceReaderBody,
+} from "../rss/documentObservation";
 import { enrichObservationImages } from "../rss/observationImages";
 import { writeObservedItems } from "../rss/writeItems";
 import { applyOriginMetadata } from "../rss/originMetadata";
 import { readFeedHttp } from "../rss/feedHttp";
+import { resolveSourceReferences } from "./reference-snapshots";
+import {
+  captureRecordValue,
+  isRecordOverBudget,
+  OversizedDocumentSourceError,
+  pruneDocumentSources,
+  readStagedRecord,
+  stageDocumentSource,
+  storeDocumentBlobs,
+} from "./document-source";
 import { CheckpointHostError } from "./protocol";
 import { eligible, loadOrigin, nowFor, planFor } from "./store";
 import { createStreamReporter } from "./report";
+import type { FetchedBlob } from "./document-source";
 import type { StreamDatabase, StreamSettings } from "./store";
-import type { ApplicationFeedItem } from "../db/schema";
+import type {
+  ApplicationFeedItem,
+  DOCUMENT_LEDGER_REASONS,
+} from "../db/schema";
 import type { PublicationClient } from "../rss/atprotoClient";
 import type { FeedDatabase } from "../feeds/origins";
 import { workerPool } from "~/lib/workerPool";
@@ -139,7 +161,10 @@ export async function processOriginDocuments(
   };
   const committed = new Map<string, ApplicationFeedItem>();
   const removed = new Set<string>();
+  const now = nowFor(settings);
+  const did = row.atproto.publicationDid;
   for await (const unused of workerPool(pending, 4, async (entry) => {
+    const key = { originId, uri: entry.uri, cid: entry.cid };
     const identity = and(
       eq(feedOriginAtprotoDocuments.originId, originId),
       eq(feedOriginAtprotoDocuments.uri, entry.uri),
@@ -149,28 +174,81 @@ export async function processOriginDocuments(
       eq(feedOriginAtprotoDocuments.cid, entry.cid),
       eq(feedOriginAtprotoDocuments.status, "retry"),
     );
-    try {
-      const document = parseDocumentRecord(
-        entry.pendingRecord
-          ? { uri: entry.uri, cid: entry.cid, value: entry.pendingRecord }
-          : await client.getRecord(entry.uri, { cid: entry.cid }),
-      );
-      if (!document) {
-        await runDatabaseWrite(database, () =>
-          database
+    const invalidate = async (
+      reason: (typeof DOCUMENT_LEDGER_REASONS)[number],
+      error: Error,
+    ) => {
+      await runDatabaseWrite(database, () =>
+        database.transaction(async (tx) => {
+          const marked = await tx
             .update(feedOriginAtprotoDocuments)
-            .set({ status: "invalid", pendingRecord: null })
-            .where(identity),
+            .set({ status: "invalid", reason })
+            .where(identity)
+            .returning({ uri: feedOriginAtprotoDocuments.uri });
+          // A version staged meanwhile owns the row now; leave its source alone.
+          if (!marked.length) return;
+          // The readable source stays; the failed version is not retained.
+          await pruneDocumentSources(tx, originId, [
+            { uri: entry.uri, keep: [entry.bodyCid] },
+          ]);
+        }),
+      );
+      report(error, "document-validation");
+    };
+    try {
+      // A staged record read is one narrow row; the ledger never carries it.
+      // A missing row (older ledger entries, a pruned version) reads the
+      // record itself, which the budget then bounds like staging does.
+      const captured =
+        (await readStagedRecord(database, key)) ??
+        captureRecordValue(
+          listedRecordSchema.parse(
+            await client.getRecord(entry.uri, { cid: entry.cid }),
+          ).value,
         );
-        report(new Error("Invalid document"), "document-validation");
+      if (isRecordOverBudget(captured.text)) {
+        await invalidate("oversized", new OversizedDocumentSourceError());
         return;
       }
-      const observation = await documentObservation(
-        document,
-        publication,
-        row.atproto.publicationDid,
-        client,
+      const document = parseDocumentRecord({
+        uri: entry.uri,
+        cid: entry.cid,
+        value: captured.value,
+      });
+      if (!document) {
+        await invalidate("invalid", new Error("Invalid document"));
+        return;
+      }
+      let blobs: FetchedBlob[];
+      try {
+        blobs = await fetchDocumentBlobs(document, captured.text, did, client);
+      } catch (error) {
+        if (!(error instanceof OversizedDocumentSourceError)) throw error;
+        await invalidate("oversized", error);
+        return;
+      }
+      const source = retainedSource(key, captured.text, blobs);
+      const references = await resolveSourceReferences(
+        database,
+        source,
+        did,
+        // Lookup budgets are wall-clock; `now` only stamps stored rows.
+        (uri) => client.getRecord(uri, { deadline: Date.now() + 5_000 }),
+        { now, reuseMs: REFERENCE_IMPORT_REUSE_MS },
       );
+      const body = sourceReaderBody(source, references);
+      const outcome = deriveDocumentBody(document, body, did);
+      // A rejected or absent body writes the item anyway; the last readable body stays.
+      const observation = documentObservation(document, publication, did, {
+        outcome,
+        cid: entry.cid,
+        readableCid: entry.bodyCid,
+      });
+      if (outcome.kind === "rejected")
+        report(
+          new Error("Document source did not convert"),
+          "document-adapter",
+        );
       const incoming = await enrichObservationImages([observation], readPage);
       const currentPlan = await planFor(row, settings);
       const written = await writeObservedItems(database, row.feed, incoming, {
@@ -185,7 +263,6 @@ export async function processOriginDocuments(
             !latest.atproto.repositoryActive ||
             latest.atproto.accountSeq !== row.atproto.accountSeq ||
             !eligible(latest, currentPlan, settings, options.manual) ||
-            !latest.atproto.repositoryActive ||
             latest.atproto.streamMode !== "live" ||
             latest.atproto.publicationSeq !== row.atproto.publicationSeq ||
             latest.atproto.repositorySeq !== row.atproto.repositorySeq
@@ -200,15 +277,26 @@ export async function processOriginDocuments(
           );
         },
         didWrite: async (tx) => {
+          const readable = outcome.kind === "source";
+          // Source and blobs become readable in the same transaction as the item.
+          if (readable) {
+            await stageDocumentSource(tx, key, captured.text, now);
+            await storeDocumentBlobs(tx, key, blobs);
+          }
+          const bodyCid = readable ? entry.cid : entry.bodyCid;
           await tx
             .update(feedOriginAtprotoDocuments)
             .set({
               status: "ready",
-              pendingRecord: null,
+              bodyCid,
+              reason: outcome.kind === "rejected" ? "adapter" : null,
               attempts: 0,
               retryAt: null,
             })
             .where(identity);
+          await pruneDocumentSources(tx, originId, [
+            { uri: entry.uri, keep: [bodyCid] },
+          ]);
         },
       });
       for (const id of written.removedItemIds) {
@@ -225,7 +313,7 @@ export async function processOriginDocuments(
           .set({
             attempts: entry.attempts + 1,
             retryAt: new Date(
-              nowFor(settings).getTime() +
+              now.getTime() +
                 Math.min(3_600_000, 5000 * 2 ** Math.min(entry.attempts, 10)),
             ),
           })

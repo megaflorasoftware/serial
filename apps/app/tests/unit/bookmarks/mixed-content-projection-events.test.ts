@@ -33,7 +33,9 @@ const orpcMocks = vi.hoisted(() => ({
   setFeedBulkWatchedValue: vi.fn(),
   requestPage: vi.fn(),
   getCaptures: vi.fn().mockResolvedValue([]),
-  requestFullTextForItems: vi.fn().mockResolvedValue([]),
+  requestFullTextForItems: vi
+    .fn()
+    .mockResolvedValue({ items: [], omitted: [] }),
 }));
 
 vi.mock("~/lib/orpc", () => ({
@@ -102,7 +104,8 @@ function feedItem(id: string, url: string): ApplicationFeedItem {
     author: "Author",
     url,
     thumbnail: "",
-    content: "",
+    sourceCid: null,
+    body: null,
     contentSnippet: "",
     contentType: "text",
     isWatched: false,

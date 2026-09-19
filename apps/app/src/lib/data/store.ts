@@ -32,9 +32,9 @@ import type {
 } from "./feed-page-retention";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type { ApplicationFeedItem } from "~/server/db/schema";
-import type { FeedItemFulltext } from "~/server/api/routers/initialRouter";
 import type { PublishedChunk } from "~/server/api/publisher";
 import type { IncomingFeedItem } from "./feed-items/mergeFeedItem";
+import type { FeedItemFulltext } from "~/server/api/routers/initialRouter";
 
 export { getFeedItemScopeKey } from "./scopeMembership";
 export type { FeedItemScopeType } from "./scopeMembership";
@@ -292,7 +292,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           if (existing) {
             const updated = {
               ...existing,
-              content: item.content,
+              body: item.body,
               contentSnippet: item.contentSnippet,
             };
             feedItemsDict[item.id] = updated;
@@ -343,8 +343,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             .requestFullTextForItems({
               itemIds,
             })
-            .then((items) => {
-              get().applyFulltextItems(items);
+            .then((response) => {
+              get().applyFulltextItems(response.items);
+              // Omitted ids were cut by the response byte cap, so they are
+              // re-queued rather than treated as bodyless.
+              if (response.omitted.length > 0) {
+                const pending = new Set(get().pendingFulltextItems);
+                for (const itemId of response.omitted) pending.add(itemId);
+                set({ pendingFulltextItems: [...pending] });
+              }
             })
             .catch((error) => {
               console.error("Error fetching fulltext:", error);
@@ -635,11 +642,11 @@ export async function retainFeedItemBody(itemId: string) {
   }
   if (retainLoadedFeedItemBody(itemId)) return;
   // Retention is best effort; a failed fetch stays silent.
-  const items = await orpcRouterClient.initial
+  const response = await orpcRouterClient.initial
     .requestFullTextForItems({ itemIds: [itemId] })
     .catch(() => null);
-  if (!items) return;
-  feedItemsStore.getState().applyFulltextItems(items);
+  if (!response) return;
+  feedItemsStore.getState().applyFulltextItems(response.items);
 }
 
 export const useFeedItemsListProjection = () => {

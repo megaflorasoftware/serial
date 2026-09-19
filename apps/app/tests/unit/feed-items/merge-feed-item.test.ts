@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { ReaderBody } from "@serial/standard-site";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import { mergeFeedItem } from "~/lib/data/feed-items/mergeFeedItem";
 import {
@@ -21,7 +22,8 @@ function makeItem(
     author: "Original author",
     url: "https://example.com/original",
     thumbnail: "https://example.com/original.jpg",
-    content: "Original content",
+    sourceCid: null,
+    body: htmlBody("Original content"),
     contentSnippet: "Original snippet",
     contentType: "text",
     isWatched: false,
@@ -40,6 +42,24 @@ function makeItem(
   };
 }
 
+function htmlBody(html: string, revision = "hash-1"): ReaderBody {
+  return { form: "html", html, revision };
+}
+
+function sourceBody(): ReaderBody {
+  return {
+    form: "source",
+    source: {
+      uri: "at://did:plc:alice/site.standard.document/post",
+      cid: "bafy",
+      record: "{}",
+      blobs: [],
+    },
+    references: [],
+    revision: "bafy",
+  };
+}
+
 describe("mergeFeedItem", () => {
   afterEach(() => {
     clearPendingFeedItemOverrides();
@@ -49,7 +69,7 @@ describe("mergeFeedItem", () => {
     const existingItem = makeItem();
     const incomingItem = makeItem({
       title: "Incoming title",
-      content: "Incoming content",
+      body: htmlBody("Incoming content"),
       contentSnippet: "Incoming snippet",
       thumbnail: "https://example.com/incoming.jpg",
       isWatched: true,
@@ -65,7 +85,7 @@ describe("mergeFeedItem", () => {
     const mergedItem = mergeFeedItem(existingItem, incomingItem);
 
     expect(mergedItem.title).toBe("Original title");
-    expect(mergedItem.content).toBe("Original content");
+    expect(mergedItem.body).toEqual(htmlBody("Original content"));
     expect(mergedItem.contentSnippet).toBe("Original snippet");
     expect(mergedItem.thumbnail).toBe("https://example.com/original.jpg");
     expect(mergedItem.isWatched).toBe(true);
@@ -81,7 +101,7 @@ describe("mergeFeedItem", () => {
     const existingItem = makeItem();
     const incomingItem = makeItem({
       title: "Incoming title",
-      content: "Incoming content",
+      body: htmlBody("Incoming content"),
       contentSnippet: "Incoming snippet",
       thumbnail: "https://example.com/incoming.jpg",
       contentHash: "hash-2",
@@ -90,7 +110,7 @@ describe("mergeFeedItem", () => {
     const mergedItem = mergeFeedItem(existingItem, incomingItem);
 
     expect(mergedItem.title).toBe("Incoming title");
-    expect(mergedItem.content).toBe("Incoming content");
+    expect(mergedItem.body).toEqual(htmlBody("Incoming content"));
     expect(mergedItem.contentSnippet).toBe("Incoming snippet");
     expect(mergedItem.thumbnail).toBe("https://example.com/incoming.jpg");
   });
@@ -127,13 +147,33 @@ describe("mergeFeedItem", () => {
     expect(mergedItem.updatedAt).toEqual(new Date("2026-01-04T11:59:59Z"));
   });
 
-  it("fills missing cached content when the hash matches", () => {
-    const existingItem = makeItem({ content: "", contentSnippet: "" });
+  it("fills a missing cached body when the hash matches", () => {
+    const existingItem = makeItem({ body: null, contentSnippet: "" });
     const incomingItem = makeItem({ contentHash: "hash-1" });
 
     const mergedItem = mergeFeedItem(existingItem, incomingItem);
 
-    expect(mergedItem.content).toBe("Original content");
+    expect(mergedItem.body).toEqual(htmlBody("Original content"));
     expect(mergedItem.contentSnippet).toBe("Original snippet");
+  });
+
+  it.each([
+    ["an HTML", htmlBody("Original content")],
+    ["a Document source", sourceBody()],
+  ])(
+    "keeps %s body across a hash-matching metadata refresh",
+    (_label, body) => {
+      const existingItem = makeItem({ body });
+      const incomingItem = makeItem({ body: undefined, contentHash: "hash-1" });
+
+      expect(mergeFeedItem(existingItem, incomingItem).body).toEqual(body);
+    },
+  );
+
+  it("drops the cached body when the hash changes", () => {
+    const existingItem = makeItem({ body: sourceBody() });
+    const incomingItem = makeItem({ body: undefined, contentHash: "hash-2" });
+
+    expect(mergeFeedItem(existingItem, incomingItem).body).toBeNull();
   });
 });

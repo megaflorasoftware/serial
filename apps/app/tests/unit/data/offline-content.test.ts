@@ -13,9 +13,26 @@ function archivedTextItem() {
     id: "item-1",
     contentType: "text",
     isWatched: true,
-    content: "<p>Archived body</p>",
+    body: { form: "html", html: "<p>Archived body</p>", revision: "hash-1" },
     contentSnippet: "Archived",
     contentHash: "hash-1",
+  } as unknown as ApplicationFeedItem;
+}
+
+function archivedSourceItem() {
+  return {
+    ...archivedTextItem(),
+    body: {
+      form: "source",
+      source: {
+        uri: "at://did:plc:alice/site.standard.document/post",
+        cid: "bafy",
+        record: "{}",
+        blobs: [],
+      },
+      references: [],
+      revision: "bafy",
+    },
   } as unknown as ApplicationFeedItem;
 }
 
@@ -31,20 +48,30 @@ describe("archived body handling", () => {
 
     const persisted = stripIneligibleFeedBodyForPersistence(item);
 
-    expect(persisted.content).toBe("");
+    expect(persisted.body).toBeNull();
     expect(persisted.contentSnippet).toBe("Archived");
-    expect(item.content).toBe("<p>Archived body</p>");
+    expect(item.body).not.toBeNull();
     // Stable identity across flushes so the normalized IDB diff sees no
     // change without a real update.
     expect(stripIneligibleFeedBodyForPersistence(item)).toBe(persisted);
   });
 
-  it("passes through items whose body is already eligible or empty", () => {
+  it("strips an archived Document source from the persisted snapshot", () => {
+    const item = archivedSourceItem();
+
+    expect(stripIneligibleFeedBodyForPersistence(item).body).toBeNull();
+  });
+
+  it("passes through items whose body is already eligible or unloaded", () => {
     const eligible = { ...archivedTextItem(), isWatched: false };
-    const empty = { ...archivedTextItem(), content: "" };
+    const eligibleSource = { ...archivedSourceItem(), isWatched: false };
+    const unloaded = { ...archivedTextItem(), body: null };
 
     expect(stripIneligibleFeedBodyForPersistence(eligible)).toBe(eligible);
-    expect(stripIneligibleFeedBodyForPersistence(empty)).toBe(empty);
+    expect(stripIneligibleFeedBodyForPersistence(eligibleSource)).toBe(
+      eligibleSource,
+    );
+    expect(stripIneligibleFeedBodyForPersistence(unloaded)).toBe(unloaded);
   });
 });
 

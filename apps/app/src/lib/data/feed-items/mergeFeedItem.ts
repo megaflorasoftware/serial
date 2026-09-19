@@ -1,8 +1,10 @@
 import { applyPendingFeedItemOverrides } from "./pendingMutations";
+import { hasReaderBodyContent } from "./readerBody";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 
-export type IncomingFeedItem = Omit<ApplicationFeedItem, "content"> &
-  Partial<Pick<ApplicationFeedItem, "content">>;
+/** List and page payloads never carry bodies; only body endpoints do. */
+export type IncomingFeedItem = Omit<ApplicationFeedItem, "body"> &
+  Partial<Pick<ApplicationFeedItem, "body">>;
 
 const FEED_ITEM_MERGE_FIELDS = {
   metadata: [
@@ -23,7 +25,7 @@ function normalizeIncomingFeedItem(
 ): ApplicationFeedItem {
   return {
     ...incomingItem,
-    content: incomingItem.content ?? "",
+    body: incomingItem.body ?? null,
   };
 }
 
@@ -65,7 +67,9 @@ export function mergeFeedItem(
     mergeItemMetadata(
       {
         ...existingItem,
-        content: existingItem.content || normalizedIncomingItem.content,
+        body: hasReaderBodyContent(existingItem.body)
+          ? existingItem.body
+          : normalizedIncomingItem.body,
         contentSnippet:
           existingItem.contentSnippet || normalizedIncomingItem.contentSnippet,
       },

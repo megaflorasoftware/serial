@@ -9,6 +9,7 @@ import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
 import { feedItems, feedOriginRss, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { logMessage } from "../logger";
+import { toApplicationFeedItem } from "../feeds/reader-bodies";
 import { enrichObservationImages } from "./observationImages";
 import { calculateNextFetch } from "./calculateNextFetch";
 import { getCachedFeedResult, setCachedFeedResult } from "./feedCache";
@@ -347,11 +348,7 @@ async function insertFeedItems(
 
   return feedItemsList.map((item) => {
     const itemFeed = databaseFeeds.find((f) => f.id === item.feedId);
-
-    return {
-      ...item,
-      platform: itemFeed?.platform ?? "youtube",
-    } as ApplicationFeedItem;
+    return toApplicationFeedItem(item, itemFeed?.platform ?? "youtube");
   });
 }
 

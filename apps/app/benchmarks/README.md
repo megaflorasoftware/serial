@@ -241,3 +241,13 @@ The client audit profiles also measure local mixed-content View projection over
 their complete Bookmark fixtures. This protects fetch-free View navigation and
 View-chip status computation with the same 50 ms operation budget as other
 client state transitions.
+
+## Reader bodies
+
+`pnpm benchmark:reader-body` loads the nine real standard.site fixture
+documents through the body endpoint path and reports, per document, the
+serialized Reader body size against the 128 KiB reader transfer budget and the
+4 MiB offline budget, plus body load and browser derivation timings. It exits
+nonzero when any fixture exceeds a budget. Import cost for the same documents
+is covered by `pnpm benchmark:ingest`, which stages and processes them through
+the Jetstream workload.

@@ -543,9 +543,15 @@ describe("leaflet blocks", () => {
     );
     expect(html).toContain('data-serial-embed="record"');
     expect(html).toContain('data-size="row"');
-    expect(html).toContain('href="https://pdsls.dev/at://did:plc:a/site.standard.document/b"');
-    expect(html).toContain('href="https://pdsls.dev/at://did:plc:a/site.standard.publication/c"');
-    expect(html).toContain(`<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyimg")}" alt="g"></figure><h3>Suffixed</h3>`);
+    expect(html).toContain(
+      'href="https://pdsls.dev/at://did:plc:a/site.standard.document/b"',
+    );
+    expect(html).toContain(
+      'href="https://pdsls.dev/at://did:plc:a/site.standard.publication/c"',
+    );
+    expect(html).toContain(
+      `<figure><img src="${buildBlueskyCdnImageUrl(did, "bafyimg")}" alt="g"></figure><h3>Suffixed</h3>`,
+    );
     expect(html).not.toContain("../../evil");
     expectFixedPoint(html);
   });

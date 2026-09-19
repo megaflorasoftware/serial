@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   documentBelongsToPublication,
   parseDocumentRecord,
+  stringifyLosslessJson,
 } from "@serial/standard-site";
 import {
   atprotoStreamState,
@@ -14,9 +15,16 @@ import {
 import { hydrateOrigin } from "../feeds/origins";
 import { runDatabaseWrite } from "../db/retry-write";
 import { getEffectivePlanConfig } from "../subscriptions/plans";
+import {
+  captureRecordValue,
+  isRecordOverBudget,
+  pruneDocumentSources,
+  stageDocumentSources,
+} from "./document-source";
 import { createStreamReporter } from "./report";
 import { canApplyStream } from "./eligibility";
 import { CheckpointHostError, normalizeService, sequence } from "./protocol";
+import type { CapturedRecord } from "./document-source";
 import type { getUserPlanId } from "../subscriptions/helpers";
 import type { PlanConfig } from "../subscriptions/plans";
 import type { StreamBatch, StreamEvent } from "./protocol";
@@ -155,68 +163,139 @@ export function streamIsConnected(
   return state.connected && state.leaseUntil !== null && state.leaseUntil > now;
 }
 
-/** Runs inside the caller's transaction. Supplied records are kept only while processing is pending. */
-export async function stageDocument(
-  database: FeedDatabase,
-  input: {
-    originId: number;
-    uri: string;
-    cid: string;
-    record?: unknown;
-    rev?: string | null;
-    seq: number;
-    deleted?: boolean;
-  },
+export type StagedDocumentInput = {
+  originId: number;
+  uri: string;
+  cid: string;
+  record?: CapturedRecord;
+  rev?: string | null;
+  seq: number;
+  deleted?: boolean;
+  now?: Date;
+};
+
+function stagedValues(
+  input: StagedDocumentInput,
+  old: typeof feedOriginAtprotoDocuments.$inferSelect | undefined,
 ) {
-  const old = await database
-    .select()
-    .from(feedOriginAtprotoDocuments)
-    .where(
-      and(
-        eq(feedOriginAtprotoDocuments.originId, input.originId),
-        eq(feedOriginAtprotoDocuments.uri, input.uri),
-      ),
-    )
-    .get();
-  if (
-    old?.eventSeq !== null &&
-    old?.eventSeq !== undefined &&
-    sequence(old.eventSeq) >= input.seq
-  )
-    return;
   const document = input.deleted
     ? null
     : parseDocumentRecord({
         uri: input.uri,
         cid: input.cid,
-        value: input.record,
+        value: input.record?.value,
       });
+  const oversized = document !== null && isRecordOverBudget(input.record!.text);
   const status = input.deleted
     ? "deleted"
-    : document && Number.isFinite(Date.parse(document.value.publishedAt))
+    : document &&
+        !oversized &&
+        Number.isFinite(Date.parse(document.value.publishedAt))
       ? "retry"
       : "invalid";
-  const values = {
+  return {
     originId: input.originId,
     uri: input.uri,
     cid: input.cid,
     status,
     eventSeq: String(input.seq),
     eventRev: input.rev ?? null,
-    pendingRecord: status === "retry" ? input.record : null,
+    bodyCid: old?.bodyCid ?? null,
+    reason: status === "invalid" ? (oversized ? "oversized" : "invalid") : null,
     attempts: 0,
     retryAt: null,
   } as const;
-  await database
-    .insert(feedOriginAtprotoDocuments)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [
-        feedOriginAtprotoDocuments.originId,
-        feedOriginAtprotoDocuments.uri,
-      ],
-      set: values,
-    });
+}
+
+/**
+ * Runs inside the caller's transaction. Staged records live in their own
+ * source rows; the ledger only records that work is pending. One page of
+ * documents costs a fixed handful of statements.
+ */
+export async function stageDocuments(
+  database: FeedDatabase,
+  inputs: StagedDocumentInput[],
+) {
+  if (!inputs.length) return;
+  const originId = inputs[0]!.originId;
+  const existing = await database
+    .select()
+    .from(feedOriginAtprotoDocuments)
+    .where(
+      and(
+        eq(feedOriginAtprotoDocuments.originId, originId),
+        inArray(
+          feedOriginAtprotoDocuments.uri,
+          inputs.map((input) => input.uri),
+        ),
+      ),
+    );
+  const old = new Map(existing.map((row) => [row.uri, row]));
+  const staged = inputs
+    .filter((input) => {
+      const seq = old.get(input.uri)?.eventSeq;
+      return seq === null || seq === undefined || sequence(seq) < input.seq;
+    })
+    .map((input) => ({
+      input,
+      values: stagedValues(input, old.get(input.uri)),
+    }));
+  if (!staged.length) return;
+  for (let offset = 0; offset < staged.length; offset += 50) {
+    // Bound each statement below SQLite's host-parameter limit.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database
+      .insert(feedOriginAtprotoDocuments)
+      .values(staged.slice(offset, offset + 50).map((entry) => entry.values))
+      .onConflictDoUpdate({
+        target: [
+          feedOriginAtprotoDocuments.originId,
+          feedOriginAtprotoDocuments.uri,
+        ],
+        set: {
+          cid: sql`excluded.cid`,
+          status: sql`excluded.status`,
+          eventSeq: sql`excluded.event_seq`,
+          eventRev: sql`excluded.event_rev`,
+          bodyCid: sql`excluded.body_cid`,
+          reason: sql`excluded.reason`,
+          attempts: sql`excluded.attempts`,
+          retryAt: sql`excluded.retry_at`,
+        },
+      });
+  }
+  const retrying = staged.filter((entry) => entry.values.status === "retry");
+  await stageDocumentSources(
+    database,
+    retrying.map(({ input }) => ({
+      originId,
+      uri: input.uri,
+      cid: input.cid,
+      record: input.record!.text,
+      createdAt: input.now ?? new Date(),
+    })),
+  );
+  // The readable version survives; a newer staged version replaces older staging.
+  await pruneDocumentSources(
+    database,
+    originId,
+    staged.map(({ input, values }) => ({
+      uri: input.uri,
+      keep: [values.bodyCid, values.status === "retry" ? input.cid : null],
+    })),
+  );
+}
+
+export async function stageDocument(
+  database: FeedDatabase,
+  input: StagedDocumentInput,
+) {
+  await stageDocuments(database, [input]);
+}
+
+/** Rounds a lossless value through ordinary JSON, for columns that store it that way. */
+function plainJson(value: unknown): unknown {
+  return JSON.parse(stringifyLosslessJson(value));
 }
 
 function olderDocuments(originId: number, seq: number) {
@@ -251,13 +330,14 @@ async function applyCommit(
         .update(feedOriginAtproto)
         .set({
           publicationSeq: String(event.seq),
+          // The publication column is ordinary JSON; only documents keep 64-bit digits.
           publicationRecord:
             event.commit.operation === "delete"
               ? null
               : {
                   uri,
                   cid: event.commit.cid,
-                  value: event.commit.record,
+                  value: plainJson(event.commit.record),
                 },
           publicationDirty: event.commit.operation !== "delete",
         })
@@ -267,7 +347,6 @@ async function applyCommit(
           .update(feedOriginAtprotoDocuments)
           .set({
             status: "deleted",
-            pendingRecord: null,
             eventSeq: String(event.seq),
           })
           .where(olderDocuments(originId, event.seq));
@@ -309,7 +388,12 @@ async function applyCommit(
       originId,
       uri,
       cid: event.commit.cid ?? "",
-      record: event.commit.record,
+      record:
+        event.commit.record === undefined
+          ? undefined
+          : event.commit.recordText !== undefined
+            ? { text: event.commit.recordText, value: event.commit.record }
+            : captureRecordValue(event.commit.record),
       rev: event.commit.rev,
       seq: event.seq,
       deleted: !belongs || event.commit.operation === "delete",
@@ -366,7 +450,6 @@ async function applyMarker(
         .update(feedOriginAtprotoDocuments)
         .set({
           status: "deleted",
-          pendingRecord: null,
           eventSeq: String(event.seq),
         })
         .where(
@@ -381,7 +464,6 @@ async function applyMarker(
         .update(feedOriginAtprotoDocuments)
         .set({
           status: "deleted",
-          pendingRecord: null,
           eventSeq: String(event.seq),
         })
         .where(

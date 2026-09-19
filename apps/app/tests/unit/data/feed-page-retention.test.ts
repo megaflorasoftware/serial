@@ -26,7 +26,8 @@ function makeItem(pageIndex: number, itemIndex: number): ApplicationFeedItem {
     author: "Serial test",
     url: `https://example.com/${id}`,
     thumbnail: "",
-    content: "",
+    sourceCid: null,
+    body: null,
     contentSnippet: id,
     contentType: "text",
     isWatched: false,
@@ -44,13 +45,19 @@ function makeItem(pageIndex: number, itemIndex: number): ApplicationFeedItem {
   };
 }
 
+const OFFLINE_BODY = {
+  form: "html",
+  html: "<p>Offline body</p>",
+  revision: "offline-revision",
+} as const;
+
 function seedAndRetainPages(pageCount: number, retainedBodyId?: string) {
   const items = Array.from({ length: pageCount }, (_page, pageIndex) =>
     Array.from({ length: 30 }, (_item, itemIndex) =>
       (() => {
         const item = makeItem(pageIndex, itemIndex);
         return item.id === retainedBodyId
-          ? { ...item, content: "<p>Offline body</p>" }
+          ? { ...item, body: OFFLINE_BODY }
           : item;
       })(),
     ),
@@ -184,16 +191,14 @@ describe("Feed-item page retention", () => {
         page.entityIds.includes(item.id),
       ),
     ).toBe(false);
-    expect(retained.feedItemsDict[item.id]?.content).toBe(
-      "<p>Offline body</p>",
-    );
+    expect(retained.feedItemsDict[item.id]?.body).toEqual(OFFLINE_BODY);
   });
 
   it("drops body retention when the item is archived", () => {
     const item = makeItem(0, 0);
     feedItemsStore
       .getState()
-      .setFeedItem(item.id, { ...item, content: "<p>Offline body</p>" });
+      .setFeedItem(item.id, { ...item, body: OFFLINE_BODY });
 
     feedItemsStore.getState().setFeedItem(item.id, {
       ...feedItemsStore.getState().feedItemsDict[item.id]!,
@@ -201,8 +206,8 @@ describe("Feed-item page retention", () => {
     });
 
     // The live store keeps the body so the online reader can render it...
-    expect(feedItemsStore.getState().feedItemsDict[item.id]?.content).toBe(
-      "<p>Offline body</p>",
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toEqual(
+      OFFLINE_BODY,
     );
     expect(feedItemsStore.getState().retainedFeedItemBodyIds[item.id]).toBe(
       undefined,
@@ -210,7 +215,7 @@ describe("Feed-item page retention", () => {
     // ...while the persisted snapshot no longer carries it.
     expect(
       getPersistedFeedItemRetentionState(feedItemsStore.getState())
-        .feedItemsDict[item.id]?.content,
-    ).toBe("");
+        .feedItemsDict[item.id]?.body,
+    ).toBeNull();
   });
 });

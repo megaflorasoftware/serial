@@ -300,6 +300,7 @@ function makeFeedItem(index: number): ApplicationFeedItem {
   return {
     sourceKind: "rss",
     atprotoUri: null,
+    sourceCid: null,
     bodySource: "rss",
     tags: [],
     id: `audit-feed-item-${index}`,
@@ -309,7 +310,11 @@ function makeFeedItem(index: number): ApplicationFeedItem {
     author: "Serial audit",
     url: `https://feeds.serial.test/${index}`,
     thumbnail: "",
-    content: `<p>Audit body ${index}</p>`,
+    body: {
+      form: "html",
+      html: `<p>Audit body ${index}</p>`,
+      revision: `feed-hash-${index}`,
+    },
     contentSnippet: `Audit summary ${index}`,
     contentType: "text",
     isWatched: index % 5 > 2,

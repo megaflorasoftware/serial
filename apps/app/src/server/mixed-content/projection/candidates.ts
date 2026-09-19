@@ -47,8 +47,10 @@ export type BookmarkCandidate = {
 
 export type Candidate = FeedCandidate | BookmarkCandidate;
 
+// Bodies never ride page queries; they travel through the body endpoint and direct open.
 const applicationFeedItemColumns = { ...getTableColumns(feedItems) };
 Reflect.deleteProperty(applicationFeedItemColumns, "normalizedUrl");
+Reflect.deleteProperty(applicationFeedItemColumns, "content");
 
 function bookmarkContentStatusCondition(contentStatus: ContentStatusFilter) {
   return and(
@@ -271,7 +273,11 @@ export async function queryFeedCandidates(input: {
   return rows.map((row) => ({
     entityKind: "feed-item",
     entityId: row.item.id,
-    item: { ...row.item, platform: row.platform } as ApplicationFeedItem,
+    item: {
+      ...row.item,
+      platform: row.platform,
+      body: null,
+    } as ApplicationFeedItem,
     sectionPlacement: input.usesSectionOrder ? row.placement : null,
     normalizedAt: new Date(row.normalizedAt),
   }));
