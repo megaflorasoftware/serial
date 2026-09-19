@@ -236,7 +236,6 @@ it.each([true, false])(
         ],
       }),
       loadBlob: async () => new Uint8Array(),
-      resolveRecord: async () => null,
     });
     await refresh();
     expect(await stored()).toMatchObject({

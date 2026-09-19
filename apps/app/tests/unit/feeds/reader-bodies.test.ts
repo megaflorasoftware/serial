@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { bytesToBase64, stringifyLosslessJson } from "@serial/standard-site";
-import type { ReaderBody } from "@serial/standard-site";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type { ReaderBody } from "@serial/standard-site";
+import type { PublicationClient } from "~/server/rss/atprotoClient";
 import {
   atprotoReferenceSnapshots,
   feedItems,
@@ -21,7 +22,6 @@ import {
   stageDocumentSource,
   storeDocumentBlobs,
 } from "~/server/jetstream/document-source";
-import type { PublicationClient } from "~/server/rss/atprotoClient";
 
 vi.mock("~/server/logger", () => ({
   logWarning: vi.fn(),
@@ -98,13 +98,25 @@ async function retainSource(cid: string, text: string, withBlob = false) {
     .insert(feedOriginAtprotoDocuments)
     .values({ originId, uri: DOC, cid, status: "ready", bodyCid: cid })
     .onConflictDoUpdate({
-      target: [feedOriginAtprotoDocuments.originId, feedOriginAtprotoDocuments.uri],
+      target: [
+        feedOriginAtprotoDocuments.originId,
+        feedOriginAtprotoDocuments.uri,
+      ],
       set: { cid, bodyCid: cid },
     });
-  await stageDocumentSource(fixture.database, { originId, uri: DOC, cid }, text, NOW);
+  await stageDocumentSource(
+    fixture.database,
+    { originId, uri: DOC, cid },
+    text,
+    NOW,
+  );
   if (withBlob)
     await storeDocumentBlobs(fixture.database, { originId, uri: DOC, cid }, [
-      { cid: "bafyblob", mimeType: "application/json", bytes: new Uint8Array([1, 2, 3]) },
+      {
+        cid: "bafyblob",
+        mimeType: "application/json",
+        bytes: new Uint8Array([1, 2, 3]),
+      },
     ]);
 }
 
@@ -176,28 +188,52 @@ describe("reader bodies", () => {
     await snapshot(REF, referenced);
     await snapshot(OTHER_PUB, otherPublication);
     const rows = await fixture.database.select().from(feedItems);
-    const body = (await loadReaderBodies(fixture.database, rows, NOW)).get("doc");
+    const body = (await loadReaderBodies(fixture.database, rows, NOW)).get(
+      "doc",
+    );
     expect(body?.form).toBe("source");
     if (body?.form !== "source") throw new Error();
     expect(body.revision).toBe(CID);
     expect(body.source.record).toContain('"views":9007199254740993');
     expect(body.source.blobs).toEqual([
-      { cid: "bafyblob", mimeType: "application/json", bytes: bytesToBase64(new Uint8Array([1, 2, 3])) },
+      {
+        cid: "bafyblob",
+        mimeType: "application/json",
+        bytes: bytesToBase64(new Uint8Array([1, 2, 3])),
+      },
     ]);
     expect(body.references.map((reference) => reference.uri)).toEqual([
       REF,
       OTHER_PUB,
     ]);
-    expect(body.references[0]).toMatchObject({ outcome: "resolved", cid: CID_B });
-    const read = await fixture.database.select().from(atprotoReferenceSnapshots);
-    expect(read.every((row) => row.readAt?.getTime() === NOW.getTime())).toBe(true);
+    expect(body.references[0]).toMatchObject({
+      outcome: "resolved",
+      cid: CID_B,
+    });
+    const read = await fixture.database
+      .select()
+      .from(atprotoReferenceSnapshots);
+    expect(read.every((row) => row.readAt?.getTime() === NOW.getTime())).toBe(
+      true,
+    );
   });
 
   it("falls back to the html body when the item names a source that is gone", async () => {
-    await insertItem({ id: "doc", content: "<p>RSS</p>", atprotoUri: DOC, sourceCid: CID });
+    await insertItem({
+      id: "doc",
+      content: "<p>RSS</p>",
+      atprotoUri: DOC,
+      sourceCid: CID,
+    });
     const rows = await fixture.database.select().from(feedItems);
-    const body = (await loadReaderBodies(fixture.database, rows, NOW)).get("doc");
-    expect(body).toEqual({ form: "html", html: "<p>RSS</p>", revision: "hash-doc" });
+    const body = (await loadReaderBodies(fixture.database, rows, NOW)).get(
+      "doc",
+    );
+    expect(body).toEqual({
+      form: "html",
+      html: "<p>RSS</p>",
+      revision: "hash-doc",
+    });
   });
 
   it("caps responses in request order and names the omitted ids", () => {
@@ -216,7 +252,9 @@ describe("reader bodies", () => {
     expect(items.map((entry) => entry.id)).toEqual(["a", "b"]);
     expect(omitted.map((entry) => entry.id)).toEqual(["c", "d"]);
     // A single oversized body still ships rather than starving the request.
-    expect(capReaderBodies([{ id: "big", body: body(500) }], 100).items).toHaveLength(1);
+    expect(
+      capReaderBodies([{ id: "big", body: body(500) }], 100).items,
+    ).toHaveLength(1);
   });
 
   it("refreshes stale snapshots at their latest version and keeps young ones", async () => {
@@ -263,9 +301,16 @@ describe("reader bodies", () => {
       }),
     } as unknown as PublicationClient;
     const row = (await ownedBodyRow(fixture.database, "reader", "doc"))!;
-    const result = await refreshDocumentReferences(fixture.database, row, { now: NOW, client });
+    const result = await refreshDocumentReferences(fixture.database, row, {
+      now: NOW,
+      client,
+    });
     expect(result?.references).toEqual([
-      expect.objectContaining({ uri: REF, outcome: "unavailable", record: null }),
+      expect.objectContaining({
+        uri: REF,
+        outcome: "unavailable",
+        record: null,
+      }),
     ]);
     expect(
       await fixture.database
@@ -279,7 +324,11 @@ describe("reader bodies", () => {
   it("returns null for items without a source and for other users' items", async () => {
     await insertItem({ id: "rss", content: "<p>Body</p>" });
     const row = (await ownedBodyRow(fixture.database, "reader", "rss"))!;
-    expect(await refreshDocumentReferences(fixture.database, row, { now: NOW })).toBeNull();
-    expect(await ownedBodyRow(fixture.database, "someone-else", "rss")).toBeUndefined();
+    expect(
+      await refreshDocumentReferences(fixture.database, row, { now: NOW }),
+    ).toBeNull();
+    expect(
+      await ownedBodyRow(fixture.database, "someone-else", "rss"),
+    ).toBeUndefined();
   });
 });

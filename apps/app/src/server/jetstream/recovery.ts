@@ -12,7 +12,7 @@ import {
   loadOrigin,
   nowFor,
   planFor,
-  stageDocument,
+  stageDocuments,
   streamIsConnected,
 } from "./store";
 import { processOriginDocuments } from "./process";
@@ -191,10 +191,9 @@ export async function recoverOrigin(
                   !eligible(latest, currentPlan, settings, options.manual)
                 )
                   throw new Error("Feed no longer eligible");
-                for (const record of records)
-                  // Preserve write order inside this SQLite transaction.
-                  // react-doctor-disable-next-line react-doctor/async-await-in-loop
-                  await stageDocument(tx, {
+                await stageDocuments(
+                  tx,
+                  records.map((record) => ({
                     originId,
                     uri: record.uri,
                     cid: record.cid,
@@ -202,7 +201,8 @@ export async function recoverOrigin(
                     rev,
                     seq: boundary,
                     now: nowFor(settings),
-                  });
+                  })),
+                );
               },
               { behavior: "immediate" },
             ),

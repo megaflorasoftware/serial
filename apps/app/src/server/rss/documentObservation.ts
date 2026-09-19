@@ -5,23 +5,23 @@ import {
   discoverReferences,
   DOCUMENT_SOURCE_BUDGET_BYTES,
   documentSourceBytes,
+  isBlockNativeDocument,
   overflowBlobCid,
   referencedPublications,
   resolveDocumentSourceContent,
   snapshotLookup,
 } from "@serial/standard-site";
+import { OversizedDocumentSourceError } from "../jetstream/document-source";
+import { itemUrl } from "./itemObservation";
 import type {
+  ConvertedDocument,
   DocumentSource,
+  parseDocumentRecord,
+  parsePublicationRecord,
   ReferenceSnapshot,
   SourceReaderBody,
 } from "@serial/standard-site";
-import { itemUrl } from "./itemObservation";
-import { OversizedDocumentSourceError } from "../jetstream/document-source";
 import type { FetchedBlob } from "../jetstream/document-source";
-import type {
-  parseDocumentRecord,
-  parsePublicationRecord,
-} from "@serial/standard-site";
 import type { PublicationClient } from "./atprotoClient";
 import type { ItemObservation } from "./itemObservation";
 
@@ -51,36 +51,60 @@ export async function fetchDocumentBlobs(
   return blobs;
 }
 
-/** The records this source renders, one level out: cards, mentions, galleries and their publications. */
-export function documentReferences(
-  source: DocumentSource,
+/** The records this content renders, one level out: cards, mentions, galleries and their publications. */
+export function contentReferences(
+  content: unknown,
   did: string,
   records: (uri: string) => unknown,
 ) {
-  const content = resolveDocumentSourceContent(source);
-  if (content === null) return [];
   const direct = discoverReferences(content, did);
   return [...direct, ...referencedPublications(direct, records)];
 }
 
-export class DocumentAdapterError extends Error {
-  constructor() {
-    super("Document source did not convert to a body");
-  }
+/** Direct references of a retained source; empty when the source is not renderable. */
+export function documentReferences(source: DocumentSource, did: string) {
+  const content = resolveDocumentSourceContent(source);
+  return content === null ? [] : discoverReferences(content, did);
+}
+
+/**
+ * How the document's body came out: a readable source, no body at all (the
+ * document is not block-native), or a source the adapter rejected.
+ */
+export type DocumentBodyOutcome =
+  | { kind: "source"; converted: ConvertedDocument }
+  | { kind: "none" }
+  | { kind: "rejected" };
+
+export function deriveDocumentBody(
+  document: ParsedDocument,
+  body: SourceReaderBody,
+  did: string,
+): DocumentBodyOutcome {
+  if (!isBlockNativeDocument(document.value)) return { kind: "none" };
+  const converted = convertReaderBody(body, did);
+  return converted ? { kind: "source", converted } : { kind: "rejected" };
 }
 
 /**
  * One observation from a retained source. The adapter runs once here for the
- * snippet and first image; the client derives the Reader document itself.
+ * snippet and first image; the client derives the Reader document itself. A
+ * rejected or absent body keeps the last readable version, never erasing it.
  */
 export function documentObservation(
   document: ParsedDocument,
   publication: ParsedPublication,
   did: string,
-  body: SourceReaderBody,
+  body: {
+    outcome: DocumentBodyOutcome;
+    cid: string;
+    readableCid: string | null;
+  },
 ): ItemObservation {
-  const converted = convertReaderBody(body, did);
-  if (!converted) throw new DocumentAdapterError();
+  const converted =
+    body.outcome.kind === "source" ? body.outcome.converted : null;
+  const sourceCid =
+    body.outcome.kind === "source" ? body.cid : (body.readableCid ?? undefined);
   const canonical = buildCanonicalDocumentUrl(
     publication.value.url,
     document.value.path,
@@ -101,9 +125,9 @@ export function documentObservation(
         "")
       : "",
     content: "",
-    sourceCid: body.revision,
-    firstParagraph: converted.firstParagraph ?? "",
-    firstImageUrl: converted.firstImageUrl ?? "",
+    ...(sourceCid ? { sourceCid } : {}),
+    firstParagraph: converted?.firstParagraph ?? "",
+    firstImageUrl: converted?.firstImageUrl ?? "",
     publishedAt: document.value.publishedAt,
     tags: document.value.tags ?? [],
     publicationName: publication.value.name,

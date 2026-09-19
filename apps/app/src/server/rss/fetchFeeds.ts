@@ -9,6 +9,7 @@ import { checkFeedItemIsVerticalFromUrl } from "../checkFeedItemIsVertical";
 import { feedItems, feedOriginRss, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { logMessage } from "../logger";
+import { toApplicationFeedItem } from "../feeds/reader-bodies";
 import { enrichObservationImages } from "./observationImages";
 import { calculateNextFetch } from "./calculateNextFetch";
 import { getCachedFeedResult, setCachedFeedResult } from "./feedCache";
@@ -23,7 +24,6 @@ import {
 import { computeItemHash } from "./hash";
 import { resolveItemDate } from "./publishedDate";
 import { writeObservedItems } from "./writeItems";
-import { toApplicationFeedItem } from "../feeds/reader-bodies";
 import { rssObservation } from "./itemObservation";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";

@@ -2,18 +2,20 @@ import { and, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   isReferenceSnapshotStale,
   MissingPublicRecordError,
-  PublicRecordVersionUnavailableError,
   parseAtUri,
+  PublicRecordVersionUnavailableError,
   REFERENCE_IMPORT_REUSE_MS,
   REFERENCE_UNREAD_RETENTION_MS,
+  referencedPublications,
+  snapshotLookup,
   STANDARD_SITE_COLLECTIONS,
   validatePublicRecord,
 } from "@serial/standard-site";
-import type { DocumentSource, ReferenceSnapshot } from "@serial/standard-site";
-import { documentReferences, snapshotLookup } from "../rss/documentObservation";
+import { documentReferences } from "../rss/documentObservation";
 import { atprotoReferenceSnapshots } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { captureRecordValue } from "./document-source";
+import type { DocumentSource, ReferenceSnapshot } from "@serial/standard-site";
 import type { FeedDatabase } from "../feeds/origins";
 import type { db } from "../db";
 import { workerPool } from "~/lib/workerPool";
@@ -210,7 +212,7 @@ export async function resolveSourceReferences(
   readRecord: ReferenceReader,
   options: { now: Date; reuseMs: number },
 ): Promise<ReferenceSnapshot[]> {
-  const direct = documentReferences(source, did, () => undefined);
+  const direct = documentReferences(source, did);
   const snapshots = await refreshReferenceSnapshots(
     database,
     direct,
@@ -220,8 +222,8 @@ export async function resolveSourceReferences(
   const lookup = snapshotLookup(
     [...snapshots.values()].map(toReferenceSnapshot),
   );
-  const references = documentReferences(source, did, lookup);
-  const publications = references.filter((uri) => !snapshots.has(uri));
+  const publications = referencedPublications(direct, lookup);
+  const references = [...direct, ...publications];
   for (const [uri, row] of await refreshReferenceSnapshots(
     database,
     publications,

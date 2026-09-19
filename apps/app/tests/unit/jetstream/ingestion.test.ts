@@ -24,9 +24,11 @@ import {
   feedItems,
   feedOriginAtproto,
   feedOriginAtprotoDocuments,
+  feedOriginAtprotoDocumentSources,
   feeds,
   user,
 } from "~/server/db/schema";
+import { captureRecordValue } from "~/server/jetstream/document-source";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 
 vi.mock("~/server/logger", () => ({
@@ -64,7 +66,6 @@ const client: PublicationClient = {
   latestRev: vi.fn(async () => "rev"),
   getRecord: vi.fn(async () => publication),
   loadBlob: vi.fn(async () => new Uint8Array()),
-  resolveRecord: vi.fn(async () => null),
   list: vi.fn(async () => ({
     records: [],
     notModified: false as const,
@@ -172,6 +173,21 @@ async function state(id = originId) {
     .where(eq(feedOriginAtproto.originId, id))
     .get())!;
 }
+/** Retained source rows for one document, newest staging last. */
+async function sources(documentUri: string) {
+  return fixture.database
+    .select()
+    .from(feedOriginAtprotoDocumentSources)
+    .where(eq(feedOriginAtprotoDocumentSources.uri, documentUri))
+    .orderBy(feedOriginAtprotoDocumentSources.cid);
+}
+async function ledger(documentUri: string) {
+  return fixture.database
+    .select()
+    .from(feedOriginAtprotoDocuments)
+    .where(eq(feedOriginAtprotoDocuments.uri, documentUri))
+    .get();
+}
 beforeEach(async () => {
   vi.clearAllMocks();
   fixture = await createBookmarkTestDatabase();
@@ -216,7 +232,16 @@ describe("durable Jetstream application", () => {
       (await fixture.database.select().from(atprotoStreamState))[0]?.seq,
     ).toBe("10");
     await process();
-    expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+    // The body is the retained source, named on the item and on the ledger.
+    expect(await fixture.database.select().from(feedItems)).toMatchObject([
+      { content: "", sourceCid: "cid10", bodySource: "atproto" },
+    ]);
+    expect(await ledger(uri("post"))).toMatchObject({
+      status: "ready",
+      bodyCid: "cid10",
+      reason: null,
+    });
+    expect(await sources(uri("post"))).toMatchObject([{ cid: "cid10" }]);
   });
   it("retains reader copies on delete and prevents a stale replay from recreating pending work", async () => {
     await accept(event(10));
@@ -382,7 +407,7 @@ describe("durable Jetstream application", () => {
           originId,
           uri: uri("post"),
           cid: "old",
-          record: bootstrap.commit.record,
+          record: captureRecordValue(bootstrap.commit.record),
           seq: 1,
         });
       }),
@@ -557,6 +582,63 @@ describe("Feed recovery", () => {
 });
 
 describe("failure isolation", () => {
+  it("retains a 64-bit integer field with its digits intact", async () => {
+    const commit = event(10);
+    if (commit.kind !== "commit") throw new Error();
+    // The wire text carries a value no double can hold; the parsed record rounds.
+    const text = JSON.stringify({
+      ...(commit.commit.record as object),
+      views: 0,
+    }).replace('"views":0', '"views":9007199254740993');
+    commit.commit.record = JSON.parse(text);
+    commit.commit.recordText = text;
+    await accept(commit);
+    await process();
+    expect((await sources(uri("post")))[0]?.record).toContain(
+      '"views":9007199254740993',
+    );
+    expect(await fixture.database.select().from(feedItems)).toMatchObject([
+      { sourceCid: "cid10" },
+    ]);
+  });
+  it("keeps the last readable version when a newer one fails the adapter", async () => {
+    await accept(event(10));
+    await process();
+    const broken = event(11, "post", "Broken", "update");
+    if (broken.kind !== "commit") throw new Error();
+    (broken.commit.record as { content: unknown }).content = {
+      $type: "app.offprint.content",
+      items: "nope",
+    };
+    await accept(broken);
+    await process();
+    // The failure is noted on the ledger; the newer metadata still lands.
+    expect(await ledger(uri("post"))).toMatchObject({
+      cid: "cid11",
+      status: "ready",
+      reason: "adapter",
+      bodyCid: "cid10",
+    });
+    // The readable version and the body it produced both survive the failure.
+    expect(await sources(uri("post"))).toMatchObject([{ cid: "cid10" }]);
+    expect(await fixture.database.select().from(feedItems)).toMatchObject([
+      { title: "Broken", sourceCid: "cid10" },
+    ]);
+  });
+  it("refuses to stage a record larger than the source budget", async () => {
+    const huge = event(10);
+    if (huge.kind !== "commit") throw new Error();
+    (huge.commit.record as { title: string }).title = "x".repeat(4_200_000);
+    await accept(huge);
+    expect(await ledger(uri("post"))).toMatchObject({
+      status: "invalid",
+      reason: "oversized",
+      bodyCid: null,
+    });
+    expect(await sources(uri("post"))).toEqual([]);
+    await process();
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(0);
+  });
   it("keeps other documents when a required body conversion fails", async () => {
     const broken = event(10, "broken");
     if (broken.kind !== "commit") throw new Error();
@@ -588,7 +670,10 @@ describe("failure isolation", () => {
       .where(eq(feedOriginAtprotoDocuments.uri, uri("broken")))
       .get();
     expect(pending).toMatchObject({ status: "retry", attempts: 1 });
-    expect(pending?.pendingRecord).toBeTruthy();
+    // The staged source survives the transient failure so the retry can read it.
+    expect(await sources(uri("broken"))).toMatchObject([
+      { cid: "cid10", record: expect.stringContaining("Broken") },
+    ]);
   });
   it("rolls back an item write if recording document completion fails", async () => {
     await accept(event(10));

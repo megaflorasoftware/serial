@@ -136,6 +136,10 @@ describe("stringifyLosslessJson", () => {
     );
   });
 
+  it("omits undefined properties like JSON.stringify", () => {
+    expect(stringifyLosslessJson({ a: undefined, b: 1 })).toBe('{"b":1}');
+  });
+
   it("rejects values JSON cannot represent", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic["self"] = cyclic;
@@ -143,7 +147,6 @@ describe("stringifyLosslessJson", () => {
     cyclicArray.push(cyclicArray);
     const cases: unknown[] = [
       undefined,
-      { a: undefined },
       () => 1,
       Symbol("x"),
       Number.NaN,

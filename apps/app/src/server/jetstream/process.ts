@@ -5,19 +5,23 @@ import {
   parseDocumentRecord,
   parsePublicationRecord,
 } from "@serial/standard-site";
-import {
-  DOCUMENT_LEDGER_REASONS,
-  feedOriginAtproto,
-  feedOriginAtprotoDocuments,
-} from "../db/schema";
+import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { createPublicationClient } from "../rss/atprotoClient";
 import {
-  DocumentAdapterError,
+  deriveDocumentBody,
   documentObservation,
   fetchDocumentBlobs,
   sourceReaderBody,
 } from "../rss/documentObservation";
+import { enrichObservationImages } from "../rss/observationImages";
+import { writeObservedItems } from "../rss/writeItems";
+import { applyOriginMetadata } from "../rss/originMetadata";
+import { readFeedHttp } from "../rss/feedHttp";
+import {
+  IMPORT_REUSE_MS,
+  resolveSourceReferences,
+} from "./reference-snapshots";
 import {
   captureRecordValue,
   OversizedDocumentSourceError,
@@ -26,19 +30,16 @@ import {
   stageDocumentSource,
   storeDocumentBlobs,
 } from "./document-source";
-import { IMPORT_REUSE_MS, resolveSourceReferences } from "./reference-snapshots";
-import type { FetchedBlob } from "./document-source";
-import type { ItemObservation } from "../rss/itemObservation";
-import type { DocumentSource } from "@serial/standard-site";
-import { enrichObservationImages } from "../rss/observationImages";
-import { writeObservedItems } from "../rss/writeItems";
-import { applyOriginMetadata } from "../rss/originMetadata";
-import { readFeedHttp } from "../rss/feedHttp";
 import { CheckpointHostError } from "./protocol";
 import { eligible, loadOrigin, nowFor, planFor } from "./store";
 import { createStreamReporter } from "./report";
+import type { DocumentSource } from "@serial/standard-site";
+import type { FetchedBlob } from "./document-source";
 import type { StreamDatabase, StreamSettings } from "./store";
-import type { ApplicationFeedItem } from "../db/schema";
+import type {
+  ApplicationFeedItem,
+  DOCUMENT_LEDGER_REASONS,
+} from "../db/schema";
 import type { PublicationClient } from "../rss/atprotoClient";
 import type { FeedDatabase } from "../feeds/origins";
 import { workerPool } from "~/lib/workerPool";
@@ -185,7 +186,9 @@ export async function processOriginDocuments(
             .set({ status: "invalid", reason })
             .where(identity);
           // The readable source stays; the failed version is not retained.
-          await pruneDocumentSources(tx, key, [entry.bodyCid]);
+          await pruneDocumentSources(tx, originId, [
+            { uri: entry.uri, keep: [entry.bodyCid] },
+          ]);
         }),
       );
       report(error, "document-validation");
@@ -194,7 +197,9 @@ export async function processOriginDocuments(
       // A staged record read is one narrow row; the ledger never carries it.
       const captured =
         (await readStagedRecord(database, key)) ??
-        captureRecordValue(await client.getRecord(entry.uri, { cid: entry.cid }));
+        captureRecordValue(
+          await client.getRecord(entry.uri, { cid: entry.cid }),
+        );
       const document = parseDocumentRecord({
         uri: entry.uri,
         cid: entry.cid,
@@ -226,19 +231,23 @@ export async function processOriginDocuments(
         database,
         source,
         did,
-        (uri) => client.getRecord(uri, { deadline: now.getTime() + 5_000 }),
+        // Lookup budgets are wall-clock; `now` only stamps stored rows.
+        (uri) => client.getRecord(uri, { deadline: Date.now() + 5_000 }),
         { now, reuseMs: IMPORT_REUSE_MS },
       );
       const body = sourceReaderBody(source, references);
-      let observation: ItemObservation;
-      try {
-        observation = documentObservation(document, publication, did, body);
-      } catch (error) {
-        if (!(error instanceof DocumentAdapterError)) throw error;
-        // Precedence falls to the RSS body or body-less; the last readable body stays.
-        await invalidate("adapter", error);
-        return;
-      }
+      const outcome = deriveDocumentBody(document, body, did);
+      // A rejected or absent body writes the item anyway; the last readable body stays.
+      const observation = documentObservation(document, publication, did, {
+        outcome,
+        cid: entry.cid,
+        readableCid: entry.bodyCid,
+      });
+      if (outcome.kind === "rejected")
+        report(
+          new Error("Document source did not convert"),
+          "document-adapter",
+        );
       const incoming = await enrichObservationImages([observation], readPage);
       const currentPlan = await planFor(row, settings);
       const written = await writeObservedItems(database, row.feed, incoming, {
@@ -267,20 +276,26 @@ export async function processOriginDocuments(
           );
         },
         didWrite: async (tx) => {
+          const readable = outcome.kind === "source";
           // Source and blobs become readable in the same transaction as the item.
-          await stageDocumentSource(tx, key, captured.text, now);
-          await storeDocumentBlobs(tx, key, blobs);
+          if (readable) {
+            await stageDocumentSource(tx, key, captured.text, now);
+            await storeDocumentBlobs(tx, key, blobs);
+          }
+          const bodyCid = readable ? entry.cid : entry.bodyCid;
           await tx
             .update(feedOriginAtprotoDocuments)
             .set({
               status: "ready",
-              bodyCid: entry.cid,
-              reason: null,
+              bodyCid,
+              reason: outcome.kind === "rejected" ? "adapter" : null,
               attempts: 0,
               retryAt: null,
             })
             .where(identity);
-          await pruneDocumentSources(tx, key, [entry.cid]);
+          await pruneDocumentSources(tx, originId, [
+            { uri: entry.uri, keep: [bodyCid] },
+          ]);
         },
       });
       for (const id of written.removedItemIds) {

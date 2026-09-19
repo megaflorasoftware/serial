@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   DOCUMENT_SOURCE_BUDGET_BYTES,
   documentBelongsToPublication,
@@ -14,17 +14,17 @@ import {
   user,
 } from "../db/schema";
 import { hydrateOrigin } from "../feeds/origins";
+import { runDatabaseWrite } from "../db/retry-write";
+import { getEffectivePlanConfig } from "../subscriptions/plans";
 import {
   captureRecordValue,
   pruneDocumentSources,
-  stageDocumentSource,
+  stageDocumentSources,
 } from "./document-source";
-import type { CapturedRecord } from "./document-source";
-import { runDatabaseWrite } from "../db/retry-write";
-import { getEffectivePlanConfig } from "../subscriptions/plans";
 import { createStreamReporter } from "./report";
 import { canApplyStream } from "./eligibility";
 import { CheckpointHostError, normalizeService, sequence } from "./protocol";
+import type { CapturedRecord } from "./document-source";
 import type { getUserPlanId } from "../subscriptions/helpers";
 import type { PlanConfig } from "../subscriptions/plans";
 import type { StreamBatch, StreamEvent } from "./protocol";
@@ -163,39 +163,21 @@ export function streamIsConnected(
   return state.connected && state.leaseUntil !== null && state.leaseUntil > now;
 }
 
-/**
- * Runs inside the caller's transaction. The staged record lives in its own
- * source row; the ledger only records that work is pending.
- */
-export async function stageDocument(
-  database: FeedDatabase,
-  input: {
-    originId: number;
-    uri: string;
-    cid: string;
-    record?: CapturedRecord;
-    rev?: string | null;
-    seq: number;
-    deleted?: boolean;
-    now?: Date;
-  },
+export type StagedDocumentInput = {
+  originId: number;
+  uri: string;
+  cid: string;
+  record?: CapturedRecord;
+  rev?: string | null;
+  seq: number;
+  deleted?: boolean;
+  now?: Date;
+};
+
+function stagedValues(
+  input: StagedDocumentInput,
+  old: typeof feedOriginAtprotoDocuments.$inferSelect | undefined,
 ) {
-  const old = await database
-    .select()
-    .from(feedOriginAtprotoDocuments)
-    .where(
-      and(
-        eq(feedOriginAtprotoDocuments.originId, input.originId),
-        eq(feedOriginAtprotoDocuments.uri, input.uri),
-      ),
-    )
-    .get();
-  if (
-    old?.eventSeq !== null &&
-    old?.eventSeq !== undefined &&
-    sequence(old.eventSeq) >= input.seq
-  )
-    return;
   const document = input.deleted
     ? null
     : parseDocumentRecord({
@@ -214,7 +196,7 @@ export async function stageDocument(
         Number.isFinite(Date.parse(document.value.publishedAt))
       ? "retry"
       : "invalid";
-  const values = {
+  return {
     originId: input.originId,
     uri: input.uri,
     cid: input.cid,
@@ -226,29 +208,92 @@ export async function stageDocument(
     attempts: 0,
     retryAt: null,
   } as const;
-  await database
-    .insert(feedOriginAtprotoDocuments)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [
-        feedOriginAtprotoDocuments.originId,
-        feedOriginAtprotoDocuments.uri,
-      ],
-      set: values,
-    });
-  const key = { originId: input.originId, uri: input.uri };
-  if (status === "retry")
-    await stageDocumentSource(
-      database,
-      { ...key, cid: input.cid },
-      input.record!.text,
-      input.now ?? new Date(),
+}
+
+/**
+ * Runs inside the caller's transaction. Staged records live in their own
+ * source rows; the ledger only records that work is pending. One page of
+ * documents costs a fixed handful of statements.
+ */
+export async function stageDocuments(
+  database: FeedDatabase,
+  inputs: StagedDocumentInput[],
+) {
+  if (!inputs.length) return;
+  const originId = inputs[0]!.originId;
+  const existing = await database
+    .select()
+    .from(feedOriginAtprotoDocuments)
+    .where(
+      and(
+        eq(feedOriginAtprotoDocuments.originId, originId),
+        inArray(
+          feedOriginAtprotoDocuments.uri,
+          inputs.map((input) => input.uri),
+        ),
+      ),
     );
+  const old = new Map(existing.map((row) => [row.uri, row]));
+  const staged = inputs
+    .filter((input) => {
+      const seq = old.get(input.uri)?.eventSeq;
+      return seq === null || seq === undefined || sequence(seq) < input.seq;
+    })
+    .map((input) => ({
+      input,
+      values: stagedValues(input, old.get(input.uri)),
+    }));
+  if (!staged.length) return;
+  for (let offset = 0; offset < staged.length; offset += 50) {
+    // Bound each statement below SQLite's host-parameter limit.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database
+      .insert(feedOriginAtprotoDocuments)
+      .values(staged.slice(offset, offset + 50).map((entry) => entry.values))
+      .onConflictDoUpdate({
+        target: [
+          feedOriginAtprotoDocuments.originId,
+          feedOriginAtprotoDocuments.uri,
+        ],
+        set: {
+          cid: sql`excluded.cid`,
+          status: sql`excluded.status`,
+          eventSeq: sql`excluded.event_seq`,
+          eventRev: sql`excluded.event_rev`,
+          bodyCid: sql`excluded.body_cid`,
+          reason: sql`excluded.reason`,
+          attempts: sql`excluded.attempts`,
+          retryAt: sql`excluded.retry_at`,
+        },
+      });
+  }
+  const retrying = staged.filter((entry) => entry.values.status === "retry");
+  await stageDocumentSources(
+    database,
+    retrying.map(({ input }) => ({
+      originId,
+      uri: input.uri,
+      cid: input.cid,
+      record: input.record!.text,
+      createdAt: input.now ?? new Date(),
+    })),
+  );
   // The readable version survives; a newer staged version replaces older staging.
-  await pruneDocumentSources(database, key, [
-    values.bodyCid,
-    status === "retry" ? input.cid : null,
-  ]);
+  await pruneDocumentSources(
+    database,
+    originId,
+    staged.map(({ input, values }) => ({
+      uri: input.uri,
+      keep: [values.bodyCid, values.status === "retry" ? input.cid : null],
+    })),
+  );
+}
+
+export async function stageDocument(
+  database: FeedDatabase,
+  input: StagedDocumentInput,
+) {
+  await stageDocuments(database, [input]);
 }
 
 function olderDocuments(originId: number, seq: number) {

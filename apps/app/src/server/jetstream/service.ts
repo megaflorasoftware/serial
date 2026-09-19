@@ -15,8 +15,6 @@ import {
 import { recoverOrigin } from "./recovery";
 import { processOriginDocuments } from "./process";
 import { sweepReferenceSnapshots } from "./reference-snapshots";
-
-const SNAPSHOT_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 import { createStreamTransport, retryStream } from "./transport";
 import { normalizeService, sequence, StreamFailure } from "./protocol";
 import { createStreamReporter } from "./report";
@@ -27,6 +25,8 @@ import type { StreamDatabase, StreamSettings } from "./store";
 import { ALL_CONTENT_STATUS_KEYS } from "~/lib/reconciliation/invalidation";
 import { env } from "~/env";
 import { workerPool } from "~/lib/workerPool";
+
+const SNAPSHOT_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 async function configuration() {
   const settings: StreamSettings = {

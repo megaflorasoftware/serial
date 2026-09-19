@@ -4,18 +4,11 @@ import {
   READER_BODY_RESPONSE_BUDGET_BYTES,
   readerBodyBytes,
   REFERENCE_REFRESH_INTERVAL_MS,
-} from "@serial/standard-site";
-import type {
-  DocumentSource,
-  ReaderBody,
-  ReferenceSnapshot,
+  referencedPublications,
+  snapshotLookup,
 } from "@serial/standard-site";
 import { feedItems, feedOrigins, feeds } from "../db/schema";
-import type { ApplicationFeedItem, DatabaseFeedItem } from "../db/schema";
-import {
-  loadDocumentSources,
-  sourceKeyOf,
-} from "../jetstream/document-source";
+import { loadDocumentSources, sourceKeyOf } from "../jetstream/document-source";
 import {
   loadReferenceSnapshots,
   markReferenceSnapshotsRead,
@@ -24,10 +17,15 @@ import {
 } from "../jetstream/reference-snapshots";
 import {
   documentReferences,
-  snapshotLookup,
   sourceReaderBody,
 } from "../rss/documentObservation";
 import { createPublicationClient } from "../rss/atprotoClient";
+import type { ApplicationFeedItem, DatabaseFeedItem } from "../db/schema";
+import type {
+  DocumentSource,
+  ReaderBody,
+  ReferenceSnapshot,
+} from "@serial/standard-site";
 import type { PublicationClient } from "../rss/atprotoClient";
 import type { db } from "../db";
 
@@ -57,17 +55,22 @@ function htmlBody(row: BodyRow): ReaderBody | null {
 /** Feed items whose body is a retained source, keyed to the origin that holds it. */
 async function sourceKeys(database: typeof db, rows: BodyRow[]) {
   const sourced = rows.filter((row) => row.sourceCid && row.atprotoUri);
-  if (!sourced.length) return new Map<string, { originId: number; uri: string; cid: string }>();
+  if (!sourced.length)
+    return new Map<string, { originId: number; uri: string; cid: string }>();
   const origins = await database
     .select({ feedId: feedOrigins.feedId, originId: feedOrigins.id })
     .from(feedOrigins)
     .where(
       and(
         eq(feedOrigins.kind, "atproto"),
-        inArray(feedOrigins.feedId, [...new Set(sourced.map((row) => row.feedId))]),
+        inArray(feedOrigins.feedId, [
+          ...new Set(sourced.map((row) => row.feedId)),
+        ]),
       ),
     );
-  const originByFeed = new Map(origins.map((row) => [row.feedId, row.originId]));
+  const originByFeed = new Map(
+    origins.map((row) => [row.feedId, row.originId]),
+  );
   return new Map(
     sourced.flatMap((row) => {
       const originId = originByFeed.get(row.feedId);
@@ -91,13 +94,16 @@ async function snapshotsFor(
   now: Date,
 ) {
   const direct = bodies.map(({ source, did }) =>
-    documentReferences(source, did, () => undefined),
+    documentReferences(source, did),
   );
   const snapshots = await loadReferenceSnapshots(database, direct.flat());
-  const lookup = snapshotLookup([...snapshots.values()].map(toReferenceSnapshot));
-  const complete = bodies.map(({ source, did }) =>
-    documentReferences(source, did, lookup),
+  const lookup = snapshotLookup(
+    [...snapshots.values()].map(toReferenceSnapshot),
   );
+  const complete = direct.map((references) => [
+    ...references,
+    ...referencedPublications(references, lookup),
+  ]);
   const publications = complete.flat().filter((uri) => !snapshots.has(uri));
   for (const [uri, row] of await loadReferenceSnapshots(database, publications))
     snapshots.set(uri, row);
@@ -105,8 +111,7 @@ async function snapshotsFor(
   return new Map(
     bodies.map(({ source }, index) => [
       source.uri,
-      complete[index]!
-        .map((uri) => snapshots.get(uri))
+      complete[index]!.map((uri) => snapshots.get(uri))
         .filter((row) => row !== undefined)
         .map(toReferenceSnapshot),
     ]),
@@ -181,7 +186,7 @@ export async function refreshDocumentReferences(
     database,
     source,
     did,
-    (uri) => client.getRecord(uri, { deadline: now.getTime() + 5_000 }),
+    (uri) => client.getRecord(uri, { deadline: Date.now() + 5_000 }),
     { now, reuseMs: REFERENCE_REFRESH_INTERVAL_MS },
   );
   await markReferenceSnapshotsRead(
@@ -193,7 +198,11 @@ export async function refreshDocumentReferences(
 }
 
 /** The one place a feed item row is looked up with its owner check for body work. */
-export async function ownedBodyRow(database: typeof db, userId: string, id: string) {
+export async function ownedBodyRow(
+  database: typeof db,
+  userId: string,
+  id: string,
+) {
   return database
     .select({
       id: feedItems.id,

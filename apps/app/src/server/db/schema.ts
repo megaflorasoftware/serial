@@ -19,7 +19,6 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import type { ReaderBody } from "@serial/standard-site";
 import {
   VIEW_LAYOUT,
   VIEW_LAYOUT_ITEM_TYPE,
@@ -28,6 +27,7 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
+import type { ReaderBody } from "@serial/standard-site";
 import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
 import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";

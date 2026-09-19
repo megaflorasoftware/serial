@@ -28,6 +28,10 @@ afterEach(() => {
   mocks.items = {};
 });
 
+function htmlBody(html: string, revision = "body-revision") {
+  return { form: "html", html, revision } as const;
+}
+
 function ReaderLoad({ id }: { id: string }) {
   const state = useRefreshFeedItem(id);
   return createElement("output", null, JSON.stringify(state));
@@ -37,9 +41,9 @@ describe("Feed item body refresh", () => {
   it("does not reuse an earlier visit's success while returning to an item", async () => {
     const item = {
       id: "article",
-      content: "",
+      body: null,
       updatedAt: new Date(0),
-    } as ApplicationFeedItem;
+    } as unknown as ApplicationFeedItem;
     let finishOther!: (item: ApplicationFeedItem) => void;
     let finishReturn!: (item: ApplicationFeedItem) => void;
     mocks.getById
@@ -100,13 +104,13 @@ describe("Feed item body refresh", () => {
   it("hydrates the same body revision without overwriting a newer save/archive choice", async () => {
     const response = {
       id: "article",
-      content: "<p>Loaded body</p>",
+      body: htmlBody("<p>Loaded body</p>"),
       contentHash: "same-body",
       updatedAt: new Date(0),
       isWatched: false,
       isWatchLater: false,
       progress: 0,
-    } as ApplicationFeedItem;
+    } as unknown as ApplicationFeedItem;
     let resolve!: (item: ApplicationFeedItem) => void;
     mocks.getById.mockReturnValue(
       new Promise<ApplicationFeedItem>((done) => {
@@ -121,7 +125,7 @@ describe("Feed item body refresh", () => {
       });
       mocks.items.article = {
         ...response,
-        content: "",
+        body: null,
         updatedAt: new Date(1),
         isWatched: true,
         isWatchLater: true,
@@ -133,7 +137,7 @@ describe("Feed item body refresh", () => {
       expect(mocks.setFeedItem).toHaveBeenCalledWith(
         "article",
         expect.objectContaining({
-          content: response.content,
+          body: response.body,
           updatedAt: new Date(1),
           isWatched: true,
           isWatchLater: true,
@@ -160,15 +164,15 @@ describe("Feed item body refresh", () => {
   ])("respects concurrent item state for %s", async (scenario) => {
     const response = {
       id: "article",
-      content: "Loaded body",
+      body: htmlBody("Loaded body"),
       contentHash: "same-body",
       updatedAt: new Date(1),
       isWatched: false,
       isWatchLater: false,
       progress: 0,
       duration: 0,
-    } as ApplicationFeedItem;
-    mocks.items.article = { ...response, content: "" };
+    } as unknown as ApplicationFeedItem;
+    mocks.items.article = { ...response, body: null };
     let finish!: (item: ApplicationFeedItem) => void;
     mocks.getById.mockReturnValueOnce(
       new Promise<ApplicationFeedItem>((resolve) => {
@@ -184,7 +188,7 @@ describe("Feed item body refresh", () => {
       if (scenario === "changed-progress-newer-body")
         mocks.items.article = {
           ...response,
-          content: "",
+          body: null,
           progress: 12,
           duration: 40,
         };
@@ -192,7 +196,7 @@ describe("Feed item body refresh", () => {
       else if (scenario.startsWith("changed-metadata"))
         mocks.items.article = {
           ...response,
-          content: "",
+          body: null,
           isWatched: true,
           isWatchLater: true,
           progress: 12,
@@ -229,7 +233,7 @@ describe("Feed item body refresh", () => {
         expect(mocks.setFeedItem).toHaveBeenCalledWith(
           "article",
           expect.objectContaining({
-            content: "Loaded body",
+            body: htmlBody("Loaded body"),
             contentHash:
               scenario === "changed-metadata-new-body" ||
               scenario === "changed-progress-newer-body"
@@ -256,15 +260,15 @@ describe("Feed item body refresh", () => {
   it("retries once when a newer document loses its body during loading", async () => {
     const oldItem = {
       id: "article",
-      content: "Old body",
+      body: htmlBody("Old body"),
       contentHash: "old",
       updatedAt: new Date(0),
       progress: 0,
       duration: 0,
-    } as ApplicationFeedItem;
+    } as unknown as ApplicationFeedItem;
     const currentItem = {
       ...oldItem,
-      content: "",
+      body: null,
       contentHash: "new",
       updatedAt: new Date(1),
     };
@@ -304,7 +308,7 @@ describe("Feed item body refresh", () => {
       expect(mocks.setFeedItem).toHaveBeenCalledWith(
         "article",
         expect.objectContaining({
-          content: "",
+          body: null,
           contentHash: "new",
           progress: 12,
           duration: 40,
@@ -326,11 +330,11 @@ describe("Feed item body refresh", () => {
     async (concurrent) => {
       const oldItem = {
         id: "article",
-        content: "Old body",
+        body: htmlBody("Old body"),
         contentHash: "old",
         updatedAt: new Date(1),
-      } as ApplicationFeedItem;
-      const newItem = { ...oldItem, content: "", contentHash: "new" };
+      } as unknown as ApplicationFeedItem;
+      const newItem = { ...oldItem, body: null, contentHash: "new" };
       mocks.items.article = oldItem;
       let finish!: (item: ApplicationFeedItem) => void;
       mocks.getById
@@ -354,7 +358,7 @@ describe("Feed item body refresh", () => {
         expect(mocks.setFeedItem).toHaveBeenCalledTimes(1);
         expect(mocks.setFeedItem).toHaveBeenCalledWith(
           "article",
-          expect.objectContaining({ contentHash: "new", content: "" }),
+          expect.objectContaining({ contentHash: "new", body: null }),
         );
         expect(JSON.parse(container.textContent)).toEqual({
           complete: true,
@@ -373,10 +377,10 @@ describe("Feed item body refresh", () => {
     async (result) => {
       const item = {
         id: "article",
-        content: "",
+        body: null,
         updatedAt: new Date(0),
         contentHash: "old-body",
-      } as ApplicationFeedItem;
+      } as unknown as ApplicationFeedItem;
       if (result === "stale")
         mocks.items.article = {
           ...item,

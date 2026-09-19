@@ -1,7 +1,7 @@
 import { clear, get, set } from "idb-keyval";
 
 export const INDEXED_DB_SCHEMA_KEY = "serial-indexed-db-schema-version";
-export const INDEXED_DB_SCHEMA_VERSION = 6;
+export const INDEXED_DB_SCHEMA_VERSION = 7;
 
 type IndexedDbSchemaStore = {
   get: (key: string) => Promise<unknown>;

@@ -30,7 +30,9 @@ export async function recoverRepository(
     service,
     backgroundEnabled: true,
     getPlanId: async () => "pro",
-    now: () => new Date("2026-09-18T12:00:00Z"),
+    // Reference lookups spend a budget measured against the real clock, so a
+    // pinned date silently expires every deadline once wall time passes it.
+    now: () => new Date(),
   };
   const transport: StreamTransport = {
     service,

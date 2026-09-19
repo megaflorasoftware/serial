@@ -31,7 +31,8 @@ function makeItem(
     author: "Serial",
     url: `https://serial.test/${id}`,
     thumbnail: "",
-    content: "Original content",
+    sourceCid: null,
+    body: { form: "html", html: "Original content", revision: "hash-1" },
     contentSnippet: "Original snippet",
     contentType: "text",
     isWatched: false,
@@ -138,7 +139,7 @@ describe("Feed-item list projection", () => {
       ...item,
       progress: 40,
       duration: 120,
-      content: "Updated content",
+      body: { form: "html", html: "Updated content", revision: "hash-1" },
       contentSnippet: "Updated snippet",
     };
 
@@ -175,7 +176,7 @@ describe("Feed-item list projection", () => {
     stateBefore.setFeedItem(itemBefore.id, {
       ...itemBefore,
       progress: 50,
-      content: "Updated content",
+      body: { form: "html", html: "Updated content", revision: "hash-1" },
     });
 
     const stateAfter = feedItemsStore.getState();

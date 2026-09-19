@@ -1,8 +1,8 @@
 import {
   lookupPublicRecord,
-  parseLosslessJson,
   MissingPublicRecordError,
   parseAtUri,
+  parseLosslessJson,
   PublicRecordHttpError,
   PublicRecordVersionUnavailableError,
 } from "@serial/standard-site";

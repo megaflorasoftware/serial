@@ -9,6 +9,7 @@ import {
   bookmarksStore,
   isBookmarkCaptureRetainableNow,
 } from "./bookmarks/store";
+import { hasReaderBodyContent } from "./feed-items/readerBody";
 import {
   isEligibleFeedBody,
   shouldRetainBookmarkCapture,
@@ -174,26 +175,48 @@ function filterUnavailable(
   });
 }
 
+// Omitted ids re-enter the pending map through their current store entities
+// so the next run re-plans them under the same eligibility rules.
+function requeueOmittedFeedItems(itemIds: readonly string[]) {
+  let requeued = false;
+  for (const id of itemIds) {
+    const item = feedItemsStore.getState().feedItemsDict[id];
+    if (!item) continue;
+    pendingFeedItems.set(id, item);
+    requeued = true;
+  }
+  // The run loop clears its flag before each sweep; re-arm it so the requeued
+  // ids do not wait for an unrelated page application.
+  if (requeued) pendingRun = true;
+}
+
 async function hydrateFeedItemBodies(itemIds: string[], epoch: number) {
   for (let index = 0; index < itemIds.length; index += FULLTEXT_BATCH_SIZE) {
     const batch = itemIds.slice(index, index + FULLTEXT_BATCH_SIZE);
     try {
-      const items = await orpcRouterClient.initial.requestFullTextForItems(
+      const response = await orpcRouterClient.initial.requestFullTextForItems(
         { itemIds: batch },
         { signal: AbortSignal.timeout(HYDRATION_REQUEST_TIMEOUT_MS) },
       );
       if (epoch !== hydrationEpoch) return;
-      const returnedById = new Map(items.map((item) => [item.id, item]));
+      const returnedById = new Map(
+        response.items.map((item) => [item.id, item]),
+      );
+      const omittedIds = new Set(response.omitted);
       for (const id of batch) {
+        // The byte cap cut this id out of the response: it neither failed nor
+        // proved bodyless, so it is asked for again on the next run.
+        if (omittedIds.has(id)) continue;
         failedFeedItemIds.delete(id);
-        if (!returnedById.get(id)?.content.trim()) {
+        if (!hasReaderBodyContent(returnedById.get(id)?.body)) {
           unavailableFeedBodies.set(
             id,
             feedItemsStore.getState().feedItemsDict[id]?.contentHash ?? null,
           );
         }
       }
-      feedItemsStore.getState().applyFulltextItems(items);
+      feedItemsStore.getState().applyFulltextItems(response.items);
+      requeueOmittedFeedItems(response.omitted);
     } catch {
       if (epoch !== hydrationEpoch) return;
       for (const id of batch) failedFeedItemIds.add(id);

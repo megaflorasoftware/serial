@@ -42,10 +42,15 @@ export function useTruncationAlert({
     !!feedId &&
     !hasTruncationAlertResponse &&
     !!feedItem;
+  // Only an HTML body can be partial; a Document source is always the full
+  // document, so it never raises the alert.
+  const htmlBody =
+    feedItem?.body?.form === "html" ? feedItem.body.html : undefined;
   const shouldShowTruncationAlert =
     shouldCheckTruncatedContent &&
     feedItem !== undefined &&
-    detectTruncatedContent(feedItem.content, feedItem.contentSnippet);
+    feedItem.body?.form !== "source" &&
+    detectTruncatedContent(htmlBody, feedItem.contentSnippet);
 
   const handleAlertResponse = (openLocation: "serial" | "origin") => {
     if (!feedId || !canMutate) return;

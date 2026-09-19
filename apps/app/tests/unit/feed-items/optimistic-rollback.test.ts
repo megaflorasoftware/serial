@@ -34,7 +34,18 @@ function makeItem(
     author: "Original author",
     url: "https://example.com/original",
     thumbnail: "https://example.com/original.jpg",
-    content: "Original content",
+    sourceCid: null,
+    body: {
+      form: "source",
+      source: {
+        uri: "at://did:plc:alice/site.standard.document/post",
+        cid: "bafy",
+        record: "{}",
+        blobs: [],
+      },
+      references: [],
+      revision: "bafy",
+    },
     contentSnippet: "Original snippet",
     contentType: "text",
     isWatched: false,
@@ -159,8 +170,8 @@ describe("optimistic feed item mutations", () => {
     const context = applyOptimisticWatchedValue(previousFeedItem.id, true);
     // The live body survives the optimistic Archive; only retention drops.
     expect(
-      feedItemsStore.getState().feedItemsDict[previousFeedItem.id]?.content,
-    ).toBe(previousFeedItem.content);
+      feedItemsStore.getState().feedItemsDict[previousFeedItem.id]?.body,
+    ).toEqual(previousFeedItem.body);
     expect(
       feedItemsStore.getState().retainedFeedItemBodyIds[previousFeedItem.id],
     ).toBeUndefined();
@@ -168,8 +179,8 @@ describe("optimistic feed item mutations", () => {
     rollbackOptimisticWatchedValue(context);
 
     expect(
-      feedItemsStore.getState().feedItemsDict[previousFeedItem.id]?.content,
-    ).toBe(previousFeedItem.content);
+      feedItemsStore.getState().feedItemsDict[previousFeedItem.id]?.body,
+    ).toEqual(previousFeedItem.body);
     expect(
       feedItemsStore.getState().retainedFeedItemBodyIds[previousFeedItem.id],
     ).toBe(true);

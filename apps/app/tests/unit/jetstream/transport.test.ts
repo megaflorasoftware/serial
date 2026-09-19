@@ -320,9 +320,8 @@ it("reports a successful quiet connection before receiving any events", async ()
 });
 
 it("keeps 64-bit integers from live frames and archived records", async () => {
-  const { createRecordStash, lexToLossless } = await import(
-    "~/server/jetstream/transport"
-  );
+  const { createRecordStash, lexToLossless } =
+    await import("~/server/jetstream/transport");
   const { parseLosslessJson } = await import("@serial/standard-site");
   const stash = createRecordStash();
   const frame = `{"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#commit","seq":7,"did":"did:plc:alice","time":"2026-09-18T12:00:00Z","rev":"2222222222222","operation":"create","collection":"site.standard.document","rkey":"post","cid":"bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku","record":{"$type":"site.standard.document","views":9007199254740993,"nested":{"$link":"bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"}}}}`;
@@ -338,7 +337,9 @@ it("keeps 64-bit integers from live frames and archived records", async () => {
     '{"count":-9223372036854775808}',
   );
   stash.note("not json");
-  stash.note('{"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#account","seq":8}}');
+  stash.note(
+    '{"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#account","seq":8}}',
+  );
   expect(stash.take(8)).toBeUndefined();
   const { parseCid } = await import("@atproto/lex");
   const lossless = lexToLossless({

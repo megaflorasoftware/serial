@@ -26,12 +26,17 @@ vi.mock("~/lib/orpc", () => ({
 
 const now = new Date("2026-08-31T12:00:00.000Z");
 
+function htmlBody(html: string, revision = "content-hash") {
+  return { form: "html", html, revision } as const;
+}
+
 function feedItem(
   overrides: Partial<ApplicationFeedItem> = {},
 ): ApplicationFeedItem {
   return {
     sourceKind: "rss",
     atprotoUri: null,
+    sourceCid: null,
     bodySource: "rss",
     tags: [],
     id: "feed-item-one",
@@ -41,7 +46,7 @@ function feedItem(
     author: "Author",
     url: "https://example.com/article",
     thumbnail: "",
-    content: "",
+    body: null,
     contentSnippet: "preview",
     contentType: "text",
     isWatched: false,
@@ -143,7 +148,7 @@ describe("planPageBodyHydration", () => {
   });
 
   it("retains a loaded body only while it is unmarked", () => {
-    const loaded = feedItem({ content: "<p>Body</p>" });
+    const loaded = feedItem({ body: htmlBody("<p>Body</p>") });
     expect(planWith({ feedItems: [loaded] }).retainLoadedFeedItemIds).toEqual([
       "feed-item-one",
     ]);
@@ -193,7 +198,7 @@ describe("hydrateOfflineBodiesForPage", () => {
     });
     mocks.requestFullTextForItems.mockImplementation(() => {
       feedRequested();
-      return Promise.resolve([]);
+      return Promise.resolve({ items: [], omitted: [] });
     });
     mocks.getCaptures.mockResolvedValue([]);
     try {
@@ -345,20 +350,46 @@ describe("hydrateOfflineBodiesForPage", () => {
   it("never re-requests a body the server already returned empty", async () => {
     const item = feedItem();
     feedItemsStore.getState().setFeedItems([item]);
-    mocks.requestFullTextForItems.mockResolvedValue([
-      { id: item.id, content: "", contentSnippet: "" },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [{ id: item.id, body: null, contentSnippet: "" }],
+      omitted: [],
+    });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     expect(mocks.requestFullTextForItems).toHaveBeenCalledTimes(1);
   });
 
+  it("re-requests an omitted body instead of negative caching it", async () => {
+    const item = feedItem();
+    feedItemsStore.getState().setFeedItems([item]);
+    mocks.requestFullTextForItems
+      .mockResolvedValueOnce({ items: [], omitted: [item.id] })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: item.id,
+            body: htmlBody("<p>Body</p>"),
+            contentSnippet: "body",
+          },
+        ],
+        omitted: [],
+      });
+
+    await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
+
+    expect(mocks.requestFullTextForItems).toHaveBeenCalledTimes(2);
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toEqual(
+      htmlBody("<p>Body</p>"),
+    );
+  });
+
   it("re-requests an empty body once its content hash changes", async () => {
     const item = feedItem();
     feedItemsStore.getState().setFeedItems([item]);
-    mocks.requestFullTextForItems.mockResolvedValue([
-      { id: item.id, content: "", contentSnippet: "" },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [{ id: item.id, body: null, contentSnippet: "" }],
+      omitted: [],
+    });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     expect(mocks.requestFullTextForItems).toHaveBeenCalledTimes(1);
@@ -416,7 +447,7 @@ describe("hydrateOfflineBodiesForPage", () => {
   it("discards an in-flight fulltext response after invalidation", async () => {
     const item = feedItem();
     feedItemsStore.getState().setFeedItems([item]);
-    let resolveFulltext: (items: unknown[]) => void = () => {};
+    let resolveFulltext: (response: unknown) => void = () => {};
     mocks.requestFullTextForItems.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveFulltext = resolve;
@@ -428,11 +459,18 @@ describe("hydrateOfflineBodiesForPage", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
     invalidateOfflineHydration();
-    resolveFulltext([
-      { id: item.id, content: "<p>Late body</p>", contentSnippet: "late" },
-    ]);
+    resolveFulltext({
+      items: [
+        {
+          id: item.id,
+          body: htmlBody("<p>Late body</p>"),
+          contentSnippet: "late",
+        },
+      ],
+      omitted: [],
+    });
     await hydration;
-    expect(feedItemsStore.getState().feedItemsDict[item.id]?.content).toBe("");
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toBeNull();
   });
 
   it("does not resurrect a severed run alongside the newly admitted one", async () => {

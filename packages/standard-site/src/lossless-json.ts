@@ -291,8 +291,9 @@ function fail(cursor: Cursor, message: string): SyntaxError {
 
 /**
  * Serializes to compact JSON. `bigint` values print as bare digits and keys
- * keep insertion order. Throws `TypeError` for `undefined`, functions,
- * symbols, `NaN`, `Infinity`, binary data, and cyclic input.
+ * keep insertion order; undefined properties are omitted. Throws `TypeError`
+ * for a bare `undefined`, functions, symbols, `NaN`, `Infinity`, binary data,
+ * and cyclic input.
  */
 export function stringifyLosslessJson(value: unknown): string {
   return writeValue(value, new Set<unknown>());
@@ -343,8 +344,11 @@ function writeObject(
   value: Record<string, unknown>,
   ancestors: Set<unknown>,
 ): string {
-  const entries = Object.keys(value).map(
-    (key) => `${JSON.stringify(key)}:${writeValue(value[key], ancestors)}`,
-  );
+  // Like `JSON.stringify`, an undefined property is absent rather than an error.
+  const entries = Object.keys(value)
+    .filter((key) => value[key] !== undefined)
+    .map(
+      (key) => `${JSON.stringify(key)}:${writeValue(value[key], ancestors)}`,
+    );
   return `{${entries.join(",")}}`;
 }

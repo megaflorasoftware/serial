@@ -1,5 +1,4 @@
-import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   bytesToBase64,
   DOCUMENT_SOURCE_BUDGET_BYTES,
@@ -7,12 +6,12 @@ import {
   parseLosslessJson,
   stringifyLosslessJson,
 } from "@serial/standard-site";
-import type { DocumentSource } from "@serial/standard-site";
 import {
   feedOriginAtprotoDocumentBlobs,
-
   feedOriginAtprotoDocumentSources,
 } from "../db/schema";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { DocumentSource } from "@serial/standard-site";
 import type { FeedDatabase } from "../feeds/origins";
 
 /**
@@ -41,46 +40,81 @@ export class OversizedDocumentSourceError extends Error {
 
 /** Throws when the record alone is over budget, before any blob is fetched. */
 export function assertRecordWithinBudget(text: string) {
-  if (documentSourceBytes({ record: text, blobs: [] }) > DOCUMENT_SOURCE_BUDGET_BYTES)
+  if (
+    documentSourceBytes({ record: text, blobs: [] }) >
+    DOCUMENT_SOURCE_BUDGET_BYTES
+  )
     throw new OversizedDocumentSourceError();
 }
 
 type DocumentKey = { originId: number; uri: string; cid: string };
 
-/** Writes the staged record text for one version. Runs inside the caller's transaction. */
+type StagedSource = DocumentKey & { record: string; createdAt: Date };
+
+/** Writes staged record text, one version per row. Runs inside the caller's transaction. */
+export async function stageDocumentSources(
+  database: FeedDatabase,
+  sources: StagedSource[],
+) {
+  for (let offset = 0; offset < sources.length; offset += 25) {
+    // Record text can be large; keep each statement modest.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database
+      .insert(feedOriginAtprotoDocumentSources)
+      .values(sources.slice(offset, offset + 25))
+      .onConflictDoNothing();
+  }
+}
+
 export async function stageDocumentSource(
   database: FeedDatabase,
   key: DocumentKey,
   record: string,
   now: Date,
 ) {
-  await database
-    .insert(feedOriginAtprotoDocumentSources)
-    .values({ ...key, record, createdAt: now })
-    .onConflictDoNothing();
+  await stageDocumentSources(database, [{ ...key, record, createdAt: now }]);
 }
 
-/** Keeps the readable version and the version named; every other version goes. */
+/**
+ * Keeps each document's readable version and the version named; every other
+ * version of those documents goes, in one statement per batch.
+ */
 export async function pruneDocumentSources(
   database: FeedDatabase,
-  key: { originId: number; uri: string },
-  keep: Array<string | null>,
+  originId: number,
+  documents: Array<{ uri: string; keep: Array<string | null> }>,
 ) {
-  const cids = keep.filter((cid): cid is string => cid !== null);
-  await database
-    .delete(feedOriginAtprotoDocumentSources)
-    .where(
+  for (let offset = 0; offset < documents.length; offset += 100) {
+    const batch = documents.slice(offset, offset + 100);
+    const kept = batch.flatMap(({ uri, keep }) =>
+      keep
+        .filter((cid): cid is string => cid !== null)
+        .map((cid) => `${uri}\n${cid}`),
+    );
+    // Bound each statement and preserve transaction order.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database.delete(feedOriginAtprotoDocumentSources).where(
       and(
-        eq(feedOriginAtprotoDocumentSources.originId, key.originId),
-        eq(feedOriginAtprotoDocumentSources.uri, key.uri),
-        cids.length
-          ? notInArray(feedOriginAtprotoDocumentSources.cid, cids)
+        eq(feedOriginAtprotoDocumentSources.originId, originId),
+        inArray(
+          feedOriginAtprotoDocumentSources.uri,
+          batch.map(({ uri }) => uri),
+        ),
+        kept.length
+          ? notInArray(
+              sql`${feedOriginAtprotoDocumentSources.uri} || char(10) || ${feedOriginAtprotoDocumentSources.cid}`,
+              kept,
+            )
           : undefined,
       ),
     );
+  }
 }
 
-export async function readStagedRecord(database: FeedDatabase, key: DocumentKey) {
+export async function readStagedRecord(
+  database: FeedDatabase,
+  key: DocumentKey,
+) {
   const row = await database
     .select({ record: feedOriginAtprotoDocumentSources.record })
     .from(feedOriginAtprotoDocumentSources)
@@ -181,5 +215,7 @@ export async function loadDocumentSource(
   database: FeedDatabase,
   key: SourceKey,
 ) {
-  return (await loadDocumentSources(database, [key])).get(sourceKeyOf(key)) ?? null;
+  return (
+    (await loadDocumentSources(database, [key])).get(sourceKeyOf(key)) ?? null
+  );
 }
