@@ -118,6 +118,6 @@ console.log(
   JSON.stringify({
     conversion: result.conversion,
     render: result.render,
-    lookups: 16,
+    lookups: 100,
   }),
 );
