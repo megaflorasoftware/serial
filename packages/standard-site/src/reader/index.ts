@@ -1,37 +1,40 @@
 import { z } from "zod";
-import { convertLeafletContent, leafletContentSchema } from "./leaflet";
-import { convertOffprintContent, offprintContentSchema } from "./offprint";
-import { convertPcktItems, pcktBlobSchema, pcktContentSchema } from "./pckt";
-import type { ConvertedDocument } from "./shared";
+import { AdapterContext, MAX_BLOCK_NESTING_DEPTH } from "./context";
+import { deriveLeafletContent, leafletContentSchema } from "./leaflet";
+import { deriveOffprintContent, offprintContentSchema } from "./offprint";
+import { derivePcktItems, pcktBlobSchema, pcktContentSchema } from "./pckt";
+import { boundReaderDocument } from "./bounds";
+import type { ReaderDocument, ReaderSummary } from "./model";
+import { richTextPlaintext } from "./rich-text";
 import {
   BLOCK_NATIVE_CONTENT_TYPES,
   isBlockNativeContentType,
-  type DocumentRecord,
+  parseDocumentRecord,
 } from "../lexicons";
 import { parseLosslessJson } from "../lossless-json";
-import { sanitizeArticleHtml } from "../sanitize";
 import { documentPublicationUri } from "../record-preview";
 import type { RecordLookup } from "../record-preview";
-import { parseDocumentRecord } from "../lexicons";
 import { base64ToBytes } from "../reader-body";
 import type { DocumentSource, SourceReaderBody } from "../reader-body";
 
-export type { ConvertedDocument } from "./shared";
-export { INTERACTIVE_PLACEHOLDER_TEXT, parseYouTubeReference } from "./html";
-
-/**
- * Loads a blob's bytes from the owning repo. The package never fetches; the app
- * supplies this over `com.atproto.sync.getBlob` through its hardened fetch.
- */
-export type BlobLoader = (did: string, cid: string) => Promise<Uint8Array>;
-
-export type ConvertDocumentOptions = {
-  /** DID of the repo the document lives in; every blob reference resolves against it. */
-  did: string;
-  loadBlob: BlobLoader;
-  /** Records already resolved for this document, keyed by URI. */
-  records?: RecordLookup;
-};
+export * from "./model";
+export {
+  boundReaderDocument,
+  READER_DOCUMENT_BLOCK_LIMIT,
+  READER_DOCUMENT_BUDGET_BYTES,
+  readerDocumentBytes,
+} from "./bounds";
+export { MAX_BLOCK_NESTING_DEPTH };
+export { calloutTint } from "./tint";
+export {
+  facetArraySchema,
+  facetSchema,
+  resolveRichText,
+  richTextContext,
+  richTextPlaintext,
+  richTextSchema,
+} from "./rich-text";
+export type { Facet, RichText, RichTextContext } from "./rich-text";
 
 const leafletBlobPagesSchema = z.array(z.unknown());
 
@@ -87,24 +90,34 @@ function inlineOverflow(content: unknown, bytes: Uint8Array | null): unknown {
 }
 
 /**
- * Converts content with no blob overflow left. The converters emit HTML that is a
- * fixed point of `sanitizeArticleHtml` by construction; this is exported so tests
- * can assert that on the raw output.
+ * Derives the Reader document from content with no blob overflow left. Null
+ * when the content is not one of the three block-native shapes. Exported for
+ * tests and for the reference discovery pass.
  */
-export function convertResolvedContent(
+export function deriveResolvedContent(
   content: unknown,
   did: string,
   records?: RecordLookup,
-): ConvertedDocument | null {
+): ReaderDocument | null {
+  const context = new AdapterContext(did, records);
   const leaflet = leafletContentSchema.safeParse(content);
-  if (leaflet.success) return convertLeafletContent(leaflet.data, did, records);
+  if (leaflet.success)
+    return boundReaderDocument(
+      deriveLeafletContent(leaflet.data, context),
+      context.footnotes,
+    );
   const offprint = offprintContentSchema.safeParse(content);
   if (offprint.success)
-    return convertOffprintContent(offprint.data, did, records);
+    return boundReaderDocument(
+      deriveOffprintContent(offprint.data, context),
+      context.footnotes,
+    );
   const pckt = pcktContentSchema.safeParse(content);
-  if (pckt.success && pckt.data.items) {
-    return convertPcktItems(pckt.data.items, did, records);
-  }
+  if (pckt.success && pckt.data.items)
+    return boundReaderDocument(
+      derivePcktItems(pckt.data.items, context),
+      context.footnotes,
+    );
   return null;
 }
 
@@ -117,7 +130,7 @@ export const MAX_EMBEDDED_RECORDS_PER_DOCUMENT = 16;
  */
 export function discoverReferences(content: unknown, did: string) {
   const references = new Set<string>();
-  convertResolvedContent(content, did, (uri) => {
+  deriveResolvedContent(content, did, (uri) => {
     if (references.size < MAX_EMBEDDED_RECORDS_PER_DOCUMENT)
       references.add(uri);
     return undefined;
@@ -139,29 +152,6 @@ export function referencedPublications(
   return [...publications];
 }
 
-function finish(converted: ConvertedDocument | null) {
-  if (!converted || !converted.html.trim()) return null;
-  return { ...converted, html: sanitizeArticleHtml(converted.html) };
-}
-
-/**
- * Converts a block-native document body to article HTML. Returns null when the
- * document carries no block-native content; `textContent` alone is not a body.
- * The result is passed through `sanitizeArticleHtml` once more as a guard.
- */
-export async function convertDocumentContent(
-  document: Pick<DocumentRecord, "content">,
-  options: ConvertDocumentOptions,
-): Promise<ConvertedDocument | null> {
-  const content = document.content;
-  if (!content) return null;
-  const cid = overflowBlobCid(content);
-  const bytes = cid ? await options.loadBlob(options.did, cid) : null;
-  const resolved = inlineOverflow(content, bytes);
-  if (resolved === null) return null;
-  return finish(convertResolvedContent(resolved, options.did, options.records));
-}
-
 const documentValueSchema = z.looseObject({ content: z.unknown().optional() });
 
 /** Content with the retained overflow blob inlined, or null when the source is unusable. */
@@ -176,7 +166,7 @@ export function resolveDocumentSourceContent(source: DocumentSource) {
   return inlineOverflow(content, blob ? base64ToBytes(blob.bytes) : null);
 }
 
-/** Snapshot records keyed by URI, as the converters read them. */
+/** Snapshot records keyed by URI, as the adapters read them. */
 export function snapshotLookup(
   references: SourceReaderBody["references"],
 ): RecordLookup {
@@ -196,13 +186,64 @@ export function snapshotLookup(
 }
 
 /**
- * Derives article HTML from a source-form Reader body. Shared by the browser
- * bridge and import, which runs it once for the snippet and first image.
+ * Derives the Reader document from a source-form Reader body. The browser
+ * runs this at render time; import runs it once for the list-view summary.
+ * Null when the source carries no block-native content or nothing renders.
  */
-export function convertReaderBody(body: SourceReaderBody, did: string) {
+export function deriveReaderDocument(
+  body: SourceReaderBody,
+  did: string,
+): ReaderDocument | null {
   const content = resolveDocumentSourceContent(body.source);
   if (content === null) return null;
-  return finish(
-    convertResolvedContent(content, did, snapshotLookup(body.references)),
+  const document = deriveResolvedContent(
+    content,
+    did,
+    snapshotLookup(body.references),
   );
+  return document && document.blocks.length > 0 ? document : null;
+}
+
+/**
+ * What list views show for a document: the first paragraph outside quotations
+ * and the first image. Callouts and quoted text never become the snippet.
+ */
+export function summarizeReaderDocument(
+  document: ReaderDocument,
+): ReaderSummary {
+  let firstParagraph: string | null = null;
+  let firstImageUrl: string | null = null;
+  const visit = (blocks: ReaderDocument["blocks"], quoted: boolean) => {
+    for (const block of blocks) {
+      if (firstParagraph !== null && firstImageUrl !== null) return;
+      switch (block.kind) {
+        case "paragraph": {
+          const text = richTextPlaintext(block.content).trim();
+          if (!quoted && firstParagraph === null && text) firstParagraph = text;
+          break;
+        }
+        case "image":
+          if (firstImageUrl === null) firstImageUrl = block.image.url;
+          break;
+        case "imageGroup":
+          if (firstImageUrl === null && block.images[0])
+            firstImageUrl = block.images[0].url;
+          break;
+        case "quotation":
+          visit(block.children, true);
+          break;
+        case "list":
+          for (const item of block.items) visit(item.content, quoted);
+          break;
+        case "table":
+          for (const row of block.rows)
+            for (const cell of row) visit(cell.content, quoted);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  visit(document.blocks, false);
+  return { firstParagraph, firstImageUrl };
 }

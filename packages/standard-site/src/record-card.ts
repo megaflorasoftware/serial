@@ -1,6 +1,6 @@
 import { buildPdslsUrl, parseAtUri } from "./uris";
 import { z } from "zod";
-import { element, linkCard, safeSourceUrl } from "./convert/html";
+import { safeSourceUrl } from "./urls";
 import type { RecordPreview } from "./record-preview";
 
 export const RECORD_CARD_SIZES = ["small", "medium", "large", "row"] as const;
@@ -24,63 +24,24 @@ export const recordCardSchema = z.object({
 });
 export type RecordCard = z.infer<typeof recordCardSchema>;
 
-/** One contract for conversion, sanitization, and trusted reader reconstruction. */
-export const RECORD_CARD_FIELDS = {
-  uri: "data-record-uri",
-  url: "data-href",
-  title: "data-title",
-  description: "data-description",
-  imageUrl: "data-image-url",
-  publicationName: "data-publication-name",
-  iconUrl: "data-icon-url",
-  author: "data-author",
-  publishedAt: "data-published-at",
-  size: "data-size",
-} as const;
-
-export function parseRecordCard(attributes: Record<string, string>) {
-  const parsed = recordCardSchema.safeParse(
-    Object.fromEntries(
-      Object.entries(RECORD_CARD_FIELDS).map(([field, attribute]) => [
-        field,
-        attributes[attribute],
-      ]),
-    ),
-  );
-  return parsed.success ? parsed.data : null;
-}
-
+/**
+ * The card a Record preview draws: validated metadata, or the record inspector
+ * fallback when the preview is malformed. Null only when the URI itself is
+ * unusable.
+ */
 export function recordCard(
   preview: RecordPreview & { uri: string },
   size: unknown = "row",
-) {
+): RecordCard | null {
   const parsed = recordCardSchema.safeParse({ ...preview, size });
+  if (parsed.success) return parsed.data;
   const fallback = buildPdslsUrl(preview.uri);
-  if (!parsed.success && !fallback) return "";
-  const card: RecordCard = parsed.success
-    ? parsed.data
-    : {
-        uri: preview.uri,
-        url: fallback!,
-        title: "Embedded record",
-        description: preview.uri,
-        size: "row",
-      };
-  return element(
-    "div",
-    {
-      "data-serial-embed": "record",
-      ...Object.fromEntries(
-        Object.entries(RECORD_CARD_FIELDS).map(([field, attribute]) => [
-          attribute,
-          card[field as keyof RecordCard],
-        ]),
-      ),
-    },
-    linkCard({
-      href: card.url,
-      title: card.title,
-      description: card.description,
-    }),
-  );
+  if (!fallback) return null;
+  return {
+    uri: preview.uri,
+    url: fallback,
+    title: "Embedded record",
+    description: preview.uri,
+    size: "row",
+  };
 }

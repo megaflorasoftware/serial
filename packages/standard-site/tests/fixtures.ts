@@ -3,12 +3,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseAtUri } from "../src/uris";
 import { parseDocumentRecord } from "../src/lexicons";
-import type { BlobLoader } from "../src/convert";
+import { stringifyLosslessJson } from "../src/lossless-json";
+import type { ReaderBlock, ReaderDocument } from "../src/reader/model";
+import type { SourceReaderBody } from "../src/reader-body";
 
 export const FIXTURE_DOCUMENTS = [
   "leaflet-legacy-site",
   "leaflet-montreal-recap",
   "leaflet-network-punk",
+  "leaflet-what-is-the-atmosphere",
+  "leaflet-poll-block",
+  "leaflet-reader-code-block",
   "offprint-bluesky-and-did-plc",
   "offprint-interactive-transcripts",
   "offprint-nyc-community-day",
@@ -40,17 +45,37 @@ export function loadDocumentFixture(name: FixtureName) {
   return { record, did: parts.did };
 }
 
-export const rejectingBlobLoader: BlobLoader = (did, cid) =>
-  Promise.reject(new Error(`unexpected blob load ${did} ${cid}`));
+/** The publication fixtures as resolved Reference snapshots. */
+export function publicationSnapshots(): SourceReaderBody["references"] {
+  return (
+    readFixture("publications") as Array<{
+      uri: string;
+      cid: string;
+      value: unknown;
+    }>
+  ).map((publication) => ({
+    uri: publication.uri,
+    cid: publication.cid,
+    outcome: "resolved",
+    record: stringifyLosslessJson(publication.value),
+    resolvedAt: "2026-09-19T00:00:00Z",
+  }));
+}
 
-export function stubBlobLoader(blobs: Record<string, unknown>): BlobLoader {
-  return (_did, cid) => {
-    if (!(cid in blobs)) {
-      return Promise.reject(new Error(`unknown blob ${cid}`));
-    }
-    return Promise.resolve(
-      new TextEncoder().encode(JSON.stringify(blobs[cid])),
-    );
+/** A fixture as the body endpoint would return it: source text plus snapshots. */
+export function fixtureReaderBody(name: FixtureName): SourceReaderBody {
+  const { record } = loadDocumentFixture(name);
+  const value = JSON.parse(readFixtureText(name)) as { value: unknown };
+  return {
+    form: "source",
+    source: {
+      uri: record.uri,
+      cid: record.cid,
+      record: stringifyLosslessJson(value.value),
+      blobs: [],
+    },
+    references: publicationSnapshots(),
+    revision: record.cid,
   };
 }
 
@@ -72,4 +97,37 @@ export function offprint(items: Array<Record<string, unknown>>) {
 
 export function pckt(items: Array<Record<string, unknown>>) {
   return { $type: "blog.pckt.content", items };
+}
+
+/** Block kinds in document order, nesting included, for terse assertions. */
+export function kinds(blocks: ReaderBlock[]): string[] {
+  return blocks.flatMap((block) => {
+    switch (block.kind) {
+      case "quotation":
+        return [block.kind, ...kinds(block.children)];
+      case "list":
+        return [
+          block.kind,
+          ...block.items.flatMap((item) => kinds(item.content)),
+        ];
+      case "table":
+        return [
+          block.kind,
+          ...block.rows.flatMap((row) =>
+            row.flatMap((cell) => kinds(cell.content)),
+          ),
+        ];
+      default:
+        return [block.kind];
+    }
+  });
+}
+
+/** Strips `source` so snapshots hold only the typed part the reader draws. */
+export function typedDocument(document: ReaderDocument) {
+  return JSON.parse(
+    JSON.stringify(document, (key, value) =>
+      key === "source" ? undefined : value,
+    ),
+  ) as ReaderDocument;
 }

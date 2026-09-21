@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  parseRecordCard,
-  recordCard,
-  recordPreview,
-  sanitizeArticleHtml,
-} from "../src";
-import { renderRichText } from "../src/convert/facets";
+import { recordCard, recordPreview } from "../src";
+import { resolveRichText } from "../src/reader/rich-text";
 
 const did = "did:plc:author";
 const site = `at://did:plc:publisher/site.standard.publication/site`;
@@ -92,8 +87,8 @@ describe("record previews", () => {
   });
 });
 
-it("round-trips typed cards and rejects unsafe attributes at the reader boundary", () => {
-  const html = recordCard(
+it("validates card metadata and falls back to the record inspector", () => {
+  const card = recordCard(
     {
       uri,
       url: "https://example.com",
@@ -102,30 +97,26 @@ it("round-trips typed cards and rejects unsafe attributes at the reader boundary
     },
     "large",
   );
-  expect(sanitizeArticleHtml(html)).toBe(html);
-  expect(html).not.toContain("javascript:");
-  expect(html).toContain('<strong>&#x3C;script>"Title"&#x3C;/script></strong>');
+  expect(card).toMatchObject({
+    url: "https://example.com/",
+    title: '<script>"Title"</script>',
+    size: "large",
+  });
+  expect(card?.imageUrl).toBeUndefined();
   expect(
-    parseRecordCard({
-      "data-record-uri": uri,
-      "data-href": "javascript:alert(1)",
-      "data-title": "Title",
-    }),
-  ).toBeNull();
+    recordCard({ uri, url: "javascript:alert(1)", title: "Title" }),
+  ).toMatchObject({
+    url: `https://pdsls.dev/${uri}`,
+    title: "Embedded record",
+  });
   expect(
-    parseRecordCard({
-      "data-record-uri": uri,
-      "data-href": "https://example.com",
-      "data-title": "Title",
-      "data-image-url": "data:image/svg+xml,bad",
-      "data-size": "giant",
-    }),
-  ).toMatchObject({ size: "row", imageUrl: undefined });
+    recordCard({ uri, url: "https://example.com", title: "Title" }, "giant"),
+  ).toMatchObject({ size: "row" });
 });
 
 it("uses safe authored mention destinations or the record inspector when lookup fails", () => {
   const mention = (href?: string) =>
-    renderRichText({
+    resolveRichText({
       plaintext: "Name",
       facets: [
         {
@@ -136,10 +127,20 @@ it("uses safe authored mention destinations or the record inspector when lookup 
         },
       ],
     });
-  expect(mention("https://example.com/post")).toBe(
-    `<a href="https://example.com/post" data-record-uri="${uri}">Name</a>`,
-  );
-  expect(mention("javascript:alert(1)")).toBe(
-    `<a href="https://pdsls.dev/${uri}" data-record-uri="${uri}">Name</a>`,
-  );
+  expect(mention("https://example.com/post")).toEqual([
+    {
+      kind: "text",
+      text: "Name",
+      marks: {},
+      link: { href: "https://example.com/post", record: uri },
+    },
+  ]);
+  expect(mention("javascript:alert(1)")).toEqual([
+    {
+      kind: "text",
+      text: "Name",
+      marks: {},
+      link: { href: `https://pdsls.dev/${uri}`, record: uri },
+    },
+  ]);
 });

@@ -1,14 +1,10 @@
 "use client";
 
-import { parseRecordCard } from "@serial/standard-site";
 import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
-import { RecordCard } from "~/components/content-reader/RecordCard";
-import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
+import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
-import { useFlagState } from "~/lib/hooks/useFlagState";
-import classes from "~/components/feed/read/article.module.css";
 
 function extractYouTubeVideoId(src: string): string | null {
   const match = src.match(
@@ -40,6 +36,7 @@ function isImageContainer(node: Element): boolean {
   return false;
 }
 
+/** Renders an HTML Reader body: RSS bodies and legacy stored HTML. */
 export function ArticleContent({
   content,
   simplified = false,
@@ -47,8 +44,6 @@ export function ArticleContent({
   content: string;
   simplified?: boolean;
 }) {
-  const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
-
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (!(domNode instanceof Element)) return;
@@ -63,10 +58,6 @@ export function ArticleContent({
         domNode.attribs.rel = "noopener noreferrer";
       }
 
-      if (domNode.attribs["data-serial-embed"] === "record") {
-        const card = parseRecordCard(domNode.attribs);
-        if (card) return <RecordCard card={card} />;
-      }
       if (simplified) return;
 
       if (domNode.name === "img") {
@@ -86,40 +77,7 @@ export function ArticleContent({
       const src = domNode.attribs.src ?? "";
       const videoId = extractYouTubeVideoId(src);
       if (!videoId) return;
-
-      if (videoPlayer === "serial") {
-        return (
-          <div
-            data-article-video-embed
-            className={`${classes.videoEmbed} aspect-video w-full overflow-hidden rounded`}
-          >
-            <CustomVideoPlayer
-              videoID={videoId}
-              orientation="horizontal"
-              isInactive={false}
-              isEmbed
-            />
-          </div>
-        );
-      }
-
-      return (
-        <div
-          data-article-video-embed
-          className="aspect-video w-full overflow-hidden rounded"
-        >
-          <iframe
-            width="1600"
-            height="900"
-            src={`https://www.youtube-nocookie.com/embed/${videoId}`}
-            title="YouTube video player"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="h-full w-full border-none"
-          />
-        </div>
-      );
+      return <ArticleVideoEmbed videoId={videoId} />;
     },
   };
 

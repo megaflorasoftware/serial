@@ -12,13 +12,6 @@ import {
   sanitizeEmbeddedHtml,
 } from "../src/sanitize";
 import {
-  codeBlock,
-  escapeText,
-  image,
-  list,
-  paragraph,
-} from "../src/convert/html";
-import {
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
   buildBlueskyProfileUrl,
@@ -49,6 +42,7 @@ describe("record parsers", () => {
       "Atmosphere Conference News",
       "Atmosphere Community",
       "jenn's little art blog",
+      "Leaflet Lab Notes",
     ]);
     expect(parsed[3]!.value.icon?.ref.$link).toBe(
       "bafkreigkcfkuvhf7wlwqgv4iachbwwkcxpmglf2fov6gf76jj6ub2vot2m",
@@ -316,41 +310,6 @@ describe("subscription record key", () => {
 });
 
 describe("article sanitizer", () => {
-  it("round-trips escaped Latin-1 text and attributes through the article parser", () => {
-    for (let codePoint = 0; codePoint < 256; codePoint += 1) {
-      const text = `a${String.fromCodePoint(codePoint)}b`;
-      const html =
-        paragraph(escapeText(text)) +
-        codeBlock(text, undefined) +
-        image("https://example.com/image", text);
-      expect(sanitizeArticleHtml(html), `code point ${codePoint}`).toBe(html);
-    }
-  });
-
-  it.each(["\r", "\r\n"])("normalizes %j in text and attributes", (newline) => {
-    const text = `a${newline}b`;
-    const html =
-      paragraph(escapeText(text)) +
-      codeBlock(text, undefined) +
-      image("https://x.test/a.png", text);
-    expect(html).not.toContain("\r");
-    expect(html).toContain("<p>a\nb</p><pre><code>a\nb</code></pre>");
-    expect(html).toContain('alt="a\nb"');
-    expect(sanitizeArticleHtml(html)).toBe(html);
-  });
-
-  it("drops unsafe list starts instead of emitting exponential integers", () => {
-    expect(list(true, ["<li>x</li>"], { start: 1e21 })).toBe(
-      "<ol><li>x</li></ol>",
-    );
-    expect(
-      list(true, ["<li>x</li>"], { start: Number.MAX_SAFE_INTEGER + 1 }),
-    ).toBe("<ol><li>x</li></ol>");
-    expect(list(true, ["<li>x</li>"], { start: -3 })).toBe(
-      '<ol start="-3"><li>x</li></ol>',
-    );
-  });
-
   it("keeps underline, highlight, figures, and known placeholders only", () => {
     const html =
       '<p><u>u</u><mark>m</mark></p><figure><img src="https://x/y.jpg" alt="a"><figcaption>c</figcaption></figure>' +
@@ -368,19 +327,6 @@ describe("article sanitizer", () => {
       '<p id="user-content-x">t</p>',
     );
     expect(ARTICLE_SANITIZE_SCHEMA.clobberPrefix).toBe("user-content-");
-  });
-
-  it("escapes backticks and drops nulls so emissions stay fixed points", () => {
-    const withBacktick = image("https://x.test/a.png", "a`b");
-    expect(withBacktick).toBe(
-      '<img src="https://x.test/a.png" alt="a&#x60;b">',
-    );
-    expect(sanitizeArticleHtml(withBacktick)).toBe(withBacktick);
-
-    const withNulls =
-      codeBlock("a\u0000b", "js") + image("https://x.test/a.png", "c\u0000d");
-    expect(withNulls).not.toContain("\u0000");
-    expect(sanitizeArticleHtml(withNulls)).toBe(withNulls);
   });
 
   it("strips clobbered attributes from embedded html so the result stays a fixed point", () => {

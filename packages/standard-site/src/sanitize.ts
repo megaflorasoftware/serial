@@ -1,25 +1,24 @@
-import { RECORD_CARD_FIELDS, RECORD_CARD_SIZES } from "./record-card";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 import type { Options as SanitizeSchema } from "rehype-sanitize";
-import { safeSourceUrl } from "./convert/html";
+import { safeSourceUrl } from "./urls";
 
-export const SERIAL_EMBED_KINDS = ["youtube", "interactive", "record"] as const;
+export const SERIAL_EMBED_KINDS = ["youtube", "interactive"] as const;
 export type SerialEmbedKind = (typeof SERIAL_EMBED_KINDS)[number];
 
 /**
- * The schema every stored article body is a fixed point of. It extends the
- * rehype-sanitize default (which the reader's simplified mode already applies) with
- * underline, highlight, figures, and the inert placeholder attributes that stand in
- * for embedded content.
+ * The schema every stored HTML body is a fixed point of. It extends the
+ * rehype-sanitize default (which the reader's simplified mode already applies)
+ * with underline, highlight, figures, and the inert placeholder attributes that
+ * stand in for embedded video.
  *
- * Contract for callers: converted bodies are already fixed points, so
- * `sanitizeArticleHtml` is a no-op guard on them. Bodies from any other source
- * (RSS, author HTML) must go through `sanitizeEmbeddedHtml` once at ingest; the
- * article schema prefixes `id` and `name` on every pass and is therefore not
- * idempotent on markup that carries them.
+ * Contract for callers: bodies from RSS or author HTML go through
+ * `sanitizeEmbeddedHtml` once at ingest; the article schema prefixes `id` and
+ * `name` on every pass and is therefore not idempotent on markup that carries
+ * them. Block-native documents never become HTML; they derive to a Reader
+ * document in the browser.
  */
 export const ARTICLE_SANITIZE_SCHEMA: SanitizeSchema = {
   ...defaultSchema,
@@ -32,20 +31,12 @@ export const ARTICLE_SANITIZE_SCHEMA: SanitizeSchema = {
   ],
   attributes: {
     ...defaultSchema.attributes,
-    a: [...(defaultSchema.attributes?.a ?? []), "dataRecordUri"],
     div: [
       ...(defaultSchema.attributes?.div ?? []),
       ["dataSerialEmbed", ...SERIAL_EMBED_KINDS],
       "dataVideoId",
       "dataStart",
-      ...Object.values(RECORD_CARD_FIELDS)
-        .filter((attribute) => attribute !== "data-size")
-        .map((attribute) =>
-          attribute.replace(/-([a-z])/g, (_, letter: string) =>
-            letter.toUpperCase(),
-          ),
-        ),
-      ["dataSize", ...RECORD_CARD_SIZES],
+      "dataHref",
     ],
   },
 };
@@ -55,9 +46,8 @@ const CLOBBERED_ATTRIBUTES = new Set(defaultSchema.clobber ?? []);
 /**
  * The article schema minus the attributes rehype prefixes against DOM clobbering
  * (`id`, `name`, and the aria references). Prefixing is applied on every pass, so
- * markup carrying those attributes can never be a sanitizer fixed point; author
- * HTML embedded in a document is sanitized with this schema instead, and converted
- * bodies therefore never contain them.
+ * markup carrying those attributes can never be a sanitizer fixed point; RSS
+ * bodies are sanitized with this schema at ingest.
  */
 export const EMBEDDED_HTML_SANITIZE_SCHEMA: SanitizeSchema = {
   ...ARTICLE_SANITIZE_SCHEMA,

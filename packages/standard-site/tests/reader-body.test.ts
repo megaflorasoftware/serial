@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   base64ToBytes,
   bytesToBase64,
-  convertDocumentContent,
-  convertReaderBody,
+  deriveReaderDocument,
+  deriveResolvedContent,
   documentSourceBytes,
   isReferenceSnapshotStale,
   overflowBlobCid,
@@ -14,9 +14,9 @@ import {
 import type { ReaderBody, SourceReaderBody } from "../src";
 import {
   FIXTURE_DOCUMENTS,
+  fixtureReaderBody,
   loadDocumentFixture,
-  readFixtureText,
-  rejectingBlobLoader,
+  typedDocument,
 } from "./fixtures";
 
 const did = "did:plc:example";
@@ -37,20 +37,20 @@ function sourceBody(
 
 describe("source-form Reader bodies", () => {
   it.each(FIXTURE_DOCUMENTS)(
-    "%s derives the same HTML from its source as from import",
-    async (name) => {
+    "%s derives the same Reader document from its body as from resolved content",
+    (name) => {
       const { record, did: fixtureDid } = loadDocumentFixture(name);
-      const text = readFixtureText(name);
-      const value = JSON.parse(text) as { value: unknown };
-      const imported = await convertDocumentContent(record.value, {
-        did: fixtureDid,
-        loadBlob: rejectingBlobLoader,
-      });
-      const derived = convertReaderBody(
-        sourceBody(record.uri, stringifyLosslessJson(value.value)),
+      const body = fixtureReaderBody(name);
+      const fromContent = deriveResolvedContent(
+        record.value.content,
         fixtureDid,
       );
-      expect(derived).toEqual(imported);
+      const fromBody = deriveReaderDocument(
+        { ...body, references: [] },
+        fixtureDid,
+      );
+      expect(fromBody).not.toBeNull();
+      expect(typedDocument(fromBody!)).toEqual(typedDocument(fromContent!));
     },
   );
 
@@ -72,7 +72,9 @@ describe("source-form Reader bodies", () => {
         },
       ],
     );
-    expect(convertReaderBody(body, did)?.html).toBe("<p>from blob</p>");
+    expect(deriveReaderDocument(body, did)?.blocks).toMatchObject([
+      { kind: "paragraph", content: [{ kind: "text", text: "from blob" }] },
+    ]);
   });
 
   it("derives nothing when the overflow blob was not retained", () => {
@@ -90,7 +92,48 @@ describe("source-form Reader bodies", () => {
       stringifyLosslessJson({ title: "Post", content }),
     );
     expect(resolveDocumentSourceContent(body.source)).toBeNull();
-    expect(convertReaderBody(body, did)).toBeNull();
+    expect(deriveReaderDocument(body, did)).toBeNull();
+  });
+
+  it("reads leaflet pages from blobPages and ignores inline pages", () => {
+    const pages = [
+      {
+        $type: "pub.leaflet.pages.linearDocument",
+        blocks: [
+          {
+            block: { $type: "pub.leaflet.blocks.text", plaintext: "from blob" },
+          },
+        ],
+      },
+    ];
+    const content = {
+      $type: "pub.leaflet.content",
+      pages: [
+        {
+          $type: "pub.leaflet.pages.linearDocument",
+          blocks: [
+            {
+              block: { $type: "pub.leaflet.blocks.text", plaintext: "inline" },
+            },
+          ],
+        },
+      ],
+      blobPages: { ref: { $link: "bafypages" } },
+    };
+    const body = sourceBody(
+      `at://${did}/site.standard.document/post`,
+      stringifyLosslessJson({ content }),
+      [
+        {
+          cid: "bafypages",
+          mimeType: null,
+          bytes: bytesToBase64(new TextEncoder().encode(JSON.stringify(pages))),
+        },
+      ],
+    );
+    expect(deriveReaderDocument(body, did)?.blocks).toMatchObject([
+      { kind: "paragraph", content: [{ kind: "text", text: "from blob" }] },
+    ]);
   });
 
   it("renders cards from resolved snapshots and ignores the rest", () => {
@@ -139,9 +182,10 @@ describe("source-form Reader bodies", () => {
         },
       ],
     );
-    const html = convertReaderBody(body, did)?.html;
-    expect(html).toContain('href="https://example.com/other"');
-    expect(html).toContain("Other post");
+    expect(deriveReaderDocument(body, did)?.blocks[0]).toMatchObject({
+      kind: "recordPreview",
+      card: { url: "https://example.com/other", title: "Other post" },
+    });
   });
 
   it("measures source and body bytes from decoded blob sizes", () => {

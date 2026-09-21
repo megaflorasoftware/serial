@@ -1,12 +1,18 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createStore, Provider } from "jotai";
 import {
-  convertReaderBody,
+  deriveReaderDocument,
   DOCUMENT_SOURCE_BUDGET_BYTES,
   parseAtUri,
   readerBodyBytes,
+  readerDocumentBytes,
   stringifyLosslessJson,
 } from "@serial/standard-site";
+import { ReaderDocumentContent } from "../../src/components/content-reader/ReaderDocumentContent";
+import { flagAtoms } from "../../src/lib/hooks/useFlagState";
 import {
   applyMigrations,
   createLocalBenchmarkTarget,
@@ -26,9 +32,10 @@ import {
 import { stageDocumentSource } from "~/server/jetstream/document-source";
 
 /**
- * Measures the body endpoint against the nine real fixture documents: source
+ * Measures the body endpoint against the real fixture documents: source
  * transfer size per document against the 128 KiB reader budget, the 4 MiB
- * offline budget, and body load plus client derivation time.
+ * offline budget, body load time, client derivation time, and a static React
+ * render of the derived Reader document.
  */
 const READER_TRANSFER_BUDGET = 128 * 1024;
 const fixtures = resolve("../../packages/standard-site/tests/fixtures");
@@ -119,11 +126,16 @@ try {
     });
   }
   const rows = await session.database.select().from(feedItems);
-  const samples: Array<{ loadMs: number; deriveMs: number }> = [];
+  // The custom player needs the app's query client; the privacy embed does not.
+  const renderStore = createStore();
+  renderStore.set(flagAtoms.CUSTOM_VIDEO_PLAYER, "youtube");
+  const samples: Array<{ loadMs: number; deriveMs: number; renderMs: number }> =
+    [];
   let documents: Array<{
     id: string;
     transferBytes: number;
-    derivedHtmlBytes: number;
+    derivedBytes: number;
+    blocks: number;
     references: number;
     withinReaderBudget: boolean;
     withinOfflineBudget: boolean;
@@ -140,31 +152,55 @@ try {
       rows.map((row) => ({ id: row.id, body: bodies.get(row.id) ?? null })),
     );
     if (omitted.length) throw new Error("Fixture bodies exceeded the cap");
-    documents = items.map(({ id, body }) => {
+    const derivedDocuments = items.map(({ id, body }) => {
       if (body?.form !== "source") throw new Error(`No source body for ${id}`);
       const did = parseAtUri(body.source.uri)!.did;
-      const html = convertReaderBody(body, did)?.html ?? "";
+      const document = deriveReaderDocument(body, did);
+      if (!document) throw new Error(`Body ${id} did not derive`);
+      return { id, body, document };
+    });
+    const derived = performance.now();
+    for (const { document } of derivedDocuments) {
+      renderToStaticMarkup(
+        createElement(
+          Provider,
+          { store: renderStore },
+          createElement(ReaderDocumentContent, {
+            document,
+            documentUrl: "https://example.com/",
+            originActionLabel: "Open in Website",
+          }),
+        ),
+      );
+    }
+    const rendered = performance.now();
+    documents = derivedDocuments.map(({ id, body, document }) => {
       const transferBytes = readerBodyBytes(body);
       return {
         id,
         transferBytes,
-        derivedHtmlBytes: Buffer.byteLength(html),
+        derivedBytes: readerDocumentBytes(document),
+        blocks: document.blocks.length,
         references: body.references.length,
         withinReaderBudget: transferBytes <= READER_TRANSFER_BUDGET,
         withinOfflineBudget: transferBytes <= DOCUMENT_SOURCE_BUDGET_BYTES,
       };
     });
-    const derived = performance.now();
     if (i >= 3)
-      samples.push({ loadMs: loaded - started, deriveMs: derived - loaded });
+      samples.push({
+        loadMs: loaded - started,
+        deriveMs: derived - loaded,
+        renderMs: rendered - derived,
+      });
   }
-  const sorted = (field: "loadMs" | "deriveMs") =>
+  const sorted = (field: "loadMs" | "deriveMs" | "renderMs") =>
     samples.map((sample) => sample[field]).sort((a, b) => a - b);
   const result = {
     documents: documents.length,
     statementsPerLoad: session.instrumentation.snapshot().statementCount,
     load: { medianMs: sorted("loadMs")[7], p95Ms: sorted("loadMs")[14] },
     derive: { medianMs: sorted("deriveMs")[7], p95Ms: sorted("deriveMs")[14] },
+    render: { medianMs: sorted("renderMs")[7], p95Ms: sorted("renderMs")[14] },
     largestTransferBytes: Math.max(...documents.map((d) => d.transferBytes)),
     readerBudgetBytes: READER_TRANSFER_BUDGET,
     offlineBudgetBytes: DOCUMENT_SOURCE_BUDGET_BYTES,
@@ -177,12 +213,15 @@ try {
   );
   console.log({ ...result, perDocument: undefined });
   console.table(
-    documents.map(({ id, transferBytes, derivedHtmlBytes, references }) => ({
-      id,
-      transferBytes,
-      derivedHtmlBytes,
-      references,
-    })),
+    documents.map(
+      ({ id, transferBytes, derivedBytes, blocks, references }) => ({
+        id,
+        transferBytes,
+        derivedBytes,
+        blocks,
+        references,
+      }),
+    ),
   );
   if (!documents.every((d) => d.withinReaderBudget && d.withinOfflineBudget))
     throw new Error("A fixture body exceeded its budget");

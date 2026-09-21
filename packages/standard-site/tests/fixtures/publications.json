@@ -379,5 +379,15 @@
         "showInDiscover": true
       }
     }
+  },
+  {
+    "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.publication/3lppk75kw7k26",
+    "cid": "bafyreienforblsiwcwbjsihxx75pkjtscqgihjfvvgv5i5qsiwtggql6zm",
+    "value": {
+      "$type": "site.standard.publication",
+      "url": "https://lab.leaflet.pub",
+      "name": "Leaflet Lab Notes",
+      "description": "Behind the scenes as we build Leaflet, an open social publishing tool for blogs, newsletters, and more!"
+    }
   }
 ]

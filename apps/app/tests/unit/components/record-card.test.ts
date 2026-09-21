@@ -2,8 +2,9 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
-import { recordCard, sanitizeArticleHtml } from "@serial/standard-site";
-import { ArticleContent } from "~/components/feed/read/ArticleContent";
+import { recordCard } from "@serial/standard-site";
+import type { ReaderDocument } from "@serial/standard-site";
+import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
 
 vi.mock("~/lib/hooks/useFlagState", () => ({ useFlagState: () => ["iframe"] }));
 vi.mock("~/components/CustomVideoPlayer", () => ({
@@ -26,19 +27,32 @@ const preview = {
   author: "Author",
   publishedAt: "2026-09-18T00:00:00Z",
 };
+function document(blocks: ReaderDocument["blocks"]): ReaderDocument {
+  return { blocks, footnotes: [], truncated: false };
+}
+function render(doc: ReaderDocument, simplified: boolean) {
+  const container = window.document.createElement("div");
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(ReaderDocumentContent, {
+        document: doc,
+        documentUrl: "https://example.com/post",
+        originActionLabel: "Open in Website",
+        simplified,
+      }),
+    ),
+  );
+  return { container, unmount: () => act(() => root.unmount()) };
+}
 describe.each([false, true])("reader simplified=%s", (simplified) => {
-  it.each(["small", "medium", "large", "row"])(
+  it.each(["small", "medium", "large", "row"] as const)(
     "renders %s cards with safe links and metadata",
     (size) => {
-      const container = document.createElement("div");
-      const root = createRoot(container);
-      act(() =>
-        root.render(
-          createElement(ArticleContent, {
-            content: sanitizeArticleHtml(recordCard(preview, size)),
-            simplified,
-          }),
-        ),
+      const card = recordCard(preview, size)!;
+      const { container, unmount } = render(
+        document([{ kind: "recordPreview", card, source: null, align: null }]),
+        simplified,
       );
       const link = container.querySelector<HTMLAnchorElement>(
         `[data-record-card="${size}"]`,
@@ -53,21 +67,34 @@ describe.each([false, true])("reader simplified=%s", (simplified) => {
       );
       expect(link.textContent?.includes("Summary")).toBe(size !== "small");
       expect(container.querySelectorAll("a")).toHaveLength(1);
-      act(() => root.unmount());
+      unmount();
     },
   );
   it("keeps ordinary inline mentions and contains failed images", () => {
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    act(() =>
-      root.render(
-        createElement(ArticleContent, {
-          content:
-            recordCard(preview, "large") +
-            '<p>A <a href="https://example.com/mention">mention</a>.</p>',
-          simplified,
-        }),
-      ),
+    const card = recordCard(preview, "large")!;
+    const { container, unmount } = render(
+      document([
+        { kind: "recordPreview", card, source: null, align: null },
+        {
+          kind: "paragraph",
+          source: null,
+          align: null,
+          content: [
+            { kind: "text", text: "A ", marks: {}, link: null },
+            {
+              kind: "text",
+              text: "mention",
+              marks: {},
+              link: {
+                href: "https://example.com/mention",
+                record: preview.uri,
+              },
+            },
+            { kind: "text", text: ".", marks: {}, link: null },
+          ],
+        },
+      ]),
+      simplified,
     );
     act(() =>
       container
@@ -78,7 +105,8 @@ describe.each([false, true])("reader simplified=%s", (simplified) => {
     expect(container.textContent).toContain("Title");
     const mention = container.querySelector("p > a")!;
     expect(mention.textContent).toBe("mention");
+    expect(mention.getAttribute("data-record-uri")).toBe(preview.uri);
     expect(mention.attributes.getNamedItem("class")).toBeNull();
-    act(() => root.unmount());
+    unmount();
   });
 });

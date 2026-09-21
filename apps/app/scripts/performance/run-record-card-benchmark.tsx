@@ -1,9 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  convertDocumentContent,
-  recordCardSchema,
-} from "@serial/standard-site";
+import { deriveResolvedContent, recordCardSchema } from "@serial/standard-site";
 import { RecordCard } from "../../src/components/content-reader/RecordCard";
 
 const did = "did:plc:benchmark";
@@ -47,11 +44,9 @@ const blocks = Array.from({ length: 100 }, (_, index) => [
     },
   },
 ]).flat();
-const document = {
-  content: {
-    $type: "pub.leaflet.content",
-    pages: [{ $type: "pub.leaflet.pages.linearDocument", blocks }],
-  },
+const content = {
+  $type: "pub.leaflet.content",
+  pages: [{ $type: "pub.leaflet.pages.linearDocument", blocks }],
 };
 const cards = Array.from({ length: 100 }, (_, index) =>
   recordCardSchema.parse({
@@ -69,15 +64,9 @@ for (let index = 0; index < 23; index++) {
   globalThis.gc?.();
   let lookups = 0;
   const start = performance.now();
-  // Measure each sample in isolation so concurrent samples cannot distort timings.
-  // react-doctor-disable-next-line react-doctor/async-await-in-loop
-  const converted = await convertDocumentContent(document, {
-    did,
-    loadBlob: () => Promise.reject(new Error("Unexpected blob request")),
-    records: (uri) => {
-      lookups++;
-      return referenced(uri);
-    },
+  const derived = deriveResolvedContent(content, did, (uri) => {
+    lookups++;
+    return referenced(uri);
   });
   const convertedAt = performance.now();
   const rendered = renderToStaticMarkup(
@@ -88,7 +77,7 @@ for (let index = 0; index < 23; index++) {
     </>,
   );
   const end = performance.now();
-  if (lookups !== 100 || !converted?.html || !rendered)
+  if (lookups !== 100 || !derived?.blocks.length || !rendered)
     throw new Error("Invalid benchmark workload");
   if (index >= 3)
     samples.push({

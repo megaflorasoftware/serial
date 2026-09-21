@@ -1,5 +1,5 @@
-import { convertReaderBody, parseAtUri } from "@serial/standard-site";
-import type { ReaderBody } from "@serial/standard-site";
+import { deriveReaderDocument, parseAtUri } from "@serial/standard-site";
+import type { ReaderBody, ReaderDocument } from "@serial/standard-site";
 import { detectTruncatedContent } from "~/lib/utils/detectTruncatedContent";
 
 /**
@@ -15,15 +15,23 @@ export function hasReaderBodyContent(body: ReaderBody | null | undefined) {
 }
 
 /**
- * Bridge until typed React rendering replaces the HTML reader: an HTML body
- * is already HTML, a Document source derives to HTML in the browser.
+ * What the reader draws for a body: HTML as it stands, or the Reader document
+ * derived from a Document source and its Reference snapshots. Null when the
+ * body is not loaded or the source does not derive.
  */
-export function readerBodyHtml(body: ReaderBody | null | undefined) {
-  if (!body) return "";
-  if (body.form === "html") return body.html;
+export type ReaderContent =
+  | { form: "html"; html: string }
+  | { form: "document"; document: ReaderDocument };
+
+export function readerContent(
+  body: ReaderBody | null | undefined,
+): ReaderContent | null {
+  if (!body) return null;
+  if (body.form === "html") return { form: "html", html: body.html };
   const did = parseAtUri(body.source.uri)?.did;
-  if (!did) return "";
-  return convertReaderBody(body, did)?.html ?? "";
+  if (!did) return null;
+  const document = deriveReaderDocument(body, did);
+  return document ? { form: "document", document } : null;
 }
 
 /**

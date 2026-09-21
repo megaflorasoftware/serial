@@ -2,18 +2,22 @@
 
 import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import type { CSSProperties } from "react";
 import { Dialog, DialogOverlay, DialogPortal } from "~/components/ui/dialog";
 
 interface ArticleImageLightboxProps {
   src: string;
   alt?: string;
   className?: string;
+  /** Layout hints from the Reader document: aspect ratio and capped width. */
+  style?: CSSProperties;
 }
 
 export function ArticleImageLightbox({
   src,
   alt,
   className,
+  style,
 }: ArticleImageLightboxProps) {
   const [open, setOpen] = useState(false);
   const [failedSrc, setFailedSrc] = useState<string>();
@@ -48,6 +52,7 @@ export function ArticleImageLightbox({
             src={src}
             alt={alt}
             className={className}
+            style={style}
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"

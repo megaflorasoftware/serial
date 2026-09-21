@@ -245,10 +245,7 @@ export async function processOriginDocuments(
         readableCid: entry.bodyCid,
       });
       if (outcome.kind === "rejected")
-        report(
-          new Error("Document source did not convert"),
-          "document-adapter",
-        );
+        report(new Error("Document source did not derive"), "document-adapter");
       const incoming = await enrichObservationImages([observation], readPage);
       const currentPlan = await planFor(row, settings);
       const written = await writeObservedItems(database, row.feed, incoming, {
