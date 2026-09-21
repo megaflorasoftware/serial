@@ -73,6 +73,8 @@ function createFlagAtom<TKey extends FlagName>(key: TKey) {
 }
 
 // All readers of a flag share its derived value and subscription graph.
+// Exported so scripts rendering flag-dependent components outside the app can
+// seed a store; product code reads flags through `useFlagState`.
 export const flagAtoms: {
   [TKey in FlagName]: ReturnType<typeof createFlagAtom<TKey>>;
 } = {

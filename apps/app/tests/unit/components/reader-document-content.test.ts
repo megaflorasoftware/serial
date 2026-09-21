@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // @vitest-environment-options { "url": "https://serial.test/" }
 
+import { getDefaultStore } from "jotai";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +16,7 @@ import {
   SANDBOXED_FRAME_SANDBOX,
   sandboxedFrameDocument,
 } from "~/components/content-reader/SandboxedFrame";
+import { connectionStateAtom } from "~/lib/data/atoms";
 import { getElements } from "~/lib/hooks/useArticleNavigation";
 
 vi.mock("~/lib/hooks/useFlagState", () => ({ useFlagState: () => ["iframe"] }));
@@ -27,7 +29,7 @@ const roots: Array<ReturnType<typeof createRoot>> = [];
 
 function render(
   document: ReaderDocument,
-  options: { simplified?: boolean; offline?: boolean } = {},
+  options: { simplified?: boolean } = {},
 ) {
   const container = window.document.createElement("div");
   window.document.body.append(container);
@@ -49,6 +51,7 @@ function render(
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   window.document.body.innerHTML = "";
+  getDefaultStore().set(connectionStateAtom, "unknown");
 });
 
 const text = (value: string): ReaderInline => ({
@@ -242,7 +245,9 @@ describe("Reader document content", () => {
         } as unknown as ReaderBlock,
       ]),
     );
-    const notices = container.querySelectorAll<HTMLElement>("[role='alert']");
+    const notices = container.querySelectorAll<HTMLElement>("[role='note']");
+    // Each notice is one atomic stop for the progress index, not two.
+    expect(getElements(container)).toHaveLength(3);
     expect(notices).toHaveLength(3);
     expect(notices[0]?.getAttribute("data-reader-notice")).toBe("membersOnly");
     expect(
@@ -292,9 +297,11 @@ describe("Reader document content", () => {
     expect(srcdoc).toContain('<base target="_blank">');
     expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
 
-    const offline = render(document([html]), { offline: true });
+    act(() => getDefaultStore().set(connectionStateAtom, "disconnected"));
+    const offline = render(document([html]));
     expect(offline.querySelector("iframe")).toBeNull();
     expect(offline.querySelector("[data-reader-notice='frame']")).toBeTruthy();
+    act(() => getDefaultStore().set(connectionStateAtom, "connected"));
     const simplified = render(document([html]), { simplified: true });
     expect(simplified.querySelector("iframe")).toBeNull();
     expect(

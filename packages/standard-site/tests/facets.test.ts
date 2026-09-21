@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_FOOTNOTE_NESTING_DEPTH,
   resolveRichText,
   richTextContext,
   richTextPlaintext,
@@ -268,6 +269,88 @@ describe("resolveRichText", () => {
     ).toEqual([
       text("write", { highlight: { color: null } }, "mailto:a@b.test"),
     ]);
+  });
+
+  it("keeps adjacent highlights apart when their colors differ", () => {
+    expect(
+      resolveRichText({
+        plaintext: "abcd",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 2 },
+            features: [{ $type: "x#highlight", color: "red" }],
+          },
+          {
+            index: { byteStart: 2, byteEnd: 4 },
+            features: [{ $type: "x#highlight", color: "blue" }],
+          },
+        ],
+      }),
+    ).toEqual([
+      text("ab", { highlight: { color: "red" } }),
+      text("cd", { highlight: { color: "blue" } }),
+    ]);
+  });
+
+  it("bounds duplicate formatting without dropping footnote markers", () => {
+    const context = richTextContext();
+    const inlines = resolveRichText(
+      {
+        plaintext: "dense",
+        facets: [
+          ...Array.from({ length: 2000 }, () => ({
+            index: { byteStart: 0, byteEnd: 5 },
+            features: [{ $type: "x#bold" }],
+          })),
+          {
+            index: { byteStart: 0, byteEnd: 5 },
+            features: [
+              {
+                $type: "x#footnote",
+                footnoteId: "n",
+                contentPlaintext: "note",
+              },
+            ],
+          },
+        ],
+      },
+      context,
+    );
+    expect(inlines).toEqual([text("dense", { bold: true }), note(1)]);
+  });
+
+  it("stops resolving facets in footnotes nested past the depth limit", () => {
+    let feature: { $type: string } & Record<string, unknown> = {
+      $type: "x#footnote",
+      footnoteId: "leaf",
+      contentPlaintext: "leaf",
+      contentFacets: [
+        {
+          index: { byteStart: 0, byteEnd: 4 },
+          features: [{ $type: "x#bold" }],
+        },
+      ],
+    };
+    for (let depth = 0; depth < MAX_FOOTNOTE_NESTING_DEPTH + 4; depth += 1) {
+      feature = {
+        $type: "x#footnote",
+        footnoteId: `n${depth}`,
+        contentPlaintext: "note",
+        contentFacets: [
+          { index: { byteStart: 0, byteEnd: 4 }, features: [feature] },
+        ],
+      };
+    }
+    const context = richTextContext();
+    resolveRichText(
+      {
+        plaintext: "x",
+        facets: [{ index: { byteStart: 0, byteEnd: 1 }, features: [feature] }],
+      },
+      context,
+    );
+    expect(context.footnotes.length).toBe(MAX_FOOTNOTE_NESTING_DEPTH + 1);
+    expect(context.footnotes.at(-1)?.content).toEqual([text("note")]);
   });
 
   it("keeps the authored href of a mention whose URI has no inspector page", () => {

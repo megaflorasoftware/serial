@@ -1,6 +1,8 @@
 import { useMemo } from "react";
+import { useAtomValue } from "jotai";
 import type { ReaderAspectRatio } from "@serial/standard-site";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
+import { isDisconnectedAtom } from "~/lib/data/atoms";
 
 /**
  * The one sandboxed frame the reader ever shows, with one locked-down policy.
@@ -48,8 +50,8 @@ export type SandboxedFrameProps = {
   title: string;
   height: number | null;
   aspectRatio: ReaderAspectRatio | null;
-  /** Offline and simplified mode show the notice instead of loading the frame. */
-  unavailable: boolean;
+  /** Simplified mode shows the notice instead of loading the frame; so does being offline. */
+  simplified: boolean;
   noticeHref: string;
   originActionLabel: string;
 };
@@ -59,12 +61,13 @@ export function SandboxedFrame({
   title,
   height,
   aspectRatio,
-  unavailable,
+  simplified,
   noticeHref,
   originActionLabel,
 }: SandboxedFrameProps) {
+  const offline = useAtomValue(isDisconnectedAtom);
   const srcDoc = useMemo(() => sandboxedFrameDocument(html), [html]);
-  if (unavailable) {
+  if (simplified || offline) {
     return (
       <ReaderNotice
         kind="frame"

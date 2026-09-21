@@ -15,6 +15,10 @@ export function readerBlockBytes(block: ReaderBlock) {
     .byteLength;
 }
 
+function footnoteBytes(footnotes: ReaderFootnote[]) {
+  return new TextEncoder().encode(JSON.stringify(footnotes)).byteLength;
+}
+
 export function readerDocumentBytes(document: ReaderDocument) {
   return new TextEncoder().encode(JSON.stringify(document, withoutSource))
     .byteLength;
@@ -76,8 +80,9 @@ export function boundReaderDocument(
   const byteLimit = limits.bytes ?? READER_DOCUMENT_BUDGET_BYTES;
   const blockLimit = limits.blocks ?? READER_DOCUMENT_BLOCK_LIMIT;
   const kept: ReaderBlock[] = [];
-  // Two bytes for the surrounding array brackets, one comma per block.
-  let bytes = 2;
+  // Footnotes count in full up front; the block array adds two bytes for its
+  // brackets and one comma per block.
+  let bytes = footnoteBytes(footnotes) + 2;
   let count = 0;
   for (const block of blocks) {
     const size = readerBlockBytes(block) + (kept.length ? 1 : 0);

@@ -29,6 +29,7 @@ export { calloutTint } from "./tint";
 export {
   facetArraySchema,
   facetSchema,
+  MAX_FOOTNOTE_NESTING_DEPTH,
   resolveRichText,
   richTextContext,
   richTextPlaintext,

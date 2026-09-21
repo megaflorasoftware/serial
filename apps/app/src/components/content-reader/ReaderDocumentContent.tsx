@@ -30,8 +30,6 @@ export type ReaderDocumentContentProps = {
   originActionLabel: string;
   /** No lightbox, no video, and frames show the notice. */
   simplified?: boolean;
-  /** Frames show the notice instead of loading. */
-  offline?: boolean;
 };
 
 type RenderOptions = Omit<ReaderDocumentContentProps, "document">;
@@ -390,7 +388,7 @@ function Block({
           title="Embedded content"
           height={block.height}
           aspectRatio={block.aspectRatio}
-          unavailable={simplified || options.offline === true}
+          simplified={simplified}
           noticeHref={options.documentUrl}
           originActionLabel={options.originActionLabel}
         />

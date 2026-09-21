@@ -59,8 +59,10 @@ describe("real documents", () => {
     const { document } = deriveFixture(name);
     const visit = (blocks: ReaderBlock[]) => {
       for (const block of blocks) {
-        if (block.kind !== "notice" || block.reason !== "truncated")
+        if (block.kind !== "notice" || block.reason !== "truncated") {
           expect(block.source, block.kind).toBeDefined();
+          expect(block.source, block.kind).not.toBeNull();
+        }
         if (block.kind === "quotation") visit(block.children);
         if (block.kind === "list")
           for (const item of block.items) visit(item.content);
@@ -243,6 +245,41 @@ describe("leaflet blocks", () => {
     expect(find(document.blocks, "code")[0]).toMatchObject({
       language: "python",
     });
+  });
+
+  it("keeps text and valid formatting beside malformed facets", () => {
+    const document = derive(
+      leaflet([
+        {
+          $type: "pub.leaflet.blocks.text",
+          plaintext: "keep me",
+          facets: [
+            null,
+            { index: "invalid", features: [{ $type: "x#bold" }] },
+            { index: { byteStart: 0, byteEnd: 4 }, features: "invalid" },
+            {
+              index: { byteStart: 5, byteEnd: 7 },
+              features: [null, { $type: "x#italic" }],
+            },
+          ],
+        },
+        {
+          $type: "pub.leaflet.blocks.text",
+          plaintext: "plain",
+          facets: "invalid",
+        },
+      ]),
+    );
+    expect(document.blocks).toMatchObject([
+      {
+        kind: "paragraph",
+        content: [
+          { text: "keep ", marks: {} },
+          { text: "me", marks: { italic: true } },
+        ],
+      },
+      { kind: "paragraph", content: [{ text: "plain", marks: {} }] },
+    ]);
   });
 
   it("renders website blocks as record previews or link cards and buttons as cards", () => {
@@ -439,7 +476,7 @@ describe("pckt blocks", () => {
             {
               content: [
                 {
-                  $type: "blog.pckt.block.tableHeader",
+                  $type: "blog.pckt.block.tableHeader#main",
                   content: [text("h")],
                   colspan: 2,
                 },
@@ -547,6 +584,26 @@ describe("pckt blocks", () => {
       height: 152,
       youtube: null,
     });
+  });
+
+  it("turns an over-deep pckt quotation into one notice and keeps its ancestors", () => {
+    let quote: Record<string, unknown> = {
+      $type: "blog.pckt.block.text",
+      plaintext: "deepest",
+    };
+    for (let depth = 0; depth < MAX_BLOCK_NESTING_DEPTH + 2; depth += 1) {
+      quote = { $type: "blog.pckt.block.blockquote", content: [quote] };
+    }
+    const document = derive(
+      pckt([quote, { $type: "blog.pckt.block.text", plaintext: "after" }]),
+    );
+    const flat = kinds(document.blocks);
+    // The quotation at the limit still renders; its children become the notice.
+    expect(flat.filter((kind) => kind === "quotation")).toHaveLength(
+      MAX_BLOCK_NESTING_DEPTH + 1,
+    );
+    expect(flat.filter((kind) => kind === "notice")).toHaveLength(1);
+    expect(flat.at(-1)).toBe("paragraph");
   });
 
   it("keeps quotations out of the summary and blob images on the CDN", () => {
@@ -686,6 +743,86 @@ describe("offprint blocks", () => {
     expect(summarizeReaderDocument(document).firstParagraph).toBe("done");
   });
 
+  it("turns an over-deep Offprint list into one notice", () => {
+    let item: Record<string, unknown> = { content: { plaintext: "deepest" } };
+    for (let depth = 0; depth < MAX_BLOCK_NESTING_DEPTH + 2; depth += 1) {
+      item = { content: { plaintext: `level ${depth}` }, children: [item] };
+    }
+    const document = derive(
+      offprint([{ $type: "app.offprint.block.bulletList", children: [item] }]),
+    );
+    const flat = kinds(document.blocks);
+    expect(flat.filter((kind) => kind === "list")).toHaveLength(
+      MAX_BLOCK_NESTING_DEPTH,
+    );
+    expect(flat.at(-1)).toBe("notice");
+  });
+
+  it("drops whitespace-only Offprint list text but keeps its children", () => {
+    const [list] = find(
+      derive(
+        offprint([
+          {
+            $type: "app.offprint.block.bulletList",
+            children: [
+              {
+                content: { plaintext: "   " },
+                children: [{ content: { plaintext: "child" } }],
+              },
+              { content: { plaintext: "  " } },
+            ],
+          },
+        ]),
+      ).blocks,
+      "list",
+    );
+    expect(list?.items).toHaveLength(1);
+    expect(kinds(list!.items[0]!.content)).toEqual(["list", "paragraph"]);
+  });
+
+  it("keeps an image whose caption facets are malformed", () => {
+    const [image] = find(
+      derive(
+        offprint([
+          {
+            $type: "app.offprint.block.image",
+            image: { ref: { $link: "bafyone" }, mimeType: "image/png" },
+            caption: "Caption",
+            captionFacets: "invalid",
+          },
+        ]),
+      ).blocks,
+      "image",
+    );
+    expect(image?.caption).toEqual([
+      { kind: "text", text: "Caption", marks: {}, link: null },
+    ]);
+  });
+
+  it("drops bad pckt gallery entries and keeps the rest", () => {
+    const galleryUri = "at://did:plc:bob/blog.pckt.gallery/one";
+    const document = deriveResolvedContent(
+      pckt([{ $type: "blog.pckt.block.gallery", ref: galleryUri }]),
+      did,
+      () => ({
+        uri: galleryUri,
+        cid: "bafy",
+        value: {
+          images: [
+            null,
+            { src: 42 },
+            { src: "javascript:alert(1)" },
+            { src: "https://example.com/ok.png" },
+          ],
+        },
+      }),
+    );
+    expect(document?.blocks[0]).toMatchObject({
+      kind: "imageGroup",
+      images: [{ url: "https://example.com/ok.png" }],
+    });
+  });
+
   it("derives grids with their layout and drops images without a blob", () => {
     const [grid] = find(
       derive(
@@ -735,6 +872,29 @@ describe("bounds", () => {
     });
     expect(document.blocks.length).toBeLessThan(blocks.length);
     expect(readerDocumentBytes(document)).toBeLessThan(600);
+  });
+
+  it("counts footnote text toward the byte limit", () => {
+    const blocks = [paragraph("short")];
+    const footnotes = [
+      {
+        number: 1,
+        content: [
+          {
+            kind: "text" as const,
+            text: "x".repeat(600),
+            marks: {},
+            link: null,
+          },
+        ],
+      },
+    ];
+    expect(
+      boundReaderDocument(blocks, footnotes, { bytes: 400 }).truncated,
+    ).toBe(true);
+    expect(boundReaderDocument(blocks, [], { bytes: 400 }).truncated).toBe(
+      false,
+    );
   });
 
   it("counts nested blocks toward the block limit and drops orphaned footnotes", () => {

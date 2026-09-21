@@ -11,13 +11,13 @@ import {
   readerDocumentBytes,
   stringifyLosslessJson,
 } from "@serial/standard-site";
-import { ReaderDocumentContent } from "../../src/components/content-reader/ReaderDocumentContent";
-import { flagAtoms } from "../../src/lib/hooks/useFlagState";
 import {
   applyMigrations,
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "./database";
+import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
+import { flagAtoms } from "~/lib/hooks/useFlagState";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   capReaderBodies,

@@ -35,7 +35,8 @@ export type ReaderNoticeProps = {
 /**
  * Modeled on the custom video player's error overlay: a generic visible
  * headline, the specific message for screen readers, and one outline button
- * with the external-link icon to the original site.
+ * with the external-link icon to the original site. Unlike the overlay, many
+ * notices can sit in one document, so they are notes rather than alerts.
  */
 export function ReaderNotice({
   kind,
@@ -43,7 +44,7 @@ export function ReaderNotice({
   originActionLabel,
 }: ReaderNoticeProps) {
   return (
-    <div role="alert" data-reader-notice={kind}>
+    <div role="note" data-reader-notice={kind}>
       <div>
         <p data-reader-notice-headline>{HEADLINES[kind] ?? HEADLINE}</p>
         <p className="sr-only">{DESCRIPTIONS[kind]}</p>

@@ -59,6 +59,8 @@ function isAtomicDiv(element: HTMLElement): boolean {
   return (
     element.hasAttribute("data-lightbox") ||
     element.hasAttribute("data-article-video-embed") ||
+    element.hasAttribute("data-reader-notice") ||
+    element.hasAttribute("data-reader-frame") ||
     isInteractive ||
     isMediaOnly
   );

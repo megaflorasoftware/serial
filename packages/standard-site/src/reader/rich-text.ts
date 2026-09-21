@@ -45,12 +45,22 @@ export type RichTextContext = {
   records: RecordLookup;
   /** Numbers already given to ids, so a second reference reuses the first. */
   footnoteNumbers: Map<string, number>;
+  /** How many footnote texts are being resolved inside one another right now. */
+  footnoteDepth: number;
 };
+
+/** Footnote text nested deeper than this keeps its plaintext and drops its facets. */
+export const MAX_FOOTNOTE_NESTING_DEPTH = 32;
 
 export function richTextContext(
   records: RecordLookup = () => undefined,
 ): RichTextContext {
-  return { footnotes: [], records, footnoteNumbers: new Map() };
+  return {
+    footnotes: [],
+    records,
+    footnoteNumbers: new Map(),
+    footnoteDepth: 0,
+  };
 }
 
 function featureName(feature: Feature) {
@@ -140,7 +150,8 @@ function contributionFor(
 /**
  * Numbers a footnote when its reference is met, so numbering follows reading
  * order. Nested footnote text resolves with the same context and is listed
- * after its parent.
+ * after its parent; past the nesting limit its facets are dropped so
+ * author-controlled nesting cannot recurse without bound.
  */
 function footnoteNumber(
   footnote: { id: string; text: RichText },
@@ -154,7 +165,16 @@ function footnoteNumber(
   if (footnote.id) context.footnoteNumbers.set(footnote.id, number);
   const entry: ReaderFootnote = { number, content: [] };
   context.footnotes.push(entry);
-  entry.content = resolveRichText(footnote.text, context);
+  const text =
+    context.footnoteDepth >= MAX_FOOTNOTE_NESTING_DEPTH
+      ? { plaintext: footnote.text.plaintext }
+      : footnote.text;
+  context.footnoteDepth += 1;
+  try {
+    entry.content = resolveRichText(text, context);
+  } finally {
+    context.footnoteDepth -= 1;
+  }
   return number;
 }
 
@@ -265,10 +285,16 @@ export function resolveRichText(
 }
 
 function sameFormatting(left: ReaderTextSpan, right: ReaderTextSpan) {
-  const marks = (span: ReaderTextSpan) =>
-    JSON.stringify(span.marks, Object.keys(span.marks).sort());
+  const a = left.marks;
+  const b = right.marks;
   return (
-    marks(left) === marks(right) &&
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.code === b.code &&
+    a.strikethrough === b.strikethrough &&
+    a.underline === b.underline &&
+    (a.highlight === undefined) === (b.highlight === undefined) &&
+    a.highlight?.color === b.highlight?.color &&
     left.link?.href === right.link?.href &&
     left.link?.record === right.link?.record
   );

@@ -14,7 +14,7 @@ import { unified } from "unified";
 import { useZoom } from "../components/feed/watch/[id]/useZoom";
 import { ContentActions } from "../components/feed/watch/[id]/ContentActions";
 import { useFeeds } from "~/lib/data/feeds";
-import { barsHiddenAtom, isDisconnectedAtom } from "~/lib/data/atoms";
+import { barsHiddenAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import classes from "~/components/feed/read/article.module.css";
 import { useFeedItemValue } from "~/lib/data/store";
@@ -146,7 +146,6 @@ function FeedReader({
   const reader = useMemo(() => readerContent(body), [body]);
   const content =
     reader?.form === "html" ? getReaderContent(reader.html, articleStyle) : "";
-  const offline = useAtomValue(isDisconnectedAtom);
 
   const articleRef = useRef<HTMLDivElement>(null);
   const [articleElement, setArticleElement] = useState<HTMLDivElement | null>(
@@ -230,7 +229,6 @@ function FeedReader({
                 contentType: feedItem?.contentType ?? "text",
               })}
               simplified={articleStyle === "simplified"}
-              offline={offline}
             />
           ) : (
             <ArticleContent
