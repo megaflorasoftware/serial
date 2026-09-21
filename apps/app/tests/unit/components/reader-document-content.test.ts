@@ -218,7 +218,8 @@ describe("Reader document content", () => {
     )!;
     expect(grid.getAttribute("data-reader-grid-rows")).toBe("2");
     expect(grid.getAttribute("data-reader-grid-ratio")).toBe("mosaic");
-    expect(grid.style.getPropertyValue("--reader-grid-count")).toBe("3");
+    // Three images in a two-row mosaic: the first spans both rows, two more stack beside it.
+    expect(grid.style.getPropertyValue("--reader-grid-columns")).toBe("2");
     expect(grid.querySelectorAll("img")).toHaveLength(3);
   });
 
@@ -244,6 +245,12 @@ describe("Reader document content", () => {
     const notices = container.querySelectorAll<HTMLElement>("[role='alert']");
     expect(notices).toHaveLength(3);
     expect(notices[0]?.getAttribute("data-reader-notice")).toBe("membersOnly");
+    expect(
+      notices[0]?.querySelector("[data-reader-notice-headline]")?.textContent,
+    ).toBe("The rest of this post is for members");
+    expect(
+      notices[1]?.querySelector("[data-reader-notice-headline]")?.textContent,
+    ).toBe("Available on the original site");
     expect(notices[0]?.querySelector(".sr-only")?.textContent).toContain(
       "members",
     );

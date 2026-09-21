@@ -11,6 +11,11 @@ export type ReaderNoticeKind = ReaderNoticeReason | "frame";
 
 const HEADLINE = "Available on the original site";
 
+/** A delimiter is the one notice whose reason the reader states out loud. */
+const HEADLINES: Partial<Record<ReaderNoticeKind, string>> = {
+  membersOnly: "The rest of this post is for members",
+};
+
 const DESCRIPTIONS: Record<ReaderNoticeKind, string> = {
   unsupported: "This block is not supported in the reader yet.",
   canvas: "This page is a canvas layout, which the reader does not show yet.",
@@ -40,7 +45,7 @@ export function ReaderNotice({
   return (
     <div role="alert" data-reader-notice={kind}>
       <div>
-        <p data-reader-notice-headline>{HEADLINE}</p>
+        <p data-reader-notice-headline>{HEADLINES[kind] ?? HEADLINE}</p>
         <p className="sr-only">{DESCRIPTIONS[kind]}</p>
       </div>
       <Button variant="outline" asChild>

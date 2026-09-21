@@ -105,10 +105,14 @@ function imageStyle(image: ReaderImage): CSSProperties | undefined {
 function Picture({
   image,
   simplified,
+  fill = false,
 }: {
   image: ReaderImage;
   simplified: boolean;
+  /** Grid cells size the picture; the image's own hints are not applied. */
+  fill?: boolean;
 }) {
+  const style = fill ? undefined : imageStyle(image);
   if (simplified) {
     return (
       <img
@@ -116,17 +120,20 @@ function Picture({
         src={image.url}
         alt={image.alt}
         title={image.title ?? undefined}
-        style={imageStyle(image)}
+        style={style}
       />
     );
   }
-  return (
-    <ArticleImageLightbox
-      src={image.url}
-      alt={image.alt}
-      style={imageStyle(image)}
-    />
-  );
+  return <ArticleImageLightbox src={image.url} alt={image.alt} style={style} />;
+}
+
+/**
+ * Columns for an Offprint grid: images fill the rows in order, and a mosaic
+ * gives its first image both rows.
+ */
+function gridColumns(count: number, rows: number, mosaic: boolean) {
+  if (mosaic && rows === 2 && count > 1) return 1 + Math.ceil((count - 1) / 2);
+  return Math.max(1, Math.ceil(count / rows));
 }
 
 function Blocks({
@@ -276,7 +283,10 @@ function Block({
       );
     case "image":
       return (
-        <figure data-reader-align={block.align ?? undefined}>
+        <figure
+          data-reader-figure="image"
+          data-reader-align={block.align ?? undefined}
+        >
           <Picture image={block.image} simplified={simplified} />
           {block.caption && (
             <figcaption>
@@ -285,28 +295,35 @@ function Block({
           )}
         </figure>
       );
-    case "imageGroup":
+    case "imageGroup": {
+      const grid = block.layout.mode === "grid" ? block.layout : null;
       return (
         <figure
+          data-reader-figure="group"
           data-reader-align={block.align ?? undefined}
           data-reader-image-group={block.layout.mode}
-          data-reader-grid-rows={
-            block.layout.mode === "grid" ? block.layout.rows : undefined
-          }
-          data-reader-grid-ratio={
-            block.layout.mode === "grid" ? block.layout.ratio : undefined
-          }
+          data-reader-grid-rows={grid?.rows}
+          data-reader-grid-ratio={grid?.ratio}
           style={
-            block.layout.mode === "grid"
+            grid
               ? ({
-                  "--reader-grid-count": block.images.length,
+                  "--reader-grid-columns": gridColumns(
+                    block.images.length,
+                    grid.rows,
+                    grid.ratio === "mosaic",
+                  ),
                 } as CSSProperties)
               : undefined
           }
         >
           <div data-reader-image-group-items>
             {block.images.map((image, index) => (
-              <Picture key={index} image={image} simplified={simplified} />
+              <Picture
+                key={index}
+                image={image}
+                simplified={simplified}
+                fill={grid !== null}
+              />
             ))}
           </div>
           {block.caption && (
@@ -316,6 +333,7 @@ function Block({
           )}
         </figure>
       );
+    }
     case "divider":
       return <hr />;
     case "break":

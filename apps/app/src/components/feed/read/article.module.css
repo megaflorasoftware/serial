@@ -363,22 +363,22 @@
   min-width: 0;
 }
 
-.article figure:global([data-reader-align="center"]) {
+/* Reader figures: the lightbox button fills the figure so percent widths and
+   alignment resolve against the column, not the image's own size. */
+.article :global([data-reader-figure]) :global([data-lightbox-trigger]) {
+  width: 100%;
+}
+
+.article :global([data-reader-figure="image"]) img {
+  display: block;
+}
+
+.article :global([data-reader-figure][data-reader-align="center"]) img {
   margin-inline: auto;
 }
 
-.article figure:global([data-reader-align="center"]) :global([data-lightbox]),
-.article figure:global([data-reader-align="center"]) > img {
-  margin-inline: auto;
-}
-
-.article figure:global([data-reader-align="right"]) :global([data-lightbox]),
-.article figure:global([data-reader-align="right"]) > img {
+.article :global([data-reader-figure][data-reader-align="right"]) img {
   margin-inline-start: auto;
-}
-
-.article figure:global([data-reader-align]) :global([data-lightbox-trigger]) {
-  margin-inline: inherit;
 }
 
 .article div:global([data-reader-align="center"]) {
@@ -404,48 +404,30 @@
   :global([data-reader-image-group-items]) {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(
-    max(1, calc(var(--reader-grid-count) / var(--reader-grid-rows, 1))),
-    minmax(0, 1fr)
-  );
+  grid-template-columns: repeat(var(--reader-grid-columns, 2), minmax(0, 1fr));
+  grid-auto-rows: 1fr;
 }
 
-.article
-  :global([data-reader-grid-rows="2"])
-  :global([data-reader-image-group-items]) {
-  --reader-grid-rows: 2;
-  grid-template-columns: repeat(
-    max(1, round(up, calc(var(--reader-grid-count) / 2), 1)),
-    minmax(0, 1fr)
-  );
-}
-
-.article :global([data-reader-image-group="grid"]) :global([data-lightbox]),
 .article
   :global([data-reader-image-group="grid"])
-  :global([data-lightbox-trigger]),
-.article :global([data-reader-image-group="grid"]) img {
-  height: 100%;
-  width: 100%;
-  max-width: none;
-}
-
-.article :global([data-reader-image-group="grid"]) img {
-  object-fit: cover;
+  :global([data-reader-image-group-items])
+  > * {
+  min-height: 0;
   aspect-ratio: 4 / 3;
-  border-radius: var(--radius-sm);
 }
 
-.article :global([data-reader-grid-ratio="portrait"]) img {
+.article
+  :global([data-reader-grid-ratio="portrait"])
+  :global([data-reader-image-group-items])
+  > * {
   aspect-ratio: 3 / 4;
 }
 
-.article :global([data-reader-grid-ratio="square"]) img {
+.article
+  :global([data-reader-grid-ratio="square"])
+  :global([data-reader-image-group-items])
+  > * {
   aspect-ratio: 1;
-}
-
-.article :global([data-reader-grid-ratio="mosaic"]) img {
-  aspect-ratio: auto;
 }
 
 .article
@@ -453,6 +435,23 @@
   :global([data-reader-image-group-items])
   > :first-child {
   grid-row: span 2;
+  aspect-ratio: auto;
+}
+
+.article :global([data-reader-image-group="grid"]) :global([data-lightbox]),
+.article
+  :global([data-reader-image-group="grid"])
+  :global([data-lightbox-trigger]),
+.article :global([data-reader-image-group="grid"]) img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  max-width: none;
+}
+
+.article :global([data-reader-image-group="grid"]) img {
+  object-fit: cover;
+  border-radius: var(--radius-sm);
 }
 
 .article :global([data-reader-footnotes]) {
