@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 import {
+  deriveReaderDocument,
   recordPreview,
   REFERENCE_IMPORT_REUSE_MS,
 } from "@serial/standard-site";
@@ -16,7 +17,11 @@ import {
   createPublicationClient,
   MissingPublicationRecordError,
 } from "~/server/rss/atprotoClient";
-import { refreshReferenceSnapshots } from "~/server/jetstream/reference-snapshots";
+import {
+  referenceReaders,
+  refreshReferenceSnapshots,
+  resolveSourceReferences,
+} from "~/server/jetstream/reference-snapshots";
 import { atprotoReferenceSnapshots } from "~/server/db/schema";
 
 const uri = "at://did:plc:alice/site.standard.publication/site";
@@ -45,7 +50,7 @@ describe("publication transport", () => {
     const snapshots = await refreshReferenceSnapshots(
       fixture.database,
       [uri],
-      (target) => remote.getRecord(target),
+      referenceReaders(remote, 5_000),
       { now: NOW, reuseMs: REFERENCE_IMPORT_REUSE_MS },
     );
     return snapshots.get(uri);
@@ -101,6 +106,169 @@ describe("publication transport", () => {
       Response.json({ uri: `${uri}-other`, cid, value: {} }),
     );
     await expect(remote.getRecord(uri)).rejects.toThrow("Record URI mismatch");
+  });
+  it("snapshots DID documents under their DID and always refreshes them", async () => {
+    const did = "did:plc:alice";
+    let handle = "alice.example";
+    const remote = createPublicationClient({
+      fetch: vi.fn(async () => new Response(null, { status: 500 })),
+      resolvePds: vi.fn(async () => "https://pds.example.com"),
+      resolveDidDocument: vi.fn(async () => ({
+        id: did,
+        alsoKnownAs: [`at://${handle}`],
+      })),
+    });
+    const first = await refreshReferenceSnapshots(
+      fixture.database,
+      [did],
+      referenceReaders(remote, 5_000),
+      { now: NOW, reuseMs: 0 },
+    );
+    expect(first.get(did)).toMatchObject({
+      outcome: "resolved",
+      cid: null,
+      record: expect.stringContaining("alice.example"),
+    });
+    handle = "alice.moved";
+    const second = await refreshReferenceSnapshots(
+      fixture.database,
+      [did],
+      referenceReaders(
+        createPublicationClient({
+          fetch: vi.fn(async () => new Response(null, { status: 500 })),
+          resolvePds: vi.fn(async () => "https://pds.example.com"),
+          resolveDidDocument: vi.fn(async () => ({
+            id: did,
+            alsoKnownAs: [`at://${handle}`],
+          })),
+        }),
+        5_000,
+      ),
+      { now: new Date(NOW.getTime() + 1), reuseMs: 0 },
+    );
+    expect(second.get(did)?.record).toContain("alice.moved");
+  });
+  it.each([
+    [Object.assign(new Error("gone"), { status: 404 }), "missing"],
+    [new Error("timeout"), "unavailable"],
+  ])("maps a DID document failure %o to %s", async (error, outcome) => {
+    const did = "did:plc:gone";
+    const remote = createPublicationClient({
+      fetch: vi.fn(async () => new Response(null, { status: 500 })),
+      resolvePds: vi.fn(async () => "https://pds.example.com"),
+      resolveDidDocument: vi.fn(async () => {
+        throw error;
+      }),
+    });
+    const snapshots = await refreshReferenceSnapshots(
+      fixture.database,
+      [did],
+      referenceReaders(remote, 5_000),
+      { now: NOW, reuseMs: 0 },
+    );
+    expect(snapshots.get(did)).toMatchObject({ outcome, record: null });
+  });
+  it("resolves social posts and walks to their authors, handles and quotes", async () => {
+    const author = "did:plc:author";
+    const post = `at://${author}/app.bsky.feed.post/p`;
+    const quoted = `at://did:plc:quoter/app.bsky.feed.post/q`;
+    const values: Record<string, unknown> = {
+      [post]: {
+        $type: "app.bsky.feed.post",
+        text: "hi",
+        createdAt: "2026-07-15T22:08:33.054Z",
+        embed: {
+          $type: "app.bsky.embed.record",
+          record: { uri: quoted, cid },
+        },
+      },
+      [quoted]: {
+        $type: "app.bsky.feed.post",
+        text: "quoted",
+        createdAt: "2026-07-15T22:08:33.054Z",
+      },
+      [`at://${author}/app.bsky.actor.profile/self`]: {
+        $type: "app.bsky.actor.profile",
+        displayName: "Author",
+      },
+      [`at://did:plc:quoter/app.bsky.actor.profile/self`]: {
+        $type: "app.bsky.actor.profile",
+        displayName: "Quoter",
+      },
+    };
+    const remote = createPublicationClient({
+      fetch: vi.fn(async (input: string | URL | Request) => {
+        const target = new URL(input instanceof Request ? input.url : input);
+        const parameters = target.searchParams;
+        const record = `at://${parameters.get("repo")}/${parameters.get("collection")}/${parameters.get("rkey")}`;
+        return record in values
+          ? Response.json({ uri: record, cid, value: values[record] })
+          : Response.json({ error: "RecordNotFound" }, { status: 404 });
+      }),
+      resolvePds: vi.fn(async () => "https://pds.example.com"),
+      resolveDidDocument: vi.fn(async (did: string) => ({
+        id: did,
+        alsoKnownAs: [`at://${did.slice("did:plc:".length)}.example`],
+      })),
+    });
+    const source = {
+      uri: `at://${author}/site.standard.document/d`,
+      cid,
+      record: JSON.stringify({
+        $type: "site.standard.document",
+        site: "https://example.com",
+        title: "Doc",
+        publishedAt: "2026-07-15T00:00:00Z",
+        content: {
+          $type: "pub.leaflet.content",
+          pages: [
+            {
+              $type: "pub.leaflet.pages.linearDocument",
+              blocks: [
+                {
+                  block: {
+                    $type: "pub.leaflet.blocks.bskyPost",
+                    postRef: { uri: post, cid },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      blobs: [],
+    };
+    const references = await resolveSourceReferences(
+      fixture.database,
+      source,
+      author,
+      referenceReaders(remote, 5_000),
+      { now: NOW, reuseMs: REFERENCE_IMPORT_REUSE_MS },
+    );
+    expect(
+      references.map((reference) => [reference.uri, reference.outcome]),
+    ).toEqual([
+      [post, "resolved"],
+      [`at://${author}/app.bsky.actor.profile/self`, "resolved"],
+      [author, "resolved"],
+      [quoted, "resolved"],
+      [`at://did:plc:quoter/app.bsky.actor.profile/self`, "resolved"],
+      ["did:plc:quoter", "resolved"],
+    ]);
+    const document = deriveReaderDocument(
+      { form: "source", source, references, revision: cid },
+      author,
+    );
+    const [block] = document?.blocks ?? [];
+    expect(block).toMatchObject({
+      kind: "socialPost",
+      post: {
+        author: { name: "Author", handle: "author.example" },
+        quote: {
+          post: { author: { name: "Quoter", handle: "quoter.example" } },
+        },
+      },
+    });
   });
   it("does not render an unsafe publication URL", async () => {
     const { remote } = client(() =>

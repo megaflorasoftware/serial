@@ -1,0 +1,161 @@
+import { useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { ReaderImage, ReaderSocialPost } from "@serial/standard-site";
+import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
+import { timeAgo } from "~/lib/utils";
+
+const PLATFORM_NAMES = { bluesky: "Bluesky", pckt: "pckt" } as const;
+
+/** A remote image that leaves no gap once it fails. */
+function RemoteImage({
+  src,
+  alt = "",
+  attribute,
+  style,
+}: {
+  src: string;
+  alt?: string;
+  attribute: string;
+  style?: CSSProperties;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <img
+      {...REMOTE_IMAGE_PROPS}
+      {...{ [attribute]: "" }}
+      src={src}
+      alt={alt}
+      style={style}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function ExternalLink({
+  href,
+  children,
+  ...attributes
+}: {
+  href: string;
+  children: ReactNode;
+} & Record<`data-${string}`, string | undefined>) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" {...attributes}>
+      {children}
+    </a>
+  );
+}
+
+function aspectStyle(ratio: ReaderImage["aspectRatio"]) {
+  return ratio
+    ? { aspectRatio: `${ratio.width} / ${ratio.height}` }
+    : undefined;
+}
+
+export type SocialPostCardProps = {
+  post: ReaderSocialPost;
+  /** The post's text, rendered by the caller so facets draw like body text. */
+  text: ReactNode;
+  /** The quoted record's card, rendered by the caller; null when unresolved. */
+  quote: ReactNode;
+};
+
+/**
+ * A Bluesky post or pckt note as an inline card: author header, text, media,
+ * one level of quote, and a footer link to the post. A static container, not
+ * one anchor, since the text carries its own links. Nothing else is
+ * interactive; no engagement counts are drawn.
+ */
+export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
+  const platform = PLATFORM_NAMES[post.platform];
+  const date = post.createdAt ? new Date(post.createdAt) : null;
+  const posted = date && Number.isFinite(date.getTime()) ? timeAgo(date) : null;
+  const name = post.author.name ?? post.author.handle ?? post.author.did;
+  return (
+    <div role="note" data-social-post={post.platform} data-record-card="row">
+      <div data-social-post-header>
+        <ExternalLink href={post.author.url} data-social-post-author="">
+          {post.author.avatarUrl ? (
+            <RemoteImage
+              key={post.author.avatarUrl}
+              src={post.author.avatarUrl}
+              attribute="data-social-post-avatar"
+            />
+          ) : (
+            <span data-social-post-avatar aria-hidden="true" />
+          )}
+          <span data-social-post-name>{name}</span>
+          {post.author.handle && post.author.name && (
+            <span data-social-post-handle>@{post.author.handle}</span>
+          )}
+        </ExternalLink>
+        {posted && (
+          <time dateTime={post.createdAt ?? undefined} data-social-post-time>
+            {posted}
+          </time>
+        )}
+      </div>
+      <div data-social-post-body>
+        <p data-social-post-text>{text}</p>
+        {post.images.length > 0 && (
+          <div data-social-post-images={post.images.length}>
+            {post.images.map((image) => (
+              <RemoteImage
+                key={image.url}
+                src={image.url}
+                alt={image.alt}
+                attribute="data-social-post-image"
+                style={aspectStyle(image.aspectRatio)}
+              />
+            ))}
+          </div>
+        )}
+        {post.video && (
+          <ExternalLink href={post.url} data-social-post-video="">
+            <RemoteImage
+              key={post.video.thumbnailUrl}
+              src={post.video.thumbnailUrl}
+              alt={`Video on ${platform}`}
+              attribute="data-social-post-image"
+              style={aspectStyle(post.video.aspectRatio)}
+            />
+          </ExternalLink>
+        )}
+        {post.mediaHidden && (
+          <p data-social-post-hidden>
+            Media hidden by the author&apos;s content labels.
+          </p>
+        )}
+        {post.external && (
+          <ExternalLink
+            href={post.external.href}
+            data-record-card="row"
+            data-reader-link-card=""
+          >
+            {post.external.imageUrl && (
+              <RemoteImage
+                key={post.external.imageUrl}
+                src={post.external.imageUrl}
+                attribute="data-record-image"
+              />
+            )}
+            <div data-record-copy>
+              <p data-record-title>{post.external.title}</p>
+              {post.external.description && (
+                <p data-record-description>{post.external.description}</p>
+              )}
+            </div>
+          </ExternalLink>
+        )}
+        {quote && <div data-social-post-quote>{quote}</div>}
+      </div>
+      <div data-social-post-footer>
+        <ExternalLink href={post.url}>View on {platform}</ExternalLink>
+        {post.siteUrl && (
+          <ExternalLink href={post.siteUrl}>Visit blog</ExternalLink>
+        )}
+      </div>
+    </div>
+  );
+}

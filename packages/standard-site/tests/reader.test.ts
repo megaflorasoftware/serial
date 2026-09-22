@@ -153,10 +153,18 @@ describe("real documents", () => {
     const [html] = find(document.blocks, "html");
     expect(html?.height).toBe(243);
     expect(html?.html).toContain("<style>");
-    expect(find(document.blocks, "recordPreview")).toHaveLength(0);
-    expect(
-      find(document.blocks, "linkCard").map((card) => card.title),
-    ).toContain("View post on Bluesky");
+    // Its Bluesky embed resolves into a social card from the fixture snapshots.
+    const posts = find(document.blocks, "socialPost").map((block) => block.post);
+    expect(posts).toMatchObject([
+      {
+        platform: "bluesky",
+        author: { handle: "pckt.blog", name: "pckt.blog" },
+        video: {
+          thumbnailUrl: expect.stringContaining("video.bsky.app"),
+          aspectRatio: { width: 1660, height: 1080 },
+        },
+      },
+    ]);
   });
 
   it("shows the notice for a poll and keeps the code block", () => {
@@ -320,7 +328,7 @@ describe("leaflet blocks", () => {
       "recordPreview",
       "linkCard",
       "linkCard",
-      "linkCard",
+      "recordPreview",
     ]);
     expect(document.blocks[1]).toMatchObject({
       href: "https://example.com/",
@@ -329,7 +337,10 @@ describe("leaflet blocks", () => {
       imageUrl: buildBlueskyCdnImageUrl(did, "bafypreview"),
     });
     expect(document.blocks[3]).toMatchObject({
-      href: "https://bsky.app/profile/did:plc:x/post/abc",
+      card: {
+        url: "https://bsky.app/profile/did:plc:x/post/abc",
+        title: "Post on Bluesky",
+      },
     });
   });
 

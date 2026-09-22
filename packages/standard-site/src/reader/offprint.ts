@@ -4,7 +4,7 @@ import {
   block,
   blockArraySchema,
   blockName,
-  blueskyPostCard,
+  blueskyPostBlock,
   embedBlock,
   image,
   linkCard,
@@ -314,7 +314,7 @@ function convertBlock(
         readAlign(value.alignment),
       );
     case "blueskyPost":
-      return blueskyPostCard(value, value.post);
+      return blueskyPostBlock(value, value.post, context);
     case "component":
       return notice(value, "unsupported");
     default:

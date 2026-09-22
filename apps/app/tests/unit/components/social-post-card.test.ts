@@ -1,0 +1,185 @@
+// @vitest-environment jsdom
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
+import type { ReaderDocument, ReaderSocialPost } from "@serial/standard-site";
+import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
+import { getElements } from "~/lib/hooks/useArticleNavigation";
+
+vi.mock("~/lib/hooks/useFlagState", () => ({ useFlagState: () => ["iframe"] }));
+vi.mock("~/components/CustomVideoPlayer", () => ({
+  CustomVideoPlayer: () => null,
+}));
+vi.mock("~/components/feed/read/ArticleImageLightbox", () => ({
+  ArticleImageLightbox: () => {
+    throw new Error("Card images must not open the lightbox");
+  },
+}));
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const author = {
+  did: "did:plc:author",
+  handle: "author.example",
+  name: "Author",
+  avatarUrl:
+    "https://cdn.bsky.app/img/avatar/plain/did:plc:author/bafyavatar@jpeg",
+  url: "https://bsky.app/profile/did:plc:author",
+};
+const post: ReaderSocialPost = {
+  platform: "bluesky",
+  uri: "at://did:plc:author/app.bsky.feed.post/p",
+  url: "https://bsky.app/profile/did:plc:author/post/p",
+  author,
+  siteUrl: null,
+  text: [
+    { kind: "text", text: "hello ", marks: {}, link: null },
+    {
+      kind: "text",
+      text: "example",
+      marks: {},
+      link: { href: "https://example.com/", record: null },
+    },
+  ],
+  createdAt: "2026-07-15T22:08:33.054Z",
+  images: [
+    {
+      url: "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:author/bafyone@jpeg",
+      alt: "One",
+      title: null,
+      aspectRatio: { width: 4, height: 3 },
+      width: null,
+      fullBleed: false,
+    },
+  ],
+  external: null,
+  video: null,
+  quote: null,
+  mediaHidden: false,
+};
+function document(blocks: ReaderDocument["blocks"]): ReaderDocument {
+  return { blocks, footnotes: [], truncated: false };
+}
+function render(doc: ReaderDocument, simplified = false) {
+  const container = window.document.createElement("div");
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(ReaderDocumentContent, {
+        document: doc,
+        documentUrl: "https://example.com/post",
+        originActionLabel: "Open in Website",
+        simplified,
+      }),
+    ),
+  );
+  return { container, unmount: () => act(() => root.unmount()) };
+}
+const links = (container: HTMLElement) =>
+  [...container.querySelectorAll("a")].map((link) => [
+    link.getAttribute("href"),
+    link.textContent?.trim(),
+  ]);
+
+describe.each([false, true])(
+  "social post cards simplified=%s",
+  (simplified) => {
+    it("draws a Bluesky post as a static card with author, text links, media and a footer", () => {
+      const { container, unmount } = render(
+        document([{ kind: "socialPost", post, source: null, align: null }]),
+        simplified,
+      );
+      const card = container.querySelector('[data-social-post="bluesky"]')!;
+      expect(card.tagName).toBe("DIV");
+      expect(card.getAttribute("role")).toBe("note");
+      expect(links(container)).toEqual([
+        ["https://bsky.app/profile/did:plc:author", "Author@author.example"],
+        ["https://example.com/", "example"],
+        ["https://bsky.app/profile/did:plc:author/post/p", "View on Bluesky"],
+      ]);
+      expect(card.querySelector("time")?.getAttribute("datetime")).toBe(
+        "2026-07-15T22:08:33.054Z",
+      );
+      expect(card.querySelector("time")?.textContent).toMatch(/ago$/);
+      const image = card.querySelector<HTMLImageElement>(
+        "[data-social-post-image]",
+      )!;
+      expect(image.alt).toBe("One");
+      expect(image.style.aspectRatio).toBe("4 / 3");
+      expect(card.querySelector("[data-social-post-avatar]")?.tagName).toBe(
+        "IMG",
+      );
+      expect(getElements(container)).toEqual([card]);
+      expect(card.textContent).not.toMatch(/\d+ (likes|reposts|replies)/);
+      unmount();
+    });
+
+    it("voices a pckt note as its blog, nests one quote, and reports hidden media", () => {
+      const quoted: ReaderSocialPost = {
+        ...post,
+        uri: "at://did:plc:quoter/app.bsky.feed.post/q",
+        url: "https://bsky.app/profile/did:plc:quoter/post/q",
+        author: {
+          ...author,
+          did: "did:plc:quoter",
+          name: "Quoter",
+          handle: null,
+          url: "https://bsky.app/profile/did:plc:quoter",
+        },
+        images: [],
+        text: [{ kind: "text", text: "quoted", marks: {}, link: null }],
+      };
+      const note: ReaderSocialPost = {
+        ...post,
+        platform: "pckt",
+        uri: "at://did:plc:author/blog.pckt.mini.post/n",
+        url: "https://pckt.blog/n/did:plc:author/n",
+        author: {
+          ...author,
+          name: "Author’s Blog",
+          url: "https://author.example",
+        },
+        siteUrl: "https://author.example",
+        text: [{ kind: "text", text: "note", marks: {}, link: null }],
+        images: [],
+        mediaHidden: true,
+        quote: { kind: "socialPost", post: quoted, source: null, align: null },
+      };
+      const { container, unmount } = render(
+        document([
+          { kind: "socialPost", post: note, source: null, align: null },
+        ]),
+        simplified,
+      );
+      expect(links(container)).toEqual([
+        ["https://author.example", "Author’s Blog@author.example"],
+        ["https://bsky.app/profile/did:plc:quoter", "Quoter"],
+        ["https://bsky.app/profile/did:plc:quoter/post/q", "View on Bluesky"],
+        ["https://pckt.blog/n/did:plc:author/n", "View on pckt"],
+        ["https://author.example", "Visit blog"],
+      ]);
+      expect(
+        container.querySelector("[data-social-post-hidden]")?.textContent,
+      ).toContain("hidden");
+      expect(container.querySelectorAll("[data-social-post]")).toHaveLength(2);
+      expect(getElements(container)).toHaveLength(1);
+      unmount();
+    });
+
+    it("drops a failed avatar or image without leaving a gap", () => {
+      const { container, unmount } = render(
+        document([{ kind: "socialPost", post, source: null, align: null }]),
+        simplified,
+      );
+      act(() =>
+        container
+          .querySelector("[data-social-post-image]")!
+          .dispatchEvent(new Event("error")),
+      );
+      expect(container.querySelector("[data-social-post-image]")).toBeNull();
+      expect(
+        container.querySelector("[data-social-post-images]"),
+      ).not.toBeNull();
+      unmount();
+    });
+  },
+);

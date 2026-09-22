@@ -62,6 +62,8 @@ function countBlocks(block: ReaderBlock): number {
           0,
         )
       );
+    case "socialPost":
+      return 1 + (block.post.quote ? countBlocks(block.post.quote) : 0);
     default:
       return 1;
   }

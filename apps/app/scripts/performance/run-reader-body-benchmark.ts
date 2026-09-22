@@ -52,22 +52,31 @@ try {
     createdAt: now,
     updatedAt: now,
   });
-  const publications = JSON.parse(
-    readFileSync(resolve(fixtures, "publications.json"), "utf8"),
-  ) as Array<{ uri: string; cid: string; value: unknown }>;
-  for (const publication of publications)
+  /** Snapshot fixtures: publications, and the records social post cards read. */
+  const SNAPSHOT_FIXTURES = ["publications.json", "references.json"];
+  const snapshots = SNAPSHOT_FIXTURES.flatMap(
+    (file) =>
+      JSON.parse(readFileSync(resolve(fixtures, file), "utf8")) as Array<{
+        uri: string;
+        cid: string | null;
+        value: unknown;
+      }>,
+  );
+  for (const snapshot of snapshots)
     // Snapshot rows are independent; insert in fixture order.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
     await session.database.insert(atprotoReferenceSnapshots).values({
-      uri: publication.uri,
-      cid: publication.cid,
+      uri: snapshot.uri,
+      cid: snapshot.cid,
       outcome: "resolved",
-      record: stringifyLosslessJson(publication.value),
+      record: stringifyLosslessJson(snapshot.value),
       resolvedAt: now,
       readAt: null,
     });
   const names = readdirSync(fixtures)
-    .filter((file) => file.endsWith(".json") && file !== "publications.json")
+    .filter(
+      (file) => file.endsWith(".json") && !SNAPSHOT_FIXTURES.includes(file),
+    )
     .map((file) => file.replace(/\.json$/, ""));
   for (const name of names) {
     const text = readFileSync(resolve(fixtures, `${name}.json`), "utf8");

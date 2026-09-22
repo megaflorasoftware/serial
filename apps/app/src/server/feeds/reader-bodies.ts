@@ -10,6 +10,7 @@ import { loadDocumentSources, sourceKeyOf } from "../jetstream/document-source";
 import {
   loadReferenceSnapshots,
   markReferenceSnapshotsRead,
+  referenceReaders,
   resolveSourceReferences,
   sourceReferences,
 } from "../jetstream/reference-snapshots";
@@ -206,7 +207,7 @@ export async function refreshDocumentReferences(
     database,
     source,
     did,
-    (uri) => client.getRecord(uri, { deadline: Date.now() + 5_000 }),
+    referenceReaders(client, 5_000),
     { now, reuseMs: REFERENCE_REFRESH_INTERVAL_MS },
   );
   await markReferenceSnapshotsRead(

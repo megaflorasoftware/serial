@@ -545,11 +545,55 @@
     },
     {
       "align": null,
-      "kind": "linkCard",
-      "href": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv/post/3mgh4crd7ws2d",
-      "title": "View post on Bluesky",
-      "description": null,
-      "imageUrl": null
+      "kind": "socialPost",
+      "post": {
+        "platform": "bluesky",
+        "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mgh4crd7ws2d",
+        "url": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv/post/3mgh4crd7ws2d",
+        "author": {
+          "did": "did:plc:revjuqmkvrw6fnkxppqtszpv",
+          "handle": "pckt.blog",
+          "name": "pckt.blog",
+          "avatarUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:revjuqmkvrw6fnkxppqtszpv/bafkreic22tl2yrbl5ts3uar3j6zsvfbjpodlf27kybyzdo2js5zqzynz7m@jpeg",
+          "url": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv"
+        },
+        "siteUrl": null,
+        "text": [
+          {
+            "kind": "text",
+            "text": "one account wherever you go ☺️\n\nyour handle isn’t just for one app anymore ! \n\nwe took ",
+            "marks": {},
+            "link": null
+          },
+          {
+            "kind": "text",
+            "text": "@hello.pckt.cafe",
+            "marks": {},
+            "link": {
+              "href": "https://bsky.app/profile/did:plc:t4lse5m2vaxvsuexa3kmfvzx",
+              "record": null
+            }
+          },
+          {
+            "kind": "text",
+            "text": " for a walk across the atmosphere",
+            "marks": {},
+            "link": null
+          }
+        ],
+        "createdAt": "2026-03-07T05:37:40.911Z",
+        "images": [],
+        "external": null,
+        "video": {
+          "thumbnailUrl": "https://video.bsky.app/watch/did%3Aplc%3Arevjuqmkvrw6fnkxppqtszpv/bafkreie5tb3zi5kumkwpwyi7k23pglnpjry4wxa2mudgn5th7ypa5p7p3y/thumbnail.jpg",
+          "aspectRatio": {
+            "width": 1660,
+            "height": 1080
+          }
+        },
+        "quote": null,
+        "mediaHidden": false
+      }
     },
     {
       "align": null,

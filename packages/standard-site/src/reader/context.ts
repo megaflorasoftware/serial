@@ -18,7 +18,10 @@ import {
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
   buildPdslsUrl,
+  parseAtUri,
+  socialPlatformOf,
 } from "../uris";
+import { socialPost, socialPostUrl } from "./social";
 import { safeLinkUrl } from "../urls";
 import { validEntriesSchema } from "../parse";
 import { parseYouTubeReference } from "../youtube";
@@ -240,13 +243,41 @@ export function linkCard(
   });
 }
 
-/** Every platform embeds a Bluesky post as a strongRef; all become one link card. */
-export function blueskyPostCard(source: unknown, ref: unknown) {
+/** Every platform embeds a Bluesky post as a strongRef; all become one Record preview. */
+export function blueskyPostBlock(
+  source: unknown,
+  ref: unknown,
+  context: AdapterContext,
+) {
   const parsed = strongRefSchema.safeParse(ref);
-  const href = parsed.success ? buildBlueskyPostUrl(parsed.data.uri) : null;
-  return href
-    ? linkCard(source, { href, title: "View post on Bluesky" })
-    : null;
+  if (!parsed.success || !buildBlueskyPostUrl(parsed.data.uri)) return null;
+  return recordPreviewBlock(source, parsed.data.uri, context);
+}
+
+const SOCIAL_FALLBACK_TITLES = {
+  bluesky: "Post on Bluesky",
+  pckt: "Note on pckt",
+} as const;
+
+/**
+ * A Bluesky post or pckt note as a card, or the row card to its page when the
+ * snapshot is absent. The page is known from the URI alone, so the fallback
+ * never shows the inspector or the raw URI.
+ */
+function socialPostBlock(
+  source: unknown,
+  uri: string,
+  context: AdapterContext,
+): ReaderBlock | null {
+  const post = socialPost(uri, context);
+  if (post) return block(source, { kind: "socialPost", post });
+  const url = socialPostUrl(uri);
+  const platform = socialPlatformOf(parseAtUri(uri)!.collection);
+  const card =
+    url && platform
+      ? recordCard({ uri, url, title: SOCIAL_FALLBACK_TITLES[platform] }, "row")
+      : null;
+  return card ? block(source, { kind: "recordPreview", card }) : null;
 }
 
 /** A record reference the reader accepts: it must have an inspector URL. */
@@ -268,6 +299,10 @@ export function recordPreviewBlock(
 ): ReaderBlock | null {
   const fallback = buildPdslsUrl(uri);
   if (!fallback) return null;
+  if (socialPlatformOf(parseAtUri(uri)!.collection)) {
+    // Reported to the lookup by socialPost, so discovery still sees it.
+    return socialPostBlock(source, uri, context);
+  }
   const preview = recordPreview(uri, context.records);
   const card = recordCard(
     { ...(preview ?? { url: fallback, title, description: uri }), uri },

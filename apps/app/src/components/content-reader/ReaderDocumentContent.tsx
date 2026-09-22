@@ -12,6 +12,7 @@ import type {
 import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
 import { LinkCard, RecordCard } from "~/components/content-reader/RecordCard";
+import { SocialPostCard } from "~/components/content-reader/SocialPostCard";
 import { SandboxedFrame } from "~/components/content-reader/SandboxedFrame";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
@@ -344,6 +345,18 @@ function Block({
       );
     case "recordPreview":
       return <RecordCard card={block.card} />;
+    case "socialPost":
+      return (
+        <SocialPostCard
+          post={block.post}
+          text={<RichText content={block.post.text} />}
+          quote={
+            block.post.quote ? (
+              <Block block={block.post.quote} options={options} />
+            ) : null
+          }
+        />
+      );
     case "embed":
       if (block.youtube && !simplified)
         return (

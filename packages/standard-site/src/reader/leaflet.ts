@@ -4,7 +4,7 @@ import {
   block,
   blockName,
   blockSchema,
-  blueskyPostCard,
+  blueskyPostBlock,
   embedBlock,
   image,
   linkCard,
@@ -292,7 +292,7 @@ function convertBlock(
         align,
       );
     case "bskyPost":
-      return blueskyPostCard(value, value.postRef);
+      return blueskyPostBlock(value, value.postRef, context);
     case "standardSitePost":
     case "standardSitePublication": {
       const uri = embeddedRecordCardUri(value);

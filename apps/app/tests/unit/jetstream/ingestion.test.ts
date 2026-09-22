@@ -63,6 +63,9 @@ const readPage = async () => {
 };
 const client: PublicationClient = {
   resolvePds: vi.fn(async () => "https://pds.example.com"),
+  getDidDocument: vi.fn(async () => {
+    throw new Error("Unexpected DID document");
+  }),
   latestRev: vi.fn(async () => "rev"),
   getRecord: vi.fn(async () => publication),
   loadBlob: vi.fn(async () => ({ bytes: new Uint8Array(), mimeType: null })),

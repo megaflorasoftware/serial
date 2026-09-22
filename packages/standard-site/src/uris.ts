@@ -162,10 +162,47 @@ export function buildBlueskyProfileUrl(did: string): string | null {
   return isDid(did) ? `https://bsky.app/profile/${did}` : null;
 }
 
+/** The two social post collections the reader draws as cards. */
+export const SOCIAL_POST_COLLECTIONS = {
+  bluesky: "app.bsky.feed.post",
+  pckt: "blog.pckt.mini.post",
+} as const;
+
+export const BLUESKY_PROFILE_COLLECTION = "app.bsky.actor.profile";
+
+export type SocialPlatform = keyof typeof SOCIAL_POST_COLLECTIONS;
+
+export function socialPlatformOf(collection: string): SocialPlatform | null {
+  if (collection === SOCIAL_POST_COLLECTIONS.bluesky) return "bluesky";
+  if (collection === SOCIAL_POST_COLLECTIONS.pckt) return "pckt";
+  return null;
+}
+
+/** The record every account's Bluesky profile lives at. */
+export function buildBlueskyProfileRecordUri(did: string): string | null {
+  return isDid(did) ? `at://${did}/${BLUESKY_PROFILE_COLLECTION}/self` : null;
+}
+
 export function buildBlueskyPostUrl(postUri: string): string | null {
   const parts = parseAtUri(postUri);
-  if (!parts || parts.collection !== "app.bsky.feed.post") return null;
+  if (!parts || parts.collection !== SOCIAL_POST_COLLECTIONS.bluesky)
+    return null;
   return `https://bsky.app/profile/${parts.did}/post/${parts.rkey}`;
+}
+
+export function buildPcktNoteUrl(noteUri: string): string | null {
+  const parts = parseAtUri(noteUri);
+  if (!parts || parts.collection !== SOCIAL_POST_COLLECTIONS.pckt) return null;
+  return `https://pckt.blog/n/${parts.did}/${parts.rkey}`;
+}
+
+/** The poster frame Bluesky serves for a video blob; the video itself is not played. */
+export function buildBlueskyVideoThumbnailUrl(
+  did: string,
+  cid: string,
+): string | null {
+  if (!isDid(did) || !isCid(cid)) return null;
+  return `https://video.bsky.app/watch/${encodeURIComponent(did)}/${cid}/thumbnail.jpg`;
 }
 
 /** Null unless the value is a well-formed at-uri, so nothing else reaches the path. */

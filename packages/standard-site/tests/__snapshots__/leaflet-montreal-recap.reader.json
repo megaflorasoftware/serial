@@ -74,11 +74,13 @@
     },
     {
       "align": null,
-      "kind": "linkCard",
-      "href": "https://bsky.app/profile/did:plc:2cxgdrgtsmrbqnjkwyplmp43/post/3m4ntigu7ak27",
-      "title": "View post on Bluesky",
-      "description": null,
-      "imageUrl": null
+      "kind": "recordPreview",
+      "card": {
+        "uri": "at://did:plc:2cxgdrgtsmrbqnjkwyplmp43/app.bsky.feed.post/3m4ntigu7ak27",
+        "url": "https://bsky.app/profile/did:plc:2cxgdrgtsmrbqnjkwyplmp43/post/3m4ntigu7ak27",
+        "title": "Post on Bluesky",
+        "size": "row"
+      }
     },
     {
       "align": null,
@@ -413,11 +415,13 @@
     },
     {
       "align": null,
-      "kind": "linkCard",
-      "href": "https://bsky.app/profile/did:plc:cbkjy5n7bk3ax2wplmtjofq2/post/3m4tmbsuqis2s",
-      "title": "View post on Bluesky",
-      "description": null,
-      "imageUrl": null
+      "kind": "recordPreview",
+      "card": {
+        "uri": "at://did:plc:cbkjy5n7bk3ax2wplmtjofq2/app.bsky.feed.post/3m4tmbsuqis2s",
+        "url": "https://bsky.app/profile/did:plc:cbkjy5n7bk3ax2wplmtjofq2/post/3m4tmbsuqis2s",
+        "title": "Post on Bluesky",
+        "size": "row"
+      }
     },
     {
       "align": null,
@@ -478,11 +482,13 @@
     },
     {
       "align": null,
-      "kind": "linkCard",
-      "href": "https://bsky.app/profile/did:plc:tgfzv5irks5acnmk75j4elky/post/3m4vbmix2322l",
-      "title": "View post on Bluesky",
-      "description": null,
-      "imageUrl": null
+      "kind": "recordPreview",
+      "card": {
+        "uri": "at://did:plc:tgfzv5irks5acnmk75j4elky/app.bsky.feed.post/3m4vbmix2322l",
+        "url": "https://bsky.app/profile/did:plc:tgfzv5irks5acnmk75j4elky/post/3m4vbmix2322l",
+        "title": "Post on Bluesky",
+        "size": "row"
+      }
     },
     {
       "align": null,

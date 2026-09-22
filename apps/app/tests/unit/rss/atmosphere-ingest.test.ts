@@ -133,6 +133,9 @@ function record(rkey: string, overrides = {}) {
 function client(records: unknown[] = []): PublicationClient {
   return {
     resolvePds: vi.fn(async () => "https://pds.example.com"),
+    getDidDocument: vi.fn(async () => {
+      throw new Error("Unexpected DID document");
+    }),
     latestRev: vi.fn(async () => "rev1"),
     getRecord: vi.fn(async () => ({
       uri: PUB,

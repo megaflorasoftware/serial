@@ -11,13 +11,17 @@ export const publicDidResolver = createDidResolver({
     : {}),
 });
 
-export async function resolvePublicPds(did: string) {
+/** The DID document as published, for handles and service endpoints. */
+export async function resolvePublicDidDocument(did: string) {
   if (!did.startsWith("did:plc:") && !did.startsWith("did:web:"))
     throw new Error("Unsupported repository DID");
-  const document = await publicDidResolver.resolve(
-    did as `did:${string}:${string}`,
-    { noCache: true },
-  );
+  return publicDidResolver.resolve(did as `did:${string}:${string}`, {
+    noCache: true,
+  });
+}
+
+export async function resolvePublicPds(did: string) {
+  const document = await resolvePublicDidDocument(did);
   const service = document.service?.find(
     (entry) =>
       (entry.id === "#atproto_pds" || entry.id === `${did}#atproto_pds`) &&

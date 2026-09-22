@@ -43,6 +43,7 @@ describe("record parsers", () => {
       "Atmosphere Community",
       "jenn's little art blog",
       "Leaflet Lab Notes",
+      "pckt - notes 📝",
     ]);
     expect(parsed[3]!.value.icon?.ref.$link).toBe(
       "bafkreigkcfkuvhf7wlwqgv4iachbwwkcxpmglf2fov6gf76jj6ub2vot2m",

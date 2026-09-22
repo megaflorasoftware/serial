@@ -77,11 +77,13 @@
     },
     {
       "align": null,
-      "kind": "linkCard",
-      "href": "https://bsky.app/profile/did:plc:hheutzl4mxedshsz4yqek5tt/post/3mk3up2q3ac2s",
-      "title": "View post on Bluesky",
-      "description": null,
-      "imageUrl": null
+      "kind": "recordPreview",
+      "card": {
+        "uri": "at://did:plc:hheutzl4mxedshsz4yqek5tt/app.bsky.feed.post/3mk3up2q3ac2s",
+        "url": "https://bsky.app/profile/did:plc:hheutzl4mxedshsz4yqek5tt/post/3mk3up2q3ac2s",
+        "title": "Post on Bluesky",
+        "size": "row"
+      }
     },
     {
       "align": null,

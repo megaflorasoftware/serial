@@ -4,7 +4,7 @@ import {
   block,
   blockArraySchema,
   blockName,
-  blueskyPostCard,
+  blueskyPostBlock,
   embedBlock,
   image,
   linkCard,
@@ -280,7 +280,7 @@ function convertBlock(
       });
     }
     case "blueskyEmbed":
-      return blueskyPostCard(value, value.postRef);
+      return blueskyPostBlock(value, value.postRef, context);
     case "mention": {
       const did = stringProperty(value, "did");
       const href = did ? buildBlueskyProfileUrl(did) : null;

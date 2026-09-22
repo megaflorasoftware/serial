@@ -13,6 +13,7 @@ import {
 } from "../lexicons";
 import { parseLosslessJson } from "../lossless-json";
 import { documentPublicationUri } from "../record-preview";
+import { socialPostReferences } from "./social";
 import type { RecordLookup } from "../record-preview";
 import { base64ToBytes } from "../reader-body";
 import type { DocumentSource, SourceReaderBody } from "../reader-body";
@@ -26,6 +27,13 @@ export {
 } from "./bounds";
 export { MAX_BLOCK_NESTING_DEPTH };
 export { calloutTint } from "./tint";
+export {
+  handleFromDidDocument,
+  isDidReference,
+  socialPost,
+  socialPostReferences,
+  socialPostUrl,
+} from "./social";
 export {
   facetArraySchema,
   facetSchema,
@@ -151,6 +159,35 @@ export function referencedPublications(
     if (site && !references.includes(site)) publications.add(site);
   }
   return [...publications];
+}
+
+/**
+ * How many hops past the direct references are followed: a document's
+ * publication is one; a post's quoted post and then that post's author is two.
+ */
+export const MAX_REFERENCE_HOPS = 2;
+
+/**
+ * The records one hop out from `references` that are not yet known, capped
+ * like the direct set: publications of documents, and for social posts the
+ * author's profile and DID document, a note's publication and its quote.
+ * Only resolved records reveal their next hop, so callers resolve each hop
+ * before asking for the next.
+ */
+export function nextReferenceHop(
+  references: readonly string[],
+  known: ReadonlySet<string>,
+  records: RecordLookup,
+) {
+  const next = new Set<string>();
+  const add = (uri: string) => {
+    if (!known.has(uri) && next.size < MAX_EMBEDDED_RECORDS_PER_DOCUMENT)
+      next.add(uri);
+  };
+  for (const uri of referencedPublications(references, records)) add(uri);
+  for (const uri of references)
+    for (const reference of socialPostReferences(uri, records)) add(reference);
+  return [...next];
 }
 
 const documentValueSchema = z.looseObject({ content: z.unknown().optional() });

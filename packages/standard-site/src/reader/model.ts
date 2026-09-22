@@ -79,6 +79,48 @@ export type ReaderTableCell = {
   content: ReaderBlock[];
 };
 
+export type ReaderLinkPreview = {
+  href: string;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+};
+
+export type ReaderSocialAuthor = {
+  did: string;
+  /** From the DID document; null until that snapshot resolves. */
+  handle: string | null;
+  /** The blog's name for a blog-voiced pckt note, else the profile's display name. */
+  name: string | null;
+  avatarUrl: string | null;
+  /** The author's page: the blog a note is voiced as, else the Bluesky profile. */
+  url: string;
+};
+
+/**
+ * A Bluesky post or pckt note drawn as a card from its raw record plus the
+ * author's profile, DID document and, for blog-voiced notes, publication.
+ * Every part past the record is optional: the card draws what has resolved.
+ */
+export type ReaderSocialPost = {
+  platform: "bluesky" | "pckt";
+  uri: string;
+  /** The post's page on its platform. */
+  url: string;
+  author: ReaderSocialAuthor;
+  /** The blog a pckt note is voiced as, once its publication resolved. */
+  siteUrl: string | null;
+  text: ReaderRichText;
+  createdAt: string | null;
+  images: ReaderImage[];
+  external: ReaderLinkPreview | null;
+  video: { thumbnailUrl: string; aspectRatio: ReaderAspectRatio | null } | null;
+  /** One level of quoted record as its own card; a quoted post never carries a quote of its own. */
+  quote: ReaderBlock | null;
+  /** The author's content labels hid the media; text and links stay. */
+  mediaHidden: boolean;
+};
+
 export type ReaderNoticeReason =
   "unsupported" | "canvas" | "truncated" | "membersOnly" | "depth";
 
@@ -119,14 +161,9 @@ export type ReaderBlockValue =
     }
   | { kind: "divider" }
   | { kind: "break" }
-  | {
-      kind: "linkCard";
-      href: string;
-      title: string;
-      description: string | null;
-      imageUrl: string | null;
-    }
+  | ({ kind: "linkCard" } & ReaderLinkPreview)
   | { kind: "recordPreview"; card: RecordCard }
+  | { kind: "socialPost"; post: ReaderSocialPost }
   | {
       kind: "embed";
       /** The page the embed comes from; the notice points here. */

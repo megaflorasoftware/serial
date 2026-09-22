@@ -18,6 +18,7 @@ export const FIXTURE_DOCUMENTS = [
   "offprint-interactive-transcripts",
   "offprint-nyc-community-day",
   "offprint-open-social-awards",
+  "pckt-blogging-more-social",
   "pckt-cant-stop-crediting",
   "pckt-science-vs-vegetable-faces",
 ] as const;
@@ -45,21 +46,29 @@ export function loadDocumentFixture(name: FixtureName) {
   return { record, did: parts.did };
 }
 
-/** The publication fixtures as resolved Reference snapshots. */
-export function publicationSnapshots(): SourceReaderBody["references"] {
-  return (
-    readFixture("publications") as Array<{
-      uri: string;
-      cid: string;
-      value: unknown;
-    }>
-  ).map((publication) => ({
-    uri: publication.uri,
-    cid: publication.cid,
+type SnapshotFixture = { uri: string; cid: string | null; value: unknown };
+
+function snapshotsFrom(name: string): SourceReaderBody["references"] {
+  return (readFixture(name) as SnapshotFixture[]).map((entry) => ({
+    uri: entry.uri,
+    cid: entry.cid,
     outcome: "resolved",
-    record: stringifyLosslessJson(publication.value),
+    record: stringifyLosslessJson(entry.value),
     resolvedAt: "2026-09-19T00:00:00Z",
   }));
+}
+
+/** The publication fixtures as resolved Reference snapshots. */
+export function publicationSnapshots() {
+  return snapshotsFrom("publications");
+}
+
+/**
+ * Every snapshot the fixtures reference: publications, then the social posts,
+ * notes, profiles, DID documents and quoted records the post cards read.
+ */
+export function referenceSnapshots() {
+  return [...publicationSnapshots(), ...snapshotsFrom("references")];
 }
 
 /** A fixture as the body endpoint would return it: source text plus snapshots. */
@@ -74,7 +83,7 @@ export function fixtureReaderBody(name: FixtureName): SourceReaderBody {
       record: stringifyLosslessJson(value.value),
       blobs: [],
     },
-    references: publicationSnapshots(),
+    references: referenceSnapshots(),
     revision: record.cid,
   };
 }
