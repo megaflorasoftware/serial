@@ -627,10 +627,13 @@
   align-items: stretch;
 }
 
+/* The explicit width keeps a stretched cell from deriving its width from
+   the row's height through its aspect ratio and spilling into the gap. */
 .article
   :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
   :global([data-reader-image-group-items])
   > * {
+  width: 100%;
   min-height: 0;
   min-width: 0;
 }
