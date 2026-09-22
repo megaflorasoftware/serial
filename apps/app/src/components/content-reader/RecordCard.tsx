@@ -19,6 +19,27 @@ function PreviewImage({ src, icon = false }: { src: string; icon?: boolean }) {
   );
 }
 
+/**
+ * A row card's preview: the image sits whole and centred inside a fixed
+ * column, so its own corners round rather than the column's. Leaves no gap
+ * once the image fails.
+ */
+export function RowPreviewImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <span data-record-preview>
+      <img
+        {...REMOTE_IMAGE_PROPS}
+        src={src}
+        alt=""
+        data-record-image="cover"
+        onError={() => setFailed(true)}
+      />
+    </span>
+  );
+}
+
 export function RecordCard({ card }: { card: RecordCardData }) {
   const date = card.publishedAt ? new Date(card.publishedAt) : null;
   const published =
@@ -38,7 +59,10 @@ export function RecordCard({ card }: { card: RecordCardData }) {
       rel="noopener noreferrer"
       data-record-card={card.size}
     >
-      {card.size !== "small" && card.imageUrl && (
+      {card.size === "row" && card.imageUrl && (
+        <RowPreviewImage key={card.imageUrl} src={card.imageUrl} />
+      )}
+      {card.size !== "small" && card.size !== "row" && card.imageUrl && (
         <PreviewImage key={card.imageUrl} src={card.imageUrl} />
       )}
       <div data-record-copy>
@@ -93,7 +117,7 @@ export function LinkCard({
       data-reader-link-card
     >
       {card.imageUrl && (
-        <PreviewImage key={card.imageUrl} src={card.imageUrl} />
+        <RowPreviewImage key={card.imageUrl} src={card.imageUrl} />
       )}
       <div data-record-copy>
         <p data-record-title>{card.title}</p>

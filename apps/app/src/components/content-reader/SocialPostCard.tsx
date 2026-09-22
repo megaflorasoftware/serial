@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { ReaderImage, ReaderSocialPost } from "@serial/standard-site";
+import { RowPreviewImage } from "~/components/content-reader/RecordCard";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { timeAgo } from "~/lib/utils";
 
@@ -140,11 +141,9 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
             data-reader-link-card=""
           >
             {post.external.imageUrl && (
-              <RemoteImage
+              <RowPreviewImage
                 key={post.external.imageUrl}
                 src={post.external.imageUrl}
-                attribute="data-record-image"
-                value="cover"
               />
             )}
             <div data-record-copy>

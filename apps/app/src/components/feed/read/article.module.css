@@ -282,13 +282,26 @@
 /* Row cards of every kind share one preview column: as wide as the square
    that fits the card's minimum height, inset from the top, right and bottom,
    and stretched to the card's height when the copy runs taller. The whole
-   image shows inside the column, centred, at its own proportions. */
-.article :global([data-record-card="row"] [data-record-image="cover"]) {
+   image shows inside the column, centred, at its own proportions, and is
+   sized to itself so the rounding follows the image, not the column. */
+.article :global([data-record-card="row"] [data-record-preview]) {
+  position: relative;
   width: 6rem;
   align-self: stretch;
+  flex: none;
   margin: 0.5rem 0.5rem 0.5rem 0;
-  border-radius: var(--radius-sm);
+}
+
+.article :global([data-record-card="row"] [data-record-preview] img) {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
+  border-radius: var(--radius-sm);
 }
 
 .article :global([data-record-card="large"]) {
