@@ -82,7 +82,7 @@ function RichText({ content }: { content: ReaderRichText }) {
               id={footnoteReferenceId(inline.number)}
               role="doc-noteref"
             >
-              [{inline.number}]
+              {inline.number}
             </a>
           </sup>
         ) : (

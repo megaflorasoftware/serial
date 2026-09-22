@@ -174,6 +174,8 @@ describe("Reader document content", () => {
     const reference = container.querySelector<HTMLAnchorElement>("sup a")!;
     expect(reference.getAttribute("href")).toBe("#fn-1");
     expect(reference.id).toBe("fnref-1");
+    // The sidebar copies this text as the note's label, so it is the bare number.
+    expect(reference.textContent).toBe("1");
     const note = container.querySelector('[role="doc-endnotes"] li#fn-1')!;
     expect(note.textContent).toContain("Evidence");
     expect(
