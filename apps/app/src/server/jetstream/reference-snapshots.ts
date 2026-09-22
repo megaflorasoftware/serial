@@ -37,6 +37,9 @@ const SUPPORTED_COLLECTIONS = new Set<string>([
   BLUESKY_PROFILE_COLLECTION,
 ]);
 
+/** When the supported set last grew; unsupported rows older than this are retried. */
+const SUPPORT_CHANGED_AT = Date.parse("2026-09-22T12:00:00Z");
+
 /** Once a day per row is enough to keep a read snapshot out of the sweep. */
 const READ_MARK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -183,10 +186,28 @@ async function resolveReference(
   }
 }
 
+/** Whether a reference is one this server would look up at all. */
+function isSupportedReference(uri: string) {
+  if (isDid(uri)) return true;
+  const parts = parseAtUri(uri);
+  return parts !== null && SUPPORTED_COLLECTIONS.has(parts.collection);
+}
+
+/**
+ * An unsupported verdict is held for a week, except when it predates support
+ * for the reference's collection: a release that adds a collection resolves
+ * those rows on the next open instead of a week later.
+ */
 function fresh(row: SnapshotRow | undefined, now: Date, reuseMs: number) {
   if (!row) return false;
   if (row.outcome === "resolved")
     return now.getTime() - row.resolvedAt.getTime() < reuseMs;
+  if (
+    row.outcome === "unsupported" &&
+    row.resolvedAt.getTime() < SUPPORT_CHANGED_AT &&
+    isSupportedReference(row.uri)
+  )
+    return false;
   return !isReferenceSnapshotStale(toReferenceSnapshot(row), now.getTime());
 }
 

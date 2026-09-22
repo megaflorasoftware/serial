@@ -112,6 +112,35 @@ describe("publication transport", () => {
     );
     await expect(remote.getRecord(uri)).rejects.toThrow("Record URI mismatch");
   });
+  it("retries an unsupported verdict recorded before its collection was supported", async () => {
+    const post = "at://did:plc:alice/app.bsky.feed.post/p";
+    await fixture.database.insert(atprotoReferenceSnapshots).values({
+      uri: post,
+      cid: null,
+      outcome: "unsupported",
+      record: null,
+      resolvedAt: new Date("2026-09-20T00:00:00Z"),
+      readAt: null,
+    });
+    const { remote } = client(() =>
+      Response.json({
+        uri: post,
+        cid,
+        value: {
+          $type: "app.bsky.feed.post",
+          text: "hi",
+          createdAt: "2026-07-15T00:00:00Z",
+        },
+      }),
+    );
+    const snapshots = await refreshReferenceSnapshots(
+      fixture.database,
+      [post],
+      referenceReaders(remote, 5_000),
+      { now: NOW, reuseMs: REFERENCE_IMPORT_REUSE_MS },
+    );
+    expect(snapshots.get(post)?.outcome).toBe("resolved");
+  });
   it("snapshots DID documents under their DID and always refreshes them", async () => {
     const did = "did:plc:alice";
     let handle = "alice.example";
