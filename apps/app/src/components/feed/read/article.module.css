@@ -270,14 +270,23 @@
 }
 
 .article :global([data-record-image="cover"]) {
-  width: 25%;
-  align-self: stretch;
   flex: none;
   object-fit: cover;
 }
 
+.article :global([data-record-card="medium"] [data-record-image="cover"]) {
+  width: 25%;
+  align-self: stretch;
+}
+
+/* Row cards of every kind share one square preview, inset from the card's
+   top and right edges, with the real image cropped to fill it. */
 .article :global([data-record-card="row"] [data-record-image="cover"]) {
-  width: 5rem;
+  width: 5.5rem;
+  aspect-ratio: 1;
+  align-self: flex-start;
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  border-radius: var(--radius-sm);
 }
 
 .article :global([data-record-card="large"]) {
@@ -286,6 +295,7 @@
 
 .article :global([data-record-card="large"] [data-record-image="cover"]) {
   width: 100%;
+  align-self: stretch;
   aspect-ratio: 1.91;
 }
 
@@ -382,13 +392,9 @@
 }
 
 /* Link cards keep Leaflet's proportions: a short row with the preview on the
-   right, sized so small stored thumbnails are never upscaled. */
+   right; the square preview plus its insets fills the minimum height. */
 .article :global([data-reader-link-card]) {
   min-height: 6.5rem;
-}
-
-.article :global([data-reader-link-card] [data-record-image="cover"]) {
-  width: 7.5rem;
 }
 
 .article :global([data-reader-link-card] [data-record-title]) {
