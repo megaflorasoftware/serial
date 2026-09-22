@@ -503,8 +503,15 @@
 }
 
 .article :global([data-social-post]) a,
-.article :global([data-social-post]) [data-social-post-quote] {
+.article :global([data-social-post]) [data-social-post-quote],
+.article :global([data-social-post]) [data-social-post-video-player] {
   pointer-events: auto;
+}
+
+.article :global([data-social-post-video-player]) video {
+  display: block;
+  width: 100%;
+  margin: 0;
 }
 
 .article :global([data-social-post-header]) {

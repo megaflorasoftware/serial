@@ -405,6 +405,7 @@ function Block({
       return (
         <SocialPostCard
           post={block.post}
+          simplified={simplified}
           text={<RichText content={block.post.text} />}
           quote={
             block.post.quote ? (

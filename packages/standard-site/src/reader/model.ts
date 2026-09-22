@@ -90,6 +90,17 @@ export type ReaderLinkPreview = {
   imageUrl: string | null;
 };
 
+export type ReaderSocialVideo = {
+  thumbnailUrl: string;
+  /** The HLS stream; plays in the reader without a further lookup. */
+  playlistUrl: string;
+  alt: string;
+  aspectRatio: ReaderAspectRatio | null;
+  /** The author asked for it to loop silently like an animated image. */
+  gif: boolean;
+  captions: Array<{ lang: string; url: string }>;
+};
+
 export type ReaderSocialAuthor = {
   did: string;
   /** From the DID document; null until that snapshot resolves. */
@@ -118,7 +129,7 @@ export type ReaderSocialPost = {
   createdAt: string | null;
   images: ReaderImage[];
   external: ReaderLinkPreview | null;
-  video: { thumbnailUrl: string; aspectRatio: ReaderAspectRatio | null } | null;
+  video: ReaderSocialVideo | null;
   /** One level of quoted record as its own card; a quoted post never carries a quote of its own. */
   quote: ReaderBlock | null;
   /** The author's content labels hid the media; text and links stay. */

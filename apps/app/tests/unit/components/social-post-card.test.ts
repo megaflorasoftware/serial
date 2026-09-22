@@ -144,7 +144,12 @@ describe.each([false, true])(
               video: {
                 thumbnailUrl:
                   "https://video.bsky.app/watch/did%3Aplc%3Aauthor/bafyvideo/thumbnail.jpg",
+                playlistUrl:
+                  "https://video.bsky.app/watch/did%3Aplc%3Aauthor/bafyvideo/playlist.m3u8",
+                alt: "",
                 aspectRatio: { width: 16, height: 9 },
+                gif: false,
+                captions: [],
               },
             },
           },
@@ -161,7 +166,31 @@ describe.each([false, true])(
       expect(external.textContent).toContain("An article");
       const video = container.querySelector("[data-social-post-video]")!;
       expect(video.tagName).toBe("DIV");
-      expect(video.querySelector("img")?.alt).toContain("Video preview");
+      if (simplified) {
+        // The static style keeps the poster and never mounts a player.
+        expect(video.querySelector("video")).toBeNull();
+        expect(video.querySelector("img")?.alt).toContain("Video preview");
+      } else {
+        // The player holds the poster and a play button; the stream attaches on first play.
+        const player = video.querySelector<HTMLElement>(
+          "[data-social-post-video-player='video']",
+        )!;
+        expect(player.getAttribute("data-social-post-video-state")).toBe(
+          "poster",
+        );
+        expect(player.style.aspectRatio).toBe("16 / 9");
+        const media = player.querySelector("video")!;
+        expect(media.getAttribute("src")).toBeNull();
+        expect(media.getAttribute("preload")).toBe("none");
+        expect(
+          player
+            .querySelector("[data-social-post-video-toggle]")
+            ?.getAttribute("aria-label"),
+        ).toBe("Play video");
+        expect(player.querySelector("img")?.getAttribute("src")).toContain(
+          "/thumbnail.jpg",
+        );
+      }
       unmount();
     });
 

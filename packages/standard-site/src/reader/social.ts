@@ -5,6 +5,7 @@ import type {
   ReaderLinkPreview,
   ReaderSocialAuthor,
   ReaderSocialPost,
+  ReaderSocialVideo,
 } from "./model";
 import { facetArraySchema } from "./rich-text";
 import { block } from "./context";
@@ -18,6 +19,8 @@ import {
   buildBlueskyPostUrl,
   buildBlueskyProfileRecordUri,
   buildBlueskyProfileUrl,
+  buildBlueskyBlobUrl,
+  buildBlueskyVideoPlaylistUrl,
   buildBlueskyVideoThumbnailUrl,
   buildPcktNoteUrl,
   normalizePublicationUrl,
@@ -73,6 +76,13 @@ const embedSchema = z.looseObject({
   record: z.unknown().optional(),
   media: z.unknown().optional(),
   video: blobRefSchema.optional().catch(undefined),
+  alt: z.string().optional().catch(undefined),
+  presentation: z.string().optional().catch(undefined),
+  captions: validEntriesSchema(
+    z.object({ lang: z.string(), file: blobRefSchema }),
+  )
+    .optional()
+    .catch(undefined),
   aspectRatio: aspectRatioSchema.optional().catch(undefined),
 });
 
@@ -202,6 +212,30 @@ function mediaOf(embed: z.infer<typeof embedSchema> | undefined) {
   return media.success ? media.data : undefined;
 }
 
+function videoOf(
+  media: z.infer<typeof embedSchema>,
+  did: string,
+): ReaderSocialVideo | null {
+  const cid = media.video?.ref.$link;
+  if (!cid) return null;
+  const thumbnailUrl = buildBlueskyVideoThumbnailUrl(did, cid);
+  const playlistUrl = buildBlueskyVideoPlaylistUrl(did, cid);
+  if (!thumbnailUrl || !playlistUrl) return null;
+  const captions: ReaderSocialVideo["captions"] = [];
+  for (const caption of media.captions ?? []) {
+    const url = buildBlueskyBlobUrl(did, caption.file.ref.$link);
+    if (url) captions.push({ lang: caption.lang, url });
+  }
+  return {
+    thumbnailUrl,
+    playlistUrl,
+    alt: media.alt?.trim() ?? "",
+    aspectRatio: media.aspectRatio ?? null,
+    gif: media.presentation === "gif",
+    captions,
+  };
+}
+
 function authorOf(
   did: string,
   publicationUri: string | null,
@@ -305,9 +339,7 @@ export function socialPost(
   const media = mediaOf(record.embed);
   const mediaHidden = hidesMedia(record.labels);
   const quoted = quotedRecordUri(record.embed);
-  const video = media?.video
-    ? buildBlueskyVideoThumbnailUrl(parts.did, media.video.ref.$link)
-    : null;
+  const video = media?.video ? videoOf(media, parts.did) : null;
   return {
     platform,
     uri,
@@ -324,10 +356,7 @@ export function socialPost(
       externalPreview(media?.external, parts.did),
       mediaHidden,
     ),
-    video:
-      video && !mediaHidden
-        ? { thumbnailUrl: video, aspectRatio: media?.aspectRatio ?? null }
-        : null,
+    video: video && !mediaHidden ? video : null,
     quote: options.quoted || !quoted ? null : quoteBlock(quoted, context),
     mediaHidden,
   };

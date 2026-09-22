@@ -196,13 +196,34 @@ export function buildPcktNoteUrl(noteUri: string): string | null {
   return `https://pckt.blog/n/${parts.did}/${parts.rkey}`;
 }
 
-/** The poster frame Bluesky serves for a video blob; the video itself is not played. */
+/** The poster frame Bluesky serves for a video blob. */
 export function buildBlueskyVideoThumbnailUrl(
   did: string,
   cid: string,
 ): string | null {
   if (!isDid(did) || !isCid(cid)) return null;
   return `https://video.bsky.app/watch/${encodeURIComponent(did)}/${cid}/thumbnail.jpg`;
+}
+
+/**
+ * A blob by way of the Bluesky entryway, which redirects to the owning PDS
+ * with open CORS; used for video caption files, which the CDN does not serve.
+ */
+export function buildBlueskyBlobUrl(did: string, cid: string): string | null {
+  if (!isDid(did) || !isCid(cid)) return null;
+  return `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${cid}`;
+}
+
+/**
+ * The HLS playlist Bluesky serves for a video blob, at the same address its
+ * own client plays from; nothing beyond the record is needed to build it.
+ */
+export function buildBlueskyVideoPlaylistUrl(
+  did: string,
+  cid: string,
+): string | null {
+  if (!isDid(did) || !isCid(cid)) return null;
+  return `https://video.bsky.app/watch/${encodeURIComponent(did)}/${cid}/playlist.m3u8`;
 }
 
 /** Null unless the value is a well-formed at-uri, so nothing else reaches the path. */

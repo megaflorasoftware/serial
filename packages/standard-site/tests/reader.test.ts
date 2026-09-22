@@ -163,7 +163,9 @@ describe("real documents", () => {
         platform: "bluesky",
         author: { handle: "pckt.blog", name: "pckt.blog" },
         video: {
-          thumbnailUrl: expect.stringContaining("video.bsky.app"),
+          thumbnailUrl: expect.stringContaining("/thumbnail.jpg"),
+          playlistUrl: expect.stringContaining("/playlist.m3u8"),
+          gif: false,
           aspectRatio: { width: 1660, height: 1080 },
         },
       },

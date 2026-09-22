@@ -586,10 +586,14 @@
         "external": null,
         "video": {
           "thumbnailUrl": "https://video.bsky.app/watch/did%3Aplc%3Arevjuqmkvrw6fnkxppqtszpv/bafkreie5tb3zi5kumkwpwyi7k23pglnpjry4wxa2mudgn5th7ypa5p7p3y/thumbnail.jpg",
+          "playlistUrl": "https://video.bsky.app/watch/did%3Aplc%3Arevjuqmkvrw6fnkxppqtszpv/bafkreie5tb3zi5kumkwpwyi7k23pglnpjry4wxa2mudgn5th7ypa5p7p3y/playlist.m3u8",
+          "alt": "",
           "aspectRatio": {
             "width": 1660,
             "height": 1080
-          }
+          },
+          "gif": false,
+          "captions": []
         },
         "quote": null,
         "mediaHidden": false

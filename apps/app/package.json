@@ -152,6 +152,7 @@
     "fast-xml-parser": "^5.10.1",
     "feedscout": "^1.10.0",
     "feedsmith": "^2.9.5",
+    "hls.js": "^1.7.3",
     "html-react-parser": "^6.1.4",
     "idb-keyval": "^6.3.0",
     "ioredis": "^5.11.1",

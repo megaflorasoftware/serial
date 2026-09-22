@@ -1,7 +1,10 @@
+import { useAtomValue } from "jotai";
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { ReaderImage, ReaderSocialPost } from "@serial/standard-site";
 import { RowPreviewImage } from "~/components/content-reader/RecordCard";
+import { SocialVideoPlayer } from "~/components/content-reader/SocialVideoPlayer";
+import { isDisconnectedAtom } from "~/lib/data/atoms";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { timeAgo } from "~/lib/utils";
 
@@ -62,6 +65,8 @@ export type SocialPostCardProps = {
   text: ReactNode;
   /** The quoted record's card, rendered by the caller; null when unresolved. */
   quote: ReactNode;
+  /** The static style: a video stays a poster, never a player. */
+  simplified?: boolean;
 };
 
 /**
@@ -70,8 +75,14 @@ export type SocialPostCardProps = {
  * author link, the text's own links, the external preview and the quote
  * are layered above it. No engagement counts are drawn.
  */
-export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
+export function SocialPostCard({
+  post,
+  text,
+  quote,
+  simplified = false,
+}: SocialPostCardProps) {
   const platform = PLATFORM_NAMES[post.platform];
+  const offline = useAtomValue(isDisconnectedAtom);
   const date = post.createdAt ? new Date(post.createdAt) : null;
   const posted = date && Number.isFinite(date.getTime()) ? timeAgo(date) : null;
   const name = post.author.name ?? post.author.handle ?? post.author.did;
@@ -120,13 +131,24 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
         )}
         {post.video && (
           <div data-social-post-video>
-            <RemoteImage
-              key={post.video.thumbnailUrl}
-              src={post.video.thumbnailUrl}
-              alt={`Video preview from the post on ${platform}`}
-              attribute="data-social-post-image"
-              style={aspectStyle(post.video.aspectRatio)}
-            />
+            {simplified || offline ? (
+              <RemoteImage
+                key={post.video.thumbnailUrl}
+                src={post.video.thumbnailUrl}
+                alt={
+                  post.video.alt || `Video preview from the post on ${platform}`
+                }
+                attribute="data-social-post-image"
+                style={aspectStyle(post.video.aspectRatio)}
+              />
+            ) : (
+              <SocialVideoPlayer
+                key={post.video.playlistUrl}
+                video={post.video}
+                platform={platform}
+                style={aspectStyle(post.video.aspectRatio)}
+              />
+            )}
           </div>
         )}
         {post.mediaHidden && (

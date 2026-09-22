@@ -247,7 +247,7 @@ describe("Bluesky post cards", () => {
     });
   });
 
-  it("keeps external previews and video posters, and never plays the video", () => {
+  it("keeps external previews and derives video posters and streams from the record", () => {
     const records = lookup({
       ...resolved,
       [post]: {
@@ -269,6 +269,12 @@ describe("Bluesky post cards", () => {
         embed: {
           $type: "app.bsky.embed.video",
           video: { $type: "blob", ref: { $link: "bafyvideo" }, mimeType: "video/mp4" },
+          alt: " A clip ",
+          presentation: "gif",
+          captions: [
+            { lang: "en", file: blob("bafycaptions") },
+            { lang: "xx", file: "nope" },
+          ],
           aspectRatio: { width: 16, height: 9 },
         },
       },
@@ -288,7 +294,16 @@ describe("Bluesky post cards", () => {
     });
     expect(video?.post.video).toEqual({
       thumbnailUrl: `https://video.bsky.app/watch/${encodeURIComponent(quoter)}/bafyvideo/thumbnail.jpg`,
+      playlistUrl: `https://video.bsky.app/watch/${encodeURIComponent(quoter)}/bafyvideo/playlist.m3u8`,
+      alt: "A clip",
       aspectRatio: { width: 16, height: 9 },
+      gif: true,
+      captions: [
+        {
+          lang: "en",
+          url: `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(quoter)}&cid=bafycaptions`,
+        },
+      ],
     });
   });
 
