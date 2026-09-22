@@ -334,6 +334,25 @@ describe("Reader document content", () => {
     expect(fallback.querySelector("iframe")?.style.height).toBe("480px");
   });
 
+  it("marks link cards so their previews keep their natural size", () => {
+    const container = render(
+      document([
+        block({
+          kind: "linkCard",
+          href: "https://example.com/support",
+          title: "Support",
+          description: null,
+          imageUrl: "https://example.com/preview.png",
+        }),
+      ]),
+    );
+    const card = container.querySelector("[data-reader-link-card]");
+    expect(card?.querySelector("a > img")?.getAttribute("src")).toBe(
+      "https://example.com/preview.png",
+    );
+    expect(card?.querySelector("p > a > strong")?.textContent).toBe("Support");
+  });
+
   it("keeps images plain and videos as links in simplified mode", () => {
     const container = render(
       document([

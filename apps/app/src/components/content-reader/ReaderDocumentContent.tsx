@@ -338,7 +338,7 @@ function Block({
       return <br />;
     case "linkCard":
       return (
-        <div data-reader-align={block.align ?? undefined}>
+        <div data-reader-link-card data-reader-align={block.align ?? undefined}>
           {block.imageUrl && (
             <a href={block.href} target="_blank" rel="noopener noreferrer">
               <img

@@ -381,6 +381,13 @@
   margin-inline-start: auto;
 }
 
+/* Link card previews are often small thumbnails; show them at their natural
+   size instead of stretching them across the column. */
+.article :global([data-reader-link-card]) img {
+  width: auto;
+  max-width: 100%;
+}
+
 .article div:global([data-reader-align="center"]) {
   text-align: center;
 }
