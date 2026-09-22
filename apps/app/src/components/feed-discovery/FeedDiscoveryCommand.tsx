@@ -6,6 +6,7 @@ import {
 import { PublicationRowContent } from "@serial/ui";
 import {
   BookmarkIcon,
+  CheckIcon,
   Loader2Icon,
   RefreshCwIcon,
   RssIcon,
@@ -170,12 +171,14 @@ function FeedResults({
             disabled={added}
             onSelect={() => onSelect(feed)}
           >
-            <PublicationRowContent feed={feed} />
-            {added && (
-              <span className="text-muted-foreground shrink-0 text-xs">
-                Already added
-              </span>
-            )}
+            <PublicationRowContent
+              feed={feed}
+              trailing={
+                added ? (
+                  <CheckIcon size={16} aria-label="Already added" />
+                ) : null
+              }
+            />
           </CommandItem>
         );
       })}

@@ -124,9 +124,15 @@ it("disables an already added feed and skips it on Enter", async () => {
     '[cmdk-item][data-value="available"]',
   )!;
   expect(addedRow.getAttribute("aria-disabled")).toBe("true");
-  expect(addedRow.textContent).toContain("Already added");
+  expect(
+    addedRow.querySelector('svg[aria-label="Already added"]'),
+  ).not.toBeNull();
+  expect(addedRow.querySelector('svg[aria-label="RSS"]')).toBeNull();
   expect(availableRow.getAttribute("aria-disabled")).toBe("false");
-  expect(availableRow.textContent).not.toContain("Already added");
+  expect(
+    availableRow.querySelector('svg[aria-label="Already added"]'),
+  ).toBeNull();
+  expect(availableRow.querySelector('svg[aria-label="RSS"]')).not.toBeNull();
   act(() => addedRow.click());
   expect(props.onSelectFeed).not.toHaveBeenCalled();
   const input = container.querySelector("input")!;

@@ -56,7 +56,11 @@ export function isDiscoveredFeedAdded(
   return feeds.some((feed) =>
     matchesDiscoveredFeed(discovered, {
       url: getFeedRssUrl(feed),
-      origins: feed.origins.map(({ kind, locator }) => ({ kind, locator })),
+      origins: feed.origins.flatMap(({ kind, locator }) =>
+        kind === FEED_ORIGIN_KIND.RSS || kind === FEED_ORIGIN_KIND.ATPROTO
+          ? [{ kind, locator }]
+          : [],
+      ),
     }),
   );
 }
