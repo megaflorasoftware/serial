@@ -26,28 +26,28 @@ import { transformSecondsToFormattedTime } from "~/lib/transformSecondsToFormatt
 
 type HlsInstance = { destroy: () => void };
 
-function playsHlsNatively(video: HTMLVideoElement) {
-  return video.canPlayType("application/vnd.apple.mpegurl") !== "";
-}
-
 /**
- * Attaches an HLS stream through hls.js, which loads only on first play so
- * readers who never press play never pay for it. Browsers that play HLS
- * natively (Safari) take the playlist as a plain source instead.
+ * Attaches an HLS stream the way Bluesky's own web client does: through
+ * hls.js wherever media source extensions exist, and only otherwise as a
+ * plain source for the browser to play itself. Browsers that claim native
+ * HLS support are not trusted for it; Chrome reports "maybe" and then fails
+ * on the first segment. hls.js loads only on first play so readers who
+ * never press play never pay for it.
  */
 async function attachStream(
   video: HTMLVideoElement,
   playlistUrl: string,
 ): Promise<HlsInstance | null> {
   const { default: Hls } = await import("hls.js/light");
-  if (!Hls.isSupported()) {
-    video.src = playlistUrl;
-    return null;
+  if (Hls.isSupported()) {
+    const hls = new Hls({ enableWorker: true });
+    hls.loadSource(playlistUrl);
+    hls.attachMedia(video);
+    return hls;
   }
-  const hls = new Hls({ enableWorker: true });
-  hls.loadSource(playlistUrl);
-  hls.attachMedia(video);
-  return hls;
+  video.src = playlistUrl;
+  await video.play();
+  return null;
 }
 
 /** Calls back as the element crosses half-visible, without re-rendering the player. */
@@ -103,37 +103,34 @@ export function SocialVideoPlayer({
   const [hasInlineShortcutsVisible] = useFlagState("INLINE_SHORTCUTS");
   const startedRef = useRef(false);
 
-  const fail = useCallback(() => {
+  const fail = useCallback((error: unknown) => {
+    // Attaching a source aborts the sourceless first request; playback continues.
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    // Activation lapsed before the stream attached: the poster stays and the
+    // next press plays directly.
+    if (error instanceof DOMException && error.name === "NotAllowedError") {
+      setLoading(false);
+      return;
+    }
     setFailed(true);
     setLoading(false);
   }, []);
 
-  // Play is requested inside the gesture so browsers that gate unmuted
-  // playback on user activation honour it. A native-HLS browser gets its
-  // source first; elsewhere play is asked for before hls.js has loaded and
-  // the stream attaches underneath it.
+  // Play is requested inside the gesture so browsers that gate playback on
+  // user activation honour it; hls.js loads and attaches the stream
+  // underneath the pending request.
   const start = useCallback(() => {
     const element = videoRef.current;
     if (!element || startedRef.current) return;
     startedRef.current = true;
     setStarted(true);
     setLoading(true);
-    if (playsHlsNatively(element)) {
-      element.src = video.playlistUrl;
-      element.play().catch(fail);
-      return;
-    }
-    const played = element.play();
+    element.play().catch(fail);
     void attachStream(element, video.playlistUrl)
       .then((hls) => {
         hlsRef.current = hls;
       })
       .catch(fail);
-    played.catch((error: unknown) => {
-      // Attaching a source aborts the sourceless first request; playback continues.
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      fail();
-    });
   }, [fail, video.playlistUrl]);
 
   // A gif plays itself while on screen and pauses off screen.
@@ -234,10 +231,7 @@ export function SocialVideoPlayer({
           setDuration(event.currentTarget.duration || 0)
         }
         onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
-        onError={() => {
-          setFailed(true);
-          setLoading(false);
-        }}
+        onError={() => fail(null)}
       >
         {/* The first, sourceless track satisfies the caption rule the way the
             app's other players do; the record's own captions follow it. */}
