@@ -26,19 +26,19 @@ import { transformSecondsToFormattedTime } from "~/lib/transformSecondsToFormatt
 
 type HlsInstance = { destroy: () => void };
 
+function playsHlsNatively(video: HTMLVideoElement) {
+  return video.canPlayType("application/vnd.apple.mpegurl") !== "";
+}
+
 /**
- * Attaches an HLS stream to a video element: natively where the browser
- * plays HLS itself (Safari), otherwise through hls.js, which loads only on
- * first play so readers who never press play never pay for it.
+ * Attaches an HLS stream through hls.js, which loads only on first play so
+ * readers who never press play never pay for it. Browsers that play HLS
+ * natively (Safari) take the playlist as a plain source instead.
  */
 async function attachStream(
   video: HTMLVideoElement,
   playlistUrl: string,
 ): Promise<HlsInstance | null> {
-  if (video.canPlayType("application/vnd.apple.mpegurl")) {
-    video.src = playlistUrl;
-    return null;
-  }
   const { default: Hls } = await import("hls.js/light");
   if (!Hls.isSupported()) {
     video.src = playlistUrl;
@@ -103,20 +103,38 @@ export function SocialVideoPlayer({
   const [hasInlineShortcutsVisible] = useFlagState("INLINE_SHORTCUTS");
   const startedRef = useRef(false);
 
-  const start = useCallback(async () => {
+  const fail = useCallback(() => {
+    setFailed(true);
+    setLoading(false);
+  }, []);
+
+  // Play is requested inside the gesture so browsers that gate unmuted
+  // playback on user activation honour it. A native-HLS browser gets its
+  // source first; elsewhere play is asked for before hls.js has loaded and
+  // the stream attaches underneath it.
+  const start = useCallback(() => {
     const element = videoRef.current;
     if (!element || startedRef.current) return;
     startedRef.current = true;
     setStarted(true);
     setLoading(true);
-    try {
-      hlsRef.current = await attachStream(element, video.playlistUrl);
-      await element.play();
-    } catch {
-      setFailed(true);
-      setLoading(false);
+    if (playsHlsNatively(element)) {
+      element.src = video.playlistUrl;
+      element.play().catch(fail);
+      return;
     }
-  }, [video.playlistUrl]);
+    const played = element.play();
+    void attachStream(element, video.playlistUrl)
+      .then((hls) => {
+        hlsRef.current = hls;
+      })
+      .catch(fail);
+    played.catch((error: unknown) => {
+      // Attaching a source aborts the sourceless first request; playback continues.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      fail();
+    });
+  }, [fail, video.playlistUrl]);
 
   // A gif plays itself while on screen and pauses off screen.
   useInView(
@@ -125,7 +143,7 @@ export function SocialVideoPlayer({
       const element = videoRef.current;
       if (!element) return;
       if (inView) {
-        if (!startedRef.current) void start();
+        if (!startedRef.current) start();
         else void element.play().catch(() => {});
       } else if (startedRef.current) {
         element.pause();
@@ -145,7 +163,7 @@ export function SocialVideoPlayer({
     const element = videoRef.current;
     if (!element) return;
     if (!started) {
-      void start();
+      start();
       return;
     }
     if (element.paused) void element.play().catch(() => {});
