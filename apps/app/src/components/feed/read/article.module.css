@@ -281,13 +281,14 @@
 
 /* Row cards of every kind share one preview column: as wide as the square
    that fits the card's minimum height, inset from the top, right and bottom,
-   and stretched to the card's height when the copy runs taller, with the
-   real image cropped to fill it. */
+   and stretched to the card's height when the copy runs taller. The whole
+   image shows inside the column, centred, at its own proportions. */
 .article :global([data-record-card="row"] [data-record-image="cover"]) {
   width: 5.5rem;
   align-self: stretch;
   margin: 0.5rem 0.5rem 0.5rem 0;
   border-radius: var(--radius-sm);
+  object-fit: contain;
 }
 
 .article :global([data-record-card="large"]) {
