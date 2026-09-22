@@ -145,9 +145,12 @@ describe("Reader document content", () => {
     ]);
     expect(container.querySelector("ol")?.getAttribute("start")).toBe("3");
     expect(container.querySelector("li.task-list-item input")).toBeTruthy();
-    const image = container.querySelector<HTMLImageElement>("figure img")!;
-    expect(image.style.aspectRatio).toBe("4 / 3");
-    expect(image.style.maxWidth).toBe("50%");
+    // The frame carries the layout hints so the space is held before the image loads.
+    const frame = container.querySelector<HTMLElement>(
+      "figure [data-image-frame]",
+    )!;
+    expect(frame.style.aspectRatio).toBe("4 / 3");
+    expect(frame.style.maxWidth).toBe("50%");
     expect(
       container.querySelector("figure")?.getAttribute("data-reader-align"),
     ).toBe("center");
@@ -521,6 +524,38 @@ describe("Reader document content", () => {
     expect(
       container.querySelectorAll("[data-reader-carousel-slide] img"),
     ).toHaveLength(2);
+  });
+
+  it("holds a muted frame for each body image until it loads", () => {
+    const container = render(
+      document([
+        block({
+          kind: "image",
+          image: {
+            ...readerImage("https://example.com/known.png"),
+            aspectRatio: { width: 4, height: 5 },
+          },
+          caption: null,
+        }),
+        block({
+          kind: "image",
+          image: readerImage("https://example.com/unknown.png"),
+          caption: null,
+        }),
+      ]),
+    );
+    const frames =
+      container.querySelectorAll<HTMLElement>("[data-image-frame]");
+    expect(frames).toHaveLength(2);
+    expect(frames[0]!.getAttribute("data-image-frame")).toBe("loading");
+    expect(frames[0]!.style.aspectRatio).toBe("4 / 5");
+    // Unknown shapes reserve a landscape frame rather than collapsing to nothing.
+    expect(frames[1]!.style.aspectRatio).toBe("3 / 2");
+    act(() =>
+      frames[0]!.querySelector("img")!.dispatchEvent(new Event("load")),
+    );
+    expect(frames[0]!.getAttribute("data-image-frame")).toBe("loaded");
+    expect(frames[1]!.getAttribute("data-image-frame")).toBe("loading");
   });
 
   it("keeps images plain and videos as links in simplified mode", () => {

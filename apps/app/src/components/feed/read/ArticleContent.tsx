@@ -13,17 +13,32 @@ function extractYouTubeVideoId(src: string): string | null {
   return match?.[1] ?? null;
 }
 
-function findImageSrc(node: Element): string | null {
-  if (node.name === "img") return node.attribs.src ?? null;
-  if (node.name === "source")
-    return node.attribs.srcset?.split(/\s/)[0] ?? null;
+function findImage(node: Element): { src: string; node: Element } | null {
+  if (node.name === "img")
+    return node.attribs.src ? { src: node.attribs.src, node } : null;
+  if (node.name === "source") {
+    const src = node.attribs.srcset?.split(/\s/)[0];
+    return src ? { src, node } : null;
+  }
   for (const child of node.children) {
     if (child instanceof Element) {
-      const src = findImageSrc(child);
-      if (src) return src;
+      const image = findImage(child);
+      if (image) return image;
     }
   }
   return null;
+}
+
+/** Publisher-declared pixel dimensions, when both are plain positive numbers. */
+function htmlImageAspectRatio(node: Element) {
+  const width = Number(node.attribs.width);
+  const height = Number(node.attribs.height);
+  return Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+    ? { width, height }
+    : null;
 }
 
 function isImageContainer(node: Element): boolean {
@@ -31,7 +46,7 @@ function isImageContainer(node: Element): boolean {
     const cls = node.attribs.class ?? "";
     if (cls.includes("image-link") || cls.includes("image2")) return true;
   }
-  if (node.name === "figure") return !!findImageSrc(node);
+  if (node.name === "figure") return !!findImage(node);
   if (node.attribs.class?.includes("captioned-image-container")) return true;
   return false;
 }
@@ -64,12 +79,24 @@ export function ArticleContent({
         const src = domNode.attribs.src ?? "";
         const alt = domNode.attribs.alt ?? "";
         if (!src) return;
-        return <ArticleImageLightbox src={src} alt={alt} />;
+        return (
+          <ArticleImageLightbox
+            src={src}
+            alt={alt}
+            aspectRatio={htmlImageAspectRatio(domNode)}
+          />
+        );
       }
 
       if (isImageContainer(domNode)) {
-        const src = findImageSrc(domNode);
-        if (src) return <ArticleImageLightbox src={src} />;
+        const image = findImage(domNode);
+        if (image)
+          return (
+            <ArticleImageLightbox
+              src={image.src}
+              aspectRatio={htmlImageAspectRatio(image.node)}
+            />
+          );
       }
 
       if (domNode.name !== "iframe") return;

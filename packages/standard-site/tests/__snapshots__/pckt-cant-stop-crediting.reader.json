@@ -598,7 +598,10 @@
         "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:x5leeami62gbmjekf7ro6sqo/bafkreiepdk3z4quxkamblmv4jqvapbeojhmwxzwsnsyrpfiau7fkzcrszy@jpeg",
         "alt": "closing scene of the \"can't stop\" video that has a sign that says \"INSPIRED BY THE 'ONE-MINUTE SCULPTURES' OF ERWIN WURM\"",
         "title": null,
-        "aspectRatio": null,
+        "aspectRatio": {
+          "width": 1578,
+          "height": 1180
+        },
         "width": {
           "value": 500,
           "unit": "px"
@@ -656,7 +659,10 @@
         "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:x5leeami62gbmjekf7ro6sqo/bafkreiagycqqtscbgr3huubn2mfkk3crrt2s2hqxj6awqkr23sfyvidubu@jpeg",
         "alt": "HORVAT How did you feel when you first saw\nthe music video for “Can’t Stop” by the Red Hot\nChili Peppers?\nWURM Great, because it was done with my\npermission. We set up a contract, I got paid, and\neverything was very professional. Also, I was cred-\nited as an artist, and I think that may have been\nthe first time an artist was credited for something\nin a mainstream music video. Many videos were\nplaying on MTV, but producers stole the ideas\nfrom other artists. “Can’t Stop” was done with my\npermission, and, in the end, it was an enormous\nadvertisement for my work.",
         "title": null,
-        "aspectRatio": null,
+        "aspectRatio": {
+          "width": 1116,
+          "height": 856
+        },
         "width": {
           "value": 500,
           "unit": "px"

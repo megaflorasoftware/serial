@@ -97,6 +97,7 @@ function alignStyle(block: ReaderBlock): CSSProperties | undefined {
   return block.align ? { textAlign: block.align } : undefined;
 }
 
+/** The image's own hints; the frame's ratio is reserved by the lightbox trigger. */
 function imageStyle(image: ReaderImage): CSSProperties | undefined {
   const style: CSSProperties = {};
   if (image.aspectRatio)
@@ -133,7 +134,9 @@ function Picture({
       />
     );
   }
-  return <ArticleImageLightboxTrigger index={index} style={style} />;
+  return (
+    <ArticleImageLightboxTrigger index={index} style={style} fill={fill} />
+  );
 }
 
 /** Wraps a figure's pictures in one lightbox group; simplified rendering has none. */
@@ -149,7 +152,11 @@ function Pictures({
   if (simplified) return <>{children}</>;
   return (
     <ArticleImageLightboxGroup
-      images={images.map((image) => ({ src: image.url, alt: image.alt }))}
+      images={images.map((image) => ({
+        src: image.url,
+        alt: image.alt,
+        aspectRatio: image.aspectRatio,
+      }))}
     >
       {children}
     </ArticleImageLightboxGroup>

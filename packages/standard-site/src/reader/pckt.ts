@@ -44,6 +44,8 @@ const imageAttrsSchema = z.object({
   blob: blobRefSchema.optional(),
   alt: z.string().optional(),
   title: z.string().optional(),
+  naturalWidth: z.number().optional(),
+  naturalHeight: z.number().optional(),
 });
 
 const cellSchema = z.object({
@@ -96,16 +98,21 @@ function readImage(
 ): ReaderImage | null {
   const attrs = imageAttrsSchema.safeParse(value);
   if (!attrs.success) return null;
-  const { src, blob, alt, title } = attrs.data;
+  const { src, blob, alt, title, naturalWidth, naturalHeight } = attrs.data;
   const cid =
     blob?.ref.$link ?? (src.startsWith("blob:") ? src.slice(5) : null);
   const url = cid ? context.imageUrl(cid, did) : safeSourceUrl(src);
   if (!url) return null;
   const source = value as Block;
+  // pckt records the pixel size it measured on upload, not an aspect ratio.
+  const measured =
+    naturalWidth && naturalHeight
+      ? { width: naturalWidth, height: naturalHeight }
+      : undefined;
   return image(url, {
     alt,
     title,
-    aspectRatio: source.aspectRatio,
+    aspectRatio: source.aspectRatio ?? measured,
     width: source.width,
   });
 }

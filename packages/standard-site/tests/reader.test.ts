@@ -134,7 +134,7 @@ describe("real documents", () => {
     });
   });
 
-  it("carries pckt image alignment and numeric-string width", () => {
+  it("carries pckt image alignment, numeric-string width and measured size", () => {
     const { document } = deriveFixture("pckt-cant-stop-crediting");
     const [image] = find(document.blocks, "image");
     expect(image).toMatchObject({
@@ -142,6 +142,8 @@ describe("real documents", () => {
       image: {
         width: { value: 500, unit: "px" },
         alt: expect.stringContaining("can't stop"),
+        // pckt writes the pixel size it measured on upload, not an aspect ratio.
+        aspectRatio: { width: 1578, height: 1180 },
       },
     });
     expect(image?.source).toMatchObject({

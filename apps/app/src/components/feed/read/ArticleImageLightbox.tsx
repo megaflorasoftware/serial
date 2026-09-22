@@ -7,7 +7,21 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogOverlay, DialogPortal } from "~/components/ui/dialog";
 
-export type LightboxImage = { src: string; alt?: string };
+export type LightboxImage = {
+  src: string;
+  alt?: string;
+  /** Known before the bytes arrive; reserves the frame at the right shape. */
+  aspectRatio?: { width: number; height: number } | null;
+};
+
+/** Body images with no known shape reserve a landscape frame. */
+export const DEFAULT_IMAGE_ASPECT_RATIO = "3 / 2";
+
+export function imageAspectRatio(ratio: LightboxImage["aspectRatio"]): string {
+  return ratio && ratio.width > 0 && ratio.height > 0
+    ? `${ratio.width} / ${ratio.height}`
+    : DEFAULT_IMAGE_ASPECT_RATIO;
+}
 
 type LightboxGroup = {
   images: LightboxImage[];
@@ -125,23 +139,32 @@ function LightboxArrow({
   );
 }
 
-/** The image in the flow; clicking it opens the group's dialog on this image. */
+/**
+ * The image in the flow; clicking it opens the group's dialog on this image.
+ * Until the bytes arrive a muted frame holds the image's place at its known
+ * shape, or a landscape one, so the article does not shift as images land.
+ */
 export function ArticleImageLightboxTrigger({
   index,
   className,
   style,
+  fill = false,
 }: {
   index: number;
   className?: string;
   /** Layout hints from the Reader document: aspect ratio and capped width. */
   style?: CSSProperties;
+  /** The cell sizes the frame; no ratio of the image's own is reserved. */
+  fill?: boolean;
 }) {
   const group = useContext(LightboxGroupContext);
+  const [loadedSrc, setLoadedSrc] = useState<string>();
   const [failedSrc, setFailedSrc] = useState<string>();
   const image = group?.images[index];
   if (!group || !image) return null;
   const { src, alt } = image;
   const failed = failedSrc === src;
+  const loaded = loadedSrc === src;
 
   return (
     <div data-lightbox style={{ position: "relative" }}>
@@ -166,16 +189,25 @@ export function ArticleImageLightboxTrigger({
             className="bg-muted block aspect-square size-48 max-w-full rounded"
           />
         ) : (
-          <img
-            src={src}
-            alt={alt}
-            className={className}
-            style={style}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={() => setFailedSrc(src)}
-          />
+          <span
+            data-image-frame={loaded ? "loaded" : "loading"}
+            className={fill ? undefined : className}
+            style={
+              fill
+                ? undefined
+                : { aspectRatio: imageAspectRatio(image.aspectRatio), ...style }
+            }
+          >
+            <img
+              src={src}
+              alt={alt}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onLoad={() => setLoadedSrc(src)}
+              onError={() => setFailedSrc(src)}
+            />
+          </span>
         )}
       </button>
     </div>
@@ -185,6 +217,7 @@ export function ArticleImageLightboxTrigger({
 interface ArticleImageLightboxProps {
   src: string;
   alt?: string;
+  aspectRatio?: LightboxImage["aspectRatio"];
   className?: string;
   /** Layout hints from the Reader document: aspect ratio and capped width. */
   style?: CSSProperties;
@@ -194,11 +227,12 @@ interface ArticleImageLightboxProps {
 export function ArticleImageLightbox({
   src,
   alt,
+  aspectRatio,
   className,
   style,
 }: ArticleImageLightboxProps) {
   return (
-    <ArticleImageLightboxGroup images={[{ src, alt }]}>
+    <ArticleImageLightboxGroup images={[{ src, alt, aspectRatio }]}>
       <ArticleImageLightboxTrigger
         index={0}
         className={className}

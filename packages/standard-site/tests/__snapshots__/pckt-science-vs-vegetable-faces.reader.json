@@ -166,7 +166,10 @@
         "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:x5leeami62gbmjekf7ro6sqo/bafkreidfex4cfyjmuk26c3zzw7hshzj5er4aisvzhn2qqdtrh6pu2kltuq@jpeg",
         "alt": "arcimboldo's portrait of rudolf ii composed of vegetables, fruit and flowers",
         "title": null,
-        "aspectRatio": null,
+        "aspectRatio": {
+          "width": 1280,
+          "height": 1587
+        },
         "width": {
           "value": 700,
           "unit": "px"
@@ -294,7 +297,10 @@
         "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:x5leeami62gbmjekf7ro6sqo/bafkreicxsyvtnnnmglqhn7ic6tz2kvydslyefsnt5rq2ucrsgxkpfwopei@jpeg",
         "alt": "arcimboldo's portrait \"the librarian\" which is a portrait of a man mad of books and cloth",
         "title": null,
-        "aspectRatio": null,
+        "aspectRatio": {
+          "width": 1000,
+          "height": 1361
+        },
         "width": null,
         "fullBleed": false
       },
@@ -352,7 +358,10 @@
         "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:x5leeami62gbmjekf7ro6sqo/bafkreicc3kg3qbdyzpxc4zocrlj5ojz57gm4p4t6mifvqworujjuah3him@jpeg",
         "alt": "arcimboldo's painting \"air\" that's a side portrait of a person composed of all different kinds of birds",
         "title": null,
-        "aspectRatio": null,
+        "aspectRatio": {
+          "width": 960,
+          "height": 1293
+        },
         "width": null,
         "fullBleed": false
       },
