@@ -324,7 +324,8 @@ it("renders pckt galleries from their referenced record", () => {
   // Gallery blobs belong to the gallery's repository, not the document's.
   expect(document?.blocks[0]).toMatchObject({
     kind: "imageGroup",
-    layout: { mode: "stack" },
+    title: null,
+    layout: { mode: "grid", columns: 2, ratio: null },
     images: [
       { url: buildBlueskyCdnImageUrl("did:plc:bob", "bafyone"), alt: "One" },
       { url: "https://example.com/two.png", alt: "" },

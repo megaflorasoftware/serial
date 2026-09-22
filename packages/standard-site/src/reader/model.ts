@@ -58,13 +58,17 @@ export type ReaderImage = {
   fullBleed: boolean;
 };
 
+export type ReaderGridRatio = "landscape" | "portrait" | "square" | "mosaic";
+
+/**
+ * Grid columns are decided where the data is; the reader only draws them.
+ * A null ratio keeps each cell at its own image's shape; a fixed ratio is
+ * Offprint's uniform cell, and a mosaic gives the first image both rows.
+ */
 export type ReaderImageGroupLayout =
   | { mode: "stack" }
-  | {
-      mode: "grid";
-      rows: number;
-      ratio: "landscape" | "portrait" | "square" | "mosaic";
-    };
+  | { mode: "grid"; columns: number; ratio: ReaderGridRatio | null }
+  | { mode: "carousel" };
 
 export type ReaderListItem = {
   content: ReaderBlock[];
@@ -156,6 +160,8 @@ export type ReaderBlockValue =
   | {
       kind: "imageGroup";
       images: ReaderImage[];
+      /** Bold text above the images; a pckt gallery title. */
+      title: string | null;
       caption: ReaderRichText | null;
       layout: ReaderImageGroupLayout;
     }

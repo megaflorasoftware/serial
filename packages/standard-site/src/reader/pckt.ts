@@ -8,6 +8,7 @@ import {
   embedBlock,
   image,
   linkCard,
+  naturalGrid,
   notice,
   readAlign,
   recordPreviewBlock,
@@ -21,6 +22,7 @@ import {
 import type {
   ReaderBlock,
   ReaderImage,
+  ReaderImageGroupLayout,
   ReaderListItem,
   ReaderTableCell,
 } from "./model";
@@ -74,8 +76,17 @@ export const pcktBlobSchema = z.union([
 
 const gallerySchema = z.object({
   images: z.array(z.unknown()),
+  title: z.string().optional(),
   caption: z.string().optional(),
+  layout: z.unknown().optional(),
 });
+
+/** pckt defaults to a grid and its masonry is a grid too; `list` is a column. */
+function galleryLayout(layout: unknown, count: number): ReaderImageGroupLayout {
+  if (layout === "list") return { mode: "stack" };
+  if (layout === "carousel") return { mode: "carousel" };
+  return naturalGrid(count);
+}
 
 /** One image whose blob lives in `did`'s repository: the document's, or a gallery's. */
 function readImage(
@@ -117,13 +128,15 @@ function galleryBlock(
     .filter((entry): entry is ReaderImage => entry !== null);
   if (images.length === 0) return notice(value, "unsupported");
   const caption = gallery.data.caption?.trim();
+  const title = gallery.data.title?.trim();
   return block(value, {
     kind: "imageGroup",
     images,
+    title: title || null,
     caption: caption
       ? [{ kind: "text", text: caption, marks: {}, link: null }]
       : null,
-    layout: { mode: "stack" },
+    layout: galleryLayout(gallery.data.layout, images.length),
   });
 }
 

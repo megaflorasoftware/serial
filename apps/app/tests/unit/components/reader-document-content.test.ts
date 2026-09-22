@@ -9,6 +9,7 @@ import type {
   ReaderBlock,
   ReaderBlockValue,
   ReaderDocument,
+  ReaderImage,
   ReaderInline,
 } from "@serial/standard-site";
 import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
@@ -66,6 +67,15 @@ function block(
 ): ReaderBlock {
   return { source: null, align: null, ...value };
 }
+
+const readerImage = (url: string): ReaderImage => ({
+  url,
+  alt: "",
+  title: null,
+  aspectRatio: null,
+  width: null,
+  fullBleed: false,
+});
 
 function document(
   blocks: ReaderBlock[],
@@ -172,14 +182,6 @@ describe("Reader document content", () => {
   });
 
   it("draws callouts with a validated tint and grids with their layout", () => {
-    const image = (url: string) => ({
-      url,
-      alt: "",
-      title: null,
-      aspectRatio: null,
-      width: null,
-      fullBleed: false,
-    });
     const container = render(
       document([
         block({
@@ -199,12 +201,13 @@ describe("Reader document content", () => {
         block({
           kind: "imageGroup",
           images: [
-            image("https://example.com/1.png"),
-            image("https://example.com/2.png"),
-            image("https://example.com/3.png"),
+            readerImage("https://example.com/1.png"),
+            readerImage("https://example.com/2.png"),
+            readerImage("https://example.com/3.png"),
           ],
+          title: null,
           caption: null,
-          layout: { mode: "grid", rows: 2, ratio: "mosaic" },
+          layout: { mode: "grid", columns: 2, ratio: "mosaic" },
         }),
       ]),
     );
@@ -219,9 +222,7 @@ describe("Reader document content", () => {
     const grid = container.querySelector<HTMLElement>(
       "[data-reader-image-group='grid']",
     )!;
-    expect(grid.getAttribute("data-reader-grid-rows")).toBe("2");
     expect(grid.getAttribute("data-reader-grid-ratio")).toBe("mosaic");
-    // Three images in a two-row mosaic: the first spans both rows, two more stack beside it.
     expect(grid.style.getPropertyValue("--reader-grid-columns")).toBe("2");
     expect(grid.querySelectorAll("img")).toHaveLength(3);
   });
@@ -376,6 +377,148 @@ describe("Reader document content", () => {
     );
     expect(cards[1]!.querySelector('[data-record-image="cover"]')).toBeNull();
     expect(cards[1]!.querySelector("[data-record-description]")).toBeNull();
+  });
+
+  it("draws natural grids with each image's own shape and a bold gallery title", () => {
+    const container = render(
+      document([
+        block({
+          kind: "imageGroup",
+          images: [
+            {
+              ...readerImage("https://example.com/left.webp"),
+              alt: "Left sidebar",
+              aspectRatio: { width: 387, height: 562 },
+            },
+            {
+              ...readerImage("https://example.com/right.webp"),
+              alt: "Right sidebar",
+              aspectRatio: { width: 379, height: 573 },
+            },
+          ],
+          title: "Sidebars",
+          caption: null,
+          layout: { mode: "grid", columns: 2, ratio: null },
+        }),
+      ]),
+    );
+    const grid = container.querySelector<HTMLElement>(
+      "[data-reader-image-group='grid']",
+    )!;
+    expect(grid.hasAttribute("data-reader-grid-ratio")).toBe(false);
+    expect(grid.style.getPropertyValue("--reader-grid-columns")).toBe("2");
+    expect(grid.style.getPropertyValue("--reader-grid-columns-narrow")).toBe(
+      "2",
+    );
+    expect(
+      grid.querySelector("[data-reader-image-group-title]")?.textContent,
+    ).toBe("Sidebars");
+    const cells = grid.querySelectorAll<HTMLElement>(
+      "[data-reader-image-group-items] > *",
+    );
+    expect([...cells].map((cell) => cell.style.aspectRatio)).toEqual([
+      "387 / 562",
+      "379 / 573",
+    ]);
+    expect(grid.querySelectorAll("[data-lightbox-trigger]")).toHaveLength(2);
+  });
+
+  it("pages a carousel one slide at a time and opens the lightbox on the visible slide", () => {
+    const container = render(
+      document([
+        block({
+          kind: "imageGroup",
+          images: [
+            readerImage("https://example.com/1.png"),
+            readerImage("https://example.com/2.png"),
+            readerImage("https://example.com/3.png"),
+          ],
+          title: null,
+          caption: [text("Three")],
+          layout: { mode: "carousel" },
+        }),
+      ]),
+    );
+    const carousel = container.querySelector<HTMLElement>(
+      "[data-reader-image-group='carousel']",
+    )!;
+    expect(
+      carousel.querySelectorAll("[data-reader-carousel-slide]"),
+    ).toHaveLength(3);
+    const counter = () =>
+      carousel.querySelector("[data-reader-carousel-counter]")?.textContent;
+    const arrow = (direction: string) =>
+      carousel.querySelector<HTMLButtonElement>(
+        `[data-reader-carousel-arrow='${direction}']`,
+      );
+    expect(counter()).toBe("1 / 3");
+    expect(arrow("previous")).toBeNull();
+    const strip = carousel.querySelector<HTMLElement>(
+      "[data-reader-carousel-strip]",
+    )!;
+    strip.scrollTo = () => {};
+    act(() => arrow("next")!.click());
+    act(() => arrow("next")!.click());
+    expect(counter()).toBe("3 / 3");
+    expect(arrow("next")).toBeNull();
+    expect(arrow("previous")).not.toBeNull();
+
+    const triggers = carousel.querySelectorAll<HTMLButtonElement>(
+      "[data-lightbox-trigger]",
+    );
+    act(() => triggers[2]!.click());
+    const dialog = window.document.querySelector("[role='dialog']")!;
+    expect(dialog.querySelector("img")?.getAttribute("src")).toBe(
+      "https://example.com/3.png",
+    );
+    expect(dialog.querySelector("[data-lightbox-counter]")?.textContent).toBe(
+      "3 / 3",
+    );
+    expect(dialog.querySelector("[data-lightbox-arrow='next']")).toBeNull();
+    act(() =>
+      dialog.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+      ),
+    );
+    expect(dialog.querySelector("img")?.getAttribute("src")).toBe(
+      "https://example.com/2.png",
+    );
+    act(() =>
+      dialog
+        .querySelector<HTMLButtonElement>("[data-lightbox-arrow='previous']")!
+        .click(),
+    );
+    expect(dialog.querySelector("[data-lightbox-counter]")?.textContent).toBe(
+      "1 / 3",
+    );
+    expect(dialog.querySelector("[data-lightbox-arrow='previous']")).toBeNull();
+    // Paging the lightbox leaves the carousel where the reader left it.
+    expect(counter()).toBe("3 / 3");
+  });
+
+  it("keeps a carousel interactive but without a lightbox in simplified mode", () => {
+    const container = render(
+      document([
+        block({
+          kind: "imageGroup",
+          images: [
+            readerImage("https://example.com/1.png"),
+            readerImage("https://example.com/2.png"),
+          ],
+          title: null,
+          caption: null,
+          layout: { mode: "carousel" },
+        }),
+      ]),
+      { simplified: true },
+    );
+    expect(container.querySelector("[data-lightbox]")).toBeNull();
+    expect(
+      container.querySelector("[data-reader-carousel-arrow='next']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll("[data-reader-carousel-slide] img"),
+    ).toHaveLength(2);
   });
 
   it("keeps images plain and videos as links in simplified mode", () => {

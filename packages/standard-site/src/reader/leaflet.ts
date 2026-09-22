@@ -8,6 +8,7 @@ import {
   embedBlock,
   image,
   linkCard,
+  naturalGrid,
   notice,
   readAlign,
   readAspectRatio,
@@ -20,7 +21,12 @@ import {
   unknownBlock,
   type Block,
 } from "./context";
-import type { ReaderAlign, ReaderBlock, ReaderListItem } from "./model";
+import type {
+  ReaderAlign,
+  ReaderBlock,
+  ReaderImageGroupLayout,
+  ReaderListItem,
+} from "./model";
 import { richTextSchema } from "./rich-text";
 import { blobRefSchema } from "../lexicons";
 import { validEntriesSchema } from "../parse";
@@ -83,6 +89,20 @@ export function embeddedRecordCardUri(value: Block) {
   if (name !== "standardSitePost" && name !== "standardSitePublication")
     return null;
   return recordReferenceUri(stringProperty(value, "uri"));
+}
+
+/**
+ * Leaflet's `grid` is the default and any unknown format falls back to it; a
+ * `strip` is a full-width column. The record's own gap and max width are not
+ * carried: the reader's grid spacing and column rule apply everywhere.
+ */
+function galleryLayout(
+  format: string | undefined,
+  count: number,
+): ReaderImageGroupLayout {
+  if (format === "strip") return { mode: "stack" };
+  if (format === "carousel") return { mode: "carousel" };
+  return naturalGrid(count);
 }
 
 function imageBlock(
@@ -228,8 +248,9 @@ function convertBlock(
       return block(value, {
         kind: "imageGroup",
         images,
+        title: null,
         caption: null,
-        layout: { mode: "stack" },
+        layout: galleryLayout(stringProperty(value, "format"), images.length),
         align,
       });
     }

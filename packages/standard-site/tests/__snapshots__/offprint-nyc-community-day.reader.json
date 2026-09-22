@@ -128,10 +128,11 @@
           "fullBleed": false
         }
       ],
+      "title": null,
       "caption": null,
       "layout": {
         "mode": "grid",
-        "rows": 2,
+        "columns": 4,
         "ratio": "mosaic"
       }
     },

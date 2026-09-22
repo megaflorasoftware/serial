@@ -14,7 +14,11 @@ import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
 import { LinkCard, RecordCard } from "~/components/content-reader/RecordCard";
 import { SocialPostCard } from "~/components/content-reader/SocialPostCard";
 import { SandboxedFrame } from "~/components/content-reader/SandboxedFrame";
-import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
+import { ReaderImageCarousel } from "~/components/content-reader/ReaderImageCarousel";
+import {
+  ArticleImageLightboxGroup,
+  ArticleImageLightboxTrigger,
+} from "~/components/feed/read/ArticleImageLightbox";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 
 /**
@@ -101,12 +105,18 @@ function imageStyle(image: ReaderImage): CSSProperties | undefined {
   return Object.keys(style).length ? style : undefined;
 }
 
+/**
+ * One image of a lightbox group. In the simplified style there is no
+ * lightbox, so the image is drawn plain.
+ */
 function Picture({
   image,
+  index,
   simplified,
   fill = false,
 }: {
   image: ReaderImage;
+  index: number;
   simplified: boolean;
   /** Grid cells size the picture; the image's own hints are not applied. */
   fill?: boolean;
@@ -123,16 +133,36 @@ function Picture({
       />
     );
   }
-  return <ArticleImageLightbox src={image.url} alt={image.alt} style={style} />;
+  return <ArticleImageLightboxTrigger index={index} style={style} />;
 }
 
-/**
- * Columns for an Offprint grid: images fill the rows in order, and a mosaic
- * gives its first image both rows.
- */
-function gridColumns(count: number, rows: number, mosaic: boolean) {
-  if (mosaic && rows === 2 && count > 1) return 1 + Math.ceil((count - 1) / 2);
-  return Math.max(1, Math.ceil(count / rows));
+/** Wraps a figure's pictures in one lightbox group; simplified rendering has none. */
+function Pictures({
+  images,
+  simplified,
+  children,
+}: {
+  images: ReaderImage[];
+  simplified: boolean;
+  children: ReactNode;
+}) {
+  if (simplified) return <>{children}</>;
+  return (
+    <ArticleImageLightboxGroup
+      images={images.map((image) => ({ src: image.url, alt: image.alt }))}
+    >
+      {children}
+    </ArticleImageLightboxGroup>
+  );
+}
+
+/** A natural grid cell keeps its image's own shape; a fixed ratio comes from the stylesheet. */
+function cellStyle(image: ReaderImage): CSSProperties | undefined {
+  return image.aspectRatio
+    ? {
+        aspectRatio: `${image.aspectRatio.width} / ${image.aspectRatio.height}`,
+      }
+    : undefined;
 }
 
 function Blocks({
@@ -286,7 +316,9 @@ function Block({
           data-reader-figure="image"
           data-reader-align={block.align ?? undefined}
         >
-          <Picture image={block.image} simplified={simplified} />
+          <Pictures images={[block.image]} simplified={simplified}>
+            <Picture image={block.image} index={0} simplified={simplified} />
+          </Pictures>
           {block.caption && (
             <figcaption>
               <RichText content={block.caption} />
@@ -295,36 +327,53 @@ function Block({
         </figure>
       );
     case "imageGroup": {
-      const grid = block.layout.mode === "grid" ? block.layout : null;
+      const { layout } = block;
+      const grid = layout.mode === "grid" ? layout : null;
+      const picture = (index: number) => (
+        <Picture
+          key={index}
+          image={block.images[index]!}
+          index={index}
+          simplified={simplified}
+          fill={grid !== null}
+        />
+      );
       return (
         <figure
           data-reader-figure="group"
           data-reader-align={block.align ?? undefined}
-          data-reader-image-group={block.layout.mode}
-          data-reader-grid-rows={grid?.rows}
-          data-reader-grid-ratio={grid?.ratio}
+          data-reader-image-group={layout.mode}
+          data-reader-grid-ratio={grid?.ratio ?? undefined}
           style={
             grid
               ? ({
-                  "--reader-grid-columns": gridColumns(
-                    block.images.length,
-                    grid.rows,
-                    grid.ratio === "mosaic",
-                  ),
+                  "--reader-grid-columns": grid.columns,
+                  "--reader-grid-columns-narrow": Math.min(grid.columns, 2),
                 } as CSSProperties)
               : undefined
           }
         >
-          <div data-reader-image-group-items>
-            {block.images.map((image, index) => (
-              <Picture
-                key={index}
-                image={image}
-                simplified={simplified}
-                fill={grid !== null}
+          {block.title && <p data-reader-image-group-title>{block.title}</p>}
+          <Pictures images={block.images} simplified={simplified}>
+            {layout.mode === "carousel" ? (
+              <ReaderImageCarousel
+                count={block.images.length}
+                renderSlide={picture}
               />
-            ))}
-          </div>
+            ) : (
+              <div data-reader-image-group-items>
+                {block.images.map((image, index) =>
+                  grid && !grid.ratio ? (
+                    <div key={index} style={cellStyle(image)}>
+                      {picture(index)}
+                    </div>
+                  ) : (
+                    picture(index)
+                  ),
+                )}
+              </div>
+            )}
+          </Pictures>
           {block.caption && (
             <figcaption>
               <RichText content={block.caption} />

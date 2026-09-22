@@ -8,6 +8,7 @@ import {
   embedBlock,
   image,
   linkCard,
+  naturalGrid,
   notice,
   readAlign,
   recordPreviewBlock,
@@ -20,6 +21,7 @@ import {
 } from "./context";
 import type {
   ReaderBlock,
+  ReaderGridRatio,
   ReaderImage,
   ReaderImageGroupLayout,
   ReaderListItem,
@@ -164,20 +166,35 @@ function imageBlock(value: Block, context: AdapterContext): ReaderBlock | null {
   });
 }
 
-function gridLayout(
-  name: string,
-  set: z.infer<typeof imageSetSchema>,
-): ReaderImageGroupLayout {
-  if (name !== "imageGrid") return { mode: "stack" };
-  const ratio =
-    set.aspectRatio && GRID_RATIOS.has(set.aspectRatio)
-      ? (set.aspectRatio as "landscape" | "portrait" | "square" | "mosaic")
-      : "landscape";
-  const rows = set.gridRows === 2 ? 2 : 1;
-  return { mode: "grid", rows, ratio };
+/**
+ * Offprint grids fill their rows in order, so the column count follows from
+ * the row count; a two-row mosaic gives its first image both rows.
+ */
+function gridColumns(count: number, rows: number, mosaic: boolean) {
+  if (mosaic && rows === 2 && count > 1) return 1 + Math.ceil((count - 1) / 2);
+  return Math.max(1, Math.ceil(count / rows));
 }
 
-/** Grids, carousels, and diffs all become one image group; only the grid draws its layout. */
+/** A grid keeps Offprint's fixed cells; a carousel pages; a diff is its two images side by side. */
+function setLayout(
+  name: string,
+  set: z.infer<typeof imageSetSchema>,
+  count: number,
+): ReaderImageGroupLayout {
+  if (name === "imageCarousel") return { mode: "carousel" };
+  if (name !== "imageGrid") return naturalGrid(count);
+  const ratio =
+    set.aspectRatio && GRID_RATIOS.has(set.aspectRatio)
+      ? (set.aspectRatio as ReaderGridRatio)
+      : "landscape";
+  const rows = set.gridRows === 2 ? 2 : 1;
+  return {
+    mode: "grid",
+    columns: gridColumns(count, rows, ratio === "mosaic"),
+    ratio,
+  };
+}
+
 function imageSet(
   name: string,
   value: Block,
@@ -200,8 +217,9 @@ function imageSet(
   return block(value, {
     kind: "imageGroup",
     images,
+    title: null,
     caption: caption(parsed.data.caption, undefined, context),
-    layout: gridLayout(name, parsed.data),
+    layout: setLayout(name, parsed.data, images.length),
     align: readAlign(value.alignment),
   });
 }

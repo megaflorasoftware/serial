@@ -115,11 +115,12 @@ describe("real documents", () => {
     });
   });
 
-  it("carries the Offprint grid mode and rows", () => {
+  it("carries the Offprint grid mode with its columns resolved", () => {
     const { document } = deriveFixture("offprint-nyc-community-day");
     const [group] = find(document.blocks, "imageGroup");
+    // Six images in a two-row mosaic: the first spans both rows, five more fill three columns beside it.
     expect(group).toMatchObject({
-      layout: { mode: "grid", rows: 2, ratio: "mosaic" },
+      layout: { mode: "grid", columns: 4, ratio: "mosaic" },
     });
     expect(group?.images).toHaveLength(6);
     expect(group?.images[0]?.aspectRatio).toEqual({
@@ -399,7 +400,7 @@ describe("leaflet blocks", () => {
     ).toEqual(["unsupported", "membersOnly", "unsupported", "unsupported"]);
   });
 
-  it("renders galleries as stacked image groups, dropping malformed entries", () => {
+  it("renders galleries as natural grids, dropping malformed entries", () => {
     const document = derive(
       leaflet([
         {
@@ -422,8 +423,81 @@ describe("leaflet blocks", () => {
     expect(document.blocks).toHaveLength(1);
     expect(document.blocks[0]).toMatchObject({
       kind: "imageGroup",
-      layout: { mode: "stack" },
+      title: null,
+      layout: { mode: "grid", columns: 2, ratio: null },
       images: [{ alt: "One" }, { alt: "" }],
+    });
+  });
+
+  it("maps gallery formats to grids, stacks and carousels, keeping each image's ratio", () => {
+    const blob = (cid: string) => ({
+      image: { ref: { $link: cid }, mimeType: "image/webp" },
+    });
+    const document = derive(
+      leaflet([
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          format: "grid",
+          gap: 24,
+          maxWidth: 900,
+          images: [
+            {
+              ...blob("bafyleft"),
+              alt: "Left sidebar",
+              aspectRatio: { width: 387, height: 562 },
+            },
+            {
+              ...blob("bafyright"),
+              alt: "Right sidebar",
+              aspectRatio: { width: 379, height: 573 },
+            },
+          ],
+        },
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          images: [
+            { ...blob("bafya"), aspectRatio: { width: 1915, height: 949 } },
+            { ...blob("bafyb"), aspectRatio: { width: 1918, height: 951 } },
+          ],
+        },
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          format: "grid",
+          images: [blob("1"), blob("2"), blob("3"), blob("4"), blob("5")],
+        },
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          format: "strip",
+          images: [blob("s1"), blob("s2")],
+        },
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          format: "carousel",
+          images: [blob("c1"), blob("c2"), blob("c3")],
+        },
+        {
+          $type: "pub.leaflet.blocks.imageGallery",
+          format: "something-new",
+          images: [blob("u1")],
+        },
+      ]),
+    );
+    const groups = find(document.blocks, "imageGroup");
+    expect(groups.map((group) => group.layout)).toEqual([
+      { mode: "grid", columns: 2, ratio: null },
+      { mode: "grid", columns: 2, ratio: null },
+      { mode: "grid", columns: 3, ratio: null },
+      { mode: "stack" },
+      { mode: "carousel" },
+      { mode: "grid", columns: 1, ratio: null },
+    ]);
+    expect(groups[0]?.images).toMatchObject([
+      { alt: "Left sidebar", aspectRatio: { width: 387, height: 562 } },
+      { alt: "Right sidebar", aspectRatio: { width: 379, height: 573 } },
+    ]);
+    expect(groups[1]?.images[0]?.aspectRatio).toEqual({
+      width: 1915,
+      height: 949,
     });
   });
 
@@ -739,7 +813,7 @@ describe("offprint blocks", () => {
     });
     const [carousel] = find(document.blocks, "imageGroup");
     expect(carousel).toMatchObject({
-      layout: { mode: "stack" },
+      layout: { mode: "carousel" },
       caption: [{ text: "Carousel" }],
     });
     expect(find(document.blocks, "paragraph").at(-1)).toMatchObject({
@@ -834,6 +908,49 @@ describe("offprint blocks", () => {
     });
   });
 
+  it("maps pckt gallery layouts and carries the title as text", () => {
+    const layouts = ["grid", "masonry", "carousel", "list", undefined, 7];
+    const uris = layouts.map((_, i) => `at://did:plc:bob/blog.pckt.gallery/${i}`);
+    const document = deriveResolvedContent(
+      pckt(uris.map((ref) => ({ $type: "blog.pckt.block.gallery", ref }))),
+      did,
+      (uri) => {
+        const index = uris.indexOf(uri);
+        return {
+          uri,
+          cid: "bafy",
+          value: {
+            title: index === 0 ? "  Sidebars  " : "",
+            layout: layouts[index],
+            images: [
+              { src: "https://example.com/a.png" },
+              { src: "https://example.com/b.png" },
+              { src: "https://example.com/c.png" },
+              { src: "https://example.com/d.png" },
+            ],
+          },
+        };
+      },
+    );
+    const groups = find(document?.blocks ?? [], "imageGroup");
+    expect(groups.map((group) => group.layout)).toEqual([
+      { mode: "grid", columns: 3, ratio: null },
+      { mode: "grid", columns: 3, ratio: null },
+      { mode: "carousel" },
+      { mode: "stack" },
+      { mode: "grid", columns: 3, ratio: null },
+      { mode: "grid", columns: 3, ratio: null },
+    ]);
+    expect(groups.map((group) => group.title)).toEqual([
+      "Sidebars",
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it("derives grids with their layout and drops images without a blob", () => {
     const [grid] = find(
       derive(
@@ -857,9 +974,47 @@ describe("offprint blocks", () => {
       "imageGroup",
     );
     expect(grid).toMatchObject({
-      layout: { mode: "grid", rows: 2, ratio: "square" },
+      layout: { mode: "grid", columns: 1, ratio: "square" },
       images: [{ aspectRatio: null }, { aspectRatio: { width: 4, height: 3 } }],
     });
+  });
+
+  it("resolves grid columns from the rows, and sets a diff side by side", () => {
+    const blob = (cid: string) => ({
+      blob: { ref: { $link: cid }, mimeType: "image/png" },
+    });
+    const document = derive(
+      offprint([
+        {
+          $type: "app.offprint.block.imageGrid",
+          gridRows: 1,
+          images: [blob("1"), blob("2"), blob("3")],
+        },
+        {
+          $type: "app.offprint.block.imageGrid",
+          gridRows: 2,
+          aspectRatio: "portrait",
+          images: [blob("1"), blob("2"), blob("3"), blob("4")],
+        },
+        {
+          $type: "app.offprint.block.imageGrid",
+          gridRows: 2,
+          aspectRatio: "mosaic",
+          images: [blob("1"), blob("2"), blob("3")],
+        },
+        {
+          $type: "app.offprint.block.imageDiff",
+          images: [blob("before"), blob("after")],
+          caption: "Before and after",
+        },
+      ]),
+    );
+    expect(find(document.blocks, "imageGroup").map((g) => g.layout)).toEqual([
+      { mode: "grid", columns: 3, ratio: "landscape" },
+      { mode: "grid", columns: 2, ratio: "portrait" },
+      { mode: "grid", columns: 2, ratio: "mosaic" },
+      { mode: "grid", columns: 2, ratio: null },
+    ]);
   });
 });
 

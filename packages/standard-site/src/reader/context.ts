@@ -5,6 +5,7 @@ import type {
   ReaderBlock,
   ReaderBlockValue,
   ReaderImage,
+  ReaderImageGroupLayout,
   ReaderRichText,
   ReaderWidth,
 } from "./model";
@@ -185,6 +186,17 @@ export function image(
     aspectRatio: readAspectRatio(options.aspectRatio),
     width: readWidth(options.width),
     fullBleed: options.fullBleed === true,
+  };
+}
+
+/** Up to three natural-ratio columns; Leaflet and pckt both stop there at their page widths. */
+export const MAX_NATURAL_GRID_COLUMNS = 3;
+
+export function naturalGrid(count: number): ReaderImageGroupLayout {
+  return {
+    mode: "grid",
+    columns: Math.max(1, Math.min(count, MAX_NATURAL_GRID_COLUMNS)),
+    ratio: null,
   };
 }
 

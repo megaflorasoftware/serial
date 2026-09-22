@@ -572,6 +572,11 @@
   margin-block-start: 0;
 }
 
+.article :global([data-reader-image-group-title]) {
+  font-weight: 600;
+  margin-block-end: 0.5rem;
+}
+
 .article
   :global([data-reader-image-group="grid"])
   :global([data-reader-image-group-items]) {
@@ -581,8 +586,9 @@
   grid-auto-rows: 1fr;
 }
 
+/* Offprint grids: every cell shares one fixed shape. */
 .article
-  :global([data-reader-image-group="grid"])
+  :global([data-reader-grid-ratio])
   :global([data-reader-image-group-items])
   > * {
   min-height: 0;
@@ -604,11 +610,40 @@
 }
 
 .article
-  :global([data-reader-grid-ratio="mosaic"][data-reader-grid-rows="2"])
+  :global([data-reader-grid-ratio="mosaic"])
   :global([data-reader-image-group-items])
   > :first-child {
   grid-row: span 2;
   aspect-ratio: auto;
+}
+
+/* Natural grids: each cell reserves its image's own shape, the row stretches
+   to the tallest cell, and shorter images crop to fill. On a narrow column
+   three columns become two. */
+.article
+  :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
+  :global([data-reader-image-group-items]) {
+  grid-auto-rows: auto;
+  align-items: stretch;
+}
+
+.article
+  :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
+  :global([data-reader-image-group-items])
+  > * {
+  min-height: 0;
+  min-width: 0;
+}
+
+@media (width < 40rem) {
+  .article
+    :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
+    :global([data-reader-image-group-items]) {
+    grid-template-columns: repeat(
+      var(--reader-grid-columns-narrow, 2),
+      minmax(0, 1fr)
+    );
+  }
 }
 
 .article :global([data-reader-image-group="grid"]) :global([data-lightbox]),
@@ -625,6 +660,53 @@
 .article :global([data-reader-image-group="grid"]) img {
   object-fit: cover;
   border-radius: var(--radius-sm);
+}
+
+/* Carousel: one slide per viewport, snapped, with the counter below. */
+.article :global([data-reader-carousel-viewport]) {
+  position: relative;
+}
+
+.article :global([data-reader-carousel-strip]) {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: var(--radius-sm);
+}
+
+.article :global([data-reader-carousel-strip])::-webkit-scrollbar {
+  display: none;
+}
+
+.article :global([data-reader-carousel-slide]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  min-width: 0;
+}
+
+.article :global([data-reader-carousel-slide]) :global([data-lightbox]),
+.article :global([data-reader-carousel-slide]) :global([data-lightbox-trigger]),
+.article :global([data-reader-carousel-slide]) img {
+  width: 100%;
+}
+
+.article :global([data-reader-carousel-slide]) img {
+  display: block;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.article :global([data-reader-carousel-counter]) {
+  margin-block: 0.5rem 0;
+  text-align: center;
+  font-size: 0.875em;
+  color: var(--color-muted-foreground);
 }
 
 .article :global([data-reader-footnotes]) {
