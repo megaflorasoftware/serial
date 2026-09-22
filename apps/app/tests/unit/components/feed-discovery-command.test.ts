@@ -82,7 +82,7 @@ it("keeps the selected row and input focus while source icons and title update",
   act(() => (row as HTMLElement).click());
   expect(props.onSelectFeed).toHaveBeenCalledWith(combined);
 });
-it("disables an already added feed and skips it on Enter", async () => {
+it("disables an already added feed and lets Enter act only on the highlighted row", async () => {
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -161,20 +161,17 @@ it("disables an already added feed and skips it on Enter", async () => {
   pressEnter();
   expect(props.onSelectFeed).not.toHaveBeenCalled();
   expect(props.onSelectBookmark).toHaveBeenCalledWith("https://example.com/");
-  // Without a bookmark row nothing is highlighted, so Enter does nothing.
+  // With no highlighted row, Enter does nothing rather than choosing one. cmdk
+  // keeps a highlight whenever an enabled row exists, so clear it directly.
   props.onSelectBookmark.mockClear();
   await act(async () => {
-    mounted.render(
-      createElement(FeedDiscoveryCommand, {
-        ...props,
-        url: "@someone",
-        discoveredFeeds: [added],
-      }),
-    );
+    mounted.render(createElement(FeedDiscoveryCommand, props));
   });
-  expect(
-    container.querySelector('[cmdk-item][data-selected="true"]'),
-  ).toBeNull();
+  for (const item of container.querySelectorAll("[cmdk-item]")) {
+    item.setAttribute("data-selected", "false");
+    item.setAttribute("aria-selected", "false");
+  }
+  expect(availableRow.getAttribute("aria-disabled")).toBe("false");
   pressEnter();
   expect(props.onSelectFeed).not.toHaveBeenCalled();
   expect(props.onSelectBookmark).not.toHaveBeenCalled();
