@@ -352,13 +352,12 @@ export function FeedDiscoveryCommand({
         onKeyDown={(event) => {
           if (event.key !== "Enter" || !isSelecting || isAddingFeed) return;
 
-          const command = event.currentTarget.closest("[cmdk-root]");
-          const selectedItem =
-            command?.querySelector<HTMLElement>(
+          // Enter acts only on the highlighted row. Disabled rows are never
+          // selected, so nothing else is chosen on their behalf.
+          const selectedItem = event.currentTarget
+            .closest("[cmdk-root]")
+            ?.querySelector<HTMLElement>(
               '[cmdk-item][data-selected="true"]:not([aria-disabled="true"])',
-            ) ??
-            command?.querySelector<HTMLElement>(
-              '[cmdk-item]:not([aria-disabled="true"])',
             );
 
           if (selectedItem) {

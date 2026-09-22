@@ -136,10 +136,46 @@ it("disables an already added feed and skips it on Enter", async () => {
   act(() => addedRow.click());
   expect(props.onSelectFeed).not.toHaveBeenCalled();
   const input = container.querySelector("input")!;
-  act(() => {
-    input.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+  const pressEnter = () =>
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+  // The disabled row is never highlighted, so the available row is.
+  expect(availableRow.getAttribute("data-selected")).toBe("true");
+  pressEnter();
+  expect(props.onSelectFeed).toHaveBeenCalledWith(available);
+  props.onSelectFeed.mockClear();
+  // Only the highlighted row acts. With the sole feed disabled, the Bookmark
+  // row is highlighted and Enter saves the bookmark.
+  await act(async () => {
+    mounted.render(
+      createElement(FeedDiscoveryCommand, {
+        ...props,
+        discoveredFeeds: [added],
+      }),
     );
   });
-  expect(props.onSelectFeed).toHaveBeenCalledWith(available);
+  expect(addedRow.getAttribute("data-selected")).toBe("false");
+  pressEnter();
+  expect(props.onSelectFeed).not.toHaveBeenCalled();
+  expect(props.onSelectBookmark).toHaveBeenCalledWith("https://example.com/");
+  // Without a bookmark row nothing is highlighted, so Enter does nothing.
+  props.onSelectBookmark.mockClear();
+  await act(async () => {
+    mounted.render(
+      createElement(FeedDiscoveryCommand, {
+        ...props,
+        url: "@someone",
+        discoveredFeeds: [added],
+      }),
+    );
+  });
+  expect(
+    container.querySelector('[cmdk-item][data-selected="true"]'),
+  ).toBeNull();
+  pressEnter();
+  expect(props.onSelectFeed).not.toHaveBeenCalled();
+  expect(props.onSelectBookmark).not.toHaveBeenCalled();
 });
