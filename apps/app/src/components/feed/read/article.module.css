@@ -284,7 +284,7 @@
    and stretched to the card's height when the copy runs taller. The whole
    image shows inside the column, centred, at its own proportions. */
 .article :global([data-record-card="row"] [data-record-image="cover"]) {
-  width: 5.5rem;
+  width: 6rem;
   align-self: stretch;
   margin: 0.5rem 0.5rem 0.5rem 0;
   border-radius: var(--radius-sm);
