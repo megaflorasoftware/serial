@@ -313,7 +313,6 @@ describe("advertised feed body size", () => {
     );
     expect(rows.map((row) => row.url)).toEqual([feedUrl]);
     expect(rows[0]?.title).toBe("Large");
-    vi.mocked(scoutFeeds).mockResolvedValue([]);
   });
 });
 
