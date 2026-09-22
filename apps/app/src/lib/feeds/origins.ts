@@ -1,4 +1,5 @@
-import { httpUrl } from "@serial/feed-discovery";
+import { httpUrl, matchesDiscoveredFeed } from "@serial/feed-discovery";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type {
   ApplicationFeedOrigin,
   DatabaseFeedOrigin,
@@ -45,6 +46,23 @@ export function findFeedWithRssUrl<TFeed extends FeedWithOrigins<OriginLike>>(
   url: string,
 ): TFeed | undefined {
   return feeds.find((feed) => getFeedRssUrl(feed) === url);
+}
+
+/** Whether a discovery result shares an RSS or Atmosphere locator with an added Feed. */
+export function isDiscoveredFeedAdded(
+  feeds: Array<FeedWithOrigins<OriginLike>>,
+  discovered: DiscoveredFeed,
+): boolean {
+  return feeds.some((feed) =>
+    matchesDiscoveredFeed(discovered, {
+      url: getFeedRssUrl(feed),
+      origins: feed.origins.flatMap(({ kind, locator }) =>
+        kind === FEED_ORIGIN_KIND.RSS || kind === FEED_ORIGIN_KIND.ATPROTO
+          ? [{ kind, locator }]
+          : [],
+      ),
+    }),
+  );
 }
 
 export function getAtmosphereOrigin<TOrigin extends OriginLike>(

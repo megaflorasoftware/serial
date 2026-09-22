@@ -11,6 +11,7 @@ import {
   STANDARD_SITE_LINK_REL,
   STANDARD_SITE_WELL_KNOWN_PATH,
 } from "@serial/standard-site";
+import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
 import { FeedImportDeferredError } from "./importErrors";
 import { discoverRssFeeds } from "./discoverRss";
 import {
@@ -142,7 +143,8 @@ function requestReader(signal?: AbortSignal) {
     const value = readFeedHttp(url, {
       ...options,
       signal,
-      maxBodyBytes: 1024 * 1024,
+      // Any Feed the refresh path can ingest must also be discoverable.
+      maxBodyBytes: FEED_HTTP_MAX_BODY_BYTES,
       totalDurationMs: Math.min(
         options?.totalDurationMs ?? DISCOVERY_PRIMARY_REQUEST_MS,
         DISCOVERY_PRIMARY_REQUEST_MS,

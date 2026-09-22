@@ -1,3 +1,4 @@
+import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
 import { beforeEach, expect, it, vi } from "vitest";
 import type * as Publications from "~/server/feeds/publications";
 import {
@@ -75,7 +76,7 @@ it("matches canonical article URLs despite excerpts, fragments and different ite
   expect(publication.itemUrls.size).toBe(1);
   expect(originsShareArticles(rss, publication)).toBe(true);
   expect(readFeedHttp).toHaveBeenCalledWith("https://example.com/feed", {
-    maxBodyBytes: 1024 * 1024,
+    maxBodyBytes: FEED_HTTP_MAX_BODY_BYTES,
     totalDurationMs: 5000,
   });
 });

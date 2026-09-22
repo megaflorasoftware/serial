@@ -1,3 +1,4 @@
+import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
 import { discoverFeeds as scoutFeeds } from "feedscout";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -113,7 +114,7 @@ describe("publication website discovery", () => {
       expect(readFeedHttp).toHaveBeenCalledWith(
         expect.stringContaining("https://www.example.com/.well-known/"),
         expect.objectContaining({
-          maxBodyBytes: 1024 * 1024,
+          maxBodyBytes: FEED_HTTP_MAX_BODY_BYTES,
           totalDurationMs: expect.any(Number),
         }),
       );
@@ -274,9 +275,45 @@ it("caps discovery transport reads and publication candidates", async () => {
   expect(readFeedHttp).toHaveBeenCalledTimes(24);
   expect(resolvePublication).toHaveBeenCalledTimes(4);
   for (const [, options] of vi.mocked(readFeedHttp).mock.calls) {
-    expect(options?.maxBodyBytes).toBe(1024 * 1024);
+    expect(options?.maxBodyBytes).toBe(FEED_HTTP_MAX_BODY_BYTES);
     expect(options?.totalDurationMs).toBeLessThanOrEqual(5000);
   }
+});
+
+describe("advertised feed body size", () => {
+  it("keeps an advertised feed larger than 1 MiB discoverable", async () => {
+    const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+      "feedscout",
+    );
+    vi.mocked(scoutFeeds).mockImplementation(actual.discoverFeeds);
+    const feedUrl = "https://example.com/rss.xml";
+    const feedBody = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Large</title><link href="https://example.com/"/>${Array.from(
+      { length: 1200 },
+      (_, index) =>
+        `<entry><title>Post ${index}</title><link href="https://example.com/posts/${index}/"/><content>${"x".repeat(1024)}</content></entry>`,
+    ).join("")}</feed>`;
+    expect(feedBody.length).toBeGreaterThan(1024 * 1024);
+    vi.mocked(readFeedHttp).mockImplementation(async (url, options) => {
+      if (url === "https://example.com/posts/one/")
+        return response(
+          url,
+          `<link rel="alternate" type="application/atom+xml" href="/rss.xml">`,
+        );
+      if (url === feedUrl) {
+        const cap = options?.maxBodyBytes ?? FEED_HTTP_MAX_BODY_BYTES;
+        if (feedBody.length > cap)
+          throw new Error(`Feed response body exceeds ${cap} bytes`);
+        return response(url, feedBody);
+      }
+      return statusResponse(url, 404);
+    });
+    const rows = await discoverFeeds(
+      "large-feed",
+      "https://example.com/posts/one/",
+    );
+    expect(rows.map((row) => row.url)).toEqual([feedUrl]);
+    expect(rows[0]?.title).toBe("Large");
+  });
 });
 
 describe("import discovery completeness", () => {
