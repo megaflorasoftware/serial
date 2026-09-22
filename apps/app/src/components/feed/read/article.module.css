@@ -279,12 +279,13 @@
   align-self: stretch;
 }
 
-/* Row cards of every kind share one square preview, inset from the card's
-   top and right edges, with the real image cropped to fill it. */
+/* Row cards of every kind share one preview column: as wide as the square
+   that fits the card's minimum height, inset from the top, right and bottom,
+   and stretched to the card's height when the copy runs taller, with the
+   real image cropped to fill it. */
 .article :global([data-record-card="row"] [data-record-image="cover"]) {
   width: 5.5rem;
-  aspect-ratio: 1;
-  align-self: flex-start;
+  align-self: stretch;
   margin: 0.5rem 0.5rem 0.5rem 0;
   border-radius: var(--radius-sm);
 }
@@ -391,9 +392,9 @@
   margin-inline-start: auto;
 }
 
-/* Link cards keep Leaflet's proportions: a short row with the preview on the
-   right; the square preview plus its insets fills the minimum height. */
-.article :global([data-reader-link-card]) {
+/* Row cards are at least as tall as the preview and its insets, so a
+   short card shows the preview square. */
+.article :global([data-record-card="row"]) {
   min-height: 6.5rem;
 }
 
