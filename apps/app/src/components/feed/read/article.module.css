@@ -506,17 +506,6 @@
   font-size: 0.9375em;
 }
 
-.article :global([data-social-post-footer]) a {
-  color: var(--color-muted-foreground);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.article :global([data-social-post-footer]) a:hover,
-.article :global([data-social-post-footer]) a:focus-visible {
-  color: var(--color-foreground);
-}
-
 .article div:global([data-reader-align="center"]) {
   text-align: center;
 }
