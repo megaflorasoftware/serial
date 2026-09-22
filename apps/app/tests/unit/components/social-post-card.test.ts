@@ -92,22 +92,22 @@ describe.each([false, true])(
       expect(card.tagName).toBe("DIV");
       expect(card.getAttribute("role")).toBe("note");
       expect(links(container)).toEqual([
-        ["https://bsky.app/profile/did:plc:author", "Author@author.example"],
         [
           "https://bsky.app/profile/did:plc:author/post/p",
           "Open post on Bluesky",
         ],
+        ["https://bsky.app/profile/did:plc:author", "Author@author.example"],
         ["https://example.com/", "example"],
       ]);
-      // The post link fills the body, not the header.
+      // The post link is the card's own; the author link sits in the header.
       expect(
-        card.querySelector("[data-social-post-body] > [data-social-post-link]"),
+        card.querySelector(":scope > a[data-social-post-link]"),
       ).not.toBeNull();
       expect(
         card.querySelector(
-          "[data-social-post-header] a[data-social-post-link]",
+          "[data-social-post-header] > a[data-social-post-author]",
         ),
-      ).toBeNull();
+      ).not.toBeNull();
       expect(card.querySelector("time")?.getAttribute("datetime")).toBe(
         "2026-07-15T22:08:33.054Z",
       );
@@ -203,13 +203,13 @@ describe.each([false, true])(
         simplified,
       );
       expect(links(container)).toEqual([
-        ["https://author.example", "Author’s Blog@author.example"],
         ["https://pckt.blog/n/did:plc:author/n", "Open post on pckt"],
-        ["https://bsky.app/profile/did:plc:quoter", "Quoter"],
+        ["https://author.example", "Author’s Blog@author.example"],
         [
           "https://bsky.app/profile/did:plc:quoter/post/q",
           "Open post on Bluesky",
         ],
+        ["https://bsky.app/profile/did:plc:quoter", "Quoter"],
       ]);
       expect(
         container.querySelector("[data-social-post-hidden]")?.textContent,

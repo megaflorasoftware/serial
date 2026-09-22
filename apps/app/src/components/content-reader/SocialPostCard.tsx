@@ -65,9 +65,9 @@ export type SocialPostCardProps = {
 
 /**
  * A Bluesky post or pckt note as an inline card: author header, text, media,
- * one level of quote. The body is a stretched link to the post with the
- * text's own links, the external preview and the quote layered above it;
- * the header links to the author's page. No engagement counts are drawn.
+ * one level of quote. The whole card is a stretched link to the post; the
+ * author link, the text's own links, the external preview and the quote
+ * are layered above it. No engagement counts are drawn.
  */
 export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
   const platform = PLATFORM_NAMES[post.platform];
@@ -76,6 +76,10 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
   const name = post.author.name ?? post.author.handle ?? post.author.did;
   return (
     <div role="note" data-social-post={post.platform} data-record-card="row">
+      {/* The card opens the post; only the author link and the body's own links sit above it. */}
+      <ExternalLink href={post.url} data-social-post-link="">
+        <span className="sr-only">Open post on {platform}</span>
+      </ExternalLink>
       <div data-social-post-header>
         <ExternalLink href={post.author.url} data-social-post-author="">
           {post.author.avatarUrl ? (
@@ -99,10 +103,6 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
         )}
       </div>
       <div data-social-post-body>
-        {/* The body opens the post; inner links sit above it, the header outside it. */}
-        <ExternalLink href={post.url} data-social-post-link="">
-          <span className="sr-only">Open post on {platform}</span>
-        </ExternalLink>
         <p data-social-post-text>{text}</p>
         {post.images.length > 0 && (
           <div data-social-post-images={post.images.length}>
