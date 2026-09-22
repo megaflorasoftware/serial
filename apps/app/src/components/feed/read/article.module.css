@@ -431,12 +431,25 @@
   color: var(--color-muted-foreground);
 }
 
-.article :global([data-social-post-author]) {
+/* The author link is a header, not an inline body link, so it never takes
+   the pill even when its avatar is absent or fails to load. */
+.article :global([data-social-post-author]),
+.article :global([data-social-post-author]):hover,
+.article :global([data-social-post-author]):focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  padding-inline: 0;
+  background: none;
   color: var(--color-foreground);
+}
+
+.article :global([data-social-post-author]):hover [data-social-post-name],
+.article
+  :global([data-social-post-author]):focus-visible
+  [data-social-post-name] {
+  text-decoration: underline;
 }
 
 .article :global([data-social-post-avatar]) {

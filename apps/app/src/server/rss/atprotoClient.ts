@@ -20,23 +20,24 @@ const pageSchema = z.object({
 export type PublicationClient = ReturnType<typeof createPublicationClient>;
 
 /** One refresh caches identity and record reads; it never follows embedded content. */
+export type DidDocumentResolver = (
+  did: string,
+  options?: { deadline?: number },
+) => Promise<unknown>;
+
 export function createPublicationClient(
   dependencies: {
     fetch: HardenedFetch;
     resolvePds: (did: string) => Promise<string>;
-    /** Defaults to the public resolver; tests that never read handles omit it. */
-    resolveDidDocument?: (did: string) => Promise<unknown>;
+    resolveDidDocument: DidDocumentResolver;
   } = {
     fetch: createHardenedFetch(undefined, {
       responseMaxSize: 10 * 1024 * 1024,
     }),
     resolvePds: resolvePublicPds,
+    resolveDidDocument: resolvePublicDidDocument,
   },
 ) {
-  // Looked up per call so a test that mocks the resolver module without this
-  // export still builds a client; only DID document reads then fail.
-  const resolveDidDocument = (did: string) =>
-    (dependencies.resolveDidDocument ?? resolvePublicDidDocument)(did);
   const pds = new Map<string, Promise<string>>();
   const records = new Map<string, Promise<unknown>>();
   const didDocuments = new Map<string, Promise<unknown>>();
@@ -78,8 +79,12 @@ export function createPublicationClient(
     return records.get(key)!;
   }
   /** The DID document itself, for the handle a profile record does not carry. */
-  function getDidDocument(did: string): Promise<unknown> {
-    if (!didDocuments.has(did)) didDocuments.set(did, resolveDidDocument(did));
+  function getDidDocument(
+    did: string,
+    options: { deadline?: number } = {},
+  ): Promise<unknown> {
+    if (!didDocuments.has(did))
+      didDocuments.set(did, dependencies.resolveDidDocument(did, options));
     return didDocuments.get(did)!;
   }
   return {

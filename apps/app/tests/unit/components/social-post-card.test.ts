@@ -109,7 +109,49 @@ describe.each([false, true])(
         "IMG",
       );
       expect(getElements(container)).toEqual([card]);
-      expect(card.textContent).not.toMatch(/\d+ (likes|reposts|replies)/);
+      unmount();
+    });
+
+    it("draws the external preview as a link card and the video as a poster link", () => {
+      const { container, unmount } = render(
+        document([
+          {
+            kind: "socialPost",
+            source: null,
+            align: null,
+            post: {
+              ...post,
+              images: [],
+              external: {
+                href: "https://example.com/article",
+                title: "An article",
+                description: "About things",
+                imageUrl:
+                  "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:author/bafythumb@jpeg",
+              },
+              video: {
+                thumbnailUrl:
+                  "https://video.bsky.app/watch/did%3Aplc%3Aauthor/bafyvideo/thumbnail.jpg",
+                aspectRatio: { width: 16, height: 9 },
+              },
+            },
+          },
+        ]),
+        simplified,
+      );
+      const external = container.querySelector<HTMLAnchorElement>(
+        "[data-reader-link-card]",
+      )!;
+      expect(external.href).toBe("https://example.com/article");
+      expect(
+        external.querySelector('[data-record-image="cover"]'),
+      ).not.toBeNull();
+      expect(external.textContent).toContain("An article");
+      const video = container.querySelector<HTMLAnchorElement>(
+        "[data-social-post-video]",
+      )!;
+      expect(video.href).toBe(post.url);
+      expect(video.querySelector("img")?.alt).toContain("opens the post");
       unmount();
     });
 

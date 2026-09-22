@@ -29,7 +29,6 @@ export { MAX_BLOCK_NESTING_DEPTH };
 export { calloutTint } from "./tint";
 export {
   handleFromDidDocument,
-  isDidReference,
   socialPost,
   socialPostReferences,
   socialPostUrl,

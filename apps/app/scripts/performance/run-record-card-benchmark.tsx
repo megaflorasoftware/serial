@@ -1,9 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { deriveResolvedContent, recordCardSchema } from "@serial/standard-site";
-import type { ReaderSocialPost } from "@serial/standard-site";
 import { RecordCard } from "../../src/components/content-reader/RecordCard";
 import { SocialPostCard } from "../../src/components/content-reader/SocialPostCard";
+import type { ReaderSocialPost } from "@serial/standard-site";
 
 const did = "did:plc:benchmark";
 const sizes = ["small", "medium", "large"] as const;

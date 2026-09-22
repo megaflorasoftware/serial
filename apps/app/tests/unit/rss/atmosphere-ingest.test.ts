@@ -540,6 +540,9 @@ function resolvingClient(
 ) {
   const transport = createPublicationClient({
     resolvePds: async () => "https://pds.example.com",
+    resolveDidDocument: async () => {
+      throw new Error("Unexpected DID document");
+    },
     fetch,
   });
   return {

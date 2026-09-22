@@ -11,11 +11,13 @@ function RemoteImage({
   src,
   alt = "",
   attribute,
+  value = "",
   style,
 }: {
   src: string;
   alt?: string;
   attribute: string;
+  value?: string;
   style?: CSSProperties;
 }) {
   const [failed, setFailed] = useState(false);
@@ -23,7 +25,7 @@ function RemoteImage({
   return (
     <img
       {...REMOTE_IMAGE_PROPS}
-      {...{ [attribute]: "" }}
+      {...{ [attribute]: value }}
       src={src}
       alt={alt}
       style={style}
@@ -116,7 +118,7 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
             <RemoteImage
               key={post.video.thumbnailUrl}
               src={post.video.thumbnailUrl}
-              alt={`Video on ${platform}`}
+              alt={`Video preview; opens the post on ${platform}`}
               attribute="data-social-post-image"
               style={aspectStyle(post.video.aspectRatio)}
             />
@@ -138,6 +140,7 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
                 key={post.external.imageUrl}
                 src={post.external.imageUrl}
                 attribute="data-record-image"
+                value="cover"
               />
             )}
             <div data-record-copy>

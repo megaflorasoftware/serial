@@ -11,12 +11,27 @@ export const publicDidResolver = createDidResolver({
     : {}),
 });
 
+/** A DID method the public resolver does not handle; never worth retrying. */
+export class UnsupportedDidError extends Error {
+  constructor() {
+    super("Unsupported repository DID");
+  }
+}
+
 /** The DID document as published, for handles and service endpoints. */
-export async function resolvePublicDidDocument(did: string) {
+export async function resolvePublicDidDocument(
+  did: string,
+  options: { deadline?: number } = {},
+) {
   if (!did.startsWith("did:plc:") && !did.startsWith("did:web:"))
-    throw new Error("Unsupported repository DID");
+    throw new UnsupportedDidError();
+  const signal =
+    options.deadline === undefined
+      ? undefined
+      : AbortSignal.timeout(Math.max(0, options.deadline - Date.now()));
   return publicDidResolver.resolve(did as `did:${string}:${string}`, {
     noCache: true,
+    signal,
   });
 }
 

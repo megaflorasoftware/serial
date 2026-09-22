@@ -23,6 +23,7 @@ import {
   resolveSourceReferences,
 } from "~/server/jetstream/reference-snapshots";
 import { atprotoReferenceSnapshots } from "~/server/db/schema";
+import { UnsupportedDidError } from "~/server/auth/atproto/did-resolver";
 
 const uri = "at://did:plc:alice/site.standard.publication/site";
 const cid = "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -31,7 +32,11 @@ function client(response: () => Response) {
   const fetch = vi.fn(async () => response());
   const resolvePds = vi.fn(async () => "https://pds.example.com");
   return {
-    remote: createPublicationClient({ fetch, resolvePds }),
+    remote: createPublicationClient({
+      fetch,
+      resolvePds,
+      resolveDidDocument: vi.fn(),
+    }),
     fetch,
     resolvePds,
   };
@@ -110,13 +115,14 @@ describe("publication transport", () => {
   it("snapshots DID documents under their DID and always refreshes them", async () => {
     const did = "did:plc:alice";
     let handle = "alice.example";
+    const resolveDidDocument = vi.fn(async () => ({
+      id: did,
+      alsoKnownAs: [`at://${handle}`],
+    }));
     const remote = createPublicationClient({
       fetch: vi.fn(async () => new Response(null, { status: 500 })),
       resolvePds: vi.fn(async () => "https://pds.example.com"),
-      resolveDidDocument: vi.fn(async () => ({
-        id: did,
-        alsoKnownAs: [`at://${handle}`],
-      })),
+      resolveDidDocument,
     });
     const first = await refreshReferenceSnapshots(
       fixture.database,
@@ -129,6 +135,10 @@ describe("publication transport", () => {
       cid: null,
       record: expect.stringContaining("alice.example"),
     });
+    expect(resolveDidDocument).toHaveBeenCalledWith(
+      did,
+      expect.objectContaining({ deadline: expect.any(Number) }),
+    );
     handle = "alice.moved";
     const second = await refreshReferenceSnapshots(
       fixture.database,
@@ -151,6 +161,7 @@ describe("publication transport", () => {
   it.each([
     [Object.assign(new Error("gone"), { status: 404 }), "missing"],
     [new Error("timeout"), "unavailable"],
+    [new UnsupportedDidError(), "unsupported"],
   ])("maps a DID document failure %o to %s", async (error, outcome) => {
     const did = "did:plc:gone";
     const remote = createPublicationClient({

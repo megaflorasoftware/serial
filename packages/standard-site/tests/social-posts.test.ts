@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveResolvedContent,
   discoverReferences,
+  handleFromDidDocument,
   nextReferenceHop,
   socialPostReferences,
 } from "../src";
@@ -131,6 +132,8 @@ describe("Bluesky post cards", () => {
         size: "row",
       },
     });
+    const card = (document?.blocks[0] as Extract<ReaderBlock, { kind: "recordPreview" }>).card;
+    expect(JSON.stringify([card.title, card.description])).not.toContain("at://");
   });
 
   it("draws the card with whichever hops resolved", () => {
@@ -152,7 +155,7 @@ describe("Bluesky post cards", () => {
     expect(withoutHandle?.post.author).toMatchObject({ handle: null, name: "Author" });
   });
 
-  it("hides media behind adult and graphic self labels but keeps the text", () => {
+  it("hides media behind adult and graphic self labels but keeps the text and links", () => {
     const [block] = socialBlocks(
       leaflet([{ $type: "pub.leaflet.blocks.bskyPost", postRef: { uri: post, cid: "bafy" } }]),
       lookup({
@@ -160,11 +163,88 @@ describe("Bluesky post cards", () => {
         [post]: {
           ...resolved[post],
           labels: { $type: "com.atproto.label.defs#selfLabels", values: [{ val: "porn" }] },
+          embed: {
+            $type: "app.bsky.embed.recordWithMedia",
+            record: { $type: "app.bsky.embed.record", record: { uri: quote, cid: "bafy" } },
+            media: {
+              $type: "app.bsky.embed.external",
+              external: { uri: "https://example.com/x", title: "X", description: "", thumb: blob("bafythumb") },
+            },
+          },
         },
       }),
     );
-    expect(block?.post).toMatchObject({ mediaHidden: true, images: [] });
+    expect(block?.post).toMatchObject({
+      mediaHidden: true,
+      images: [],
+      video: null,
+      external: { href: "https://example.com/x", title: "X", imageUrl: null },
+    });
     expect(block?.post.text[0]).toMatchObject({ text: "hello " });
+  });
+
+  it("caps images at four and renders hashtags as plain text", () => {
+    const [block] = socialBlocks(
+      leaflet([{ $type: "pub.leaflet.blocks.bskyPost", postRef: { uri: post, cid: "bafy" } }]),
+      lookup({
+        ...resolved,
+        [post]: {
+          ...resolved[post],
+          text: "tagged #atmosphere",
+          facets: [
+            {
+              index: { byteStart: 7, byteEnd: 18 },
+              features: [{ $type: "app.bsky.richtext.facet#tag", tag: "atmosphere" }],
+            },
+          ],
+          embed: {
+            $type: "app.bsky.embed.images",
+            images: Array.from({ length: 6 }, (_, index) => ({
+              image: blob(`bafy${index}`),
+              alt: `Image ${index}`,
+            })),
+          },
+        },
+      }),
+    );
+    expect(block?.post.images.map((image) => image.alt)).toEqual([
+      "Image 0",
+      "Image 1",
+      "Image 2",
+      "Image 3",
+    ]);
+    expect(block?.post.text).toEqual([
+      { kind: "text", text: "tagged #atmosphere", marks: {}, link: null },
+    ]);
+  });
+
+  it("survives malformed embeds, labels and external previews", () => {
+    const content = leaflet([
+      { $type: "pub.leaflet.blocks.bskyPost", postRef: { uri: post, cid: "bafy" } },
+    ]);
+    for (const embed of ["x", 42, { $type: "app.bsky.embed.record", record: 42 }, { $type: "app.bsky.embed.recordWithMedia", record: null, media: "no" }]) {
+      const [block] = socialBlocks(
+        content,
+        lookup({ ...resolved, [post]: { ...resolved[post], embed, labels: "bad" } }),
+      );
+      expect(block?.post).toMatchObject({ images: [], external: null, video: null, quote: null, mediaHidden: false });
+    }
+    const [untitled] = socialBlocks(
+      content,
+      lookup({
+        ...resolved,
+        [post]: {
+          ...resolved[post],
+          embed: { $type: "app.bsky.embed.external", external: { uri: "https://example.com/y", title: "  ", description: "d" } },
+        },
+      }),
+    );
+    expect(untitled?.post.external).toEqual({
+      href: "https://example.com/y",
+      title: "https://example.com/y",
+      description: "d",
+      imageUrl: null,
+    });
   });
 
   it("keeps external previews and video posters, and never plays the video", () => {
@@ -270,6 +350,23 @@ describe("pckt note cards", () => {
     url: "https://author.example/",
     icon: blob("bafyicon"),
   };
+
+  it("ignores a publication pointer at a non-publication collection", () => {
+    const records = lookup({ ...resolved, [note]: { ...blogNote, publication: post } });
+    const [block] = socialBlocks(
+      pckt([{ $type: "blog.pckt.block.noteEmbed", noteRef: { uri: note, cid: "bafy" } }]),
+      records,
+    );
+    expect(block?.post).toMatchObject({ siteUrl: null, author: { name: "Author" } });
+    expect(socialPostReferences(note, records)).toEqual([profile, author]);
+  });
+
+  it("reads handles only from at:// aliases of safe shape", () => {
+    expect(handleFromDidDocument({ alsoKnownAs: ["https://example.com", "at://alice.example"] })).toBe("alice.example");
+    expect(handleFromDidDocument({ alsoKnownAs: ["https://example.com"] })).toBeNull();
+    expect(handleFromDidDocument({ alsoKnownAs: ["at://bad handle/with space"] })).toBeNull();
+    expect(handleFromDidDocument("not a document")).toBeNull();
+  });
 
   it("voices a blog note as the blog with a Visit blog destination", () => {
     const [block] = socialBlocks(
@@ -389,6 +486,14 @@ describe("reference hops", () => {
     expect(second).toEqual([`at://${quoter}/app.bsky.actor.profile/self`, quoter]);
     const many = Array.from({ length: 20 }, (_, index) => `at://did:plc:p${index}/app.bsky.feed.post/x`);
     const wide = lookup(Object.fromEntries(many.map((uri) => [uri, resolved[post]])));
-    expect(nextReferenceHop(many, new Set(many), wide)).toHaveLength(16);
+    const capped = nextReferenceHop(many, new Set(many), wide);
+    expect(capped).toHaveLength(16);
+    // The cap is over the hop set in encounter order: eight authors' profile and DID pairs.
+    expect(capped).toEqual(
+      many.slice(0, 8).flatMap((uri) => {
+        const did = uri.slice("at://".length, uri.indexOf("/app.bsky"));
+        return [`at://${did}/app.bsky.actor.profile/self`, did];
+      }),
+    );
   });
 });

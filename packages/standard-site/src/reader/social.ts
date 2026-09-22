@@ -7,13 +7,13 @@ import type {
   ReaderSocialPost,
 } from "./model";
 import { facetArraySchema } from "./rich-text";
+import { block } from "./context";
 import type { AdapterContext } from "./context";
 import { blobRefSchema, strongRefSchema } from "../lexicons";
 import { recordCard } from "../record-card";
 import { recordPreview } from "../record-preview";
 import type { RecordLookup } from "../record-preview";
 import {
-  isDid,
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
   buildBlueskyProfileRecordUri,
@@ -169,6 +169,14 @@ function externalPreview(
   };
 }
 
+/** A labeled post keeps its external link but not the link's thumbnail. */
+function withoutHiddenThumb(
+  external: ReaderLinkPreview | null,
+  mediaHidden: boolean,
+) {
+  return external && mediaHidden ? { ...external, imageUrl: null } : external;
+}
+
 function hidesMedia(labels: z.infer<typeof selfLabelsSchema> | undefined) {
   return (labels?.values ?? []).some((label) =>
     MEDIA_HIDING_LABELS.has(label.val),
@@ -253,7 +261,7 @@ function quoteBlock(
   const platform = socialPlatformOf(parts.collection);
   if (platform) {
     const post = socialPost(uri, context, { quoted: true });
-    return post ? { source: null, align: null, kind: "socialPost", post } : null;
+    return post ? block(null, { kind: "socialPost", post }) : null;
   }
   if (
     parts.collection !== STANDARD_SITE_COLLECTIONS.document &&
@@ -262,7 +270,7 @@ function quoteBlock(
     return null;
   const preview = recordPreview(uri, context.records);
   const card = preview ? recordCard({ ...preview, uri }, "row") : null;
-  return card ? { source: null, align: null, kind: "recordPreview", card } : null;
+  return card ? block(null, { kind: "recordPreview", card }) : null;
 }
 
 /** The page a post lives on, from its URI alone. */
@@ -312,7 +320,10 @@ export function socialPost(
     }),
     createdAt: record.createdAt ?? null,
     images: mediaHidden ? [] : embeddedImages(media?.images, parts.did),
-    external: externalPreview(media?.external, parts.did),
+    external: withoutHiddenThumb(
+      externalPreview(media?.external, parts.did),
+      mediaHidden,
+    ),
     video:
       video && !mediaHidden
         ? { thumbnailUrl: video, aspectRatio: media?.aspectRatio ?? null }
@@ -349,7 +360,3 @@ export function socialPostReferences(
   return references;
 }
 
-/** A reference that names a whole DID asks for its DID document, not a record. */
-export function isDidReference(reference: string) {
-  return isDid(reference);
-}

@@ -1,7 +1,7 @@
 import { and, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   BLUESKY_PROFILE_COLLECTION,
-  isDidReference,
+  isDid,
   isReferenceSnapshotStale,
   MAX_REFERENCE_HOPS,
   MissingPublicRecordError,
@@ -17,6 +17,7 @@ import {
 import { documentReferences } from "../rss/documentObservation";
 import { atprotoReferenceSnapshots } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
+import { UnsupportedDidError } from "../auth/atproto/did-resolver";
 import { captureRecordValue } from "./document-source";
 import type { DocumentSource, ReferenceSnapshot } from "@serial/standard-site";
 import type { FeedDatabase } from "../feeds/origins";
@@ -104,22 +105,16 @@ export type ReferenceReaders = {
   didDocument: (did: string) => Promise<unknown>;
 };
 
-/**
- * Readers over a publication client, sharing its per-refresh caches. Clients
- * built before DID documents were read (test stubs) fall back to a reader
- * that reports every DID document unavailable, so those rows retry later.
- */
+/** Readers over a publication client, sharing its per-refresh caches and one deadline. */
 export function referenceReaders(
-  client: Pick<PublicationClient, "getRecord"> &
-    Partial<Pick<PublicationClient, "getDidDocument">>,
+  client: Pick<PublicationClient, "getRecord" | "getDidDocument">,
   deadlineMs: number,
 ): ReferenceReaders {
   return {
     record: (uri) =>
       client.getRecord(uri, { deadline: Date.now() + deadlineMs }),
-    didDocument:
-      client.getDidDocument ??
-      (() => Promise.reject(new Error("DID documents are not read here"))),
+    didDocument: (did) =>
+      client.getDidDocument(did, { deadline: Date.now() + deadlineMs }),
   };
 }
 
@@ -150,7 +145,11 @@ async function resolveDidDocument(
   } catch (error) {
     if (isMissingDidDocument(error))
       return { cid: null, outcome: "missing", record: null };
-    if (error instanceof SyntaxError || error instanceof TypeError)
+    if (
+      error instanceof SyntaxError ||
+      error instanceof TypeError ||
+      error instanceof UnsupportedDidError
+    )
       return { cid: null, outcome: "unsupported", record: null };
     return { cid: null, outcome: "unavailable", record: null };
   }
@@ -161,7 +160,7 @@ async function resolveReference(
   uri: string,
   readers: ReferenceReaders,
 ): Promise<Resolution> {
-  if (isDidReference(uri)) return resolveDidDocument(uri, readers.didDocument);
+  if (isDid(uri)) return resolveDidDocument(uri, readers.didDocument);
   const parts = parseAtUri(uri);
   if (!parts || !SUPPORTED_COLLECTIONS.has(parts.collection))
     return { cid: null, outcome: "unsupported", record: null };

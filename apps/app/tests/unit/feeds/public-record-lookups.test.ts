@@ -24,6 +24,8 @@ vi.mock("~/server/auth/atproto/hardened-fetch", () => ({
 }));
 vi.mock("~/server/auth/atproto/did-resolver", () => ({
   resolvePublicPds: vi.fn(),
+  resolvePublicDidDocument: vi.fn(),
+  UnsupportedDidError: class extends Error {},
 }));
 vi.mock("~/server/auth/atproto/identity", () => ({
   getAtprotoIdentityResolver: () => ({ resolve: mocks.resolve }),
@@ -44,7 +46,11 @@ let sequence = 0;
 let endpoint: string;
 let resolvePds = vi.fn(() => Promise.resolve(pds));
 const client = () =>
-  createPublicationClient({ fetch: mocks.fetch, resolvePds });
+  createPublicationClient({
+    fetch: mocks.fetch,
+    resolvePds,
+    resolveDidDocument: vi.fn(),
+  });
 
 beforeEach(() => {
   vi.useFakeTimers();
