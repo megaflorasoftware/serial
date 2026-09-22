@@ -4,6 +4,7 @@ import {
   parseDocumentRecord,
   parseDocumentUri,
 } from "@serial/standard-site";
+import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
 import {
   publicationOrigin,
   PublicationUnavailableError,
@@ -45,7 +46,7 @@ export async function readOriginEvidence(
 ): Promise<OriginEvidence> {
   if (origin.kind === "rss") {
     const response = await readFeedHttp(origin.locator, {
-      maxBodyBytes: 1024 * 1024,
+      maxBodyBytes: FEED_HTTP_MAX_BODY_BYTES,
       totalDurationMs: 5_000,
     });
     if (!response.ok) throw new Error("Unable to read the RSS Feed");

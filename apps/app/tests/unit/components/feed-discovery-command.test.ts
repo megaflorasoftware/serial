@@ -82,3 +82,58 @@ it("keeps the selected row and input focus while source icons and title update",
   act(() => (row as HTMLElement).click());
   expect(props.onSelectFeed).toHaveBeenCalledWith(combined);
 });
+it("disables an already added feed and skips it on Enter", async () => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  Element.prototype.scrollIntoView = vi.fn();
+  document.body.append(container);
+  mounted = createRoot(container);
+  const added: DiscoveryOption = {
+    url: "https://example.com/rss",
+    title: "Added feed",
+    discoveryId: "added",
+    origins: [{ kind: "rss", locator: "https://example.com/rss" }],
+  };
+  const available: DiscoveryOption = {
+    url: "https://example.com/atom",
+    title: "Available feed",
+    discoveryId: "available",
+    origins: [{ kind: "rss", locator: "https://example.com/atom" }],
+  };
+  const props = {
+    url: "example.com",
+    onUrlChange: vi.fn(),
+    onDiscover: vi.fn(),
+    onSelectFeed: vi.fn(),
+    onSelectBookmark: vi.fn(),
+    bookmarkPlatform: "website" as const,
+    state: "select" as const,
+    discoveredFeeds: [added, available],
+    isFeedAdded: (feed: DiscoveryOption) => feed === added,
+  };
+  await act(async () => {
+    mounted.render(createElement(FeedDiscoveryCommand, props));
+  });
+  const addedRow = container.querySelector<HTMLElement>(
+    '[cmdk-item][data-value="added"]',
+  )!;
+  const availableRow = container.querySelector<HTMLElement>(
+    '[cmdk-item][data-value="available"]',
+  )!;
+  expect(addedRow.getAttribute("aria-disabled")).toBe("true");
+  expect(addedRow.textContent).toContain("Already added");
+  expect(availableRow.getAttribute("aria-disabled")).toBe("false");
+  expect(availableRow.textContent).not.toContain("Already added");
+  act(() => addedRow.click());
+  expect(props.onSelectFeed).not.toHaveBeenCalled();
+  const input = container.querySelector("input")!;
+  act(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+  expect(props.onSelectFeed).toHaveBeenCalledWith(available);
+});
