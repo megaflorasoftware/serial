@@ -381,11 +381,25 @@
   margin-inline-start: auto;
 }
 
-/* Link card previews are often small thumbnails; show them at their natural
-   size instead of stretching them across the column. */
-.article :global([data-reader-link-card]) img {
-  width: auto;
-  max-width: 100%;
+/* Link cards keep Leaflet's proportions: a short row with the preview on the
+   right, sized so small stored thumbnails are never upscaled. */
+.article :global([data-reader-link-card]) {
+  min-height: 6.5rem;
+}
+
+.article :global([data-reader-link-card] [data-record-image="cover"]) {
+  width: 7.5rem;
+}
+
+.article :global([data-reader-link-card] [data-record-title]) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
+
+.article :global([data-reader-link-card] [data-record-description]) {
+  -webkit-line-clamp: 2;
 }
 
 .article div:global([data-reader-align="center"]) {

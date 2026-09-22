@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { RecordCard as RecordCardData } from "@serial/standard-site";
+import type {
+  ReaderBlockValue,
+  RecordCard as RecordCardData,
+} from "@serial/standard-site";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 
 function PreviewImage({ src, icon = false }: { src: string; icon?: boolean }) {
@@ -57,6 +60,45 @@ export function RecordCard({ card }: { card: RecordCardData }) {
           <p data-record-description>{card.description}</p>
         )}
         {metadata && <p data-record-metadata>{metadata}</p>}
+      </div>
+    </a>
+  );
+}
+
+function linkHost(href: string): string | null {
+  try {
+    return new URL(href).hostname.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A Leaflet-style link card: title, description and host on the left, the
+ * stored preview on the right. Shares the record card's shell so both read
+ * the same way in the article.
+ */
+export function LinkCard({
+  card,
+}: {
+  card: Extract<ReaderBlockValue, { kind: "linkCard" }>;
+}) {
+  const host = linkHost(card.href);
+  return (
+    <a
+      href={card.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-record-card="row"
+      data-reader-link-card
+    >
+      {card.imageUrl && (
+        <PreviewImage key={card.imageUrl} src={card.imageUrl} />
+      )}
+      <div data-record-copy>
+        <p data-record-title>{card.title}</p>
+        {card.description && <p data-record-description>{card.description}</p>}
+        {host && <p data-record-metadata>{host}</p>}
       </div>
     </a>
   );

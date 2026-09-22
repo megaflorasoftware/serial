@@ -334,23 +334,48 @@ describe("Reader document content", () => {
     expect(fallback.querySelector("iframe")?.style.height).toBe("480px");
   });
 
-  it("marks link cards so their previews keep their natural size", () => {
+  it("renders link cards as a row with the preview beside the copy", () => {
     const container = render(
       document([
         block({
           kind: "linkCard",
-          href: "https://example.com/support",
+          href: "https://www.example.com/support",
           title: "Support",
-          description: null,
+          description: "Chip in",
           imageUrl: "https://example.com/preview.png",
+        }),
+        block({
+          kind: "linkCard",
+          href: "https://example.com/plain",
+          title: "Plain",
+          description: null,
+          imageUrl: null,
         }),
       ]),
     );
-    const card = container.querySelector("[data-reader-link-card]");
-    expect(card?.querySelector("a > img")?.getAttribute("src")).toBe(
-      "https://example.com/preview.png",
+    const cards = container.querySelectorAll<HTMLAnchorElement>(
+      "[data-reader-link-card]",
     );
-    expect(card?.querySelector("p > a > strong")?.textContent).toBe("Support");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.href).toBe("https://www.example.com/support");
+    expect(cards[0]!.target).toBe("_blank");
+    expect(cards[0]!.rel).toBe("noopener noreferrer");
+    expect(
+      cards[0]!
+        .querySelector('[data-record-image="cover"]')
+        ?.getAttribute("src"),
+    ).toBe("https://example.com/preview.png");
+    expect(cards[0]!.querySelector("[data-record-title]")?.textContent).toBe(
+      "Support",
+    );
+    expect(
+      cards[0]!.querySelector("[data-record-description]")?.textContent,
+    ).toBe("Chip in");
+    expect(cards[0]!.querySelector("[data-record-metadata]")?.textContent).toBe(
+      "example.com",
+    );
+    expect(cards[1]!.querySelector('[data-record-image="cover"]')).toBeNull();
+    expect(cards[1]!.querySelector("[data-record-description]")).toBeNull();
   });
 
   it("keeps images plain and videos as links in simplified mode", () => {

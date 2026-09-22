@@ -11,7 +11,7 @@ import type {
 } from "@serial/standard-site";
 import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
-import { RecordCard } from "~/components/content-reader/RecordCard";
+import { LinkCard, RecordCard } from "~/components/content-reader/RecordCard";
 import { SandboxedFrame } from "~/components/content-reader/SandboxedFrame";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
@@ -338,27 +338,8 @@ function Block({
       return <br />;
     case "linkCard":
       return (
-        <div data-reader-link-card data-reader-align={block.align ?? undefined}>
-          {block.imageUrl && (
-            <a href={block.href} target="_blank" rel="noopener noreferrer">
-              <img
-                {...REMOTE_IMAGE_PROPS}
-                src={block.imageUrl}
-                alt={block.title}
-              />
-            </a>
-          )}
-          <p>
-            <a href={block.href} target="_blank" rel="noopener noreferrer">
-              <strong>{block.title}</strong>
-            </a>
-            {block.description && (
-              <>
-                <br />
-                {block.description}
-              </>
-            )}
-          </p>
+        <div data-reader-align={block.align ?? undefined}>
+          <LinkCard card={block} />
         </div>
       );
     case "recordPreview":
