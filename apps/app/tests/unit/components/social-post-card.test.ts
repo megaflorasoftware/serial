@@ -93,9 +93,21 @@ describe.each([false, true])(
       expect(card.getAttribute("role")).toBe("note");
       expect(links(container)).toEqual([
         ["https://bsky.app/profile/did:plc:author", "Author@author.example"],
+        [
+          "https://bsky.app/profile/did:plc:author/post/p",
+          "Open post on Bluesky",
+        ],
         ["https://example.com/", "example"],
-        ["https://bsky.app/profile/did:plc:author/post/p", "View on Bluesky"],
       ]);
+      // The post link fills the body, not the header.
+      expect(
+        card.querySelector("[data-social-post-body] > [data-social-post-link]"),
+      ).not.toBeNull();
+      expect(
+        card.querySelector(
+          "[data-social-post-header] a[data-social-post-link]",
+        ),
+      ).toBeNull();
       expect(card.querySelector("time")?.getAttribute("datetime")).toBe(
         "2026-07-15T22:08:33.054Z",
       );
@@ -147,11 +159,9 @@ describe.each([false, true])(
         external.querySelector('[data-record-image="cover"]'),
       ).not.toBeNull();
       expect(external.textContent).toContain("An article");
-      const video = container.querySelector<HTMLAnchorElement>(
-        "[data-social-post-video]",
-      )!;
-      expect(video.href).toBe(post.url);
-      expect(video.querySelector("img")?.alt).toContain("opens the post");
+      const video = container.querySelector("[data-social-post-video]")!;
+      expect(video.tagName).toBe("DIV");
+      expect(video.querySelector("img")?.alt).toContain("Video preview");
       unmount();
     });
 
@@ -194,10 +204,12 @@ describe.each([false, true])(
       );
       expect(links(container)).toEqual([
         ["https://author.example", "Author’s Blog@author.example"],
+        ["https://pckt.blog/n/did:plc:author/n", "Open post on pckt"],
         ["https://bsky.app/profile/did:plc:quoter", "Quoter"],
-        ["https://bsky.app/profile/did:plc:quoter/post/q", "View on Bluesky"],
-        ["https://pckt.blog/n/did:plc:author/n", "View on pckt"],
-        ["https://author.example", "Visit blog"],
+        [
+          "https://bsky.app/profile/did:plc:quoter/post/q",
+          "Open post on Bluesky",
+        ],
       ]);
       expect(
         container.querySelector("[data-social-post-hidden]")?.textContent,

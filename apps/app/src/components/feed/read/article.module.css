@@ -412,16 +412,24 @@
   font-size: 0.9375em;
 }
 
+/* The card lights up like a record card, but only when the body's post link
+   is under the pointer; hovering the header or an inner link does not. */
 .article :global([data-social-post]):hover {
   background: var(--color-background);
+}
+
+.article
+  :global([data-social-post]):has(
+    > [data-social-post-body] > [data-social-post-link]:hover
+  ) {
+  background: var(--color-accent);
 }
 
 .article :global([data-social-post]) > * {
   margin-block-start: 0;
 }
 
-.article :global([data-social-post-header]),
-.article :global([data-social-post-footer]) {
+.article :global([data-social-post-header]) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -433,9 +441,12 @@
 
 /* The author link is a header, not an inline body link, so it never takes
    the pill even when its avatar is absent or fails to load. */
-.article :global([data-social-post-author]),
-.article :global([data-social-post-author]):hover,
-.article :global([data-social-post-author]):focus-visible {
+.article :global([data-social-post-header] > a[data-social-post-author]),
+.article :global([data-social-post-header] > a[data-social-post-author]):hover,
+.article
+  :global(
+    [data-social-post-header] > a[data-social-post-author]
+  ):focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -474,7 +485,11 @@
   white-space: nowrap;
 }
 
+/* The body is the post's click target: a stretched link fills it and every
+   inner link, the preview and the quote sit above that link. The card's
+   hover state follows the body only, so the header never lights it up. */
 .article :global([data-social-post-body]) {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -482,6 +497,38 @@
 
 .article :global([data-social-post-body]) > * {
   margin-block-start: 0;
+}
+
+/* Not an inline body link: no pill, no background of its own. The card
+   shell draws the hover tint through its :has() rule above. */
+.article :global([data-social-post-body] > a[data-social-post-link]),
+.article :global([data-social-post-body] > a[data-social-post-link]):hover,
+.article
+  :global([data-social-post-body] > a[data-social-post-link]):focus-visible {
+  position: absolute;
+  inset: -0.5rem -1rem -1rem;
+  z-index: 0;
+  padding: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: none;
+}
+
+.article
+  :global([data-social-post-body] > a[data-social-post-link]):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: -2px;
+}
+
+.article :global([data-social-post-body]) > :not([data-social-post-link]) {
+  position: relative;
+  z-index: 1;
+  /* Text stays click-through to the stretched link; its own links do not. */
+  pointer-events: none;
+}
+
+.article :global([data-social-post-body]) a,
+.article :global([data-social-post-body]) [data-social-post-quote] {
+  pointer-events: auto;
 }
 
 .article :global([data-social-post-text]) {
@@ -504,10 +551,6 @@
   width: 100%;
   border-radius: var(--radius-sm);
   object-fit: cover;
-}
-
-.article :global([data-social-post-video]) {
-  display: block;
 }
 
 .article :global([data-social-post-hidden]) {

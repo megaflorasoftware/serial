@@ -65,9 +65,9 @@ export type SocialPostCardProps = {
 
 /**
  * A Bluesky post or pckt note as an inline card: author header, text, media,
- * one level of quote, and a footer link to the post. A static container, not
- * one anchor, since the text carries its own links. Nothing else is
- * interactive; no engagement counts are drawn.
+ * one level of quote. The body is a stretched link to the post with the
+ * text's own links, the external preview and the quote layered above it;
+ * the header links to the author's page. No engagement counts are drawn.
  */
 export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
   const platform = PLATFORM_NAMES[post.platform];
@@ -99,6 +99,10 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
         )}
       </div>
       <div data-social-post-body>
+        {/* The body opens the post; inner links sit above it, the header outside it. */}
+        <ExternalLink href={post.url} data-social-post-link="">
+          <span className="sr-only">Open post on {platform}</span>
+        </ExternalLink>
         <p data-social-post-text>{text}</p>
         {post.images.length > 0 && (
           <div data-social-post-images={post.images.length}>
@@ -114,15 +118,15 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
           </div>
         )}
         {post.video && (
-          <ExternalLink href={post.url} data-social-post-video="">
+          <div data-social-post-video>
             <RemoteImage
               key={post.video.thumbnailUrl}
               src={post.video.thumbnailUrl}
-              alt={`Video preview; opens the post on ${platform}`}
+              alt={`Video preview from the post on ${platform}`}
               attribute="data-social-post-image"
               style={aspectStyle(post.video.aspectRatio)}
             />
-          </ExternalLink>
+          </div>
         )}
         {post.mediaHidden && (
           <p data-social-post-hidden>
@@ -152,12 +156,6 @@ export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
           </ExternalLink>
         )}
         {quote && <div data-social-post-quote>{quote}</div>}
-      </div>
-      <div data-social-post-footer>
-        <ExternalLink href={post.url}>View on {platform}</ExternalLink>
-        {post.siteUrl && (
-          <ExternalLink href={post.siteUrl}>Visit blog</ExternalLink>
-        )}
       </div>
     </div>
   );
