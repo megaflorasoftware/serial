@@ -37,7 +37,7 @@ function mount() {
 /** Runs the two placement frames the hook waits for. */
 function settleFrames() {
   act(() => {
-    while (frames.length) frames.shift()!();
+    while (frames.length) frames.shift()!(performance.now());
   });
 }
 
