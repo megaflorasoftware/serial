@@ -14,6 +14,7 @@ import {
 } from "./skeletons";
 import { useViewListScroll } from "./useViewListScroll";
 import { useViewSections } from "./useViewSections";
+import { useSoftReads } from "./useSoftReads";
 import { ViewItemGrid } from "./ViewItemGrid";
 import { ViewItemLargeGrid } from "./ViewItemLargeGrid";
 import { ViewItemLargeList } from "./ViewItemLargeList";
@@ -26,6 +27,7 @@ import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import {
   categoryFilterAtom,
   contentStatusFilterAtom,
+  dateFilterAtom,
   feedFilterAtom,
   selectedItemIdAtom,
   viewFilterAtom,
@@ -252,6 +254,7 @@ function ContentStatusSectionList({
   sentinelRef,
   showPaginationLoader,
   showPaginationEnd,
+  toggleRead,
 }: {
   fullComputedSections: ViewSection[];
   visibleComputedSections: ViewSection[];
@@ -259,6 +262,7 @@ function ContentStatusSectionList({
   sentinelRef: (node: HTMLDivElement | null) => void;
   showPaginationLoader: boolean;
   showPaginationEnd: boolean;
+  toggleRead: (id: string, mutate: () => boolean) => boolean;
 }) {
   const navigationItems = useMemo(
     () => fullComputedSections.flatMap((section) => section.items),
@@ -281,6 +285,7 @@ function ContentStatusSectionList({
     navigationItems,
     navigationIsGridLayout,
     navigationSectionInfo,
+    toggleRead,
   );
   const handleSectionMarkAsRead = useCallback(
     (sectionIndex: number) => {
@@ -323,104 +328,129 @@ function ContentStatusSectionList({
 }
 
 export function RenderViewItems() {
-  const { feeds, hasFetchedFeeds } = useFeeds();
-  const { hasFetchedFeedCategories } = useFeedCategories();
-
-  const hasInitialData = useHasInitialData();
-
-  const filteredFeedItemsOrder = useFilteredContentOrder();
-
   const currentView = useAtomValue(viewFilterAtom);
   const feedFilter = useAtomValue(feedFilterAtom);
   const categoryFilter = useAtomValue(categoryFilterAtom);
-  const {
-    sentinelRef,
-    paginationState,
-    visibleItems: visibleFilteredFeedItemsOrder,
-    hasRenderedAllItems,
-  } = useViewListScroll(filteredFeedItemsOrder);
-
-  const { computedSections: fullComputedSections, baseLayout } =
-    useViewSections(currentView, filteredFeedItemsOrder);
-  const { computedSections: visibleComputedSections } = useViewSections(
-    currentView,
-    visibleFilteredFeedItemsOrder,
-  );
+  const dateFilter = useAtomValue(dateFilterAtom);
   const contentStatusFilter = useAtomValue(contentStatusFilterAtom);
-  const selectedItemId = useAtomValue(selectedItemIdAtom);
-  const setSelectedItemId = useSetAtom(selectedItemIdAtom);
-  const navigationItems = useMemo(
-    () => fullComputedSections.flatMap((section) => section.items),
-    [fullComputedSections],
-  );
-  const rootListReady =
-    hasInitialData &&
-    (navigationItems.length > 0 ||
-      (hasFetchedFeeds &&
-        hasFetchedFeedCategories &&
-        (paginationState.isLoaded || feeds.length === 0)));
-  useRootItemScrollRestoration({
-    activeItemIds: navigationItems,
-    selectedItemId,
-    setSelectedItemId,
-    ready: rootListReady,
-  });
-  const contentStatusKey = buildContentStatusKey(contentStatusFilter);
-  const viewListKey = `view-${currentView?.id ?? "none"}-${contentStatusKey}`;
-  const contentStatusContextKey = `${viewListKey}-feed-${feedFilter}-tag-${categoryFilter}`;
-  const shouldShowPaginationEnd =
-    hasRenderedAllItems &&
-    paginationState?.hasMore === false &&
-    paginationState.isFetching !== true;
+  const viewListKey = `view-${currentView?.id ?? "none"}-${buildContentStatusKey(contentStatusFilter)}`;
+  const scopeKey = `${viewListKey}-feed-${feedFilter}-tag-${categoryFilter}-date-${dateFilter}`;
 
-  if (!hasInitialData) {
-    return <FeedLoading />;
+  return <ViewVisit key={scopeKey} viewListKey={viewListKey} />;
+}
+
+function ViewListSkeleton({ layout }: { layout: ViewSection["layout"] }) {
+  switch (layout) {
+    case VIEW_LAYOUT.LARGE_LIST:
+      return <LargeListSkeleton />;
+    case VIEW_LAYOUT.GRID:
+      return <GridSkeleton />;
+    case VIEW_LAYOUT.LARGE_GRID:
+      return <LargeGridSkeleton />;
+    default:
+      return <StandardListSkeleton />;
   }
+}
 
+function getViewPlaceholder({
+  hasInitialData,
+  hasFetchedFeeds,
+  hasFetchedFeedCategories,
+  hasFeeds,
+  hasItems,
+  paginationState,
+  layout,
+}: {
+  hasInitialData: boolean;
+  hasFetchedFeeds: boolean;
+  hasFetchedFeedCategories: boolean;
+  hasFeeds: boolean;
+  hasItems: boolean;
+  paginationState: ReturnType<typeof useViewListScroll>["paginationState"];
+  layout: ViewSection["layout"];
+}) {
+  if (!hasInitialData) return <FeedLoading />;
+  if (hasItems) return null;
   if (
     paginationState.isLoaded &&
     hasFetchedFeeds &&
-    !feeds.length &&
-    filteredFeedItemsOrder.length === 0 &&
+    !hasFeeds &&
     Object.keys(bookmarksStore.getState().snapshot()).length === 0
   ) {
     return <FeedEmptyState />;
   }
-
-  // Show skeletons while feed items are being fetched
-  if (
-    (!paginationState.isLoaded || paginationState.isFetching) &&
-    filteredFeedItemsOrder.length === 0
-  ) {
-    switch (baseLayout) {
-      case VIEW_LAYOUT.LARGE_LIST:
-        return <LargeListSkeleton />;
-      case VIEW_LAYOUT.GRID:
-        return <GridSkeleton />;
-      case VIEW_LAYOUT.LARGE_GRID:
-        return <LargeGridSkeleton />;
-      default:
-        return <StandardListSkeleton />;
-    }
+  if (!paginationState.isLoaded || paginationState.isFetching) {
+    return <ViewListSkeleton layout={layout} />;
   }
+  if (hasFetchedFeeds && hasFetchedFeedCategories) return <EmptyState />;
+  return null;
+}
 
-  if (
-    hasFetchedFeeds &&
-    paginationState.isLoaded &&
-    hasFetchedFeedCategories &&
-    !filteredFeedItemsOrder.length
-  ) {
-    return <EmptyState />;
-  }
+function ViewVisit({ viewListKey }: { viewListKey: string }) {
+  const { feeds, hasFetchedFeeds } = useFeeds();
+  const { hasFetchedFeedCategories } = useFeedCategories();
+  const hasInitialData = useHasInitialData();
+  const filteredItemIds = useFilteredContentOrder();
+  const currentView = useAtomValue(viewFilterAtom);
+  const { computedSections, baseLayout } = useViewSections(
+    currentView,
+    filteredItemIds,
+  );
+  const { sections: fullComputedSections, toggleRead } = useSoftReads(
+    computedSections,
+    currentView,
+  );
+  const filteredFeedItemsOrder = useMemo(
+    () => fullComputedSections.flatMap((section) => section.items),
+    [fullComputedSections],
+  );
+  const { sentinelRef, paginationState, visibleItems, hasRenderedAllItems } =
+    useViewListScroll(filteredFeedItemsOrder);
+  const visibleComputedSections = useMemo(() => {
+    const visibleIds = new Set(visibleItems);
+    return fullComputedSections.map((section) => ({
+      ...section,
+      items: section.items.filter((id) => visibleIds.has(id)),
+    }));
+  }, [fullComputedSections, visibleItems]);
+  const selectedItemId = useAtomValue(selectedItemIdAtom);
+  const setSelectedItemId = useSetAtom(selectedItemIdAtom);
+  const rootListReady =
+    hasInitialData &&
+    (filteredFeedItemsOrder.length > 0 ||
+      (hasFetchedFeeds &&
+        hasFetchedFeedCategories &&
+        (paginationState.isLoaded || feeds.length === 0)));
+  useRootItemScrollRestoration({
+    activeItemIds: filteredFeedItemsOrder,
+    selectedItemId,
+    setSelectedItemId,
+    ready: rootListReady,
+  });
+  const shouldShowPaginationEnd =
+    hasRenderedAllItems &&
+    paginationState.hasMore === false &&
+    paginationState.isFetching !== true;
+
+  const placeholder = getViewPlaceholder({
+    hasInitialData,
+    hasFetchedFeeds,
+    hasFetchedFeedCategories,
+    hasFeeds: feeds.length > 0,
+    hasItems: filteredFeedItemsOrder.length > 0,
+    paginationState,
+    layout: baseLayout,
+  });
+  if (placeholder) return placeholder;
 
   return (
     <ContentStatusSectionList
-      key={contentStatusContextKey}
+      toggleRead={toggleRead}
       fullComputedSections={fullComputedSections}
       visibleComputedSections={visibleComputedSections}
       viewListKey={viewListKey}
       sentinelRef={sentinelRef}
-      showPaginationLoader={paginationState?.isFetching === true}
+      showPaginationLoader={paginationState.isFetching === true}
       showPaginationEnd={shouldShowPaginationEnd}
     />
   );

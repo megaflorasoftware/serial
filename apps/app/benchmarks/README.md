@@ -241,3 +241,15 @@ The client audit profiles also measure local mixed-content View projection over
 their complete Bookmark fixtures. This protects fetch-free View navigation and
 View-chip status computation with the same 50 ms operation budget as other
 client state transitions.
+
+Run the retained browser-performance audit against a production build when a
+change touches hydration, synchronization, rendering, or the reader:
+
+```sh
+pnpm benchmark:client:browser
+```
+
+It runs `tests/e2e/self-hosted/client-performance-audit.spec.ts`, which is
+skipped unless `SERIAL_RUN_CLIENT_PERFORMANCE=1`, and evaluates each scenario
+against the budgets in `scripts/performance/client-browser-budgets.ts`. Its
+generated JSON is written under the ignored `benchmarks/results/` directory.

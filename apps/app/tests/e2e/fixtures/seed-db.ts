@@ -226,6 +226,17 @@ export async function getFeedItemProgress(tursoPort: number, id: string) {
   return feedItem?.progress ?? null;
 }
 
+export async function getFeedItemWatchedState(tursoPort: number, id: string) {
+  const { db, client } = getDb(tursoPort);
+  const item = await db
+    .select({ isWatched: schema.feedItems.isWatched })
+    .from(schema.feedItems)
+    .where(eq(schema.feedItems.id, id))
+    .get();
+  client.close();
+  return item?.isWatched ?? null;
+}
+
 export async function getFeedItemWatchLaterState(
   tursoPort: number,
   id: string,
@@ -349,6 +360,7 @@ export async function seedBookmarkProjectionData(
   tursoPort: number,
   email: string,
   feedItemId: string,
+  contentHtml?: string,
 ) {
   const { db, client } = getDb(tursoPort);
   const [testUser, item, userView] = await Promise.all([
@@ -394,7 +406,9 @@ export async function seedBookmarkProjectionData(
   });
   await db.insert(schema.pageCaptures).values({
     bookmarkId,
-    contentHtml: `<p>Captured Bookmark body</p>
+    contentHtml:
+      contentHtml ??
+      `<p>Captured Bookmark body</p>
       <p><a href="https://example.com/next">External reader link</a></p>
       <a href="https://example.com/image-target">
         <img src="https://images.example.com/reader.jpg" alt="Reader image" onerror="steal()">

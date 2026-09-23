@@ -48,6 +48,11 @@ import { useBookmarkCaptureValue } from "~/lib/data/bookmarks/capture-store";
 
 export type ItemSize = "standard" | "large";
 
+function itemOpacity(canOpen: boolean, isRead: boolean) {
+  if (!canOpen) return "opacity-50";
+  return isRead ? "opacity-75" : undefined;
+}
+
 // Typography components for consistent styling across layouts
 
 interface ItemTitleProps {
@@ -716,7 +721,7 @@ function BookmarkGridItem({
       onMouseEnter={onSelect}
       className={clsx(
         "group relative flex h-full w-full flex-col",
-        !canOpen && "opacity-50",
+        itemOpacity(canOpen, bookmark.isRead),
       )}
     >
       <Link
@@ -778,7 +783,7 @@ function BookmarkListItem({
         isLarge
           ? "flex-col md:flex-row md:items-center"
           : "items-center md:h-20",
-        !canOpen && "opacity-50",
+        itemOpacity(canOpen, bookmark.isRead),
       )}
     >
       <Link
@@ -886,7 +891,7 @@ function FeedItemDisplay({
         isLarge
           ? "flex-col md:flex-row md:items-center"
           : "items-center md:h-20",
-        !canOpen && "opacity-50",
+        itemOpacity(canOpen, item.isWatched),
       )}
     >
       <Link
@@ -1009,7 +1014,7 @@ function FeedGridItemDisplay({
       onMouseEnter={onSelect}
       className={clsx(
         "group relative flex h-full w-full flex-col",
-        !canOpen && "opacity-50",
+        itemOpacity(canOpen, item.isWatched),
       )}
     >
       <Link

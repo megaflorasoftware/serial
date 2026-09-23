@@ -220,6 +220,9 @@ importers:
       feedscout:
         specifier: ^1.10.0
         version: 1.10.0
+      highlight.js:
+        specifier: ^11.12.0
+        version: 11.12.0
       html-react-parser:
         specifier: ^6.1.4
         version: 6.1.4(@types/react@19.2.17)(react@19.2.7)
@@ -6669,6 +6672,10 @@ packages:
   hex-rgb@4.3.0:
     resolution: {integrity: sha512-Ox1pJVrDCyGHMG9CFg1tmrRUMRPRsAWYc/PinY0XzJU4K7y7vjNoLKIQ7BR5UJMCxNN8EM1MNDmHWA/B3aZUuw==}
     engines: {node: '>=6'}
+
+  highlight.js@11.12.0:
+    resolution: {integrity: sha512-nbfWpyRMcMrPMmDwJB+dhX/eiaPKtc2RB+0QZskqJ3WjRA/FDS0e9hZrx8EC/lbEv8gXy98FcDbNa/dspAaJMg==}
+    engines: {node: '>=12.0.0'}
 
   hookable@6.1.1:
     resolution: {integrity: sha512-U9LYDy1CwhMCnprUfeAZWZGByVbhd54hwepegYTK7Pi5NvqEj63ifz5z+xukznehT7i6NIZRu89Ay1AZmRsLEQ==}
@@ -16536,6 +16543,8 @@ snapshots:
       hermes-estree: 0.25.1
 
   hex-rgb@4.3.0: {}
+
+  highlight.js@11.12.0: {}
 
   hookable@6.1.1: {}
 

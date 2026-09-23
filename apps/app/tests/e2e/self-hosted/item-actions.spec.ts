@@ -318,7 +318,9 @@ test.describe("feed item actions", () => {
     });
 
     await page.keyboard.press("e");
-    await expect(itemLink(firstSavedItemId)).toHaveCount(0);
+    await expect(
+      page.locator(`article[data-item-id="${firstSavedItemId}"]`),
+    ).toHaveCSS("opacity", "0.75");
 
     await page
       .getByRole("tab", {
@@ -421,8 +423,8 @@ test.describe("feed item actions", () => {
   }
 
   for (const bookmarkCase of [
-    // Archiving moves the bookmark to saved/archived; unsaving moves it to
-    // inbox/unread. Both leave the saved list, so both must advance.
+    // Archiving retains the Saved row for this visit; unsaving removes it.
+    // Both actions still advance selection to the successor.
     { action: "archiving", buttonName: "Archive", destinationKey: "y" },
     { action: "unsaving", buttonName: "Unsave", destinationKey: "i" },
   ] as const) {
@@ -484,7 +486,11 @@ test.describe("feed item actions", () => {
         .click();
       await page.mouse.move(5, 5);
 
-      await expect(bookmarkItem).toHaveCount(0, { timeout: 10000 });
+      if (bookmarkCase.action === "archiving") {
+        await expect(bookmarkItem).toHaveCSS("opacity", "0.75");
+      } else {
+        await expect(bookmarkItem).toHaveCount(0, { timeout: 10000 });
+      }
       const successorItem = page.locator(
         `article[data-item-id="${successorBookmarkId}"]`,
       );

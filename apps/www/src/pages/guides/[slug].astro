@@ -5,12 +5,6 @@ import FooterCTA from "../../components/FooterCTA.astro";
 import Icon from "../../components/Icon.astro";
 import Site from "../../layouts/Site.astro";
 import { getAllGuides } from "../../lib/content";
-import { STANDARD_SITE_PUBLICATION_URI } from "../../lib/site";
-import {
-  buildDocumentUri,
-  buildGuideDocumentSource,
-  getConfiguredPublicationUri,
-} from "../../lib/standard-site";
 
 export async function getStaticPaths() {
   const guides = await getAllGuides();
@@ -33,23 +27,6 @@ const { Content } = await render(guide);
 const iconName = guide.data.icon ? GUIDE_ICONS[guide.data.icon] : undefined;
 const description =
   guide.data.description ?? `Guide for ${guide.data.title}`;
-
-const publicationUri = getConfiguredPublicationUri(
-  STANDARD_SITE_PUBLICATION_URI,
-);
-const documentUri = publicationUri
-  ? buildDocumentUri(
-      publicationUri,
-      buildGuideDocumentSource({
-        slug: guide.id,
-        title: guide.data.title,
-        content: guide.body ?? "",
-        publish_date: guide.data.publish_date,
-        description: guide.data.description,
-        updated_at: guide.data.updated_at,
-      }),
-    )
-  : undefined;
 ---
 
 <Site
@@ -58,7 +35,6 @@ const documentUri = publicationUri
   ogImage={`/og/guides/${guide.id}.png`}
   ogType="article"
   publishDate={guide.data.publish_date}
-  documentUri={documentUri}
 >
   <div class="pt-8 pb-12 md:pt-12 md:pb-24">
     <article class="mx-auto max-w-3xl px-6 text-xl text-pretty">

@@ -32,6 +32,8 @@ export function ArticleImageLightbox({
         aria-disabled={failed}
         style={{
           display: "block",
+          width: failed ? "100%" : undefined,
+          maxWidth: failed ? "100%" : undefined,
           cursor: failed ? "default" : "zoom-in",
         }}
         onClick={toggle}
@@ -41,8 +43,16 @@ export function ArticleImageLightbox({
             data-image-fallback
             role="img"
             aria-label={alt}
-            className="bg-muted block aspect-square size-48 max-w-full rounded"
-          />
+            className="bg-muted relative block aspect-video w-full overflow-hidden rounded"
+          >
+            {alt && (
+              <span className="text-muted-foreground absolute inset-0 flex items-center justify-center px-8 py-4 text-center text-sm leading-relaxed sm:px-16">
+                <span className="line-clamp-4 min-w-0 wrap-anywhere">
+                  {alt}
+                </span>
+              </span>
+            )}
+          </span>
         ) : (
           <img
             src={src}

@@ -1,9 +1,15 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
+import { ArticleContent } from "~/components/feed/read/ArticleContent";
+
+vi.mock("~/lib/hooks/useFlagState", () => ({ useFlagState: () => ["iframe"] }));
+vi.mock("~/components/CustomVideoPlayer", () => ({
+  CustomVideoPlayer: () => null,
+}));
 
 function renderReaderNodes(...nodes: ReactNode[]) {
   return renderToStaticMarkup(
@@ -19,6 +25,18 @@ function expectInOrder(markup: string, ...values: string[]) {
 }
 
 describe("reader content images", () => {
+  it.each([
+    '<figure><img src="/garden.jpg" alt="Garden path"></figure>',
+    '<div class="captioned-image-container"><img src="/garden.jpg" alt="Garden path"></div>',
+    '<figure><picture><source srcset="/garden-wide.jpg 2x"><img src="/garden.jpg" alt="Garden path"></picture></figure>',
+  ])("preserves alt text when replacing an image wrapper: %s", (content) => {
+    const markup = renderToStaticMarkup(
+      createElement(ArticleContent, { content }),
+    );
+    expect(markup).toContain('alt="Garden path"');
+    expect(markup).toContain('aria-label="Open image preview: Garden path"');
+  });
+
   it("preserves an image between paragraphs in a wrapped article", () => {
     const markup = renderReaderNodes(
       createElement(

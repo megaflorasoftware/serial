@@ -4,6 +4,7 @@ import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
+import { replaceReaderCodeBlock } from "~/components/content-reader/ReaderCodeBlock";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import classes from "~/components/feed/read/article.module.css";
@@ -15,14 +16,25 @@ function extractYouTubeVideoId(src: string): string | null {
   return match?.[1] ?? null;
 }
 
-function findImageSrc(node: Element): string | null {
-  if (node.name === "img") return node.attribs.src ?? null;
-  if (node.name === "source")
-    return node.attribs.srcset?.split(/\s/)[0] ?? null;
+function findImage(node: Element): { src: string; alt?: string } | null {
+  if (node.name === "img") {
+    return node.attribs.src
+      ? { src: node.attribs.src, alt: node.attribs.alt }
+      : null;
+  }
+  if (node.name === "source") {
+    const src = node.attribs.srcset?.split(/\s/)[0];
+    const image = node.parent?.children.find(
+      (child) => child instanceof Element && child.name === "img",
+    );
+    return src
+      ? { src, alt: image instanceof Element ? image.attribs.alt : undefined }
+      : null;
+  }
   for (const child of node.children) {
     if (child instanceof Element) {
-      const src = findImageSrc(child);
-      if (src) return src;
+      const image = findImage(child);
+      if (image) return image;
     }
   }
   return null;
@@ -33,16 +45,25 @@ function isImageContainer(node: Element): boolean {
     const cls = node.attribs.class ?? "";
     if (cls.includes("image-link") || cls.includes("image2")) return true;
   }
-  if (node.name === "figure") return !!findImageSrc(node);
+  if (node.name === "figure") return true;
   if (node.attribs.class?.includes("captioned-image-container")) return true;
   return false;
 }
 
-export function ArticleContent({ content }: { content: string }) {
+export function ArticleContent({
+  content,
+  simplified = false,
+}: {
+  content: string;
+  simplified?: boolean;
+}) {
   const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
 
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
+      const codeBlock = replaceReaderCodeBlock(domNode);
+      if (codeBlock) return codeBlock;
+      if (simplified) return;
       if (!(domNode instanceof Element)) return;
 
       // Open external links in new tabs. In-page links include footnote refs.
@@ -55,16 +76,9 @@ export function ArticleContent({ content }: { content: string }) {
         domNode.attribs.rel = "noopener noreferrer";
       }
 
-      if (domNode.name === "img") {
-        const src = domNode.attribs.src ?? "";
-        const alt = domNode.attribs.alt ?? "";
-        if (!src) return;
-        return <ArticleImageLightbox src={src} alt={alt} />;
-      }
-
-      if (isImageContainer(domNode)) {
-        const src = findImageSrc(domNode);
-        if (src) return <ArticleImageLightbox src={src} />;
+      if (domNode.name === "img" || isImageContainer(domNode)) {
+        const image = findImage(domNode);
+        if (image) return <ArticleImageLightbox {...image} />;
       }
 
       if (domNode.name !== "iframe") return;
