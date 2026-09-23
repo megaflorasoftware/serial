@@ -72,6 +72,7 @@ import {
   getAtmosphereOrigin,
   getFeedRssUrl,
   getFeedWebsiteUrl,
+  isDiscoveredFeedAdded,
 } from "~/lib/feeds/origins";
 
 function useViewOptions() {
@@ -106,6 +107,7 @@ export function AddFeedDialog() {
   >(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const discovery = useFeedDiscovery();
+  const { feeds: addedFeeds } = useFeeds();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
   const { mutateAsync: saveBookmark } = useSaveBookmarkMutation();
 
@@ -240,6 +242,7 @@ export function AddFeedDialog() {
             onSelectBookmark={(url) => void handleSelectBookmark(url)}
             bookmarkPlatform={getAssumedFeedPlatform(discovery.url)}
             discoveredFeeds={discovery.discoveredFeeds}
+            isFeedAdded={(feed) => isDiscoveredFeedAdded(addedFeeds, feed)}
             state={pendingAction ? "adding" : discovery.discoveryState}
             loadingLabel={
               pendingAction === "bookmark"

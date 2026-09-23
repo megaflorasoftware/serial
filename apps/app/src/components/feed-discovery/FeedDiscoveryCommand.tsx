@@ -6,6 +6,7 @@ import {
 import { PublicationRowContent } from "@serial/ui";
 import {
   BookmarkIcon,
+  CheckIcon,
   Loader2Icon,
   RefreshCwIcon,
   RssIcon,
@@ -110,6 +111,7 @@ interface FeedDiscoveryCommandProps {
   onSelectBookmark: (url: string) => void;
   bookmarkPlatform: ContentPlatform;
   discoveredFeeds: DiscoveredFeed[];
+  isFeedAdded?: (feed: DiscoveredFeed) => boolean;
   state: "input" | "discovering" | "no-results" | "select" | "adding";
   inputRef?: Ref<HTMLInputElement>;
   loadingLabel?: string;
@@ -127,6 +129,7 @@ function FeedResults({
   visible,
   retry,
   feeds,
+  isAdded,
   onDiscover,
   onSelect,
 }: {
@@ -134,6 +137,7 @@ function FeedResults({
   visible: boolean;
   retry: boolean;
   feeds: DiscoveredFeed[];
+  isAdded: (feed: DiscoveredFeed) => boolean;
   onDiscover: () => void;
   onSelect: (feed: DiscoveredFeed) => void;
 }) {
@@ -156,17 +160,28 @@ function FeedResults({
           </div>
         </CommandItem>
       )}
-      {feeds.map((feed) => (
-        <CommandItem
-          className="gap-2"
-          key={feedDiscoveryKey(feed)}
-          data-onboarding="feed-result"
-          value={feedDiscoveryKey(feed)}
-          onSelect={() => onSelect(feed)}
-        >
-          <PublicationRowContent feed={feed} />
-        </CommandItem>
-      ))}
+      {feeds.map((feed) => {
+        const added = isAdded(feed);
+        return (
+          <CommandItem
+            className="gap-2"
+            key={feedDiscoveryKey(feed)}
+            data-onboarding="feed-result"
+            value={feedDiscoveryKey(feed)}
+            disabled={added}
+            onSelect={() => onSelect(feed)}
+          >
+            <PublicationRowContent
+              feed={feed}
+              trailing={
+                added ? (
+                  <CheckIcon size={16} aria-label="Already added" />
+                ) : null
+              }
+            />
+          </CommandItem>
+        );
+      })}
     </CommandGroup>
   );
 }
@@ -267,6 +282,7 @@ export function FeedDiscoveryCommand({
   onSelectBookmark,
   bookmarkPlatform,
   discoveredFeeds,
+  isFeedAdded = () => false,
   state,
   inputRef,
   loadingLabel = "Adding feed…",
@@ -315,7 +331,7 @@ export function FeedDiscoveryCommand({
           ),
         })
       }
-      className="h-full min-h-0 rounded-none border-0 sm:h-auto [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:pr-10 sm:[&_[cmdk-input]]:pr-0 [&_[cmdk-item]]:pointer-events-auto [&_[cmdk-item]]:opacity-100"
+      className="h-full min-h-0 rounded-none border-0 sm:h-auto [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:pr-10 sm:[&_[cmdk-input]]:pr-0 [&_[cmdk-item][data-disabled=false]]:pointer-events-auto [&_[cmdk-item][data-disabled=false]]:opacity-100"
       shouldFilter={
         !isAddingFeed &&
         !isDiscovering &&
@@ -336,11 +352,13 @@ export function FeedDiscoveryCommand({
         onKeyDown={(event) => {
           if (event.key !== "Enter" || !isSelecting || isAddingFeed) return;
 
-          const command = event.currentTarget.closest("[cmdk-root]");
-          const selectedItem =
-            command?.querySelector<HTMLElement>(
-              '[cmdk-item][data-selected="true"]',
-            ) ?? command?.querySelector<HTMLElement>("[cmdk-item]");
+          // Enter acts only on the highlighted row. Disabled rows are never
+          // selected, so nothing else is chosen on their behalf.
+          const selectedItem = event.currentTarget
+            .closest("[cmdk-root]")
+            ?.querySelector<HTMLElement>(
+              '[cmdk-item][data-selected="true"]:not([aria-disabled="true"])',
+            );
 
           if (selectedItem) {
             event.preventDefault();
@@ -362,6 +380,7 @@ export function FeedDiscoveryCommand({
               visible={isSelecting || hasNoResults}
               retry={hasNoResults}
               feeds={discoveredFeeds}
+              isAdded={isFeedAdded}
               onDiscover={() => onDiscover()}
               onSelect={onSelectFeed}
             />
