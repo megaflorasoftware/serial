@@ -295,7 +295,7 @@ describe("Atmosphere repository recovery", () => {
         .get(),
     ).toMatchObject({ title: "Edited" });
   });
-  it("stages the newest 100 documents and renders them newest first", async () => {
+  it("stages the newest 100 documents and renders the newest 25 in the first pass", async () => {
     const remote = client();
     // Pages descend by rkey like a real PDS: 999 down to 900, then 899 down.
     remote.list = vi.fn(async (_did, cursor) => ({
@@ -314,6 +314,7 @@ describe("Atmosphere repository recovery", () => {
     expect(
       await fixture.database.select().from(feedOriginAtprotoDocuments),
     ).toHaveLength(100);
+    // One pass drains 25 documents concurrently; the set, not the commit order, is newest-first.
     const first = await fixture.database.select().from(feedItems);
     expect(first).toHaveLength(25);
     expect(first.map((item) => item.atprotoUri).sort()).toEqual(

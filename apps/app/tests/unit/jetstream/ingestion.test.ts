@@ -634,6 +634,29 @@ describe("Feed recovery", () => {
     });
     expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
   });
+  it("catches up past a frozen checkpoint when replay is available but no worker is connected", async () => {
+    await pause(1);
+    await fixture.database.update(atprotoStreamState).set({ connected: false });
+    const transport = {
+      ...replay([event(20, "missed")], 30),
+      hasReplay: true,
+      tip: vi.fn(async () => 30),
+    };
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client, readPage, manual: true },
+    );
+    expect(transport.tip).toHaveBeenCalled();
+    expect(await state()).toMatchObject({
+      streamSeq: "30",
+      streamMode: "live",
+    });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+  });
   it("explicit refresh recovers when background ingestion is disabled", async () => {
     await fixture.database.update(atprotoStreamState).set({ seq: "20" });
     await recoverOrigin(
