@@ -72,10 +72,10 @@
 }
 
 /* Body images sit at their own size, never upscaled, centred in the column.
-   Card previews, avatars and social images keep their own layout. */
+   Card previews, avatars, social images and video posters keep their own
+   layout. */
 .article img {
   max-width: 100%;
-  height: auto;
 }
 
 .article
@@ -83,9 +83,11 @@
     [data-record-image],
     [data-social-post-avatar],
     [data-social-post-image],
-    [data-article-video-embed] img
+    [data-article-video-embed] img,
+    [data-social-post-video-player] img
   ) {
   display: block;
+  height: auto;
   margin-inline: auto;
 }
 
@@ -102,7 +104,7 @@
   border-radius: var(--radius-sm);
 }
 
-.article :global([data-image-frame="loaded"]) {
+.article :global([data-lightbox] [data-image-frame="loaded"]) {
   width: fit-content;
   max-width: 100%;
   aspect-ratio: auto !important;

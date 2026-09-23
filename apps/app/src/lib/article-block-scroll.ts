@@ -2,6 +2,13 @@
 
 import { getScrollContainer } from "~/lib/scroll";
 
+/**
+ * Marks a block root that is one navigation stop whatever its markup: cards,
+ * posts, callouts, notices, frames, video embeds. Text blocks rely on their
+ * tag instead. Rendered as a plain attribute: `data-article-block=""`.
+ */
+export const ARTICLE_BLOCK_ATTRIBUTE = "data-article-block";
+
 /** Every block lands with its top edge one-sixth down the viewport. */
 export const ARTICLE_BLOCK_SCROLL = {
   viewportPosition: 1 / 6,

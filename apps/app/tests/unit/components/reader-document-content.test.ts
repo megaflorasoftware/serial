@@ -583,7 +583,7 @@ describe("Reader document content", () => {
           element.tagName +
           (element.hasAttribute("data-article-block") ? "*" : ""),
       ),
-    ).toEqual(["P", "ASIDE*", "PRE", "TABLE", "A*", "FIGURE*", "P"]);
+    ).toEqual(["P", "ASIDE*", "PRE", "TABLE", "A*", "FIGURE", "P"]);
     // The link card is one root that carries its own alignment.
     expect(
       container

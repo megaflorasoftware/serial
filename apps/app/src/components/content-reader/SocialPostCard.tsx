@@ -7,7 +7,6 @@ import { SocialVideoPlayer } from "~/components/content-reader/SocialVideoPlayer
 import { isDisconnectedAtom } from "~/lib/data/atoms";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { timeAgo } from "~/lib/utils";
-import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
 
 const PLATFORM_NAMES = { bluesky: "Bluesky", pckt: "pckt" } as const;
 
@@ -92,7 +91,7 @@ export function SocialPostCard({
       role="note"
       data-social-post={post.platform}
       data-record-card="row"
-      {...{ [ARTICLE_BLOCK_ATTRIBUTE]: "" }}
+      data-article-block=""
     >
       {/* The card opens the post; only the author link and the body's own links sit above it. */}
       <ExternalLink href={post.url} data-social-post-link="">

@@ -3,7 +3,6 @@ import { useAtomValue } from "jotai";
 import type { ReaderAspectRatio } from "@serial/standard-site";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
 import { isDisconnectedAtom } from "~/lib/data/atoms";
-import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
 
 /**
  * The one sandboxed frame the reader ever shows, with one locked-down policy.
@@ -84,7 +83,7 @@ export function SandboxedFrame({
         ? { aspectRatio: `${aspectRatio.width} / ${aspectRatio.height}` }
         : { height: SANDBOXED_FRAME_DEFAULT_HEIGHT };
   return (
-    <div data-reader-frame {...{ [ARTICLE_BLOCK_ATTRIBUTE]: "" }}>
+    <div data-reader-frame data-article-block="">
       <iframe
         srcDoc={srcDoc}
         title={title}

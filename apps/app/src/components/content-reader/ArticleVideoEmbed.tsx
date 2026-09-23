@@ -2,7 +2,6 @@
 
 import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
 import { useFlagState } from "~/lib/hooks/useFlagState";
-import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
 
 /**
  * A YouTube video inside an article: the custom player, or the privacy embed
@@ -22,7 +21,7 @@ export function ArticleVideoEmbed({
     return (
       <div
         data-article-video-embed="serial"
-        {...{ [ARTICLE_BLOCK_ATTRIBUTE]: "" }}
+        data-article-block=""
         className="aspect-video w-full overflow-hidden rounded"
       >
         <CustomVideoPlayer
@@ -38,7 +37,7 @@ export function ArticleVideoEmbed({
   return (
     <div
       data-article-video-embed="youtube"
-      {...{ [ARTICLE_BLOCK_ATTRIBUTE]: "" }}
+      data-article-block=""
       className="aspect-video w-full overflow-hidden rounded"
     >
       <iframe

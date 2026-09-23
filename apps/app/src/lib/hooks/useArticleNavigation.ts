@@ -11,6 +11,7 @@ import {
 } from "~/lib/constants/shortcuts";
 import { getScrollContainer } from "~/lib/scroll";
 import {
+  ARTICLE_BLOCK_ATTRIBUTE,
   getArticleBlockTargetScrollTop,
   scrollArticleBlockToTarget,
 } from "~/lib/article-block-scroll";
@@ -18,12 +19,6 @@ import {
 export const articleSelectedElementAtom = atom<HTMLElement | null>(null);
 
 const SCROLL_DURATION_MS = 300;
-/**
- * A block root that is one navigation stop whatever its markup: cards,
- * posts, callouts, image groups, notices, frames. Set by the component that
- * renders the block; text blocks rely on their tag instead.
- */
-export const ARTICLE_BLOCK_ATTRIBUTE = "data-article-block";
 const SELECTABLE_TAGS = new Set([
   "P",
   "H1",
@@ -53,7 +48,6 @@ function hasNavigableContent(element: HTMLElement): boolean {
     element.textContent?.trim() ||
     element.tagName === "IMG" ||
     element.tagName === "FIGURE" ||
-    element.hasAttribute(ARTICLE_BLOCK_ATTRIBUTE) ||
     element.querySelector("img, iframe, video")
   );
 }
@@ -65,12 +59,7 @@ function isAtomicDiv(element: HTMLElement): boolean {
     !!element.querySelector("iframe, video") &&
     !element.querySelector(TEXT_BLOCK_SELECTOR);
 
-  return (
-    element.hasAttribute("data-lightbox") ||
-    element.hasAttribute("data-article-video-embed") ||
-    isInteractive ||
-    isMediaOnly
-  );
+  return element.hasAttribute("data-lightbox") || isInteractive || isMediaOnly;
 }
 
 function getNavigableDescendants(container: HTMLElement): HTMLElement[] {
@@ -80,8 +69,9 @@ function getNavigableDescendants(container: HTMLElement): HTMLElement[] {
     if (!(child instanceof HTMLElement)) continue;
     if (child.hasAttribute("data-serial-header")) continue;
 
+    // A marked block root is one stop whatever its tag; an empty one is skipped.
     if (child.hasAttribute(ARTICLE_BLOCK_ATTRIBUTE)) {
-      elements.push(child);
+      if (hasNavigableContent(child)) elements.push(child);
       continue;
     }
 
