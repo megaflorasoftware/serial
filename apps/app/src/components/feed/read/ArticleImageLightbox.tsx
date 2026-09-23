@@ -173,7 +173,15 @@ export function ArticleImageLightboxTrigger({
       <button
         data-lightbox-trigger
         type="button"
-        aria-label={alt ? `Open image preview: ${alt}` : "Open image preview"}
+        aria-label={
+          failed
+            ? alt
+              ? `Image unavailable: ${alt}`
+              : "Image unavailable"
+            : alt
+              ? `Open image preview: ${alt}`
+              : "Open image preview"
+        }
         aria-disabled={failed}
         style={{
           display: "block",

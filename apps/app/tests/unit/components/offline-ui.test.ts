@@ -65,10 +65,12 @@ describe("article image fallback", () => {
       "Unavailable illustration",
     );
     expect(container.querySelector("img")).toBeNull();
-    expect(
-      container
-        .querySelector("[data-lightbox-trigger]")
-        ?.getAttribute("aria-disabled"),
-    ).toBe("true");
+    const trigger = container.querySelector("[data-lightbox-trigger]");
+    expect(trigger?.getAttribute("aria-disabled")).toBe("true");
+    // The failed state's announcement names the image, not a preview that
+    // will not open.
+    expect(trigger?.getAttribute("aria-label")).toBe(
+      "Image unavailable: Unavailable illustration",
+    );
   });
 });

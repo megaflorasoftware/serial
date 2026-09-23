@@ -25,7 +25,7 @@ const DESCRIPTIONS: Record<ReaderNoticeKind, string> = {
   truncated: "The rest of this document is longer than the reader can show.",
   membersOnly: "The rest of this document is for members of the publication.",
   depth: "This section is nested too deeply for the reader to show.",
-  embed: "Embedded content from another site is not shown in the reader yet.",
+  embed: "This embedded content is not available in the Serial reader.",
   frame: "Embedded content is not shown offline or in simplified mode.",
 };
 
