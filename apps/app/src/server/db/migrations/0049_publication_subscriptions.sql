@@ -74,7 +74,7 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
   FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin_atproto`(`origin_id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,`uri`);
+CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,"uri" desc);
 --> statement-breakpoint
 CREATE TABLE `serial_feed_origin_atproto_document_source` (
   `origin_id` integer NOT NULL,

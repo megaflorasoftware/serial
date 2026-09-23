@@ -3440,7 +3440,7 @@
             "origin_id",
             "status",
             "retry_at",
-            "uri"
+            "\"uri\" desc"
           ],
           "isUnique": false
         }

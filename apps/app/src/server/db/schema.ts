@@ -2,7 +2,7 @@
 // https://orm.drizzle.team/docs/sql-schema-declaration
 
 import { createId } from "@paralleldrive/cuid2";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   blob,
   foreignKey,
@@ -465,11 +465,12 @@ export const feedOriginAtprotoDocuments = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.originId, table.uri] }),
+    // Pending work drains fresh-first, newest-first; the index serves that order.
     index("feed_origin_atproto_document_due_idx").on(
       table.originId,
       table.status,
       table.retryAt,
-      table.uri,
+      sql`${table.uri} desc`,
     ),
   ],
 );

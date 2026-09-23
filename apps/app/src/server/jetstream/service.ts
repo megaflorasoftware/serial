@@ -13,12 +13,14 @@ import {
   ORIGIN_PAGE_SIZE,
 } from "./store";
 import { recoverOrigin } from "./recovery";
+import { RecoveryDeferredError } from "./deferred";
 import { processOriginDocuments } from "./process";
 import { sweepReferenceSnapshots } from "./reference-snapshots";
 import { createStreamTransport, retryStream } from "./transport";
 import { normalizeService, sequence, StreamFailure } from "./protocol";
 import { createStreamReporter } from "./report";
 import { resolveStreamService } from "./endpoint";
+import type { RecoveryOutcome } from "./recovery";
 import type { FetchableOrigin } from "../rss/types";
 import type { FeedResult } from "../rss/fetchFeeds";
 import type { CommittedUpdate } from "./process";
@@ -102,10 +104,10 @@ async function establishBoundary(
   }
 }
 
-/** Called by existing import/refresh entry points; the saved Feed survives failure. */
 /**
- * Recovery keeps its own backoff on the origin, so a failure is reported as an
- * error until a later recovery succeeds. The generic fetch schedule stays
+ * Called by existing import/refresh entry points; the saved Feed survives
+ * failure. Recovery keeps its own backoff on the origin, so a failure stays an
+ * error until a later recovery succeeds. The generic fetch schedule is
  * untouched: origins remain due and recovery decides whether to run.
  */
 export async function refreshStreamOrigin(
@@ -116,9 +118,10 @@ export async function refreshStreamOrigin(
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
   const ids = { id: fetchable.feed.id, originId: fetchable.origin.id };
+  let outcome: RecoveryOutcome;
   try {
     await establishBoundary(database, config, signal);
-    await recoverOrigin(
+    outcome = await recoverOrigin(
       database,
       fetchable.origin.id,
       config.settings,
@@ -136,17 +139,8 @@ export async function refreshStreamOrigin(
     config.transport.report(error, "feed-recovery");
     return { status: "error", ...ids, error };
   }
-  const retrying = await database
-    .select({ retryAt: feedOriginAtproto.recoveryRetryAt })
-    .from(feedOriginAtproto)
-    .where(eq(feedOriginAtproto.originId, fetchable.origin.id))
-    .get();
-  if (retrying?.retryAt && retrying.retryAt > new Date())
-    return {
-      status: "error",
-      ...ids,
-      error: new Error("Publication recovery is waiting to retry"),
-    };
+  if (outcome === "deferred")
+    return { status: "error", ...ids, error: new RecoveryDeferredError() };
   return {
     status: updates.length ? "success" : "empty",
     ...ids,
