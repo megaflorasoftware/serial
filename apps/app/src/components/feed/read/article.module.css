@@ -350,7 +350,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 1rem;
+  min-height: 15rem;
   padding: 1.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -366,21 +368,25 @@
   font-weight: 600;
 }
 
-.article :global([data-reader-notice]) a {
+/* The article's link rule outranks the button's utility classes; restate the
+   primary variant at higher specificity so the notice button matches buttons
+   elsewhere. */
+.article :global([role="note"][data-reader-notice]) a {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   font-family: var(--font-sans);
   font-size: 0.875rem;
   padding-inline: 1rem;
-  background: var(--color-background);
-  color: var(--color-foreground);
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
 }
 
-.article :global([data-reader-notice]) a:hover,
-.article :global([data-reader-notice]) a:focus-visible {
-  background: var(--color-accent);
-  color: var(--color-accent-foreground);
+.article :global([role="note"][data-reader-notice]) a:hover,
+.article :global([role="note"][data-reader-notice]) a:focus-visible {
+  background: color-mix(in srgb, var(--color-primary) 90%, transparent);
+  color: var(--color-primary-foreground);
 }
 
 .article :global([data-reader-frame]) iframe {

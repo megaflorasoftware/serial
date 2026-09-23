@@ -183,7 +183,7 @@ export type ReaderBlockValue =
   | { kind: "socialPost"; post: ReaderSocialPost }
   | {
       kind: "embed";
-      /** The page the embed comes from; the notice points here. */
+      /** The page the embed comes from, for a simplified-mode link out. */
       href: string;
       embedUrl: string | null;
       youtube: YouTubeReference | null;

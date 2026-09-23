@@ -259,9 +259,10 @@ describe("Reader document content", () => {
     expect(
       notices[0]?.querySelector("[data-reader-notice-headline]")?.textContent,
     ).toBe("The rest of this post is for members");
+    expect(notices[1]?.getAttribute("data-reader-notice")).toBe("embed");
     expect(
       notices[1]?.querySelector("[data-reader-notice-headline]")?.textContent,
-    ).toBe("Available on the original site");
+    ).toBe("This interactive content is available on the original site");
     expect(notices[0]?.querySelector(".sr-only")?.textContent).toContain(
       "members",
     );
@@ -271,11 +272,14 @@ describe("Reader document content", () => {
     expect(notices[0]?.querySelector("a")?.textContent).toContain(
       "Open in Website",
     );
-    // A src frame points at the embed's own page until ticket 38 admits it.
+    // A src frame's notice opens the document page, never the embed's own URL.
     expect(notices[1]?.querySelector("a")?.getAttribute("href")).toBe(
-      "https://codepen.io/pen",
+      "https://example.com/post",
     );
     expect(notices[2]?.getAttribute("data-reader-notice")).toBe("unsupported");
+    expect(
+      notices[2]?.querySelector("[data-reader-notice-headline]")?.textContent,
+    ).toBe("Available on the original site");
     expect(container.querySelectorAll("iframe")).toHaveLength(0);
   });
 

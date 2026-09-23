@@ -196,13 +196,10 @@ function Block({
   options: RenderOptions;
 }) {
   const simplified = options.simplified === true;
-  const notice = (
-    kind: Parameters<typeof ReaderNotice>[0]["kind"],
-    href = options.documentUrl,
-  ) => (
+  const notice = (kind: Parameters<typeof ReaderNotice>[0]["kind"]) => (
     <ReaderNotice
       kind={kind}
-      href={href}
+      href={options.documentUrl}
       originActionLabel={options.originActionLabel}
     />
   );
@@ -431,7 +428,7 @@ function Block({
           </p>
         );
       // Every other src frame waits on the sandboxed frame decision (ticket 38).
-      return notice("unsupported", block.href);
+      return notice("embed");
     case "html":
       return (
         <SandboxedFrame
