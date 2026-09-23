@@ -18,9 +18,9 @@ function ListItemSkeleton() {
 
 function LargeListItemSkeleton() {
   return (
-    <div className="flex w-full flex-col gap-4 px-6 pt-4 pb-1 md:mx-4 md:flex-row md:items-center md:px-2 md:py-3">
+    <div className="flex w-full flex-col gap-4 px-6 pt-4 pb-1 md:mx-4 md:flex-row md:items-center md:px-2 md:py-2 md:pb-2">
       <div className="grid w-44 place-items-center">
-        <div className="bg-muted aspect-[1.91/1] w-44 animate-pulse rounded" />
+        <div className="bg-muted aspect-video w-44 animate-pulse rounded" />
       </div>
       <div className="flex h-full flex-1 flex-col justify-center pr-2">
         <div className="bg-muted h-4 w-3/4 animate-pulse rounded" />

@@ -184,7 +184,7 @@ function ThumbnailContainer({
           layout === "large-list" && thumbnailType === "horizontal-video",
         "aspect-[9/16] w-20":
           layout === "large-list" && thumbnailType === "vertical-video",
-        "bg-muted aspect-[1.91/1] w-44": layout === "large-list" && !isVideo,
+        "bg-muted aspect-[3/2] w-44": layout === "large-list" && !isVideo,
         // Grid layout (standard)
         "aspect-video w-full":
           (layout === "grid" || layout === "large-grid") &&
@@ -794,8 +794,8 @@ function BookmarkListItem({
         tabIndex={canOpen ? undefined : -1}
         onClick={onLinkClick}
         className={clsx(
-          "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2",
-          isLarge ? "pb-1 md:py-3" : "pb-4 md:h-20 md:py-0",
+          "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2 md:py-2",
+          isLarge ? "pb-1 md:pb-2" : "pb-4 md:h-20 md:py-0",
           isSelected && "md:bg-muted",
           !canOpen && "cursor-not-allowed",
         )}
@@ -903,8 +903,8 @@ function FeedItemDisplay({
         tabIndex={canOpen ? undefined : -1}
         onClick={handleLinkClick}
         className={clsx(
-          "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2",
-          isLarge ? "pb-1 md:py-3" : "pb-4 md:h-20 md:py-0",
+          "flex w-full flex-1 flex-col gap-4 px-6 pt-4 text-left md:flex-row md:items-center md:rounded md:px-2 md:py-2",
+          isLarge ? "pb-1 md:pb-2" : "pb-4 md:h-20 md:py-0",
           isSelected && "md:bg-muted",
           !canOpen && "cursor-not-allowed",
         )}
