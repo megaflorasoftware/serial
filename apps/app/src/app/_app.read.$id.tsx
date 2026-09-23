@@ -2,8 +2,6 @@
 
 import { ARTICLE_SANITIZE_SCHEMA } from "@serial/standard-site";
 
-import clsx from "clsx";
-
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -18,7 +16,10 @@ import { barsHiddenAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import classes from "~/components/feed/read/article.module.css";
 import { useFeedItemValue } from "~/lib/data/store";
-import { readerContent } from "~/lib/data/feed-items/readerBody";
+import {
+  hasReaderBodyContent,
+  readerContent,
+} from "~/lib/data/feed-items/readerBody";
 import { ArticleContent } from "~/components/feed/read/ArticleContent";
 import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
 import { getOriginActionLabel } from "~/lib/content/capabilities";
@@ -32,7 +33,6 @@ import { useDebouncedSaveProgress } from "~/lib/hooks/useDebouncedSaveProgress";
 import { useRefreshFeedItem } from "~/lib/hooks/useRefreshFeedItem";
 import { useRestoreArticleProgress } from "~/lib/hooks/useRestoreArticleProgress";
 import { useScrollDirection } from "~/lib/hooks/useScrollDirection";
-import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { ArticleSidebars } from "~/components/feed/read/ArticleSidebars";
 import {
   TruncationAlert,
@@ -42,7 +42,16 @@ import { useRetentionPin } from "~/lib/hooks/useRetentionPin";
 import { useBookmarkValue } from "~/lib/data/bookmarks";
 import { BookmarkReader } from "~/components/content-reader/BookmarkReader";
 import { ContentRendererFallback } from "~/components/content-renderer/ContentRendererFallback";
-import { getArticleWidthLayout } from "~/components/content-reader/articleWidth";
+import {
+  ReaderLayout,
+  ReaderSource,
+} from "~/components/content-reader/ReaderLayout";
+import {
+  ReaderBodySkeleton,
+  ReaderHeader,
+  ReaderSkeleton,
+  readerSourceInfo,
+} from "~/components/content-reader/ReaderSkeleton";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 import {
   contentDestination,
@@ -78,7 +87,7 @@ function ReadPage() {
     return <p className="p-6 text-center">This content ID is ambiguous.</p>;
   }
   if (resolution.status === "missing") {
-    return <p className="p-6 text-center">Loading content…</p>;
+    return <ReaderSkeleton />;
   }
   const destination = contentDestination(resolution.item);
   if (destination.renderer !== "read") {
@@ -136,7 +145,6 @@ function FeedReader({
   const feed = feeds.find((f) => f.id === feedItem?.feedId);
 
   const { zoom } = useZoom();
-  const articleWidthLayout = getArticleWidthLayout(zoom);
 
   // Deriving a Document source is the expensive step, so it is keyed on the
   // body identity rather than on the zoom and style the reader also reads.
@@ -144,6 +152,9 @@ function FeedReader({
   // revision stays, so progress does not move.
   const body = feedItem?.body;
   const reader = useMemo(() => readerContent(body), [body]);
+  // A body already on the client draws at once; the skeleton fills in only
+  // while the server has not yet answered. An empty answer draws nothing.
+  const isBodyPending = !hasReaderBodyContent(body) && !hasRefreshedFeedItem;
   const content =
     reader?.form === "html" ? getReaderContent(reader.html, articleStyle) : "";
 
@@ -188,26 +199,18 @@ function FeedReader({
   );
 
   return (
-    <div
-      className={clsx(
-        "mx-auto grid h-full w-full place-items-center",
-        articleWidthLayout.className,
-      )}
-      style={articleWidthLayout.style}
+    <ReaderLayout
+      source={
+        <ReaderSource
+          source={readerSourceInfo(
+            feed,
+            <div className="bg-muted aspect-square size-6 rounded object-cover" />,
+          )}
+        />
+      }
+      actions={<ContentActions contentID={id} />}
+      barsHidden={barsHidden}
     >
-      <div className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6">
-        {feed?.imageUrl ? (
-          <img
-            {...REMOTE_IMAGE_PROPS}
-            src={feed.imageUrl}
-            alt={feedItem?.title}
-            className="aspect-square h-6 rounded object-cover"
-          />
-        ) : (
-          <div className="bg-muted aspect-square size-6 rounded object-cover" />
-        )}
-        <span className="line-clamp-1 font-sans text-sm">{feed?.name}</span>
-      </div>
       <div key={id} className="relative w-full">
         <ArticleSidebars
           article={articleElement}
@@ -218,9 +221,19 @@ function FeedReader({
           ref={updateArticleRef}
           className={`h-full w-full px-6 sm:pb-6 ${classes.article}`}
         >
-          <h1 data-serial-header>{feedItem?.title}</h1>
-          <h6 data-serial-header>{feedItem?.author || feed?.name || ""}</h6>
-          {reader?.form === "document" ? (
+          <ReaderHeader
+            header={
+              feedItem
+                ? {
+                    title: feedItem.title,
+                    author: feedItem.author || feed?.name || "",
+                  }
+                : null
+            }
+          />
+          {isBodyPending ? (
+            <ReaderBodySkeleton />
+          ) : reader?.form === "document" ? (
             <ReaderDocumentContent
               document={reader.document}
               documentUrl={feedItem?.url ?? ""}
@@ -244,16 +257,6 @@ function FeedReader({
           onRespond={handleAlertResponse}
         />
       )}
-      <div
-        className={clsx(
-          "sticky inset-x-0 bottom-0 left-0 grid place-items-center transition-transform duration-300",
-          {
-            "translate-y-full": barsHidden,
-          },
-        )}
-      >
-        <ContentActions contentID={id} />
-      </div>
-    </div>
+    </ReaderLayout>
   );
 }
