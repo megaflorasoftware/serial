@@ -43,6 +43,9 @@ let resolveFeed: ReturnType<
   >
 >;
 let invalidate: ReturnType<typeof vi.fn<() => Promise<void>>>;
+let fetchCreatedFeed: ReturnType<
+  typeof vi.fn<(database: unknown, feedId: number) => Promise<void>>
+>;
 let maxActiveFeeds: number;
 const run = () =>
   syncPublicationSubscriptions({
@@ -51,6 +54,8 @@ const run = () =>
     dependencies: {
       store,
       resolveFeed: (userId, uri) => resolveFeed(userId, uri),
+      fetchCreatedFeed: (database, feedId) =>
+        fetchCreatedFeed(database, feedId),
       invalidate,
       activationBudget: async () => ({
         remainingSlots: maxActiveFeeds,
@@ -95,6 +100,9 @@ beforeEach(async () => {
   maxActiveFeeds = 10;
   resolveFeed = vi.fn(async (_userId: string, uri: string) => details(uri));
   invalidate = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+  fetchCreatedFeed = vi
+    .fn<(database: unknown, feedId: number) => Promise<void>>()
+    .mockResolvedValue(undefined);
   store = {
     visibility: "public",
     latestRev: vi.fn(async () => String(rev)),
@@ -114,6 +122,36 @@ beforeEach(async () => {
 afterEach(() => fixture.cleanup());
 
 describe("publication subscription sync", () => {
+  it("fetches each active Feed it creates once, after the Feed is visible", async () => {
+    records = [record("one"), record("two")];
+    await method("import");
+    expect(await run()).toMatchObject({ status: "completed", imported: 2 });
+    const created = await fixture.database.select().from(feeds);
+    expect(fetchCreatedFeed.mock.calls.map(([, feedId]) => feedId)).toEqual(
+      created.map((feed) => feed.id),
+    );
+    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(
+      fetchCreatedFeed.mock.invocationCallOrder[0]!,
+    );
+    fetchCreatedFeed.mockClear();
+    await run();
+    expect(fetchCreatedFeed).not.toHaveBeenCalled();
+  });
+  it("does not fetch inactive imports or Feeds that already exist", async () => {
+    await addLocal("one");
+    maxActiveFeeds = 1;
+    records = [record("one"), record("two")];
+    await method("import");
+    expect(await run()).toMatchObject({ imported: 1, inactive: 1 });
+    expect(fetchCreatedFeed).not.toHaveBeenCalled();
+  });
+  it("keeps the import when the first fetch fails", async () => {
+    records = [record("one")];
+    fetchCreatedFeed.mockRejectedValue(new Error("offline"));
+    await method("import");
+    expect(await run()).toMatchObject({ status: "completed", imported: 1 });
+    expect(await fixture.database.select().from(feeds)).toHaveLength(1);
+  });
   it("imports quota overflow inactive and skips unchanged repository listings", async () => {
     maxActiveFeeds = 1;
     records = [record("one"), record("two")];

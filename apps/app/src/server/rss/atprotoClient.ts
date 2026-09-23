@@ -113,7 +113,7 @@ export function createPublicationClient(
         {
           repo: did,
           collection: "site.standard.document",
-          reverse: "true",
+          // The PDS lists descending by rkey, so the first page is the newest.
           limit: "100",
           ...(cursor ? { cursor } : {}),
         },

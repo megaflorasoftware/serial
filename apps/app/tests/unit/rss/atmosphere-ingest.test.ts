@@ -295,8 +295,9 @@ describe("Atmosphere repository recovery", () => {
         .get(),
     ).toMatchObject({ title: "Edited" });
   });
-  it("caps the initial import at 200 matching documents and tolerates unrelated publications", async () => {
+  it("stages the newest 100 documents and renders them newest first", async () => {
     const remote = client();
+    // Pages descend by rkey like a real PDS: 999 down to 900, then 899 down.
     remote.list = vi.fn(async (_did, cursor) => ({
       records: Array.from({ length: 100 }, (_, i) =>
         record(String(999 - Number(cursor ?? 0) - i).padStart(3, "0")),
@@ -306,12 +307,19 @@ describe("Atmosphere repository recovery", () => {
       notModified: false as const,
     }));
     await refresh(remote);
-    expect(remote.list).toHaveBeenCalledTimes(2);
+    expect(remote.list).toHaveBeenCalledTimes(1);
+    expect(
+      await fixture.database.select().from(feedOriginAtproto).get(),
+    ).toMatchObject({ initialized: true, newestRkey: "999", cursor: null });
     expect(
       await fixture.database.select().from(feedOriginAtprotoDocuments),
-    ).toHaveLength(200);
-    expect(await fixture.database.select().from(feedItems)).toHaveLength(25);
-    for (let batch = 0; batch < 7; batch++)
+    ).toHaveLength(100);
+    const first = await fixture.database.select().from(feedItems);
+    expect(first).toHaveLength(25);
+    expect(first.map((item) => item.atprotoUri).sort()).toEqual(
+      Array.from({ length: 25 }, (_, i) => uri(String(999 - i))).sort(),
+    );
+    for (let batch = 0; batch < 3; batch++)
       await recoverRepository(
         fixture.database,
         origin.id,
@@ -324,16 +332,33 @@ describe("Atmosphere repository recovery", () => {
         },
         false,
       );
-    expect(remote.list).toHaveBeenCalledTimes(2);
-    expect(await fixture.database.select().from(feedItems)).toHaveLength(200);
+    expect(remote.list).toHaveBeenCalledTimes(1);
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(100);
     expect(
       await fixture.database
         .select()
         .from(feedOriginAtprotoDocuments)
         .where(eq(feedOriginAtprotoDocuments.status, "retry")),
     ).toHaveLength(0);
-    // Eight import batches over 200 documents need more than the default budget.
+    // Four import batches over 100 documents need more than the default budget.
   }, 15_000);
+  it("stops a later scan at the newest known document", async () => {
+    await refresh(client([record("003"), record("002")]));
+    const remote = client();
+    remote.latestRev = vi.fn(async () => "rev2");
+    remote.list = vi.fn(async (_did, cursor) => ({
+      records: cursor ? [record("002")] : [record("005"), record("004")],
+      cursor: cursor ? undefined : "older",
+      etag: null,
+      notModified: false as const,
+    }));
+    await refresh(remote);
+    expect(remote.list).toHaveBeenCalledTimes(2);
+    expect(
+      await fixture.database.select().from(feedOriginAtproto).get(),
+    ).toMatchObject({ newestRkey: "005" });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(4);
+  });
   it("keeps successes and retries a failed body after it leaves the first page", async () => {
     const broken = record("002", {
       content: {
