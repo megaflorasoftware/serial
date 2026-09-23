@@ -6,14 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DatabasePageCapture } from "~/server/db/schema";
 import { BookmarkArticleContent } from "~/components/bookmarks/BookmarkArticleContent";
 import { BookmarkReaderActions } from "~/components/bookmarks/BookmarkReaderActions";
-import {
-  ReaderLayout,
-  ReaderSource,
-} from "~/components/content-reader/ReaderLayout";
+import { ReaderLayout } from "~/components/content-reader/ReaderLayout";
+import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import {
   ReaderHeader,
   ReaderSkeleton,
-  readerSourceInfo,
+  ReaderSource,
 } from "~/components/content-reader/ReaderSkeleton";
 import { ArticleSidebars } from "~/components/feed/read/ArticleSidebars";
 import classes from "~/components/feed/read/article.module.css";
@@ -145,15 +143,23 @@ export function BookmarkReader({ id }: { id: string }) {
     setArticleElement(element);
   }, []);
 
-  const source = readerSourceInfo(
-    bookmark && {
-      imageUrl: bookmark.iconUrl,
-      name: bookmark.siteName ?? new URL(bookmark.sourceUrl).hostname,
-    },
-    <div className="bg-muted text-muted-foreground grid size-6 place-items-center rounded">
-      <BookmarkIcon size={14} />
-    </div>,
-  );
+  const source = bookmark
+    ? {
+        name: bookmark.siteName ?? new URL(bookmark.sourceUrl).hostname,
+        icon: bookmark.iconUrl ? (
+          <img
+            {...REMOTE_IMAGE_PROPS}
+            src={bookmark.iconUrl}
+            alt=""
+            className="size-6 rounded object-contain"
+          />
+        ) : (
+          <div className="bg-muted text-muted-foreground grid size-6 place-items-center rounded">
+            <BookmarkIcon size={14} />
+          </div>
+        ),
+      }
+    : null;
   const header = bookmark
     ? { title: bookmark.title, author: bookmark.author || "" }
     : null;

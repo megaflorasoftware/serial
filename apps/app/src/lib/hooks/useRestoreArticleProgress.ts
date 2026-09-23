@@ -52,6 +52,10 @@ export function useRestoreArticleProgress({
 
   useLayoutEffect(() => {
     hasUserInteractedRef.current = false;
+    // A placement belongs to one visit; returning to an earlier content id
+    // starts over rather than inheriting that visit's settled state.
+    if (placementRef.current?.contentId !== contentId)
+      placementRef.current = null;
     const container = getScrollContainer();
     const markUserInteraction = () => {
       hasUserInteractedRef.current = true;
@@ -80,10 +84,7 @@ export function useRestoreArticleProgress({
 
   useLayoutEffect(() => {
     if (!articleElement) return;
-    const placement =
-      placementRef.current?.contentId === contentId
-        ? placementRef.current
-        : null;
+    const placement = placementRef.current;
     // The server's answer is the only reason to place a second time. Once it
     // has been used, or the user has taken over, the scroll is theirs.
     const settled = placement !== null && (placement.ready || !ready);

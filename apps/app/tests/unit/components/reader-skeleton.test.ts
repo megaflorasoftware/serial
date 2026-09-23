@@ -43,7 +43,7 @@ describe("Reader skeleton", () => {
 
     const known = render(
       createElement(ReaderSkeleton, {
-        source: { imageUrl: null, name: "The Feed", fallback: null },
+        source: { icon: null, name: "The Feed" },
         header: { title: "Article title", author: "Author" },
       }),
     );
