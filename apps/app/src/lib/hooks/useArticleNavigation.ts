@@ -59,7 +59,13 @@ function isAtomicDiv(element: HTMLElement): boolean {
     !!element.querySelector("iframe, video") &&
     !element.querySelector(TEXT_BLOCK_SELECTOR);
 
-  return element.hasAttribute("data-lightbox") || isInteractive || isMediaOnly;
+  return (
+    element.hasAttribute("data-lightbox") ||
+    // HTML bodies mark video embeds this way without the block attribute.
+    element.hasAttribute("data-article-video-embed") ||
+    isInteractive ||
+    isMediaOnly
+  );
 }
 
 function getNavigableDescendants(container: HTMLElement): HTMLElement[] {

@@ -470,10 +470,11 @@
   min-width: 0;
 }
 
-/* Reader figures: the lightbox button fills the figure so percent widths and
-   alignment resolve against the column, not the image's own size. Images
+/* The lightbox button fills the column so percent widths, alignment and the
+   placeholder resolve against the column, not the image's own size: a
+   button shrinks to its content, and a placeholder alone has none. Images
    centre unless the author aligned them left or right. */
-.article :global([data-reader-figure]) :global([data-lightbox-trigger]) {
+.article :global([data-lightbox-trigger]) {
   width: 100%;
 }
 
