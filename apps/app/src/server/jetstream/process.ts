@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, or } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
   listedRecordSchema,
@@ -152,9 +152,10 @@ export async function processOriginDocuments(
         ),
       ),
     )
+    // Fresh work first, newest document first, so a bootstrap surfaces recent items.
     .orderBy(
       asc(feedOriginAtprotoDocuments.retryAt),
-      asc(feedOriginAtprotoDocuments.uri),
+      desc(feedOriginAtprotoDocuments.uri),
     )
     .limit(25);
   let imageRequests = 0;

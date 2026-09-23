@@ -2,7 +2,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { StreamTransport } from "~/server/jetstream/transport";
-import { startStreamWorker } from "~/server/jetstream/service";
+import {
+  refreshStreamOrigin,
+  startStreamWorker,
+} from "~/server/jetstream/service";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   atprotoStreamState,
@@ -220,3 +223,58 @@ it.each([true, false])(
     }
   },
 );
+
+it("reports a pending recovery retry as a fetch error instead of an empty refresh", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const now = new Date();
+  await database.insert(user).values({
+    id: "reader",
+    name: "Reader",
+    email: "reader@example.com",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const feed = await insertFeedWithOrigins(database, {
+    userId: "reader",
+    isActive: true,
+    details: {
+      name: "Feed",
+      platform: "website",
+      imageUrl: "",
+      origins: [
+        {
+          kind: "atproto",
+          locator: "at://did:plc:alice/site.standard.publication/site",
+        },
+      ],
+    },
+  });
+  await database
+    .insert(atprotoStreamState)
+    .values({ id: "primary", service, seq: "1" });
+  const tip = vi.fn(async () => {
+    throw new Error("Jetstream unavailable");
+  });
+  state.transport = {
+    service,
+    hasReplay: false,
+    recover: vi.fn(),
+    tip,
+    report: vi.fn(),
+    async *stream() {},
+  };
+  const fetchable = { feed, origin: feed.origins[0]! };
+  const first = await refreshStreamOrigin(database, fetchable);
+  expect(first.status).toBe("error");
+  const origin = await database.select().from(feedOriginAtproto).get();
+  expect(origin?.recoveryRetryAt?.getTime()).toBeGreaterThan(Date.now());
+  // Recovery backoff still owns scheduling; the generic fetch schedule is untouched.
+  expect(fetchable.origin.nextFetchAt).toBeNull();
+  tip.mockClear();
+  const second = await refreshStreamOrigin(database, fetchable);
+  expect(second.status).toBe("error");
+  expect(tip).not.toHaveBeenCalled();
+});

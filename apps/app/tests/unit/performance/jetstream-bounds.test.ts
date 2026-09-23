@@ -46,7 +46,8 @@ it.each([1000, 10000, 50000])(
         session.instrumentation.reset();
         const result = await workload.recover(bootstrap);
         const evidence = session.instrumentation.snapshot();
-        expect(result.pages).toBe(2);
+        // A bootstrap stops at the newest 100; a later scan pages to the end.
+        expect(result.pages).toBe(bootstrap ? 1 : 2);
         expect(result.images).toBeLessThanOrEqual(8);
         expect(evidence.materializedRows).toBeLessThanOrEqual(1600);
         expect(evidence.statementCount).toBeLessThanOrEqual(700);

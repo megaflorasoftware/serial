@@ -32,6 +32,7 @@ import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
 import {
   atprotoConnections,
   feedOrigins,
+  feeds,
   atprotoSubscriptionMirror as mirror,
 } from "~/server/db/schema";
 import { commitFeedImport, prepareFeedImport } from "~/server/feeds/imports";
@@ -40,6 +41,9 @@ import {
   FeedImportSkippedError,
 } from "~/server/feeds/importErrors";
 import { deleteUserFeeds } from "~/server/feeds/delete";
+import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
+import { fetchableOriginsOf, withOrigins } from "~/server/feeds/origins";
+import { getUserChannel } from "~/server/api/channels";
 import {
   getActiveFeedCount,
   getFeedsActivationBudget,
@@ -59,6 +63,23 @@ function groupByPublication<T extends { publicationUri: string }>(rows: T[]) {
   }
   return grouped;
 }
+/**
+ * A Feed the sync created gets its first content at once, like a Feed the user
+ * added by hand: every origin, published to the user's channel. This runs
+ * outside the user's refresh window, bounded to Feeds this run created.
+ */
+async function fetchCreatedFeed(database: typeof Database, feedId: number) {
+  const rows = await database.select().from(feeds).where(eq(feeds.id, feedId));
+  const feedsList = fetchableOriginsOf(await withOrigins(database, rows));
+  const userId = rows[0]?.userId;
+  if (!feedsList.length || !userId) return;
+  await refreshUserFeeds({
+    db: database,
+    feedsList,
+    channel: getUserChannel(userId),
+    manual: true,
+  });
+}
 async function resolveImportedFeed(userId: string, publicationUri: string) {
   const { resolvePublicationFeed } =
     await import("~/server/feeds/resolveSelection");
@@ -76,6 +97,7 @@ export async function syncPublicationSubscriptions(input: {
     backfill?: typeof backfillPublicationOrigins;
     store?: SubscriptionRecordStore;
     resolveFeed?: typeof resolveImportedFeed;
+    fetchCreatedFeed?: typeof fetchCreatedFeed;
     activationBudget?: typeof getFeedsActivationBudget;
     invalidate?: typeof publishReconciliationInvalidation;
   };
@@ -113,6 +135,13 @@ export async function syncPublicationSubscriptions(input: {
     if (!retryAt || next < retryAt) retryAt = next;
   };
   let changedFeeds = false;
+  const invalidate = async () => {
+    changedFeeds = false;
+    await (input.dependencies?.invalidate ?? publishReconciliationInvalidation)(
+      userId,
+      organizationInvalidationSummary(),
+    );
+  };
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
   let observedCompleteSnapshot = true;
@@ -363,7 +392,8 @@ export async function syncPublicationSubscriptions(input: {
           let feedId = localFeedId;
           let imported = 0,
             inactive = 0,
-            removed = 0;
+            removed = 0,
+            createdFeedId: number | null = null;
           if (prepared) {
             const activeCount = await getActiveFeedCount(tx, userId);
             const created = await commitFeedImport(
@@ -375,6 +405,8 @@ export async function syncPublicationSubscriptions(input: {
             feedId = created.feed.id;
             imported = Number(created.created || created.attached);
             inactive = Number(created.created && !created.feed.isActive);
+            if (created.created && created.feed.isActive)
+              createdFeedId = created.feed.id;
           }
           if (action === "remove-local" && feedId !== null) {
             removed = (await deleteUserFeeds(tx, userId, [feedId])).length;
@@ -396,13 +428,25 @@ export async function syncPublicationSubscriptions(input: {
                 }
               : undefined,
           });
-          return { imported, inactive, removed };
+          return { imported, inactive, removed, createdFeedId };
         });
         counts.imported += result.imported;
         counts.inactive += result.inactive;
         counts.removed += result.removed + Number(action === "remove-remote");
         counts.exported += Number(action === "export");
         changedFeeds ||= result.imported > 0 || result.removed > 0;
+        if (result.createdFeedId !== null) {
+          await renewSubscriptionSync(database, connection);
+          // Clients learn the Feed before its items arrive, as with Add.
+          await invalidate();
+          // The Feed exists either way; content failures surface on the Feed itself.
+          await (input.dependencies?.fetchCreatedFeed ?? fetchCreatedFeed)(
+            database,
+            result.createdFeedId,
+          ).catch((error: unknown) =>
+            logError("[publication-sync] first fetch failed", error),
+          );
+        }
       } catch (error) {
         if (
           action === "import" &&
@@ -507,10 +551,7 @@ export async function syncPublicationSubscriptions(input: {
           ),
         ),
       );
-    if (changedFeeds)
-      await (
-        input.dependencies?.invalidate ?? publishReconciliationInvalidation
-      )(userId, organizationInvalidationSummary());
+    if (changedFeeds) await invalidate();
   }
   return {
     ...counts,

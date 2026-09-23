@@ -570,6 +570,70 @@ describe("Feed recovery", () => {
       streamMode: "live",
     });
   });
+  it("bootstraps a no-key origin from a connected worker's checkpoint without reading the tip", async () => {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "20",
+      connected: true,
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+    await fixture.database.update(feedOriginAtproto).set({
+      initialized: false,
+      streamMode: "paused",
+      streamSeq: null,
+      streamService: null,
+    });
+    const transport = { ...replay([], 20), hasReplay: false };
+    const recover = vi.spyOn(transport, "recover");
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client, readPage },
+    );
+    expect(transport.tip).not.toHaveBeenCalled();
+    // An empty interval never opens a connection.
+    expect(
+      recover.mock.calls.map(([after, through]) => [after, through]),
+    ).toEqual([[20, 20]]);
+    expect(await state()).toMatchObject({
+      initialized: true,
+      streamSeq: "20",
+      streamMode: "live",
+    });
+  });
+  it("reads the tip for a no-key bootstrap when no worker is connected", async () => {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "20",
+      connected: false,
+    });
+    await fixture.database.update(feedOriginAtproto).set({
+      initialized: false,
+      streamMode: "paused",
+      streamSeq: null,
+      streamService: null,
+    });
+    const transport = {
+      ...replay([event(21)], 22),
+      hasReplay: false,
+      tip: vi.fn().mockResolvedValueOnce(20).mockResolvedValue(22),
+    };
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client, readPage },
+    );
+    expect(transport.tip).toHaveBeenCalledTimes(2);
+    expect(await state()).toMatchObject({
+      streamSeq: "22",
+      streamMode: "live",
+    });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+  });
   it("explicit refresh recovers when background ingestion is disabled", async () => {
     await fixture.database.update(atprotoStreamState).set({ seq: "20" });
     await recoverOrigin(
@@ -772,7 +836,7 @@ describe("failure isolation", () => {
     expect(await fixture.database.select().from(feeds)).toHaveLength(1);
     expect(await fixture.database.select().from(feedItems)).toHaveLength(0);
   });
-  it("queues only the latest 200 initial documents and applies concurrent edits before rendering", async () => {
+  it("queues only the newest 100 initial documents and applies concurrent edits before rendering", async () => {
     await fixture.database.update(atprotoStreamState).set({ seq: "1" });
     await fixture.database.update(feedOriginAtproto).set({
       initialized: false,
@@ -798,20 +862,23 @@ describe("failure isolation", () => {
       fixture.database,
       originId,
       settings,
-      replay([event(2, "800", "Latest")], 3),
+      replay([event(2, "999", "Latest")], 3),
       new AbortController().signal,
       { client: remote, readPage },
     );
-    expect(remote.list).toHaveBeenCalledTimes(2);
-    expect(
-      await fixture.database.select().from(feedOriginAtprotoDocuments),
-    ).toHaveLength(200);
+    expect(remote.list).toHaveBeenCalledTimes(1);
+    const staged = await fixture.database
+      .select({ uri: feedOriginAtprotoDocuments.uri })
+      .from(feedOriginAtprotoDocuments);
+    expect(staged).toHaveLength(100);
+    expect(staged.map((row) => row.uri)).toContain(uri("999"));
+    expect(staged.map((row) => row.uri)).not.toContain(uri("899"));
     expect(
       (
         await fixture.database
           .select()
           .from(feedItems)
-          .where(eq(feedItems.atprotoUri, uri("800")))
+          .where(eq(feedItems.atprotoUri, uri("999")))
           .get()
       )?.title,
     ).toBe("Latest");

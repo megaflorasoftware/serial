@@ -346,6 +346,7 @@ const server = createServer(async (request, response) => {
           rkey: z.string().default(""),
           cursor: z.string().optional(),
           limit: z.coerce.number().positive().optional(),
+          reverse: z.string().optional(),
           swapRecord: z.string().nullable().optional(),
           record: z.record(z.string(), z.unknown()).default({}),
         })
@@ -372,7 +373,12 @@ const server = createServer(async (request, response) => {
           .filter((record) =>
             record.uri.startsWith(`at://${repo}/${input.collection}/`),
           )
-          .sort((a, b) => a.uri.localeCompare(b.uri));
+          // Descending by URI like the reference PDS; `reverse` flips it.
+          .sort((a, b) =>
+            input.reverse === "true"
+              ? a.uri.localeCompare(b.uri)
+              : b.uri.localeCompare(a.uri),
+          );
         const offset = Number(input.cursor ?? 0),
           limit = Math.min(Number(input.limit ?? 100), 100);
         return json({

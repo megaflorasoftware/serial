@@ -20,6 +20,7 @@ import { normalizeService, sequence, StreamFailure } from "./protocol";
 import { createStreamReporter } from "./report";
 import { resolveStreamService } from "./endpoint";
 import type { FetchableOrigin } from "../rss/types";
+import type { FeedResult } from "../rss/fetchFeeds";
 import type { CommittedUpdate } from "./process";
 import type { StreamDatabase, StreamSettings } from "./store";
 import { ALL_CONTENT_STATUS_KEYS } from "~/lib/reconciliation/invalidation";
@@ -102,13 +103,19 @@ async function establishBoundary(
 }
 
 /** Called by existing import/refresh entry points; the saved Feed survives failure. */
+/**
+ * Recovery keeps its own backoff on the origin, so a failure is reported as an
+ * error until a later recovery succeeds. The generic fetch schedule stays
+ * untouched: origins remain due and recovery decides whether to run.
+ */
 export async function refreshStreamOrigin(
   database: StreamDatabase,
   fetchable: FetchableOrigin,
-) {
+): Promise<FeedResult> {
   const config = await configuration();
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
+  const ids = { id: fetchable.feed.id, originId: fetchable.origin.id };
   try {
     await establishBoundary(database, config, signal);
     await recoverOrigin(
@@ -118,7 +125,7 @@ export async function refreshStreamOrigin(
       config.transport,
       signal,
       {
-        // The ordinary fetch path already owns scheduling and eligibility.
+        // The ordinary fetch path already owns eligibility.
         manual: true,
         publish: async (update) => {
           updates.push(update);
@@ -127,12 +134,22 @@ export async function refreshStreamOrigin(
     );
   } catch (error) {
     config.transport.report(error, "feed-recovery");
-    throw error;
+    return { status: "error", ...ids, error };
   }
+  const retrying = await database
+    .select({ retryAt: feedOriginAtproto.recoveryRetryAt })
+    .from(feedOriginAtproto)
+    .where(eq(feedOriginAtproto.originId, fetchable.origin.id))
+    .get();
+  if (retrying?.retryAt && retrying.retryAt > new Date())
+    return {
+      status: "error",
+      ...ids,
+      error: new Error("Publication recovery is waiting to retry"),
+    };
   return {
-    status: updates.length ? ("success" as const) : ("empty" as const),
-    id: fetchable.feed.id,
-    originId: fetchable.origin.id,
+    status: updates.length ? "success" : "empty",
+    ...ids,
     feedItems: updates.flatMap((update) => update.items),
     removedItemIds: updates.flatMap((update) => update.removedItemIds),
     metadataChanged: updates.some((update) => update.metadataChanged),

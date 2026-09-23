@@ -17,9 +17,26 @@ import {
 } from "./store";
 import { processOriginDocuments } from "./process";
 import { captureRecordValue } from "./document-source";
+import type { atprotoStreamState } from "../db/schema";
 import type { StreamTransport } from "./transport";
 import type { StreamDatabase, StreamSettings } from "./store";
 import type { ProcessingOptions } from "./process";
+
+/**
+ * A connected worker already applies live events to this origin, so its
+ * checkpoint bounds the interval no one covers. Otherwise the transport's tip
+ * is the only truthful boundary, at the cost of one connection per read.
+ */
+async function currentBoundary(
+  state: typeof atprotoStreamState.$inferSelect,
+  transport: StreamTransport,
+  settings: StreamSettings,
+  signal: AbortSignal,
+) {
+  return transport.hasReplay || streamIsConnected(state, nowFor(settings))
+    ? sequence(state.seq!)
+    : transport.tip(signal);
+}
 
 /** A bounded attempt retains scan/replay progress. It never truncates the missed interval. */
 export async function recoverOrigin(
@@ -134,9 +151,7 @@ export async function recoverOrigin(
       row.atproto.streamMode === "direct";
     if (!continuing) {
       const boundary = bootstrap
-        ? transport.hasReplay
-          ? sequence(state.seq)
-          : await transport.tip(combined)
+        ? await currentBoundary(state, transport, settings, combined)
         : sequence(row.atproto.streamSeq ?? state.seq);
       await runDatabaseWrite(database, () =>
         database
@@ -223,7 +238,7 @@ export async function recoverOrigin(
       const through = Math.max(
         sequence(row.atproto.streamSeq!),
         bootstrap || options.manual
-          ? await transport.tip(combined)
+          ? await currentBoundary(state, transport, settings, combined)
           : sequence(state.seq!),
       );
       {
