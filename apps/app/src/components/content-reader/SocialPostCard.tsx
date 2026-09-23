@@ -7,6 +7,7 @@ import { SocialVideoPlayer } from "~/components/content-reader/SocialVideoPlayer
 import { isDisconnectedAtom } from "~/lib/data/atoms";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import { timeAgo } from "~/lib/utils";
+import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
 
 const PLATFORM_NAMES = { bluesky: "Bluesky", pckt: "pckt" } as const;
 
@@ -87,7 +88,12 @@ export function SocialPostCard({
   const posted = date && Number.isFinite(date.getTime()) ? timeAgo(date) : null;
   const name = post.author.name ?? post.author.handle ?? post.author.did;
   return (
-    <div role="note" data-social-post={post.platform} data-record-card="row">
+    <div
+      role="note"
+      data-social-post={post.platform}
+      data-record-card="row"
+      {...{ [ARTICLE_BLOCK_ATTRIBUTE]: "" }}
+    >
       {/* The card opens the post; only the author link and the body's own links sit above it. */}
       <ExternalLink href={post.url} data-social-post-link="">
         <span className="sr-only">Open post on {platform}</span>

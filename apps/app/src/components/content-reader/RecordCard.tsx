@@ -1,9 +1,14 @@
 import { useState } from "react";
 import type {
+  ReaderAlign,
   ReaderBlockValue,
   RecordCard as RecordCardData,
 } from "@serial/standard-site";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
+import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
+
+/** A card is one navigation stop however its copy nests. */
+const blockRoot = { [ARTICLE_BLOCK_ATTRIBUTE]: "" } as const;
 
 function PreviewImage({ src, icon = false }: { src: string; icon?: boolean }) {
   const [failed, setFailed] = useState(false);
@@ -58,6 +63,7 @@ export function RecordCard({ card }: { card: RecordCardData }) {
       target="_blank"
       rel="noopener noreferrer"
       data-record-card={card.size}
+      {...blockRoot}
     >
       {card.size === "row" && card.imageUrl && (
         <RowPreviewImage key={card.imageUrl} src={card.imageUrl} />
@@ -104,8 +110,10 @@ function linkHost(href: string): string | null {
  */
 export function LinkCard({
   card,
+  align = null,
 }: {
   card: Extract<ReaderBlockValue, { kind: "linkCard" }>;
+  align?: ReaderAlign | null;
 }) {
   const host = linkHost(card.href);
   return (
@@ -115,6 +123,8 @@ export function LinkCard({
       rel="noopener noreferrer"
       data-record-card="row"
       data-reader-link-card
+      data-reader-align={align ?? undefined}
+      {...blockRoot}
     >
       {card.imageUrl && (
         <RowPreviewImage key={card.imageUrl} src={card.imageUrl} />

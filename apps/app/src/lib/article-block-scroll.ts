@@ -2,18 +2,10 @@
 
 import { getScrollContainer } from "~/lib/scroll";
 
+/** Every block lands with its top edge one-sixth down the viewport. */
 export const ARTICLE_BLOCK_SCROLL = {
-  mediaViewportPosition: 1 / 2,
-  textViewportPosition: 1 / 6,
+  viewportPosition: 1 / 6,
 } as const;
-
-function isMediaBlock(element: HTMLElement) {
-  return (
-    element.tagName === "IMG" ||
-    element.tagName === "FIGURE" ||
-    !!element.querySelector("img")
-  );
-}
 
 export function getArticleBlockTargetScrollTop(
   element: HTMLElement,
@@ -21,16 +13,11 @@ export function getArticleBlockTargetScrollTop(
 ) {
   const containerRect = container.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
-  const elementOffset = isMediaBlock(element) ? elementRect.height / 2 : 0;
-  const viewportPosition = isMediaBlock(element)
-    ? ARTICLE_BLOCK_SCROLL.mediaViewportPosition
-    : ARTICLE_BLOCK_SCROLL.textViewportPosition;
 
   return (
     container.scrollTop +
     (elementRect.top - containerRect.top) -
-    containerRect.height * viewportPosition +
-    elementOffset
+    containerRect.height * ARTICLE_BLOCK_SCROLL.viewportPosition
   );
 }
 

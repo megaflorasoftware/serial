@@ -46,7 +46,7 @@ describe("Offline banner", () => {
 });
 
 describe("article image fallback", () => {
-  it("keeps a failed image in flow as a square muted block", () => {
+  it("keeps a failed image in flow as a muted placeholder with its alt text", () => {
     const container = render(
       createElement(ArticleImageLightbox, {
         src: "https://example.com/unavailable.jpg",
@@ -58,11 +58,17 @@ describe("article image fallback", () => {
 
     act(() => image?.dispatchEvent(new Event("error")));
 
-    const fallback = container.querySelector("[data-image-fallback]");
-    expect(fallback?.className).toContain("aspect-square");
-    expect(fallback?.className).toContain("bg-muted");
-    expect(fallback?.getAttribute("aria-label")).toBe(
+    const frame = container.querySelector<HTMLElement>("[data-image-frame]");
+    expect(frame?.getAttribute("data-image-frame")).toBe("failed");
+    expect(frame?.style.aspectRatio).toBe("4 / 3");
+    expect(frame?.querySelector("[data-image-placeholder]")?.textContent).toBe(
       "Unavailable illustration",
     );
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container
+        .querySelector("[data-lightbox-trigger]")
+        ?.getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 });

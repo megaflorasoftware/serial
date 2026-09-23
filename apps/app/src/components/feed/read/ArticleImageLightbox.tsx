@@ -15,7 +15,7 @@ export type LightboxImage = {
 };
 
 /** Body images with no known shape reserve a landscape frame. */
-export const DEFAULT_IMAGE_ASPECT_RATIO = "3 / 2";
+export const DEFAULT_IMAGE_ASPECT_RATIO = "4 / 3";
 
 export function imageAspectRatio(ratio: LightboxImage["aspectRatio"]): string {
   return ratio && ratio.width > 0 && ratio.height > 0
@@ -141,8 +141,9 @@ function LightboxArrow({
 
 /**
  * The image in the flow; clicking it opens the group's dialog on this image.
- * Until the bytes arrive a muted frame holds the image's place at its known
- * shape, or a landscape one, so the article does not shift as images land.
+ * Until the bytes arrive, and for good if they never do, a muted placeholder
+ * holds the image's place at its known shape (or landscape) with the alt
+ * text centred inside, so the article does not shift as images land.
  */
 export function ArticleImageLightboxTrigger({
   index,
@@ -165,6 +166,7 @@ export function ArticleImageLightboxTrigger({
   const { src, alt } = image;
   const failed = failedSrc === src;
   const loaded = loadedSrc === src;
+  const state = failed ? "failed" : loaded ? "loaded" : "loading";
 
   return (
     <div data-lightbox style={{ position: "relative" }}>
@@ -181,23 +183,21 @@ export function ArticleImageLightboxTrigger({
           if (!failed) group.open(index);
         }}
       >
-        {failed ? (
-          <span
-            data-image-fallback
-            role="img"
-            aria-label={alt}
-            className="bg-muted block aspect-square size-48 max-w-full rounded"
-          />
-        ) : (
-          <span
-            data-image-frame={loaded ? "loaded" : "loading"}
-            className={fill ? undefined : className}
-            style={
-              fill
-                ? undefined
-                : { aspectRatio: imageAspectRatio(image.aspectRatio), ...style }
-            }
-          >
+        <span
+          data-image-frame={state}
+          className={fill ? undefined : className}
+          style={
+            fill
+              ? undefined
+              : { aspectRatio: imageAspectRatio(image.aspectRatio), ...style }
+          }
+        >
+          {state !== "loaded" && (
+            <span data-image-placeholder aria-hidden="true">
+              {alt}
+            </span>
+          )}
+          {!failed && (
             <img
               src={src}
               alt={alt}
@@ -207,8 +207,8 @@ export function ArticleImageLightboxTrigger({
               onLoad={() => setLoadedSrc(src)}
               onError={() => setFailedSrc(src)}
             />
-          </span>
-        )}
+          )}
+        </span>
       </button>
     </div>
   );

@@ -18,6 +18,12 @@ import {
 export const articleSelectedElementAtom = atom<HTMLElement | null>(null);
 
 const SCROLL_DURATION_MS = 300;
+/**
+ * A block root that is one navigation stop whatever its markup: cards,
+ * posts, callouts, image groups, notices, frames. Set by the component that
+ * renders the block; text blocks rely on their tag instead.
+ */
+export const ARTICLE_BLOCK_ATTRIBUTE = "data-article-block";
 const SELECTABLE_TAGS = new Set([
   "P",
   "H1",
@@ -27,6 +33,8 @@ const SELECTABLE_TAGS = new Set([
   "H5",
   "H6",
   "BLOCKQUOTE",
+  "PRE",
+  "TABLE",
   "IMG",
   "FIGURE",
   "LI",
@@ -45,6 +53,7 @@ function hasNavigableContent(element: HTMLElement): boolean {
     element.textContent?.trim() ||
     element.tagName === "IMG" ||
     element.tagName === "FIGURE" ||
+    element.hasAttribute(ARTICLE_BLOCK_ATTRIBUTE) ||
     element.querySelector("img, iframe, video")
   );
 }
@@ -59,9 +68,6 @@ function isAtomicDiv(element: HTMLElement): boolean {
   return (
     element.hasAttribute("data-lightbox") ||
     element.hasAttribute("data-article-video-embed") ||
-    element.hasAttribute("data-reader-notice") ||
-    element.hasAttribute("data-social-post") ||
-    element.hasAttribute("data-reader-frame") ||
     isInteractive ||
     isMediaOnly
   );
@@ -73,6 +79,11 @@ function getNavigableDescendants(container: HTMLElement): HTMLElement[] {
   for (const child of container.children) {
     if (!(child instanceof HTMLElement)) continue;
     if (child.hasAttribute("data-serial-header")) continue;
+
+    if (child.hasAttribute(ARTICLE_BLOCK_ATTRIBUTE)) {
+      elements.push(child);
+      continue;
+    }
 
     if (SELECTABLE_TAGS.has(child.tagName)) {
       if (hasNavigableContent(child)) elements.push(child);

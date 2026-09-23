@@ -19,6 +19,7 @@ import {
   ArticleImageLightboxGroup,
   ArticleImageLightboxTrigger,
 } from "~/components/feed/read/ArticleImageLightbox";
+import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
 import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 
 /**
@@ -26,7 +27,12 @@ import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
  * progress, sidebar and lightbox code already read from HTML bodies:
  * paragraphs, headings, blockquotes, figures, list items, `data-lightbox`
  * wrappers, `data-article-video-embed` divs, and footnote links with ids.
+ * Every other block root is marked as one navigation stop, so a card or a
+ * callout is one block to the keyboard however its markup nests.
  */
+
+/** Marks a block root as one navigation stop. */
+const blockRoot = { [ARTICLE_BLOCK_ATTRIBUTE]: "" } as const;
 
 export type ReaderDocumentContentProps = {
   document: ReaderDocument;
@@ -227,6 +233,7 @@ function Block({
     case "callout":
       return (
         <aside
+          {...blockRoot}
           data-reader-callout
           style={
             block.tint
@@ -344,6 +351,7 @@ function Block({
       );
       return (
         <figure
+          {...blockRoot}
           data-reader-figure="group"
           data-reader-align={block.align ?? undefined}
           data-reader-image-group={layout.mode}
@@ -391,11 +399,7 @@ function Block({
     case "break":
       return <br />;
     case "linkCard":
-      return (
-        <div data-reader-align={block.align ?? undefined}>
-          <LinkCard card={block} />
-        </div>
-      );
+      return <LinkCard card={block} align={block.align} />;
     case "recordPreview":
       return <RecordCard card={block.card} />;
     case "socialPost":

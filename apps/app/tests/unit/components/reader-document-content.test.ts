@@ -530,6 +530,68 @@ describe("Reader document content", () => {
     ).toHaveLength(2);
   });
 
+  it("makes every non-text block one keyboard stop however its markup nests", () => {
+    const container = render(
+      document([
+        block({ kind: "paragraph", content: [text("Intro")] }),
+        block({
+          kind: "callout",
+          emoji: "💡",
+          color: null,
+          tint: null,
+          content: [text("Tip")],
+        }),
+        block({ kind: "code", language: "ts", code: "let x = 1;" }),
+        block({
+          kind: "table",
+          rows: [
+            [
+              {
+                header: true,
+                colspan: null,
+                rowspan: null,
+                content: [block({ kind: "paragraph", content: [text("A")] })],
+              },
+            ],
+          ],
+        }),
+        block({
+          kind: "linkCard",
+          href: "https://example.com/plain",
+          title: "Plain",
+          description: "A description",
+          imageUrl: null,
+          align: "center",
+        }),
+        block({
+          kind: "imageGroup",
+          images: [
+            readerImage("https://example.com/1.png"),
+            readerImage("https://example.com/2.png"),
+          ],
+          layout: { mode: "grid", columns: 2, ratio: null },
+          title: "Group",
+          caption: [text("Caption")],
+        }),
+        block({ kind: "paragraph", content: [text("Outro")] }),
+      ]),
+    );
+    const elements = getElements(container);
+    expect(
+      elements.map(
+        (element) =>
+          element.tagName +
+          (element.hasAttribute("data-article-block") ? "*" : ""),
+      ),
+    ).toEqual(["P", "ASIDE*", "PRE", "TABLE", "A*", "FIGURE*", "P"]);
+    // The link card is one root that carries its own alignment.
+    expect(
+      container
+        .querySelector("[data-reader-link-card]")
+        ?.getAttribute("data-reader-align"),
+    ).toBe("center");
+  });
+
   it("holds a muted frame for each body image until it loads", () => {
     const container = render(
       document([
@@ -554,7 +616,7 @@ describe("Reader document content", () => {
     expect(frames[0]!.getAttribute("data-image-frame")).toBe("loading");
     expect(frames[0]!.style.aspectRatio).toBe("4 / 5");
     // Unknown shapes reserve a landscape frame rather than collapsing to nothing.
-    expect(frames[1]!.style.aspectRatio).toBe("3 / 2");
+    expect(frames[1]!.style.aspectRatio).toBe("4 / 3");
     act(() =>
       frames[0]!.querySelector("img")!.dispatchEvent(new Event("load")),
     );

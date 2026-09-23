@@ -1,6 +1,7 @@
 import { ExternalLinkIcon } from "lucide-react";
 import type { ReaderNoticeReason } from "@serial/standard-site";
 import { Button } from "~/components/ui/button";
+import { ARTICLE_BLOCK_ATTRIBUTE } from "~/lib/hooks/useArticleNavigation";
 
 /**
  * Reasons the reader shows a notice instead of content. The block reasons come
@@ -48,7 +49,11 @@ export function ReaderNotice({
   originActionLabel,
 }: ReaderNoticeProps) {
   return (
-    <div role="note" data-reader-notice={kind}>
+    <div
+      role="note"
+      data-reader-notice={kind}
+      {...{ [ARTICLE_BLOCK_ATTRIBUTE]: "" }}
+    >
       <div>
         <p data-reader-notice-headline>{HEADLINES[kind] ?? HEADLINE}</p>
         <p className="sr-only">{DESCRIPTIONS[kind]}</p>
