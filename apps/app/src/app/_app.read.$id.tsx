@@ -42,15 +42,13 @@ import { useRetentionPin } from "~/lib/hooks/useRetentionPin";
 import { useBookmarkValue } from "~/lib/data/bookmarks";
 import { BookmarkReader } from "~/components/content-reader/BookmarkReader";
 import { ContentRendererFallback } from "~/components/content-renderer/ContentRendererFallback";
-import {
-  ReaderLayout,
-  ReaderSource,
-} from "~/components/content-reader/ReaderLayout";
+import { ReaderLayout } from "~/components/content-reader/ReaderLayout";
+import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 import {
   ReaderBodySkeleton,
   ReaderHeader,
   ReaderSkeleton,
-  readerSourceInfo,
+  ReaderSource,
 } from "~/components/content-reader/ReaderSkeleton";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 import {
@@ -202,10 +200,23 @@ function FeedReader({
     <ReaderLayout
       source={
         <ReaderSource
-          source={readerSourceInfo(
-            feed,
-            <div className="bg-muted aspect-square size-6 rounded object-cover" />,
-          )}
+          source={
+            feed
+              ? {
+                  name: feed.name,
+                  icon: feed.imageUrl ? (
+                    <img
+                      {...REMOTE_IMAGE_PROPS}
+                      src={feed.imageUrl}
+                      alt=""
+                      className="aspect-square size-6 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="bg-muted aspect-square size-6 rounded" />
+                  ),
+                }
+              : null
+          }
         />
       }
       actions={<ContentActions contentID={id} />}

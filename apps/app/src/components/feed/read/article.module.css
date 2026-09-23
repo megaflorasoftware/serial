@@ -14,6 +14,11 @@
   margin-block-start: var(--article-flow-spacing);
 }
 
+/* Skeleton lines are pitched by their own gap, not the prose flow spacing. */
+.article :global([data-reader-skeleton-paragraph]) > * + * {
+  margin-block-start: 0;
+}
+
 .article h1 {
   font-size: 1.5rem;
   font-weight: 900;

@@ -164,3 +164,56 @@ it("places a new content id from scratch after an earlier one settled", () => {
   expect(scrollTo()).toHaveBeenCalledTimes(2);
   expect(scrollTo()).toHaveBeenLastCalledWith({ top: 0, behavior: "instant" });
 });
+
+it("places a settled content id again when revisited after an unsettled visit", () => {
+  const element = article(paragraphs(6));
+  const render = mount();
+  render({ contentId: "a", articleElement: element, progress: 2, ready: true });
+  settleFrames();
+  expect(scrollTo()).toHaveBeenCalledTimes(1);
+
+  // The visit to "b" never lands: the user takes over before the frames run.
+  render({
+    contentId: "b",
+    articleElement: element,
+    progress: 3,
+    ready: false,
+  });
+  act(() => document.body.dispatchEvent(new Event("wheel")));
+  settleFrames();
+  expect(scrollTo()).toHaveBeenCalledTimes(1);
+
+  render({ contentId: "a", articleElement: element, progress: 2, ready: true });
+  settleFrames();
+  expect(scrollTo()).toHaveBeenCalledTimes(2);
+  expect(element.style.visibility).toBe("");
+});
+
+it("keeps a placeholder visible when the server answers before content", async () => {
+  const element = article(paragraphs(6));
+  const render = mount();
+  const props = { contentId: "swap", articleElement: element, progress: 1 };
+  render({ ...props, ready: false });
+  settleFrames();
+  expect(scrollTo()).toHaveBeenCalledTimes(1);
+
+  // The server's answer swaps in a placeholder first, then the new body.
+  await act(async () => {
+    element.innerHTML =
+      "<h1 data-serial-header>Title</h1><div data-reader-content-pending></div>";
+    await Promise.resolve();
+  });
+  render({ ...props, progress: 4, ready: true });
+  expect(element.style.visibility).toBe("");
+  expect(scrollTo()).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    element.querySelector("[data-reader-content-pending]")!.remove();
+    element.insertAdjacentHTML("beforeend", paragraphs(6));
+    await Promise.resolve();
+  });
+  expect(element.style.visibility).toBe("");
+  settleFrames();
+  expect(scrollTo()).toHaveBeenCalledTimes(2);
+  expect(element.style.visibility).toBe("");
+});

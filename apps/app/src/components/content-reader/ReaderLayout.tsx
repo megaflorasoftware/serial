@@ -4,8 +4,6 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { getArticleWidthLayout } from "~/components/content-reader/articleWidth";
 import { useZoom } from "~/components/feed/watch/[id]/useZoom";
-import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
-import { Skeleton } from "~/components/ui/skeleton";
 
 /**
  * The reader column every `/read` surface shares: zoom-driven width, the
@@ -47,36 +45,5 @@ export function ReaderLayout({
         </div>
       ) : null}
     </div>
-  );
-}
-
-/** The feed or bookmark that the article came from, or its skeleton. */
-export function ReaderSource({
-  source,
-}: {
-  source: { imageUrl: string | null; fallback: ReactNode; name: string } | null;
-}) {
-  if (!source) {
-    return (
-      <>
-        <Skeleton className="size-6 rounded" />
-        <Skeleton className="h-4 w-32" />
-      </>
-    );
-  }
-  return (
-    <>
-      {source.imageUrl ? (
-        <img
-          {...REMOTE_IMAGE_PROPS}
-          src={source.imageUrl}
-          alt=""
-          className="aspect-square size-6 rounded object-cover"
-        />
-      ) : (
-        source.fallback
-      )}
-      <span className="line-clamp-1 font-sans text-sm">{source.name}</span>
-    </>
   );
 }
