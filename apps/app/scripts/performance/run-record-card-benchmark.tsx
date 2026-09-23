@@ -57,56 +57,77 @@ const cards = Array.from({ length: 100 }, (_, index) =>
     size: sizes[index % 3],
   }),
 );
-/** One social card per platform, the shape the adapters emit for a resolved post. */
-const socialPosts: ReaderSocialPost[] = Array.from(
-  { length: 100 },
-  (_, index) => {
-    const platform = index % 2 ? "pckt" : "bluesky";
-    const authorDid = `did:plc:author${index % 16}`;
-    return {
-      platform,
-      uri: `at://${authorDid}/${platform === "pckt" ? "blog.pckt.mini.post" : "app.bsky.feed.post"}/${index}`,
-      url:
-        platform === "pckt"
-          ? `https://pckt.blog/n/${authorDid}/${index}`
-          : `https://bsky.app/profile/${authorDid}/post/${index}`,
-      author: {
-        did: authorDid,
-        handle: `author${index % 16}.example`,
-        name: platform === "pckt" ? "A Blog" : "An Author",
-        avatarUrl: `https://cdn.bsky.app/img/avatar/plain/${authorDid}/bafyavatar@jpeg`,
-        url: `https://bsky.app/profile/${authorDid}`,
+/**
+ * One social card per platform, the shape the adapters emit for a resolved
+ * post. Every fourth post quotes another, every third carries an image and
+ * every fifth an external preview, so the render measures the nested card
+ * path and not only plain text.
+ */
+function socialPost(index: number, quoted: boolean): ReaderSocialPost {
+  const platform = index % 2 ? "pckt" : "bluesky";
+  const authorDid = `did:plc:author${index % 16}`;
+  return {
+    platform,
+    uri: `at://${authorDid}/${platform === "pckt" ? "blog.pckt.mini.post" : "app.bsky.feed.post"}/${index}`,
+    url:
+      platform === "pckt"
+        ? `https://pckt.blog/n/${authorDid}/${index}`
+        : `https://bsky.app/profile/${authorDid}/post/${index}`,
+    author: {
+      did: authorDid,
+      handle: `author${index % 16}.example`,
+      name: platform === "pckt" ? "A Blog" : "An Author",
+      avatarUrl: `https://cdn.bsky.app/img/avatar/plain/${authorDid}/bafyavatar@jpeg`,
+      url: `https://bsky.app/profile/${authorDid}`,
+    },
+    siteUrl: platform === "pckt" ? "https://blog.example" : null,
+    text: [
+      { kind: "text", text: `Post ${index}: `, marks: {}, link: null },
+      {
+        kind: "text",
+        text: "a link",
+        marks: {},
+        link: { href: "https://example.com/", record: null },
       },
-      siteUrl: platform === "pckt" ? "https://blog.example" : null,
-      text: [
-        { kind: "text", text: `Post ${index}: `, marks: {}, link: null },
-        {
-          kind: "text",
-          text: "a link",
-          marks: {},
-          link: { href: "https://example.com/", record: null },
-        },
-      ],
-      createdAt: preview.publishedAt,
-      images:
-        index % 3 === 0
-          ? [
-              {
-                url: `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/bafyimage@jpeg`,
-                alt: "Image",
-                title: null,
-                aspectRatio: { width: 4, height: 3 },
-                width: null,
-                fullBleed: false,
-              },
-            ]
-          : [],
-      external: null,
-      video: null,
-      quote: null,
-      mediaHidden: false,
-    };
-  },
+    ],
+    createdAt: preview.publishedAt,
+    images:
+      index % 3 === 0
+        ? [
+            {
+              url: `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/bafyimage@jpeg`,
+              alt: "Image",
+              title: null,
+              aspectRatio: { width: 4, height: 3 },
+              width: null,
+              fullBleed: false,
+            },
+          ]
+        : [],
+    external:
+      index % 5 === 0
+        ? {
+            href: "https://example.com/linked",
+            title: "A linked page",
+            description: "Its description",
+            imageUrl: `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorDid}/bafythumb@jpeg`,
+          }
+        : null,
+    video: null,
+    quote:
+      !quoted && index % 4 === 0
+        ? {
+            source: null,
+            align: null,
+            kind: "socialPost",
+            post: socialPost(index + 1, true),
+          }
+        : null,
+    mediaHidden: false,
+  };
+}
+const socialPosts = Array.from({ length: 100 }, (_, index) =>
+  socialPost(index, false),
 );
 const samples: Array<{
   conversionMs: number;
@@ -140,7 +161,17 @@ for (let index = 0; index < 23; index++) {
           text={post.text.map((inline) =>
             inline.kind === "text" ? inline.text : "",
           )}
-          quote={null}
+          quote={
+            post.quote?.kind === "socialPost" ? (
+              <SocialPostCard
+                post={post.quote.post}
+                text={post.quote.post.text.map((inline) =>
+                  inline.kind === "text" ? inline.text : "",
+                )}
+                quote={null}
+              />
+            ) : null
+          }
         />
       ))}
     </>,

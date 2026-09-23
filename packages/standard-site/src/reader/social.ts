@@ -10,9 +10,13 @@ import type {
 import { facetArraySchema } from "./rich-text";
 import { block } from "./context";
 import type { AdapterContext } from "./context";
-import { blobRefSchema, strongRefSchema } from "../lexicons";
+import {
+  blobRefSchema,
+  parsePublicationRecord,
+  strongRefSchema,
+} from "../lexicons";
 import { recordCard } from "../record-card";
-import { recordPreview } from "../record-preview";
+import { publicationPreview, recordPreview } from "../record-preview";
 import type { RecordLookup } from "../record-preview";
 import {
   buildBlueskyCdnImageUrl,
@@ -23,6 +27,7 @@ import {
   buildBlueskyVideoPlaylistUrl,
   buildBlueskyVideoThumbnailUrl,
   buildPcktNoteUrl,
+  buildPdslsUrl,
   normalizePublicationUrl,
   parseAtUri,
   SOCIAL_POST_COLLECTIONS,
@@ -105,12 +110,6 @@ export const socialPostRecordSchema = z.looseObject({
 const profileRecordSchema = z.looseObject({
   displayName: z.string().optional().catch(undefined),
   avatar: blobRefSchema.optional().catch(undefined),
-});
-
-const publicationRecordSchema = z.looseObject({
-  name: z.string().optional().catch(undefined),
-  url: z.string().optional().catch(undefined),
-  icon: blobRefSchema.optional().catch(undefined),
 });
 
 /** The DID document as the resolver returns it; only the handle is read. */
@@ -245,28 +244,28 @@ function authorOf(
   const profile = profileUri
     ? recordValue(records, profileUri, profileRecordSchema)
     : null;
-  const publication = publicationUri
-    ? recordValue(records, publicationUri, publicationRecordSchema)
+  // The publication reads exactly as a publication card does; a record the
+  // card would reject voices the note as the profile instead.
+  const publicationParts = publicationUri ? parseAtUri(publicationUri) : null;
+  const publicationRecord = publicationUri
+    ? parsePublicationRecord(records(publicationUri))
     : null;
-  const publicationDid = publicationUri
-    ? parseAtUri(publicationUri)?.did
-    : undefined;
+  const publication =
+    publicationRecord && publicationParts
+      ? publicationPreview(
+          publicationRecord,
+          publicationParts.did,
+          buildPdslsUrl(publicationUri!) ?? publicationUri!,
+        )
+      : null;
   const handle = handleFromDidDocument(
     snapshotValueSchema.safeParse(records(did)).data?.value,
   );
-  const siteUrl = publication?.url
+  const siteUrl = publication
     ? normalizePublicationUrl(publication.url)
     : null;
   const profileUrl = buildBlueskyProfileUrl(did)!;
-  const blogName = publication?.name?.trim() || null;
-  const blogIcon =
-    publication?.icon && publicationDid
-      ? buildBlueskyCdnImageUrl(
-          publicationDid,
-          publication.icon.ref.$link,
-          "avatar",
-        )
-      : null;
+  const blogName = publication?.title.trim() || null;
   const profileAvatar = profile?.avatar
     ? buildBlueskyCdnImageUrl(did, profile.avatar.ref.$link, "avatar")
     : null;
@@ -275,7 +274,7 @@ function authorOf(
       did,
       handle,
       name: blogName ?? profile?.displayName?.trim() ?? null,
-      avatarUrl: (publication ? blogIcon : null) ?? profileAvatar,
+      avatarUrl: publication?.iconUrl ?? profileAvatar,
       url: siteUrl ?? profileUrl,
     },
     siteUrl,

@@ -376,6 +376,14 @@ describe("pckt note cards", () => {
     expect(socialPostReferences(note, records)).toEqual([profile, author]);
   });
 
+  it("voices a note as the profile when its publication is not a valid card", () => {
+    const [block] = socialBlocks(
+      pckt([{ $type: "blog.pckt.block.noteEmbed", noteRef: { uri: note, cid: "bafy" } }]),
+      lookup({ ...resolved, [note]: blogNote, [blog]: { ...publication, url: undefined } }),
+    );
+    expect(block?.post).toMatchObject({ siteUrl: null, author: { name: "Author" } });
+  });
+
   it("reads handles only from at:// aliases of safe shape", () => {
     expect(handleFromDidDocument({ alsoKnownAs: ["https://example.com", "at://alice.example"] })).toBe("alice.example");
     expect(handleFromDidDocument({ alsoKnownAs: ["https://example.com"] })).toBeNull();
