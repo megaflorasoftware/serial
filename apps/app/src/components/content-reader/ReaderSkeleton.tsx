@@ -5,9 +5,30 @@ import { ReaderLayout } from "~/components/content-reader/ReaderLayout";
 import classes from "~/components/feed/read/article.module.css";
 import { Skeleton } from "~/components/ui/skeleton";
 
-const PARAGRAPH_COUNT = 3;
-/** Line widths for one prose paragraph; the last line runs short. */
-const PARAGRAPH_LINE_WIDTHS = ["w-full", "w-full", "w-full", "w-2/3"] as const;
+/**
+ * The stand-in body: a paragraph, a heading, then two paragraphs, each a
+ * real block so it takes the article's own font size, line box and flow
+ * spacing. One line per wrapped line of text; the last line runs short.
+ */
+const BODY_BLOCKS = [
+  { tag: "p", lines: ["w-full", "w-full", "w-full", "w-2/3"] },
+  { tag: "h2", lines: ["w-1/2"] },
+  { tag: "p", lines: ["w-full", "w-full", "w-3/4"] },
+  { tag: "p", lines: ["w-full", "w-full", "w-full", "w-1/2"] },
+] as const;
+
+/**
+ * One wrapped line of text: a bar centred in the block's line box. Spans,
+ * because a div inside a paragraph is split apart when the server's HTML
+ * is parsed.
+ */
+function SkeletonLine({ width }: { width: string }) {
+  return (
+    <span data-reader-skeleton-line>
+      <Skeleton as="span" className={`h-[1em] ${width}`} />
+    </span>
+  );
+}
 
 /** What the reader knows about where an article came from. */
 export type ReaderSourceInfo = { icon: ReactNode; name: string };
@@ -38,8 +59,12 @@ export function ReaderHeader({ header }: { header: ReaderHeaderInfo | null }) {
   if (!header) {
     return (
       <>
-        <Skeleton data-serial-header className="h-[1.5rem] w-3/4" />
-        <Skeleton data-serial-header className="h-[1rem] w-1/3" />
+        <h1 data-serial-header>
+          <SkeletonLine width="w-3/4" />
+        </h1>
+        <h6 data-serial-header>
+          <SkeletonLine width="w-1/3" />
+        </h6>
       </>
     );
   }
@@ -52,23 +77,18 @@ export function ReaderHeader({ header }: { header: ReaderHeaderInfo | null }) {
 }
 
 /**
- * The article body's placeholder: three prose paragraphs in the article's
- * own font size and line pitch, so zoom applies and real paragraphs land
- * near the same height. The pending marker holds progress restoration.
+ * The article body's placeholder. Its blocks carry no text, so navigation
+ * skips them, and the pending marker holds progress restoration.
  */
 export function ReaderBodySkeleton() {
   return (
     <div role="status" aria-label="Loading article" data-reader-content-pending>
-      {Array.from({ length: PARAGRAPH_COUNT }, (_, paragraph) => (
-        <div
-          key={paragraph}
-          data-reader-skeleton-paragraph
-          className="grid gap-[0.7em]"
-        >
-          {PARAGRAPH_LINE_WIDTHS.map((width, line) => (
-            <Skeleton key={line} className={`h-[1em] ${width}`} />
+      {BODY_BLOCKS.map(({ tag: Block, lines }, index) => (
+        <Block key={index}>
+          {lines.map((width, line) => (
+            <SkeletonLine key={line} width={width} />
           ))}
-        </div>
+        </Block>
       ))}
     </div>
   );

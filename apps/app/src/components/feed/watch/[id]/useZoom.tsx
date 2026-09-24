@@ -26,8 +26,6 @@ export function useZoom() {
   const videoId = pathname.split("/watch/")[1]!;
   const contentId = pathname.split("/read/")[1]!;
 
-  const [zoom, setZoom] = useState(MIN_ZOOM);
-
   const feedItem = useFeedItemValue(videoId || contentId || "");
   const bookmark = useBookmarkValue(videoId || contentId || "");
 
@@ -48,32 +46,22 @@ export function useZoom() {
 
   const isVideoPlatform = VIDEO_PLATFORMS.includes(platform);
   const isArticlePlatform = ARTICLE_PLATFORMS.includes(platform);
+  // Nothing is known about a /read item yet: the skeleton takes the width
+  // the article will have.
+  const isUnknownReadItem = !platform && !!contentId;
 
+  // Derived on render, not in an effect, so the server's HTML and the first
+  // client paint already have the right width. While navigating to an item
+  // that is not known yet, the previously applied value stands until the
+  // new UI has rendered.
+  const [lastZoom, setLastZoom] = useState(MIN_ZOOM);
+  let zoom = lastZoom;
+  if (isVideoPlatform && isVertical) zoom = shortformVideoZoom;
+  else if (isVideoPlatform) zoom = longformVideoZoom;
+  else if (isArticlePlatform || isUnknownReadItem) zoom = articleZoom;
   useEffect(() => {
-    setZoom((prevZoom) => {
-      if (isVideoPlatform && isVertical) {
-        return shortformVideoZoom;
-      }
-      if (isVideoPlatform && !isVertical) {
-        return longformVideoZoom;
-      }
-      if (isArticlePlatform) {
-        return articleZoom;
-      }
-
-      // This value should default to MIN_ZOOM, but when naviating
-      // this value is used by the UI before the new UI has rendered.
-      // Therefore, we want to maintain the previously applied value
-      return prevZoom;
-    });
-  }, [
-    isVideoPlatform,
-    longformVideoZoom,
-    shortformVideoZoom,
-    isVertical,
-    isArticlePlatform,
-    articleZoom,
-  ]);
+    setLastZoom(zoom);
+  }, [zoom]);
 
   const zoomIn = useCallback(() => {
     if (isVideoPlatform) {

@@ -27,19 +27,25 @@ function render(element: ReturnType<typeof createElement>) {
 }
 
 describe("Reader skeleton", () => {
-  it("draws three paragraphs that hold progress restoration and are not navigable", () => {
+  it("draws a paragraph, a heading and two paragraphs that hold progress restoration and are not navigable", () => {
     const container = render(createElement(ReaderBodySkeleton));
     const pending = container.querySelector("[data-reader-content-pending]")!;
-    expect(pending.children).toHaveLength(3);
+    expect([...pending.children].map((block) => block.tagName)).toEqual([
+      "P",
+      "H2",
+      "P",
+      "P",
+    ]);
     expect(getElements(container)).toHaveLength(0);
   });
 
   it("shows real source and header data when known and skeletons when not", () => {
     const unknown = render(createElement(ReaderSkeleton));
-    expect(unknown.querySelector("h1")).toBeNull();
+    expect(unknown.querySelector("h1")?.textContent).toBe("");
     expect(
-      unknown.querySelectorAll("[data-serial-header][data-slot=skeleton]"),
+      unknown.querySelectorAll("[data-serial-header] [data-slot=skeleton]"),
     ).toHaveLength(2);
+    expect(getElements(unknown)).toHaveLength(0);
 
     const known = render(
       createElement(ReaderSkeleton, {

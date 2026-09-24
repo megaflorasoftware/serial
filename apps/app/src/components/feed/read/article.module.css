@@ -14,8 +14,12 @@
   margin-block-start: var(--article-flow-spacing);
 }
 
-/* Skeleton lines are pitched by their own gap, not the prose flow spacing. */
-.article :global([data-reader-skeleton-paragraph]) > * + * {
+/* A skeleton line stands in for one wrapped line of text: it takes its
+   block's line box and stacks without the prose flow gap. */
+.article :global([data-reader-skeleton-line]) {
+  display: flex;
+  align-items: center;
+  height: 1lh;
   margin-block-start: 0;
 }
 
