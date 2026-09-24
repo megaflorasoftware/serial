@@ -1,21 +1,27 @@
 import { and, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
+  BLUESKY_PROFILE_COLLECTION,
+  isDid,
   isReferenceSnapshotStale,
+  MAX_REFERENCE_HOPS,
   MissingPublicRecordError,
+  nextReferenceHop,
   parseAtUri,
   PublicRecordVersionUnavailableError,
   REFERENCE_UNREAD_RETENTION_MS,
-  referencedPublications,
   snapshotLookup,
+  SOCIAL_POST_COLLECTIONS,
   STANDARD_SITE_COLLECTIONS,
   validatePublicRecord,
 } from "@serial/standard-site";
 import { documentReferences } from "../rss/documentObservation";
 import { atprotoReferenceSnapshots } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
+import { UnsupportedDidError } from "../auth/atproto/did-resolver";
 import { captureRecordValue } from "./document-source";
 import type { DocumentSource, ReferenceSnapshot } from "@serial/standard-site";
 import type { FeedDatabase } from "../feeds/origins";
+import type { PublicationClient } from "../rss/atprotoClient";
 import type { db } from "../db";
 import { workerPool } from "~/lib/workerPool";
 
@@ -26,7 +32,13 @@ const SUPPORTED_COLLECTIONS = new Set<string>([
   STANDARD_SITE_COLLECTIONS.document,
   STANDARD_SITE_COLLECTIONS.publication,
   "blog.pckt.gallery",
+  SOCIAL_POST_COLLECTIONS.bluesky,
+  SOCIAL_POST_COLLECTIONS.pckt,
+  BLUESKY_PROFILE_COLLECTION,
 ]);
+
+/** When the supported set last grew; unsupported rows older than this are retried. */
+const SUPPORT_CHANGED_AT = Date.parse("2026-09-22T12:00:00Z");
 
 /** Once a day per row is enough to keep a read snapshot out of the sweep. */
 const READ_MARK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -87,20 +99,76 @@ export async function sweepReferenceSnapshots(database: typeof db, now: Date) {
   );
 }
 
-export type ReferenceReader = (uri: string) => Promise<unknown>;
+/**
+ * How references are read: a record by its at-uri, or a DID document by its
+ * DID. Both land in the same table, a DID document under its DID with no cid.
+ */
+export type ReferenceReaders = {
+  record: (uri: string) => Promise<unknown>;
+  didDocument: (did: string) => Promise<unknown>;
+};
+
+/** Readers over a publication client, sharing its per-refresh caches and one deadline. */
+export function referenceReaders(
+  client: Pick<PublicationClient, "getRecord" | "getDidDocument">,
+  deadlineMs: number,
+): ReferenceReaders {
+  return {
+    record: (uri) =>
+      client.getRecord(uri, { deadline: Date.now() + deadlineMs }),
+    didDocument: (did) =>
+      client.getDidDocument(did, { deadline: Date.now() + deadlineMs }),
+  };
+}
 
 type Resolution = Pick<SnapshotRow, "cid" | "outcome" | "record">;
+
+/** A gone DID, or a directory that says so, is missing; anything else is a retry. */
+function isMissingDidDocument(error: unknown) {
+  const status =
+    typeof error === "object" && error !== null
+      ? ((error as { status?: unknown }).status ??
+        (error as { statusCode?: unknown }).statusCode)
+      : undefined;
+  return status === 404 || status === 410;
+}
+
+async function resolveDidDocument(
+  did: string,
+  read: ReferenceReaders["didDocument"],
+): Promise<Resolution> {
+  try {
+    const document = await read(did);
+    if (!document || typeof document !== "object") throw new TypeError();
+    return {
+      cid: null,
+      outcome: "resolved",
+      record: captureRecordValue(document).text,
+    };
+  } catch (error) {
+    if (isMissingDidDocument(error))
+      return { cid: null, outcome: "missing", record: null };
+    if (
+      error instanceof SyntaxError ||
+      error instanceof TypeError ||
+      error instanceof UnsupportedDidError
+    )
+      return { cid: null, outcome: "unsupported", record: null };
+    return { cid: null, outcome: "unavailable", record: null };
+  }
+}
 
 /** One lookup mapped onto the four outcomes. Network and budget failures are unavailable. */
 async function resolveReference(
   uri: string,
-  readRecord: ReferenceReader,
+  readers: ReferenceReaders,
 ): Promise<Resolution> {
+  if (isDid(uri)) return resolveDidDocument(uri, readers.didDocument);
   const parts = parseAtUri(uri);
   if (!parts || !SUPPORTED_COLLECTIONS.has(parts.collection))
     return { cid: null, outcome: "unsupported", record: null };
   try {
-    const record = validatePublicRecord({ uri }, await readRecord(uri));
+    const record = validatePublicRecord({ uri }, await readers.record(uri));
     return {
       cid: record.cid,
       outcome: "resolved",
@@ -118,10 +186,28 @@ async function resolveReference(
   }
 }
 
+/** Whether a reference is one this server would look up at all. */
+function isSupportedReference(uri: string) {
+  if (isDid(uri)) return true;
+  const parts = parseAtUri(uri);
+  return parts !== null && SUPPORTED_COLLECTIONS.has(parts.collection);
+}
+
+/**
+ * An unsupported verdict is held for a week, except when it predates support
+ * for the reference's collection: a release that adds a collection resolves
+ * those rows on the next open instead of a week later.
+ */
 function fresh(row: SnapshotRow | undefined, now: Date, reuseMs: number) {
   if (!row) return false;
   if (row.outcome === "resolved")
     return now.getTime() - row.resolvedAt.getTime() < reuseMs;
+  if (
+    row.outcome === "unsupported" &&
+    row.resolvedAt.getTime() < SUPPORT_CHANGED_AT &&
+    isSupportedReference(row.uri)
+  )
+    return false;
   return !isReferenceSnapshotStale(toReferenceSnapshot(row), now.getTime());
 }
 
@@ -133,7 +219,7 @@ function fresh(row: SnapshotRow | undefined, now: Date, reuseMs: number) {
 export async function refreshReferenceSnapshots(
   database: typeof db,
   uris: readonly string[],
-  readRecord: ReferenceReader,
+  readers: ReferenceReaders,
   options: { now: Date; reuseMs: number; concurrency?: number },
 ) {
   const existing = await loadReferenceSnapshots(database, uris);
@@ -145,7 +231,7 @@ export async function refreshReferenceSnapshots(
     due,
     options.concurrency ?? 4,
     async (uri) => {
-      resolved.set(uri, await resolveReference(uri, readRecord));
+      resolved.set(uri, await resolveReference(uri, readers));
     },
   )) {
     void unused;
@@ -153,8 +239,10 @@ export async function refreshReferenceSnapshots(
   const rows = due.map((uri) => {
     const result = resolved.get(uri)!;
     const previous = existing.get(uri);
+    // A DID document has no cid, so a fresh read always replaces it.
     const unchanged =
       result.outcome === "resolved" &&
+      result.cid !== null &&
       previous?.outcome === "resolved" &&
       previous.cid === result.cid;
     return {
@@ -189,9 +277,10 @@ export async function refreshReferenceSnapshots(
 }
 
 /**
- * The snapshots a source renders, in render order. Documents referenced by
- * cards name their publications, which are known only once those documents
- * are in hand, so the lookup runs in two passes over the same rows.
+ * The snapshots a source renders, in render order. Records referenced by
+ * cards name further records (a document its publication, a post its author
+ * and quote), which are known only once the first are in hand, so the lookup
+ * runs hop by hop over the same rows, a bounded number of times.
  */
 export async function sourceReferences(
   database: FeedDatabase,
@@ -199,14 +288,22 @@ export async function sourceReferences(
   did: string,
   lookup: (uris: string[]) => Promise<Map<string, SnapshotRow>>,
 ): Promise<ReferenceSnapshot[]> {
-  const direct = documentReferences(source, did);
-  const snapshots = await lookup(direct);
-  const publications = referencedPublications(
-    direct,
-    snapshotLookup([...snapshots.values()].map(toReferenceSnapshot)),
-  );
-  for (const [uri, row] of await lookup(publications)) snapshots.set(uri, row);
-  return [...direct, ...publications]
+  const order = documentReferences(source, did);
+  const snapshots = await lookup(order);
+  let frontier = order;
+  for (let hop = 0; hop < MAX_REFERENCE_HOPS && frontier.length; hop += 1) {
+    const next = nextReferenceHop(
+      frontier,
+      new Set(order),
+      snapshotLookup([...snapshots.values()].map(toReferenceSnapshot)),
+    );
+    // Each hop depends on the records the previous one resolved.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    for (const [uri, row] of await lookup(next)) snapshots.set(uri, row);
+    order.push(...next);
+    frontier = next;
+  }
+  return order
     .map((uri) => snapshots.get(uri))
     .filter((row) => row !== undefined)
     .map(toReferenceSnapshot);
@@ -217,10 +314,10 @@ export async function resolveSourceReferences(
   database: typeof db,
   source: DocumentSource,
   did: string,
-  readRecord: ReferenceReader,
+  readers: ReferenceReaders,
   options: { now: Date; reuseMs: number },
 ): Promise<ReferenceSnapshot[]> {
   return sourceReferences(database, source, did, (uris) =>
-    refreshReferenceSnapshots(database, uris, readRecord, options),
+    refreshReferenceSnapshots(database, uris, readers, options),
   );
 }

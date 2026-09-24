@@ -212,6 +212,9 @@ it.each([true, false])(
     vi.mocked(createPublicationClient).mockReturnValue({
       latestRev: async () => "new",
       resolvePds: async () => "https://pds.example.com",
+      getDidDocument: async () => {
+        throw new Error("Unexpected DID document");
+      },
       getRecord: async () => ({
         uri: PUB,
         cid: "pub",

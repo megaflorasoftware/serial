@@ -1,11 +1,15 @@
 import { z } from "zod";
 import { parseLosslessJson } from "@serial/standard-site";
 import { createHardenedFetch } from "../auth/atproto/hardened-fetch";
-import { resolvePublicPds } from "../auth/atproto/did-resolver";
+import {
+  resolvePublicDidDocument,
+  resolvePublicPds,
+} from "../auth/atproto/did-resolver";
 
 import { createPublicRecordReader } from "../auth/atproto/public-record";
 import type { PublicRecordRequest } from "@serial/standard-site";
 import type { PublicRecordOptions } from "../auth/atproto/public-record";
+import type { HardenedFetch } from "../auth/atproto/hardened-fetch";
 
 export { MissingPublicRecordError as MissingPublicationRecordError } from "@serial/standard-site";
 
@@ -16,16 +20,27 @@ const pageSchema = z.object({
 export type PublicationClient = ReturnType<typeof createPublicationClient>;
 
 /** One refresh caches identity and record reads; it never follows embedded content. */
+export type DidDocumentResolver = (
+  did: string,
+  options?: { deadline?: number },
+) => Promise<unknown>;
+
 export function createPublicationClient(
-  dependencies = {
+  dependencies: {
+    fetch: HardenedFetch;
+    resolvePds: (did: string) => Promise<string>;
+    resolveDidDocument: DidDocumentResolver;
+  } = {
     fetch: createHardenedFetch(undefined, {
       responseMaxSize: 10 * 1024 * 1024,
     }),
     resolvePds: resolvePublicPds,
+    resolveDidDocument: resolvePublicDidDocument,
   },
 ) {
   const pds = new Map<string, Promise<string>>();
   const records = new Map<string, Promise<unknown>>();
+  const didDocuments = new Map<string, Promise<unknown>>();
   const resolvePds = (did: string) => {
     if (!pds.has(did)) pds.set(did, dependencies.resolvePds(did));
     return pds.get(did)!;
@@ -63,9 +78,19 @@ export function createPublicationClient(
     if (!records.has(key)) records.set(key, readRecord({ uri, cid }, budget));
     return records.get(key)!;
   }
+  /** The DID document itself, for the handle a profile record does not carry. */
+  function getDidDocument(
+    did: string,
+    options: { deadline?: number } = {},
+  ): Promise<unknown> {
+    if (!didDocuments.has(did))
+      didDocuments.set(did, dependencies.resolveDidDocument(did, options));
+    return didDocuments.get(did)!;
+  }
   return {
     resolvePds,
     getRecord,
+    getDidDocument,
     async latestRev(did: string) {
       try {
         const response = await request(

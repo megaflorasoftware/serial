@@ -2,20 +2,21 @@ import {
   buildBlueskyCdnImageUrl,
   buildCanonicalDocumentUrl,
   bytesToBase64,
-  convertReaderBody,
+  deriveReaderDocument,
   discoverReferences,
   DOCUMENT_SOURCE_BUDGET_BYTES,
   isBlockNativeDocument,
   overflowBlobCid,
   resolveDocumentSourceContent,
+  summarizeReaderDocument,
 } from "@serial/standard-site";
 import { OversizedDocumentSourceError } from "../jetstream/document-source";
 import { itemUrl } from "./itemObservation";
 import type {
-  ConvertedDocument,
   DocumentSource,
   parseDocumentRecord,
   parsePublicationRecord,
+  ReaderSummary,
   ReferenceSnapshot,
   SourceReaderBody,
 } from "@serial/standard-site";
@@ -78,7 +79,7 @@ export function documentReferences(source: DocumentSource, did: string) {
  * document is not block-native), or a source the adapter rejected.
  */
 export type DocumentBodyOutcome =
-  | { kind: "source"; converted: ConvertedDocument }
+  | { kind: "source"; summary: ReaderSummary }
   | { kind: "none" }
   | { kind: "rejected" };
 
@@ -88,8 +89,10 @@ export function deriveDocumentBody(
   did: string,
 ): DocumentBodyOutcome {
   if (!isBlockNativeDocument(document.value)) return { kind: "none" };
-  const converted = convertReaderBody(body, did);
-  return converted ? { kind: "source", converted } : { kind: "rejected" };
+  const derived = deriveReaderDocument(body, did);
+  return derived
+    ? { kind: "source", summary: summarizeReaderDocument(derived) }
+    : { kind: "rejected" };
 }
 
 /**
@@ -107,8 +110,7 @@ export function documentObservation(
     readableCid: string | null;
   },
 ): ItemObservation {
-  const converted =
-    body.outcome.kind === "source" ? body.outcome.converted : null;
+  const summary = body.outcome.kind === "source" ? body.outcome.summary : null;
   const sourceCid =
     body.outcome.kind === "source" ? body.cid : (body.readableCid ?? undefined);
   const canonical = buildCanonicalDocumentUrl(
@@ -132,8 +134,8 @@ export function documentObservation(
       : "",
     content: "",
     ...(sourceCid ? { sourceCid } : {}),
-    firstParagraph: converted?.firstParagraph ?? "",
-    firstImageUrl: converted?.firstImageUrl ?? "",
+    firstParagraph: summary?.firstParagraph ?? "",
+    firstImageUrl: summary?.firstImageUrl ?? "",
     publishedAt: document.value.publishedAt,
     tags: document.value.tags ?? [],
     publicationName: publication.value.name,

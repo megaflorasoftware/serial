@@ -1,0 +1,150 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Another new block type in publications: ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "polls",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "! Try it here — this will actually be helpful for us in deciding what blocks to add next!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": "center",
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "⁂ ⁂ ⁂",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "What block type should we add next in Leaflet?",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "(pick one; comment if you want multiple / others not listed)",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "notice",
+      "reason": "unsupported"
+    },
+    {
+      "align": "center",
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "⁂ ⁂ ⁂",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We rebuilt this from our earlier polls block in standalone documents. It's now fully atproto-ified, and works a little differently, e.g. you can't edit a poll after it's been published.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Right now published polls are also limited to a single response. We'd like to add some options, like a way to give a poll a limited duration, or allow multiple responses.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Pretty soon we'll make it possible to publish standalone docs to atproto as well, which will make it easier to do quick one-off polls for anything!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The lexicon is at ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pub.leaflet.poll",
+          "marks": {
+            "code": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " — we decided to stick to something scoped under the pub.leaflet namespace for simplicity, but polls definitely could be a shared lexicon that different apps use. We hope that others experiment with them, both with their own lexicons and building off the records we're publishing. One of the cool things about ATProto is that we can coordinate gradually over time, and all the data is still out there, in a simple format, for us to build on!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

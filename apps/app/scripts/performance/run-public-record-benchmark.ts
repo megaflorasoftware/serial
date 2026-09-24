@@ -19,6 +19,9 @@ for (const mode of ["healthy", "unavailable", "stalled"] as const) {
         identityReads++;
         return "https://pds.example";
       },
+      resolveDidDocument: async () => {
+        throw new Error("Unexpected DID document");
+      },
       fetch: async (input) => {
         requests++;
         const url = new URL(String(input));

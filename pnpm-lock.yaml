@@ -247,6 +247,9 @@ importers:
       feedsmith:
         specifier: ^2.9.5
         version: 2.9.5
+      hls.js:
+        specifier: ^1.7.3
+        version: 1.7.3
       html-react-parser:
         specifier: ^6.1.4
         version: 6.1.4(@types/react@19.2.17)(react@19.2.7)
@@ -6844,6 +6847,9 @@ packages:
   hex-rgb@4.3.0:
     resolution: {integrity: sha512-Ox1pJVrDCyGHMG9CFg1tmrRUMRPRsAWYc/PinY0XzJU4K7y7vjNoLKIQ7BR5UJMCxNN8EM1MNDmHWA/B3aZUuw==}
     engines: {node: '>=6'}
+
+  hls.js@1.7.3:
+    resolution: {integrity: sha512-MsPlx6yVW4Qv4C7mEVou4/gk/5cN2dVxOTnrNjPSmyH2f0Ln+/UkG10Ax1PE6OvrmTVPKgQYozTtBaPOuCzq7A==}
 
   hookable@6.1.1:
     resolution: {integrity: sha512-U9LYDy1CwhMCnprUfeAZWZGByVbhd54hwepegYTK7Pi5NvqEj63ifz5z+xukznehT7i6NIZRu89Ay1AZmRsLEQ==}
@@ -16873,6 +16879,8 @@ snapshots:
       hermes-estree: 0.25.1
 
   hex-rgb@4.3.0: {}
+
+  hls.js@1.7.3: {}
 
   hookable@6.1.1: {}
 

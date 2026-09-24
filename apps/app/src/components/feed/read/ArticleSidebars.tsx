@@ -9,6 +9,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { layoutFootnotePositions } from "./footnoteLayout";
 import {
   buildInnerDocumentLinkGraph,
   getNoteSource,
@@ -855,20 +856,18 @@ function useArticleSidebarController({
     const pane = footnotesPaneRef.current;
     if (!article || !pane || !hasRoomForPanes) return;
 
-    const articleRect = article.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
     const renderedNotes = Array.from(
       pane.querySelectorAll<HTMLElement>("[data-footnote-pane-item]"),
     );
-    let previousBottom = 0;
-    const nextPositions = footnotes.map((footnote, index) => {
-      const referenceTop =
-        footnote.references[0]!.getBoundingClientRect().top - articleRect.top;
-      const top = Math.max(referenceTop, previousBottom);
-      previousBottom =
-        top +
-        (renderedNotes[index]?.getBoundingClientRect().height ?? 0) +
-        FOOTNOTE_GAP;
-      return top;
+    const nextPositions = layoutFootnotePositions({
+      anchors: footnotes.map(
+        (footnote) =>
+          footnote.references[0]!.getBoundingClientRect().top - paneRect.top,
+      ),
+      heights: renderedNotes.map((note) => note.getBoundingClientRect().height),
+      limit: paneRect.height,
+      gap: FOOTNOTE_GAP,
     });
 
     dispatch({

@@ -49,7 +49,13 @@
   text-decoration: none;
 }
 
-.article a:not(:has(p)):not(:has(img)):not(:empty) {
+/* Inline links read as chips. Cards escape through their paragraphs, the
+   social post's overlay through being empty, and a notice's button through
+   its own exemption so the shared button variant applies untouched. */
+.article
+  a:not(:has(p)):not(:has(img)):not(:empty):not(
+    :global([data-reader-notice]) a
+  ) {
   background: var(--color-sidebar-accent);
   color: var(--color-sidebar-accent-foreground);
   border-radius: var(--radius-sm);
@@ -63,32 +69,116 @@
   hyphens: auto;
 }
 
-.article a:not(:has(p)):not(:has(img)):not(:empty):hover,
-.article a:not(:has(p)):not(:has(img)):not(:empty):focus-visible {
+.article
+  a:not(:has(p)):not(:has(img)):not(:empty):not(
+    :global([data-reader-notice]) a
+  ):hover,
+.article
+  a:not(:has(p)):not(:has(img)):not(:empty):not(
+    :global([data-reader-notice]) a
+  ):focus-visible {
   background: var(--color-sidebar-primary);
   color: var(--color-sidebar-primary-foreground);
   text-decoration: none;
   outline: none;
 }
 
+/* Body images sit at their own size, never upscaled, centred in the column.
+   Card previews, avatars, social images and video posters keep their own
+   layout. */
 .article img {
-  width: 100%;
+  max-width: 100%;
 }
 
-.article .videoEmbed img {
+.article
+  img:not(
+    [data-record-image],
+    [data-social-post-avatar],
+    [data-social-post-image],
+    [data-article-video-embed] img,
+    [data-social-post-video-player] img
+  ) {
+  display: block;
+  height: auto;
+  margin-inline: auto;
+}
+
+/* A body image's frame holds its place while the bytes arrive, or for good
+   if they never do: a muted placeholder at the image's known shape (or
+   landscape) with the alt text centred inside. Once loaded the frame shrinks
+   to the image and centres with it. */
+.article :global([data-image-frame]) {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.article :global([data-lightbox] [data-image-frame="loaded"]) {
+  width: fit-content;
+  max-width: 100%;
+  aspect-ratio: auto !important;
+}
+
+.article :global([data-image-frame]:not([data-image-frame="loaded"])) {
+  background: var(--color-muted);
+}
+
+.article :global([data-image-frame="loading"]) img {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.article :global([data-image-frame]) img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  object-fit: contain;
+  transition: opacity 0.2s ease;
+}
+
+.article :global([data-image-frame="loaded"]) img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+}
+
+.article :global([data-image-placeholder]) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  margin: 0;
+  max-width: none;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--color-muted-foreground);
+}
+
+.article :global([data-article-video-embed="serial"]) img {
   margin: 0;
   width: auto;
 }
 
-.article .videoEmbed * + * {
+.article :global([data-article-video-embed="serial"]) * + * {
   margin-block-start: 0;
 }
 
-.article .videoEmbed * {
+.article :global([data-article-video-embed="serial"]) * {
   max-width: none;
 }
 
-.article .videoEmbed :global(.font-mono) {
+.article :global([data-article-video-embed="serial"]) :global(.font-mono) {
   font-family: var(--font-mono);
 }
 
@@ -270,14 +360,38 @@
 }
 
 .article :global([data-record-image="cover"]) {
-  width: 25%;
-  align-self: stretch;
   flex: none;
   object-fit: cover;
 }
 
-.article :global([data-record-card="row"] [data-record-image="cover"]) {
-  width: 5rem;
+.article :global([data-record-card="medium"] [data-record-image="cover"]) {
+  width: 25%;
+  align-self: stretch;
+}
+
+/* Row cards of every kind share one preview column: as wide as the square
+   that fits the card's minimum height, inset from the top, right and bottom,
+   and stretched to the card's height when the copy runs taller. The whole
+   image shows inside the column, centred, at its own proportions, and is
+   sized to itself so the rounding follows the image, not the column. */
+.article :global([data-record-card="row"] [data-record-preview]) {
+  position: relative;
+  width: 6rem;
+  align-self: stretch;
+  flex: none;
+  margin: 0.5rem 0.5rem 0.5rem 0;
+}
+
+.article :global([data-record-card="row"] [data-record-preview] img) {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
 }
 
 .article :global([data-record-card="large"]) {
@@ -286,5 +400,463 @@
 
 .article :global([data-record-card="large"] [data-record-image="cover"]) {
   width: 100%;
+  align-self: stretch;
   aspect-ratio: 1.91;
+}
+
+/* Reader document blocks. Selectors mirror the HTML reader's DOM shapes so
+   navigation, progress and the sidebars read both the same way. */
+
+.article :global([data-reader-notice]) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 15rem;
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-muted);
+  text-align: center;
+}
+
+.article :global([data-reader-notice]) * {
+  margin-block-start: 0;
+}
+
+.article :global([data-reader-notice-headline]) {
+  font-weight: 600;
+}
+
+/* The notice button keeps the shared primary variant; only the article's
+   own typography is reset here. */
+.article :global([data-reader-notice]) a {
+  gap: 0.5rem;
+  font-family: var(--font-sans);
+}
+
+.article :global([data-reader-frame]) iframe {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+
+.article :global([data-reader-callout]) {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: color-mix(
+    in srgb,
+    var(--reader-callout-tint, var(--color-muted)) 24%,
+    var(--color-muted)
+  );
+}
+
+.article :global([data-reader-callout]) > * {
+  margin-block-start: 0;
+}
+
+.article :global([data-reader-callout]) > span {
+  flex: none;
+  line-height: inherit;
+}
+
+.article :global([data-reader-callout]) > p {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The lightbox button fills the column so percent widths, alignment and the
+   placeholder resolve against the column, not the image's own size: a
+   button shrinks to its content, and a placeholder alone has none. Images
+   centre unless the author aligned them left or right. */
+.article :global([data-lightbox-trigger]) {
+  width: 100%;
+}
+
+.article :global([data-reader-figure][data-reader-align="left"]) img,
+.article
+  :global([data-reader-figure][data-reader-align="left"])
+  :global([data-image-frame]) {
+  margin-inline: 0;
+}
+
+.article :global([data-reader-figure][data-reader-align="right"]) img,
+.article
+  :global([data-reader-figure][data-reader-align="right"])
+  :global([data-image-frame]) {
+  margin-inline: auto 0;
+}
+
+/* Row cards are at least as tall as the preview and its insets, so a
+   short card shows the preview square. */
+.article :global([data-record-card="row"]) {
+  min-height: 6.5rem;
+}
+
+.article :global([data-reader-link-card] [data-record-title]) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
+
+.article :global([data-reader-link-card] [data-record-description]) {
+  -webkit-line-clamp: 2;
+}
+
+/* Social post cards share the record card shell. The whole card is a
+   stretched link to the post; the author link and every link in the body
+   sit above it, so the card lights up under the pointer everywhere except
+   on those. */
+.article :global([data-social-post]) {
+  position: relative;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  font-size: 0.9375em;
+  transition: background-color 0.2s ease;
+}
+
+.article :global([data-social-post]):hover {
+  background: var(--color-background);
+}
+
+.article :global([data-social-post]):has(> [data-social-post-link]:hover) {
+  background: var(--color-accent);
+}
+
+.article :global([data-social-post]) > * {
+  margin-block-start: 0;
+}
+
+/* Not an inline body link: no pill, no background of its own. */
+.article :global([data-social-post] > a[data-social-post-link]),
+.article :global([data-social-post] > a[data-social-post-link]):hover,
+.article :global([data-social-post] > a[data-social-post-link]):focus-visible {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 0;
+  border-radius: inherit;
+  background: none;
+}
+
+.article :global([data-social-post] > a[data-social-post-link]):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: -2px;
+}
+
+/* Everything else floats above the stretched link but lets the pointer
+   through to it, except the links themselves and the quote card. */
+.article :global([data-social-post]) > :not([data-social-post-link]) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.article :global([data-social-post]) a,
+.article :global([data-social-post]) [data-social-post-quote],
+.article :global([data-social-post]) [data-social-post-video-player] {
+  pointer-events: auto;
+}
+
+.article :global([data-social-post-video-player]) video {
+  display: block;
+  width: 100%;
+  margin: 0;
+}
+
+.article :global([data-social-post-header]) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+/* The author link is a header, not an inline body link, so it never takes
+   the pill even when its avatar is absent or fails to load. */
+.article :global([data-social-post-header] > a[data-social-post-author]),
+.article :global([data-social-post-header] > a[data-social-post-author]):hover,
+.article
+  :global(
+    [data-social-post-header] > a[data-social-post-author]
+  ):focus-visible {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding-inline: 0;
+  background: none;
+  color: var(--color-foreground);
+}
+
+.article :global([data-social-post-author]):hover [data-social-post-name],
+.article
+  :global([data-social-post-author]):focus-visible
+  [data-social-post-name] {
+  text-decoration: underline;
+}
+
+.article :global([data-social-post-avatar]) {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 9999px;
+  background: var(--color-muted);
+  object-fit: cover;
+}
+
+.article :global([data-social-post-name]) {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article :global([data-social-post-handle]),
+.article :global([data-social-post-time]) {
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+
+.article :global([data-social-post-body]) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.article :global([data-social-post-body]) > * {
+  margin-block-start: 0;
+}
+
+.article :global([data-social-post-text]) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.article :global([data-social-post-images]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.article :global([data-social-post-images="1"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.article :global([data-social-post-image]) {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+.article :global([data-social-post-hidden]) {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+.article :global([data-social-post-quote]) [data-record-card] {
+  font-size: 0.9375em;
+}
+
+.article :global([data-reader-image-group-items]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--article-flow-spacing);
+}
+
+.article :global([data-reader-image-group-items]) > * {
+  margin-block-start: 0;
+}
+
+.article :global([data-reader-image-group-title]) {
+  font-weight: 600;
+  margin-block-end: 0.5rem;
+}
+
+.article
+  :global([data-reader-image-group="grid"])
+  :global([data-reader-image-group-items]) {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(var(--reader-grid-columns, 2), minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+}
+
+/* Offprint grids: every cell shares one fixed shape. */
+.article
+  :global([data-reader-grid-ratio])
+  :global([data-reader-image-group-items])
+  > * {
+  min-height: 0;
+  aspect-ratio: 4 / 3;
+}
+
+.article
+  :global([data-reader-grid-ratio="portrait"])
+  :global([data-reader-image-group-items])
+  > * {
+  aspect-ratio: 3 / 4;
+}
+
+.article
+  :global([data-reader-grid-ratio="square"])
+  :global([data-reader-image-group-items])
+  > * {
+  aspect-ratio: 1;
+}
+
+.article
+  :global([data-reader-grid-ratio="mosaic"])
+  :global([data-reader-image-group-items])
+  > :first-child {
+  grid-row: span 2;
+  aspect-ratio: auto;
+}
+
+/* Natural grids: each cell reserves its image's own shape, the row stretches
+   to the tallest cell, and shorter images crop to fill. On a narrow column
+   three columns become two. */
+.article
+  :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
+  :global([data-reader-image-group-items]) {
+  grid-auto-rows: auto;
+  align-items: stretch;
+}
+
+/* The explicit width keeps a stretched cell from deriving its width from
+   the row's height through its aspect ratio and spilling into the gap. */
+.article
+  :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
+  :global([data-reader-image-group-items])
+  > * {
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+@media (width < 40rem) {
+  .article
+    :global([data-reader-image-group="grid"]:not([data-reader-grid-ratio]))
+    :global([data-reader-image-group-items]) {
+    grid-template-columns: repeat(
+      var(--reader-grid-columns-narrow, 2),
+      minmax(0, 1fr)
+    );
+  }
+}
+
+.article :global([data-reader-image-group="grid"]) :global([data-lightbox]),
+.article
+  :global([data-reader-image-group="grid"])
+  :global([data-lightbox-trigger]),
+.article :global([data-reader-image-group="grid"]) :global([data-image-frame]),
+.article :global([data-reader-image-group="grid"]) img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  max-width: none;
+}
+
+.article :global([data-reader-image-group="grid"]) img {
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+/* Carousel: one slide per viewport, snapped, with the counter below. */
+.article :global([data-reader-carousel-viewport]) {
+  position: relative;
+}
+
+.article :global([data-reader-carousel-strip]) {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: var(--radius-sm);
+}
+
+.article :global([data-reader-carousel-strip])::-webkit-scrollbar {
+  display: none;
+}
+
+.article :global([data-reader-carousel-slide]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  min-width: 0;
+}
+
+.article :global([data-reader-carousel-slide]) :global([data-lightbox]),
+.article :global([data-reader-carousel-slide]) :global([data-lightbox-trigger]),
+.article :global([data-reader-carousel-slide]) :global([data-image-frame]),
+.article :global([data-reader-carousel-slide]) img {
+  width: 100%;
+}
+
+.article :global([data-reader-carousel-slide]) img {
+  display: block;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.article :global([data-reader-carousel-counter]) {
+  margin-block: 0.5rem 0;
+  text-align: center;
+  font-size: 0.875em;
+  color: var(--color-muted-foreground);
+}
+
+.article :global([data-reader-footnotes]) {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--article-flow-spacing);
+  font-size: 0.875em;
+}
+
+.article table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.article th,
+.article td {
+  border: 1px solid var(--color-border);
+  padding: 0.375rem 0.5rem;
+  vertical-align: top;
+}
+
+.article th {
+  font-weight: 700;
+  background: var(--color-muted);
+}
+
+.article th > * + *,
+.article td > * + * {
+  margin-block-start: calc(var(--article-flow-spacing) / 2);
+}
+
+.article :global(.task-list-item) {
+  list-style: none;
+}
+
+.article :global(.task-list-item) > input {
+  margin-inline-end: 0.25rem;
+  vertical-align: middle;
+}
+
+.article :global(.task-list-item) > * {
+  display: inline;
 }

@@ -51,7 +51,19 @@ export function BookmarkArticleContent({ content }: { content: string }) {
       if (node.name === "img") {
         const src = node.attribs.src;
         if (!src) return <></>;
-        return <ArticleImageLightbox src={src} alt={node.attribs.alt ?? ""} />;
+        const width = Number(node.attribs.width);
+        const height = Number(node.attribs.height);
+        return (
+          <ArticleImageLightbox
+            src={src}
+            alt={node.attribs.alt ?? ""}
+            aspectRatio={
+              width > 0 && height > 0 && Number.isFinite(width + height)
+                ? { width, height }
+                : null
+            }
+          />
+        );
       }
       if (node.attribs["data-serial-embed"] !== "youtube") return;
       const videoId = node.attribs["data-video-id"];

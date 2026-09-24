@@ -18,8 +18,10 @@ import { barsHiddenAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import classes from "~/components/feed/read/article.module.css";
 import { useFeedItemValue } from "~/lib/data/store";
-import { readerBodyHtml } from "~/lib/data/feed-items/readerBody";
+import { readerContent } from "~/lib/data/feed-items/readerBody";
 import { ArticleContent } from "~/components/feed/read/ArticleContent";
+import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
+import { getOriginActionLabel } from "~/lib/content/capabilities";
 import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import {
   getClosestVisibleElement,
@@ -138,9 +140,12 @@ function FeedReader({
 
   // Deriving a Document source is the expensive step, so it is keyed on the
   // body identity rather than on the zoom and style the reader also reads.
+  // A reference refresh replaces the body object and re-derives; the
+  // revision stays, so progress does not move.
   const body = feedItem?.body;
-  const bodyHtml = useMemo(() => readerBodyHtml(body), [body]);
-  const content = getReaderContent(bodyHtml, articleStyle);
+  const reader = useMemo(() => readerContent(body), [body]);
+  const content =
+    reader?.form === "html" ? getReaderContent(reader.html, articleStyle) : "";
 
   const articleRef = useRef<HTMLDivElement>(null);
   const [articleElement, setArticleElement] = useState<HTMLDivElement | null>(
@@ -206,7 +211,7 @@ function FeedReader({
       <div key={id} className="relative w-full">
         <ArticleSidebars
           article={articleElement}
-          contentKey={`${id}:${articleStyle}:${zoom}:${content}`}
+          contentKey={`${id}:${articleStyle}:${zoom}:${body?.revision ?? ""}:${reader?.form === "document" ? reader.document.footnotes.length : content}`}
           scrollToElement={scrollToElement}
         />
         <div
@@ -215,10 +220,22 @@ function FeedReader({
         >
           <h1 data-serial-header>{feedItem?.title}</h1>
           <h6 data-serial-header>{feedItem?.author || feed?.name || ""}</h6>
-          <ArticleContent
-            content={content}
-            simplified={articleStyle === "simplified"}
-          />
+          {reader?.form === "document" ? (
+            <ReaderDocumentContent
+              document={reader.document}
+              documentUrl={feedItem?.url ?? ""}
+              originActionLabel={getOriginActionLabel({
+                platform: feed?.platform ?? "website",
+                contentType: feedItem?.contentType ?? "text",
+              })}
+              simplified={articleStyle === "simplified"}
+            />
+          ) : (
+            <ArticleContent
+              content={content}
+              simplified={articleStyle === "simplified"}
+            />
+          )}
         </div>
       </div>
       {shouldShowTruncationAlert && (

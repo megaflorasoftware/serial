@@ -1,14 +1,10 @@
 "use client";
 
-import { parseRecordCard } from "@serial/standard-site";
 import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
-import { RecordCard } from "~/components/content-reader/RecordCard";
-import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
+import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
-import { useFlagState } from "~/lib/hooks/useFlagState";
-import classes from "~/components/feed/read/article.module.css";
 
 function extractYouTubeVideoId(src: string): string | null {
   const match = src.match(
@@ -17,17 +13,32 @@ function extractYouTubeVideoId(src: string): string | null {
   return match?.[1] ?? null;
 }
 
-function findImageSrc(node: Element): string | null {
-  if (node.name === "img") return node.attribs.src ?? null;
-  if (node.name === "source")
-    return node.attribs.srcset?.split(/\s/)[0] ?? null;
+function findImage(node: Element): { src: string; node: Element } | null {
+  if (node.name === "img")
+    return node.attribs.src ? { src: node.attribs.src, node } : null;
+  if (node.name === "source") {
+    const src = node.attribs.srcset?.split(/\s/)[0];
+    return src ? { src, node } : null;
+  }
   for (const child of node.children) {
     if (child instanceof Element) {
-      const src = findImageSrc(child);
-      if (src) return src;
+      const image = findImage(child);
+      if (image) return image;
     }
   }
   return null;
+}
+
+/** Publisher-declared pixel dimensions, when both are plain positive numbers. */
+function htmlImageAspectRatio(node: Element) {
+  const width = Number(node.attribs.width);
+  const height = Number(node.attribs.height);
+  return Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+    ? { width, height }
+    : null;
 }
 
 function isImageContainer(node: Element): boolean {
@@ -35,11 +46,12 @@ function isImageContainer(node: Element): boolean {
     const cls = node.attribs.class ?? "";
     if (cls.includes("image-link") || cls.includes("image2")) return true;
   }
-  if (node.name === "figure") return !!findImageSrc(node);
+  if (node.name === "figure") return !!findImage(node);
   if (node.attribs.class?.includes("captioned-image-container")) return true;
   return false;
 }
 
+/** Renders an HTML Reader body: RSS bodies and legacy stored HTML. */
 export function ArticleContent({
   content,
   simplified = false,
@@ -47,8 +59,6 @@ export function ArticleContent({
   content: string;
   simplified?: boolean;
 }) {
-  const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
-
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (!(domNode instanceof Element)) return;
@@ -63,22 +73,30 @@ export function ArticleContent({
         domNode.attribs.rel = "noopener noreferrer";
       }
 
-      if (domNode.attribs["data-serial-embed"] === "record") {
-        const card = parseRecordCard(domNode.attribs);
-        if (card) return <RecordCard card={card} />;
-      }
       if (simplified) return;
 
       if (domNode.name === "img") {
         const src = domNode.attribs.src ?? "";
         const alt = domNode.attribs.alt ?? "";
         if (!src) return;
-        return <ArticleImageLightbox src={src} alt={alt} />;
+        return (
+          <ArticleImageLightbox
+            src={src}
+            alt={alt}
+            aspectRatio={htmlImageAspectRatio(domNode)}
+          />
+        );
       }
 
       if (isImageContainer(domNode)) {
-        const src = findImageSrc(domNode);
-        if (src) return <ArticleImageLightbox src={src} />;
+        const image = findImage(domNode);
+        if (image)
+          return (
+            <ArticleImageLightbox
+              src={image.src}
+              aspectRatio={htmlImageAspectRatio(image.node)}
+            />
+          );
       }
 
       if (domNode.name !== "iframe") return;
@@ -86,40 +104,7 @@ export function ArticleContent({
       const src = domNode.attribs.src ?? "";
       const videoId = extractYouTubeVideoId(src);
       if (!videoId) return;
-
-      if (videoPlayer === "serial") {
-        return (
-          <div
-            data-article-video-embed
-            className={`${classes.videoEmbed} aspect-video w-full overflow-hidden rounded`}
-          >
-            <CustomVideoPlayer
-              videoID={videoId}
-              orientation="horizontal"
-              isInactive={false}
-              isEmbed
-            />
-          </div>
-        );
-      }
-
-      return (
-        <div
-          data-article-video-embed
-          className="aspect-video w-full overflow-hidden rounded"
-        >
-          <iframe
-            width="1600"
-            height="900"
-            src={`https://www.youtube-nocookie.com/embed/${videoId}`}
-            title="YouTube video player"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="h-full w-full border-none"
-          />
-        </div>
-      );
+      return <ArticleVideoEmbed videoId={videoId} />;
     },
   };
 

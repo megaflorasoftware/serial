@@ -42,7 +42,11 @@ export function documentPublicationUri(document: Pick<DocumentRecord, "site">) {
     : null;
 }
 
-function publicationPreview(
+/**
+ * A publication as a card: its site, name, description and icon. Also how a
+ * blog-voiced social post reads the publication it speaks as.
+ */
+export function publicationPreview(
   publication: ListedRecord<PublicationRecord>,
   did: string,
   fallback: string,

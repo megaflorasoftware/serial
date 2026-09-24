@@ -192,8 +192,8 @@ function ThumbnailContainer({
         "aspect-[9/16] w-full":
           (layout === "grid" || layout === "large-grid") &&
           thumbnailType === "vertical-video",
-        // Non-video grid layouts
-        "bg-muted aspect-[3/2] w-full":
+        // Non-video grid layouts: the Open Graph image shape
+        "bg-muted aspect-[1.91/1] w-full":
           (layout === "grid" || layout === "large-grid") && !isVideo,
       })}
     >

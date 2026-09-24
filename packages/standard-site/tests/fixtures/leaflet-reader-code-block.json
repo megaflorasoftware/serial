@@ -1,0 +1,454 @@
+{
+  "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.document/3mhgvk6vnbk2n",
+  "cid": "bafyreidqn67eb5frgg2xb64iqvvl6sljextuhf72uskren6vgb7g72bqqm",
+  "value": {
+    "path": "/3mhgvk6vnbk2n",
+    "site": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.publication/3lppk75kw7k26",
+    "tags": [],
+    "$type": "site.standard.document",
+    "title": "New and improved Leaflet Reader",
+    "content": {
+      "$type": "pub.leaflet.content",
+      "pages": [
+        {
+          "id": "019c8c00-af98-7338-ae5b-ac6a640f90e6",
+          "$type": "pub.leaflet.pages.linearDocument",
+          "blocks": [
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "We shipped post recommendations, and improved Leaflet Reader. We also reworked overall Leaflet nav, with clearer \"Read\" and \"Write\" modes. Here's what's new!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "level": 2,
+                "plaintext": "Recommend posts"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "You can hit the \"recommend\" button (heart icon) from the top or bottom of a post, to show your appreciation."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 21,
+                      "byteStart": 17
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#italic"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "Yes, basically a like button, but…for recommending!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "Publishers can turn off recommendations for a publication, or per-post if you like."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "alt": "header of post \"Atmospheric Weather Report #2\" with small recommend button highlighted, showing 7 recommends",
+                "$type": "pub.leaflet.blocks.image",
+                "image": {
+                  "ref": {
+                    "$link": "bafkreihaqhlzbfhnn6kcqjs52kltlozf5wlsiwsqluwah5kpw6l4myhete"
+                  },
+                  "size": 25670,
+                  "$type": "blob",
+                  "mimeType": "image/webp"
+                },
+                "aspectRatio": {
+                  "width": 1592,
+                  "height": 448
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "alt": "footer of post \"Atmospheric Weather Report #2\" with larger recommend button showing \"recommended!\" and 7 recommends",
+                "$type": "pub.leaflet.blocks.image",
+                "image": {
+                  "ref": {
+                    "$link": "bafkreif3kdmpfs2vkumif5qsskyaacv6iiz57l2fbm7kwsjjpxupvf5pau"
+                  },
+                  "size": 23320,
+                  "$type": "blob",
+                  "mimeType": "image/webp"
+                },
+                "aspectRatio": {
+                  "width": 1592,
+                  "height": 448
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 42,
+                      "byteStart": 0
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#italic"
+                      }
+                    ]
+                  }
+                ],
+                "textSize": "small",
+                "plaintext": "same post, \"recommended\" at top and bottom"
+              },
+              "alignment": "lex:pub.leaflet.pages.linearDocument#textAlignCenter"
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "⁂ ⁂ ⁂"
+              },
+              "alignment": "lex:pub.leaflet.pages.linearDocument#textAlignCenter"
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "level": 2,
+                "plaintext": "Leaflet Reader"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "We merged our old Reader (showing your subscriptions) and our previous Discover page into a new \"Reader\" with multiple feeds:"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.unorderedList",
+                "children": [
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "plaintext": "Subs: posts from your subscribed publications"
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "plaintext": "Trending: hottest recent posts"
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "plaintext": "New: all posts, by recency"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "alt": "leaflet reader, with \"what's hot\" (since renamed \"trending\") feed shown, with post list + comments for one of the visible posts, \"Announcing Skyboard\", open in sidebar",
+                "$type": "pub.leaflet.blocks.image",
+                "image": {
+                  "ref": {
+                    "$link": "bafkreibbhedxkn64kiorp77z5lt6wabivnw34misxus2yttfmsspym6dvq"
+                  },
+                  "size": 643714,
+                  "$type": "blob",
+                  "mimeType": "image/webp"
+                },
+                "aspectRatio": {
+                  "width": 2634,
+                  "height": 1380
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "From the Reader feeds, you can open posts, hit recommend, and copy the share link directly. You can also click the comments and mentions buttons to preview the social context before reading."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 89,
+                      "byteStart": 76
+                    },
+                    "features": [
+                      {
+                        "uri": "https://standard.site",
+                        "$type": "pub.leaflet.richtext.facet#link"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "Also worth noting — this shows not only posts created on Leaflet, but any standard.site published posts!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 41,
+                      "byteStart": 30
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#italic"
+                      }
+                    ]
+                  },
+                  {
+                    "index": {
+                      "byteEnd": 236,
+                      "byteStart": 223
+                    },
+                    "features": [
+                      {
+                        "uri": "https://standard.site",
+                        "$type": "pub.leaflet.richtext.facet#link"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "In the process we removed the publication-focused Discover page, which was less useful — maybe we'll revisit in some form (like a way to recommend pubs) but here we want posts to shine. This is also a fun area for global standard.site tools to explore!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 44,
+                      "byteStart": 27
+                    },
+                    "features": [
+                      {
+                        "uri": "https://bsky.app/profile/leaflet.pub/post/3merkri5lcs2e",
+                        "$type": "pub.leaflet.richtext.facet#link"
+                      }
+                    ]
+                  },
+                  {
+                    "index": {
+                      "byteEnd": 69,
+                      "byteStart": 56
+                    },
+                    "features": [
+                      {
+                        "did": "did:plc:xbtmt2zjwlrfegqvch7fboei",
+                        "$type": "pub.leaflet.richtext.facet#didMention"
+                      }
+                    ]
+                  },
+                  {
+                    "index": {
+                      "byteEnd": 82,
+                      "byteStart": 74
+                    },
+                    "features": [
+                      {
+                        "uri": "https://bsky.app/profile/zzstoatzz.io/post/3mfubyiph422y",
+                        "$type": "pub.leaflet.richtext.facet#link"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "Some good responses on our announcement post; thanks to @zzstoatzz.io for feedback on some issues, now mostly fixed :)"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "⁂ ⁂ ⁂"
+              },
+              "alignment": "lex:pub.leaflet.pages.linearDocument#textAlignCenter"
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "level": 2,
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 21,
+                      "byteStart": 13
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#italic"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "Sidebar: the Trending feed"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 21,
+                      "byteStart": 13
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#bold"
+                      },
+                      {
+                        "$type": "pub.leaflet.richtext.facet#italic"
+                      }
+                    ]
+                  },
+                  {
+                    "index": {
+                      "byteEnd": 85,
+                      "byteStart": 73
+                    },
+                    "features": [
+                      {
+                        "uri": "https://www.righto.com/2013/11/how-hacker-news-ranking-really-works.html",
+                        "$type": "pub.leaflet.richtext.facet#link"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "How does the Trending algo work? It's basically the Hacker News homepage ranking algo, lightly tweaked. We calculate a score for recent posts, based on both Bluesky likes and Leaflet recommendations (the latter weighted more strongly)."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "Right now we show the top 50 recent posts. The score decays rapidly, within hours, so we could play with that variable so posts stick around a bit longer."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.code",
+                "plaintext": "SELECT uri\nFROM documents\nWHERE indexed = true\nAND sort_date > now() - interval '7 days'\nORDER BY\n(bsky_like_count + recommend_count * 5)::numeric \n/ power(extract(epoch from (now() - sort_date)) / 3600 + 2, 1.5) DESC\nLIMIT 50"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "⁂ ⁂ ⁂"
+              },
+              "alignment": "lex:pub.leaflet.pages.linearDocument#textAlignCenter"
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "level": 2,
+                "plaintext": "Future ideas for Reader"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "One thing that'd be really cool to build on this: custom feeds."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "We'd love to show more things in Reader feeds too, e.g. more context-rich recommendations, or surfacing things your friends are reading."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "plaintext": "And we'd like to have some nicer way to navigate between posts as you read, maybe an iframe wrapper, with footer for interactions and navigation / browsing."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 62,
+                      "byteStart": 49
+                    },
+                    "features": [
+                      {
+                        "uri": "https://standard.site",
+                        "$type": "pub.leaflet.richtext.facet#link"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "Since we can show not only Leaflet posts but any standard.site compatible posts, it'd be nice to support more standard social interactions (like comments) on all posts in some form, too."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "bskyPostRef": {
+      "cid": "bafyreif2vrivv66yr6swxixox2rff3yegagnowqjylcxzxh3rmvjinu6zq",
+      "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/app.bsky.feed.post/3mhgvkejl3k2n",
+      "commit": {
+        "cid": "bafyreig4kide2s3gz2w4gid2h2bwijseo3smluyvrxsgyuejvrrxzgikom",
+        "rev": "3mhgvkemzln2j"
+      },
+      "validationStatus": "valid"
+    },
+    "description": "Lab Notes 023: Leaflet Reader now has \"new\" and \"trending\" feeds, post recommendations, and more!",
+    "publishedAt": "2026-02-13T21:58:00.000Z"
+  }
+}

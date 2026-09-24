@@ -379,5 +379,86 @@
         "showInDiscover": true
       }
     }
+  },
+  {
+    "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.publication/3lppk75kw7k26",
+    "cid": "bafyreienforblsiwcwbjsihxx75pkjtscqgihjfvvgv5i5qsiwtggql6zm",
+    "value": {
+      "$type": "site.standard.publication",
+      "url": "https://lab.leaflet.pub",
+      "name": "Leaflet Lab Notes",
+      "description": "Behind the scenes as we build Leaflet, an open social publishing tool for blogs, newsletters, and more!"
+    }
+  },
+  {
+    "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/site.standard.publication/3lwafzkjqm25s",
+    "cid": "bafyreihg5pkqcr4hklzfygyo56gn5tssjcdla2g4zrkb2co6krq4zhcjn4",
+    "value": {
+      "url": "https://notes.pckt.blog",
+      "icon": {
+        "ref": {
+          "$link": "bafkreia3gaejwdadslicpqbgtzitcysop7lhuyry6bjf6xlf5fe7jvvcdy"
+        },
+        "size": 8535,
+        "$type": "blob",
+        "mimeType": "image/png"
+      },
+      "name": "pckt - notes 📝",
+      "$type": "site.standard.publication",
+      "theme": {
+        "dark": {
+          "link": "#fdba74",
+          "text": "#ffedd5",
+          "accent": "#fb7185",
+          "background": "#1f0c04",
+          "surfaceHover": "#3d1709"
+        },
+        "font": "legible",
+        "$type": "blog.pckt.theme",
+        "light": {
+          "link": "#c2410c",
+          "text": "#7c2d12",
+          "accent": "#fb7185",
+          "background": "#ffedd5",
+          "surfaceHover": "#fed7aa"
+        },
+        "transparency": 100,
+        "highlightColor": "theme",
+        "highlightShape": "scratchy",
+        "tileBackground": false,
+        "backgroundTileSize": 30
+      },
+      "basicTheme": {
+        "$type": "site.standard.theme.basic",
+        "accent": {
+          "b": 133,
+          "g": 113,
+          "r": 251,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "background": {
+          "b": 213,
+          "g": 237,
+          "r": 255,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "foreground": {
+          "b": 18,
+          "g": 45,
+          "r": 124,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "accentForeground": {
+          "b": 34,
+          "g": 43,
+          "r": 51,
+          "$type": "site.standard.theme.color#rgb"
+        }
+      },
+      "description": "the latest and greatest from pckt !",
+      "preferences": {
+        "showInDiscover": true
+      }
+    }
   }
 ]

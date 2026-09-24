@@ -164,6 +164,9 @@ export async function createJetstreamWorkload(
       };
       const remote: PublicationClient = {
         resolvePds: async () => "https://pds.example.com",
+        getDidDocument: async () => {
+          throw new Error("Unexpected DID document");
+        },
         latestRev: async () => `rev${seq}`,
         getRecord: async () => ({
           uri,
@@ -250,6 +253,7 @@ export async function createJetstreamWorkload(
           manual: true,
           client: {
             resolvePds: unexpected,
+            getDidDocument: unexpected,
             latestRev: unexpected,
             getRecord: unexpected,
             list: unexpected,

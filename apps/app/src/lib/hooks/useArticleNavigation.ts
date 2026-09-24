@@ -11,6 +11,7 @@ import {
 } from "~/lib/constants/shortcuts";
 import { getScrollContainer } from "~/lib/scroll";
 import {
+  ARTICLE_BLOCK_ATTRIBUTE,
   getArticleBlockTargetScrollTop,
   scrollArticleBlockToTarget,
 } from "~/lib/article-block-scroll";
@@ -27,6 +28,8 @@ const SELECTABLE_TAGS = new Set([
   "H5",
   "H6",
   "BLOCKQUOTE",
+  "PRE",
+  "TABLE",
   "IMG",
   "FIGURE",
   "LI",
@@ -58,6 +61,7 @@ function isAtomicDiv(element: HTMLElement): boolean {
 
   return (
     element.hasAttribute("data-lightbox") ||
+    // HTML bodies mark video embeds this way without the block attribute.
     element.hasAttribute("data-article-video-embed") ||
     isInteractive ||
     isMediaOnly
@@ -70,6 +74,12 @@ function getNavigableDescendants(container: HTMLElement): HTMLElement[] {
   for (const child of container.children) {
     if (!(child instanceof HTMLElement)) continue;
     if (child.hasAttribute("data-serial-header")) continue;
+
+    // A marked block root is one stop whatever its tag; an empty one is skipped.
+    if (child.hasAttribute(ARTICLE_BLOCK_ATTRIBUTE)) {
+      if (hasNavigableContent(child)) elements.push(child);
+      continue;
+    }
 
     if (SELECTABLE_TAGS.has(child.tagName)) {
       if (hasNavigableContent(child)) elements.push(child);

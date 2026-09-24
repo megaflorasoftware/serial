@@ -20,7 +20,10 @@ import { enrichObservationImages } from "../rss/observationImages";
 import { writeObservedItems } from "../rss/writeItems";
 import { applyOriginMetadata } from "../rss/originMetadata";
 import { readFeedHttp } from "../rss/feedHttp";
-import { resolveSourceReferences } from "./reference-snapshots";
+import {
+  referenceReaders,
+  resolveSourceReferences,
+} from "./reference-snapshots";
 import {
   captureRecordValue,
   isRecordOverBudget,
@@ -233,7 +236,7 @@ export async function processOriginDocuments(
         source,
         did,
         // Lookup budgets are wall-clock; `now` only stamps stored rows.
-        (uri) => client.getRecord(uri, { deadline: Date.now() + 5_000 }),
+        referenceReaders(client, 5_000),
         { now, reuseMs: REFERENCE_IMPORT_REUSE_MS },
       );
       const body = sourceReaderBody(source, references);
@@ -245,10 +248,7 @@ export async function processOriginDocuments(
         readableCid: entry.bodyCid,
       });
       if (outcome.kind === "rejected")
-        report(
-          new Error("Document source did not convert"),
-          "document-adapter",
-        );
+        report(new Error("Document source did not derive"), "document-adapter");
       const incoming = await enrichObservationImages([observation], readPage);
       const currentPlan = await planFor(row, settings);
       const written = await writeObservedItems(database, row.feed, incoming, {

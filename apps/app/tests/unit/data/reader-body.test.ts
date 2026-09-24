@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ReaderBody } from "@serial/standard-site";
 import {
   hasReaderBodyContent,
-  readerBodyHtml,
+  readerContent,
 } from "~/lib/data/feed-items/readerBody";
 
 const LEAFLET_RECORD = JSON.stringify({
@@ -21,13 +21,13 @@ const LEAFLET_RECORD = JSON.stringify({
   },
 });
 
-function sourceBody(): ReaderBody {
+function sourceBody(record = LEAFLET_RECORD): ReaderBody {
   return {
     form: "source",
     source: {
       uri: "at://did:plc:alice/site.standard.document/post",
       cid: "bafy",
-      record: LEAFLET_RECORD,
+      record,
       blobs: [],
     },
     references: [],
@@ -35,23 +35,25 @@ function sourceBody(): ReaderBody {
   };
 }
 
-describe("reader body derivation", () => {
-  it("derives reader HTML from a Document source", () => {
-    expect(readerBodyHtml(sourceBody())).toContain("<p>Hello</p>");
+describe("reader content", () => {
+  it("derives a Reader document from a Document source", () => {
+    const content = readerContent(sourceBody());
+    expect(content?.form).toBe("document");
+    if (content?.form !== "document") throw new Error("expected a document");
+    expect(content.document.blocks).toMatchObject([
+      { kind: "paragraph", content: [{ kind: "text", text: "Hello" }] },
+    ]);
   });
 
-  it("renders an HTML body as it stands", () => {
+  it("passes an HTML body through as it stands", () => {
     expect(
-      readerBodyHtml({
-        form: "html",
-        html: "<p>Stored</p>",
-        revision: "hash",
-      }),
-    ).toBe("<p>Stored</p>");
+      readerContent({ form: "html", html: "<p>Stored</p>", revision: "hash" }),
+    ).toEqual({ form: "html", html: "<p>Stored</p>" });
   });
 
-  it("renders nothing for an unloaded body", () => {
-    expect(readerBodyHtml(null)).toBe("");
+  it("yields nothing for an unloaded body or a source that does not derive", () => {
+    expect(readerContent(null)).toBeNull();
+    expect(readerContent(sourceBody("{}"))).toBeNull();
   });
 });
 
