@@ -65,7 +65,7 @@ export async function refreshUserFeeds({
   for (const { feed } of activeOrigins)
     pending.set(feed.id, (pending.get(feed.id) ?? 0) + 1);
   for await (const result of fetchAndInsertFeedData(
-    { db, manual },
+    { db, manual, drain: manual },
     activeOrigins,
   )) {
     if (result.metadataChanged) stats.metadataChanged = true;

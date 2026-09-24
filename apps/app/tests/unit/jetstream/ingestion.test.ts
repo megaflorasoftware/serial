@@ -18,7 +18,10 @@ import {
   interruptStream,
   stageDocument,
 } from "~/server/jetstream/store";
-import { processOriginDocuments } from "~/server/jetstream/process";
+import {
+  drainOriginDocuments,
+  processOriginDocuments,
+} from "~/server/jetstream/process";
 import {
   atprotoStreamState,
   feedItems,
@@ -507,6 +510,78 @@ describe("Feed recovery", () => {
     });
     // Application remains bounded even when the recovered interval is large.
     expect(await fixture.database.select().from(feedItems)).toHaveLength(25);
+  }, 30_000);
+  it("drains every staged document for an explicit fetch and one page otherwise", async () => {
+    await pause(300);
+    const events = Array.from({ length: 60 }, (_, index) =>
+      event(index + 2, `post-${index}`),
+    );
+    await recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      replay(events, 300),
+      new AbortController().signal,
+      { client, readPage, drain: true },
+    );
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(60);
+    expect(
+      await fixture.database
+        .select()
+        .from(feedOriginAtprotoDocuments)
+        .where(eq(feedOriginAtprotoDocuments.status, "retry")),
+    ).toHaveLength(0);
+    const more = Array.from({ length: 30 }, (_, index) =>
+      event(index + 400, `later-${index}`),
+    );
+    await accept(...more);
+    await drainOriginDocuments(fixture.database, originId, settings, {
+      client,
+      readPage,
+    });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(85);
+    // A pass that makes no progress, here an origin that is no longer initialized, ends the drain.
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ initialized: false })
+      .where(eq(feedOriginAtproto.originId, originId));
+    await drainOriginDocuments(fixture.database, originId, settings, {
+      client,
+      readPage,
+      drain: true,
+    });
+    expect(
+      await fixture.database
+        .select()
+        .from(feedOriginAtprotoDocuments)
+        .where(eq(feedOriginAtprotoDocuments.status, "retry")),
+    ).toHaveLength(5);
+    // The first page always runs, so a drain also applies a changed Publication.
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({
+        initialized: true,
+        publicationRecord: {
+          uri: PUB,
+          cid: "pubcid2",
+          value: {
+            $type: "site.standard.publication",
+            name: "Renamed",
+            url: "https://example.com",
+          },
+        },
+        publicationDirty: true,
+      })
+      .where(eq(feedOriginAtproto.originId, originId));
+    await drainOriginDocuments(fixture.database, originId, settings, {
+      client,
+      readPage,
+      drain: true,
+    });
+    expect((await fixture.database.select().from(feeds).get())?.name).toBe(
+      "Renamed",
+    );
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(90);
   }, 30_000);
   it("does no writes for a sweep of an ineligible user's Feed", async () => {
     await fixture.database.update(user).set({ lastActiveAt: null });

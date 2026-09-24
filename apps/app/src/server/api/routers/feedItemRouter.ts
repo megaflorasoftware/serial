@@ -394,8 +394,9 @@ export const getByFeedId = protectedProcedure
       return;
     }
 
+    // The user watches this fetch from the Feed they just added; finish every staged document.
     for await (const feedResult of fetchAndInsertFeedData(
-      context,
+      { ...context, drain: true },
       fetchableOriginsOf(await withOrigins(context.db, [feed])),
     )) {
       yield {

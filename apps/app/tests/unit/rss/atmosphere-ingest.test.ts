@@ -295,7 +295,7 @@ describe("Atmosphere repository recovery", () => {
         .get(),
     ).toMatchObject({ title: "Edited" });
   });
-  it("stages the newest 100 documents and renders the newest 25 in the first pass", async () => {
+  it("stages the newest 100 documents; a background pass renders the newest 25 and an explicit fetch renders them all", async () => {
     const remote = client();
     // Pages descend by rkey like a real PDS: 999 down to 900, then 899 down.
     remote.list = vi.fn(async (_did, cursor) => ({
@@ -306,7 +306,15 @@ describe("Atmosphere repository recovery", () => {
       etag: null,
       notModified: false as const,
     }));
-    await refresh(remote);
+    const unavailablePage = async () => {
+      throw new Error("Page unavailable");
+    };
+    // A background bootstrap stages everything but applies one bounded page.
+    await recoverRepository(fixture.database, origin.id, {
+      client: remote,
+      manual: false,
+      readPage: unavailablePage,
+    });
     expect(remote.list).toHaveBeenCalledTimes(1);
     expect(
       await fixture.database.select().from(feedOriginAtproto).get(),
@@ -320,19 +328,21 @@ describe("Atmosphere repository recovery", () => {
     expect(first.map((item) => item.atprotoUri).sort()).toEqual(
       Array.from({ length: 25 }, (_, i) => uri(String(999 - i))).sort(),
     );
-    for (let batch = 0; batch < 3; batch++)
-      await recoverRepository(
-        fixture.database,
-        origin.id,
-        {
-          client: remote,
-          manual: false,
-          readPage: async () => {
-            throw new Error("Page unavailable");
-          },
-        },
-        false,
-      );
+    // Later background passes continue through the staged set without relisting.
+    await recoverRepository(
+      fixture.database,
+      origin.id,
+      { client: remote, manual: false, readPage: unavailablePage },
+      false,
+    );
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(50);
+    // A user's fetch keeps going until nothing is pending.
+    await recoverRepository(
+      fixture.database,
+      origin.id,
+      { client: remote, drain: true, readPage: unavailablePage },
+      false,
+    );
     expect(remote.list).toHaveBeenCalledTimes(1);
     expect(await fixture.database.select().from(feedItems)).toHaveLength(100);
     expect(

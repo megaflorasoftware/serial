@@ -50,6 +50,7 @@ import {
   useCreateFeedMutation,
   useDeleteFeedMutation,
   useEditFeedMutation,
+  useImportFeedItems,
   useIsFeedRevalidating,
   useRevalidateFeedMutation,
   useSetFeedActiveMutation,
@@ -109,6 +110,7 @@ export function AddFeedDialog() {
   const discovery = useFeedDiscovery();
   const { feeds: addedFeeds } = useFeeds();
   const { mutateAsync: createFeed } = useCreateFeedMutation();
+  const importFeedItems = useImportFeedItems();
   const { mutateAsync: saveBookmark } = useSaveBookmarkMutation();
 
   const dialog = useDialogStore((store) => store.dialog);
@@ -170,6 +172,8 @@ export function AddFeedDialog() {
       feedCreatedDuringOnboarding(createdFeed.id);
       discovery.reset();
       launchDialog("edit-feed", { selectedFeedId: createdFeed.id });
+      // The dialog moves on once the Feed exists; items arrive behind a toast.
+      void importFeedItems(createdFeed);
     } catch {
       // Error handled by toast.promise
     } finally {

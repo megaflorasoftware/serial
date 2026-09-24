@@ -15,7 +15,10 @@ import {
   useRemoveFeed,
   useUpdateFeed,
 } from "./store";
-import type { ApplicationFeedOrigin } from "~/server/db/schema";
+import type {
+  ApplicationFeed,
+  ApplicationFeedOrigin,
+} from "~/server/db/schema";
 import { useDialogStore } from "~/components/feed/dialogStore";
 import { orpc } from "~/lib/orpc";
 import { refreshNavigationSnapshotSafely } from "~/lib/data/navigation/store";
@@ -45,8 +48,33 @@ export function useIsFeedRevalidating(feedId: number | null) {
   );
 }
 
-export function useCreateFeedMutation() {
+/**
+ * Creating a Feed only needs its row. The first item import runs behind a
+ * toast so the dialog can move on; the Feed keeps its sidebar status either way.
+ */
+export function importFeedItemsWithToast(
+  feed: Pick<ApplicationFeed, "id" | "name">,
+  fetchItems: (feedId: number) => Promise<void>,
+) {
+  const importing = fetchItems(feed.id);
+  toast.promise(importing, {
+    id: `feed-import:${feed.id}`,
+    loading: `Importing items from ${feed.name}…`,
+    error: (error) =>
+      error instanceof Error
+        ? error.message
+        : `Something went wrong importing items from ${feed.name}.`,
+  });
+  return importing;
+}
+
+export function useImportFeedItems() {
   const fetchFeedItemsForFeed = useFetchFeedItemsForFeed();
+  return (feed: Pick<ApplicationFeed, "id" | "name">) =>
+    importFeedItemsWithToast(feed, fetchFeedItemsForFeed);
+}
+
+export function useCreateFeedMutation() {
   const fetchFeedCategories = useFetchFeedCategories();
   const fetchViewFeeds = useFetchViewFeeds();
   const fetchViews = useFetchViews();
@@ -57,7 +85,6 @@ export function useCreateFeedMutation() {
       onSuccess: async (result) => {
         result.feeds.forEach((feed) => addFeed(feed));
         await Promise.all([
-          ...result.feeds.map((feed) => fetchFeedItemsForFeed(feed.id)),
           fetchFeedCategories(),
           fetchViewFeeds(),
           fetchViews(),

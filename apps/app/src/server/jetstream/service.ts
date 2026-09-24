@@ -113,6 +113,7 @@ async function establishBoundary(
 export async function refreshStreamOrigin(
   database: StreamDatabase,
   fetchable: FetchableOrigin,
+  options: { drain?: boolean } = {},
 ): Promise<FeedResult> {
   const config = await configuration();
   const signal = AbortSignal.timeout(50_000);
@@ -130,6 +131,7 @@ export async function refreshStreamOrigin(
       {
         // The ordinary fetch path already owns eligibility.
         manual: true,
+        drain: options.drain,
         publish: async (update) => {
           updates.push(update);
         },
