@@ -540,7 +540,7 @@ describe("Feed recovery", () => {
       readPage,
     });
     expect(await fixture.database.select().from(feedItems)).toHaveLength(85);
-    // A pass that cannot run leaves the pending count unchanged and ends the drain.
+    // A pass that makes no progress, here an origin that is no longer initialized, ends the drain.
     await fixture.database
       .update(feedOriginAtproto)
       .set({ initialized: false })
@@ -556,6 +556,32 @@ describe("Feed recovery", () => {
         .from(feedOriginAtprotoDocuments)
         .where(eq(feedOriginAtprotoDocuments.status, "retry")),
     ).toHaveLength(5);
+    // The first page always runs, so a drain also applies a changed Publication.
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({
+        initialized: true,
+        publicationRecord: {
+          uri: PUB,
+          cid: "pubcid2",
+          value: {
+            $type: "site.standard.publication",
+            name: "Renamed",
+            url: "https://example.com",
+          },
+        },
+        publicationDirty: true,
+      })
+      .where(eq(feedOriginAtproto.originId, originId));
+    await drainOriginDocuments(fixture.database, originId, settings, {
+      client,
+      readPage,
+      drain: true,
+    });
+    expect((await fixture.database.select().from(feeds).get())?.name).toBe(
+      "Renamed",
+    );
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(90);
   }, 30_000);
   it("does no writes for a sweep of an ineligible user's Feed", async () => {
     await fixture.database.update(user).set({ lastActiveAt: null });

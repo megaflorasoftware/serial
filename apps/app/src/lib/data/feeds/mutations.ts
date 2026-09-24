@@ -52,20 +52,26 @@ export function useIsFeedRevalidating(feedId: number | null) {
  * Creating a Feed only needs its row. The first item import runs behind a
  * toast so the dialog can move on; the Feed keeps its sidebar status either way.
  */
+export function importFeedItemsWithToast(
+  feed: Pick<ApplicationFeed, "id" | "name">,
+  fetchItems: (feedId: number) => Promise<void>,
+) {
+  const importing = fetchItems(feed.id);
+  toast.promise(importing, {
+    id: `feed-import:${feed.id}`,
+    loading: `Importing items from ${feed.name}…`,
+    error: (error) =>
+      error instanceof Error
+        ? error.message
+        : `Something went wrong importing items from ${feed.name}.`,
+  });
+  return importing;
+}
+
 export function useImportFeedItems() {
   const fetchFeedItemsForFeed = useFetchFeedItemsForFeed();
-  return (feed: Pick<ApplicationFeed, "id" | "name">) => {
-    const importing = fetchFeedItemsForFeed(feed.id);
-    toast.promise(importing, {
-      id: `feed-import:${feed.id}`,
-      loading: `Importing items from ${feed.name}…`,
-      error: (error) =>
-        error instanceof Error
-          ? error.message
-          : `Something went wrong importing items from ${feed.name}.`,
-    });
-    return importing;
-  };
+  return (feed: Pick<ApplicationFeed, "id" | "name">) =>
+    importFeedItemsWithToast(feed, fetchFeedItemsForFeed);
 }
 
 export function useCreateFeedMutation() {

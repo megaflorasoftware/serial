@@ -173,7 +173,7 @@ export function AddFeedDialog() {
       discovery.reset();
       launchDialog("edit-feed", { selectedFeedId: createdFeed.id });
       // The dialog moves on once the Feed exists; items arrive behind a toast.
-      importFeedItems(createdFeed).catch(() => {});
+      void importFeedItems(createdFeed);
     } catch {
       // Error handled by toast.promise
     } finally {

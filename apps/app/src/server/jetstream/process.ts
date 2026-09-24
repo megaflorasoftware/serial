@@ -338,20 +338,20 @@ export async function drainOriginDocuments(
   settings: StreamSettings,
   options: ProcessingOptions = {},
 ) {
-  if (!options.drain) {
-    await processOriginDocuments(database, originId, settings, options);
-    return;
-  }
-  let before = await pendingDocumentCount(database, originId, settings);
-  while (before > 0) {
-    options.signal?.throwIfAborted();
+  // The first page always runs: it also applies a changed Publication record.
+  let before = options.drain
+    ? await pendingDocumentCount(database, originId, settings)
+    : 0;
+  await processOriginDocuments(database, originId, settings, options);
+  while (options.drain && before > 0) {
     // Each page depends on the writes of the previous one.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    await processOriginDocuments(database, originId, settings, options);
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const after = await pendingDocumentCount(database, originId, settings);
-    if (after >= before) return;
+    if (after === 0 || after >= before) return;
     before = after;
+    options.signal?.throwIfAborted();
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await processOriginDocuments(database, originId, settings, options);
   }
 }
 

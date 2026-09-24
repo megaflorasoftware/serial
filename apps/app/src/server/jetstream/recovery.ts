@@ -81,7 +81,10 @@ export async function recoverOrigin(
     candidate.atproto.streamGeneration === initialState.generation &&
     streamIsConnected(initialState, nowFor(settings))
   ) {
-    await drainOriginDocuments(database, originId, settings, options);
+    await drainOriginDocuments(database, originId, settings, {
+      ...options,
+      signal,
+    });
     return "done";
   }
   const owner = randomUUID();

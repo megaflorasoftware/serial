@@ -328,6 +328,14 @@ describe("Atmosphere repository recovery", () => {
     expect(first.map((item) => item.atprotoUri).sort()).toEqual(
       Array.from({ length: 25 }, (_, i) => uri(String(999 - i))).sort(),
     );
+    // Later background passes continue through the staged set without relisting.
+    await recoverRepository(
+      fixture.database,
+      origin.id,
+      { client: remote, manual: false, readPage: unavailablePage },
+      false,
+    );
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(50);
     // A user's fetch keeps going until nothing is pending.
     await recoverRepository(
       fixture.database,
