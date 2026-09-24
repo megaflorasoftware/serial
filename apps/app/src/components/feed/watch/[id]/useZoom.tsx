@@ -21,6 +21,36 @@ export const MAX_ZOOM_VERTICAL = 3;
 const VIDEO_PLATFORMS: ContentPlatform[] = ["youtube", "peertube"];
 const ARTICLE_PLATFORMS: ContentPlatform[] = ["website"];
 
+/**
+ * The zoom for what is on screen. A /read item that is not known yet takes
+ * the article zoom so its skeleton has the article's width; otherwise an
+ * unknown item keeps the previously applied value until the new UI renders.
+ */
+function resolveZoom({
+  isVideoPlatform,
+  isVertical,
+  isArticlePlatform,
+  isUnknownReadItem,
+  shortformVideoZoom,
+  longformVideoZoom,
+  articleZoom,
+  lastZoom,
+}: {
+  isVideoPlatform: boolean;
+  isVertical: boolean;
+  isArticlePlatform: boolean;
+  isUnknownReadItem: boolean;
+  shortformVideoZoom: number;
+  longformVideoZoom: number;
+  articleZoom: number;
+  lastZoom: number;
+}) {
+  if (isVideoPlatform)
+    return isVertical ? shortformVideoZoom : longformVideoZoom;
+  if (isArticlePlatform || isUnknownReadItem) return articleZoom;
+  return lastZoom;
+}
+
 export function useZoom() {
   const { pathname } = useLocation();
   const videoId = pathname.split("/watch/")[1]!;
@@ -46,19 +76,21 @@ export function useZoom() {
 
   const isVideoPlatform = VIDEO_PLATFORMS.includes(platform);
   const isArticlePlatform = ARTICLE_PLATFORMS.includes(platform);
-  // Nothing is known about a /read item yet: the skeleton takes the width
-  // the article will have.
   const isUnknownReadItem = !platform && !!contentId;
 
   // Derived on render, not in an effect, so the server's HTML and the first
-  // client paint already have the right width. While navigating to an item
-  // that is not known yet, the previously applied value stands until the
-  // new UI has rendered.
+  // client paint already have the right width.
   const [lastZoom, setLastZoom] = useState(MIN_ZOOM);
-  let zoom = lastZoom;
-  if (isVideoPlatform && isVertical) zoom = shortformVideoZoom;
-  else if (isVideoPlatform) zoom = longformVideoZoom;
-  else if (isArticlePlatform || isUnknownReadItem) zoom = articleZoom;
+  const zoom = resolveZoom({
+    isVideoPlatform,
+    isVertical,
+    isArticlePlatform,
+    isUnknownReadItem,
+    shortformVideoZoom,
+    longformVideoZoom,
+    articleZoom,
+    lastZoom,
+  });
   useEffect(() => {
     setLastZoom(zoom);
   }, [zoom]);

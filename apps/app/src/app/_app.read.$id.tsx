@@ -124,6 +124,70 @@ function useReaderBars() {
   return barsHidden;
 }
 
+type FeedReaderFeed = ReturnType<typeof useFeeds>["feeds"][number];
+type FeedReaderItem = ReturnType<typeof useFeedItemValue>;
+
+function feedReaderSource(feed: FeedReaderFeed | undefined) {
+  if (!feed) return null;
+  return {
+    name: feed.name,
+    icon: feed.imageUrl ? (
+      <img
+        {...REMOTE_IMAGE_PROPS}
+        src={feed.imageUrl}
+        alt=""
+        className="aspect-square size-6 rounded object-cover"
+      />
+    ) : (
+      <div className="bg-muted aspect-square size-6 rounded" />
+    ),
+  };
+}
+
+function feedReaderHeader(
+  feedItem: FeedReaderItem,
+  feed: FeedReaderFeed | undefined,
+) {
+  if (!feedItem) return null;
+  return {
+    title: feedItem.title,
+    author: feedItem.author || feed?.name || "",
+  };
+}
+
+/** The body: skeleton while pending, else the document or HTML reader. */
+function FeedReaderBody({
+  pending,
+  reader,
+  content,
+  feedItem,
+  feed,
+  simplified,
+}: {
+  pending: boolean;
+  reader: ReturnType<typeof readerContent>;
+  content: string;
+  feedItem: FeedReaderItem;
+  feed: FeedReaderFeed | undefined;
+  simplified: boolean;
+}) {
+  if (pending) return <ReaderBodySkeleton />;
+  if (reader?.form === "document") {
+    return (
+      <ReaderDocumentContent
+        document={reader.document}
+        documentUrl={feedItem?.url ?? ""}
+        originActionLabel={getOriginActionLabel({
+          platform: feed?.platform ?? "website",
+          contentType: feedItem?.contentType ?? "text",
+        })}
+        simplified={simplified}
+      />
+    );
+  }
+  return <ArticleContent content={content} simplified={simplified} />;
+}
+
 function FeedReader({
   id,
   hasRefreshedFeedItem,
@@ -198,27 +262,7 @@ function FeedReader({
 
   return (
     <ReaderLayout
-      source={
-        <ReaderSource
-          source={
-            feed
-              ? {
-                  name: feed.name,
-                  icon: feed.imageUrl ? (
-                    <img
-                      {...REMOTE_IMAGE_PROPS}
-                      src={feed.imageUrl}
-                      alt=""
-                      className="aspect-square size-6 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="bg-muted aspect-square size-6 rounded" />
-                  ),
-                }
-              : null
-          }
-        />
-      }
+      source={<ReaderSource source={feedReaderSource(feed)} />}
       actions={<ContentActions contentID={id} />}
       barsHidden={barsHidden}
     >
@@ -232,34 +276,15 @@ function FeedReader({
           ref={updateArticleRef}
           className={`h-full w-full px-6 sm:pb-6 ${classes.article}`}
         >
-          <ReaderHeader
-            header={
-              feedItem
-                ? {
-                    title: feedItem.title,
-                    author: feedItem.author || feed?.name || "",
-                  }
-                : null
-            }
+          <ReaderHeader header={feedReaderHeader(feedItem, feed)} />
+          <FeedReaderBody
+            pending={isBodyPending}
+            reader={reader}
+            content={content}
+            feedItem={feedItem}
+            feed={feed}
+            simplified={articleStyle === "simplified"}
           />
-          {isBodyPending ? (
-            <ReaderBodySkeleton />
-          ) : reader?.form === "document" ? (
-            <ReaderDocumentContent
-              document={reader.document}
-              documentUrl={feedItem?.url ?? ""}
-              originActionLabel={getOriginActionLabel({
-                platform: feed?.platform ?? "website",
-                contentType: feedItem?.contentType ?? "text",
-              })}
-              simplified={articleStyle === "simplified"}
-            />
-          ) : (
-            <ArticleContent
-              content={content}
-              simplified={articleStyle === "simplified"}
-            />
-          )}
         </div>
       </div>
       {shouldShowTruncationAlert && (
