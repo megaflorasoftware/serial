@@ -19,6 +19,19 @@ const READER_SCROLL_KEYS = new Set([
   " ",
 ]);
 
+/** A body placeholder is on screen; there is nothing to place yet. */
+function hasPendingContent(article: HTMLElement) {
+  return !!article.querySelector("[data-reader-content-pending]");
+}
+
+/**
+ * Places the reader at its saved progress. Content already on the client is
+ * placed and revealed at once, and a placeholder stays visible until content
+ * replaces it. When the server's answer lands (`ready`), the article is
+ * placed again at the server's progress, in place and without hiding, unless
+ * the user has scrolled, clicked, or used the keyboard since opening. After
+ * that the content may still change, but the scroll stays put.
+ */
 export function useRestoreArticleProgress({
   contentId,
   articleElement,
@@ -30,11 +43,19 @@ export function useRestoreArticleProgress({
   progress: number | undefined;
   ready?: boolean;
 }) {
-  const restoredContentIdRef = useRef<string | null>(null);
   const hasUserInteractedRef = useRef(false);
+  // Which content the article was last placed for, and whether that placement
+  // already used the server's progress.
+  const placementRef = useRef<{ contentId: string; ready: boolean } | null>(
+    null,
+  );
 
   useLayoutEffect(() => {
     hasUserInteractedRef.current = false;
+    // A placement belongs to one visit; returning to an earlier content id
+    // starts over rather than inheriting that visit's settled state.
+    if (placementRef.current?.contentId !== contentId)
+      placementRef.current = null;
     const container = getScrollContainer();
     const markUserInteraction = () => {
       hasUserInteractedRef.current = true;
@@ -62,37 +83,31 @@ export function useRestoreArticleProgress({
   }, [articleElement, contentId]);
 
   useLayoutEffect(() => {
-    if (!articleElement) {
-      return;
-    }
-    if (
-      restoredContentIdRef.current === contentId ||
-      hasUserInteractedRef.current
-    ) {
+    if (!articleElement) return;
+    const placement = placementRef.current;
+    // The server's answer is the only reason to place a second time. Once it
+    // has been used, or the user has taken over, the scroll is theirs.
+    const settled = placement !== null && (placement.ready || !ready);
+    if (settled || hasUserInteractedRef.current || progress === undefined) {
       setArticleRestorationVisibility(articleElement, true);
       return;
     }
 
-    setArticleRestorationVisibility(articleElement, false);
-    if (!ready || progress === undefined) {
-      return () => {
-        setArticleRestorationVisibility(articleElement, true);
-      };
-    }
-
-    const savedProgress = progress;
     const contentElement = articleElement;
+    const savedProgress = progress;
+    // A first placement hides the article until it lands so the top of the
+    // content never flashes; a second placement moves the visible article.
+    const hideWhilePlacing = placement === null;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    const observer = new MutationObserver(() => scheduleRestore());
 
     function revealContent() {
       setArticleRestorationVisibility(contentElement, true);
     }
 
-    let firstFrame = 0;
-    let secondFrame = 0;
-    const observer = new MutationObserver(() => scheduleRestore());
-
     function completeRestoration(element?: HTMLElement) {
-      restoredContentIdRef.current = contentId;
+      placementRef.current = { contentId, ready };
       observer.disconnect();
       if (element) scrollArticleBlockToTarget(element, "instant");
       else getScrollContainer().scrollTo({ top: 0, behavior: "instant" });
@@ -100,33 +115,29 @@ export function useRestoreArticleProgress({
     }
 
     function scheduleRestore() {
-      if (
-        firstFrame ||
-        restoredContentIdRef.current === contentId ||
-        hasUserInteractedRef.current
-      ) {
+      if (firstFrame || hasUserInteractedRef.current) return;
+      if (hasPendingContent(contentElement)) {
+        revealContent();
         return;
       }
       const elements = getElements(contentElement);
-      if (contentElement.querySelector("[data-reader-content-pending]")) {
-        return;
-      }
-
       if (elements.length === 0 || savedProgress <= 0) {
         completeRestoration();
         return;
       }
 
+      if (hideWhilePlacing)
+        setArticleRestorationVisibility(contentElement, false);
       firstFrame = requestAnimationFrame(() => {
         firstFrame = 0;
         secondFrame = requestAnimationFrame(() => {
           secondFrame = 0;
           if (hasUserInteractedRef.current) return;
-          const renderedElements = getElements(contentElement);
-          if (contentElement.querySelector("[data-reader-content-pending]")) {
+          if (hasPendingContent(contentElement)) {
+            revealContent();
             return;
           }
-
+          const renderedElements = getElements(contentElement);
           completeRestoration(
             renderedElements[
               Math.min(savedProgress, renderedElements.length - 1)

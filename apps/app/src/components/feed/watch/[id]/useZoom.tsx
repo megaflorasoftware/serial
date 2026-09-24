@@ -21,12 +21,40 @@ export const MAX_ZOOM_VERTICAL = 3;
 const VIDEO_PLATFORMS: ContentPlatform[] = ["youtube", "peertube"];
 const ARTICLE_PLATFORMS: ContentPlatform[] = ["website"];
 
+/**
+ * The zoom for what is on screen. A /read item that is not known yet takes
+ * the article zoom so its skeleton has the article's width; otherwise an
+ * unknown item keeps the previously applied value until the new UI renders.
+ */
+function resolveZoom({
+  isVideoPlatform,
+  isVertical,
+  isArticlePlatform,
+  isUnknownReadItem,
+  shortformVideoZoom,
+  longformVideoZoom,
+  articleZoom,
+  lastZoom,
+}: {
+  isVideoPlatform: boolean;
+  isVertical: boolean;
+  isArticlePlatform: boolean;
+  isUnknownReadItem: boolean;
+  shortformVideoZoom: number;
+  longformVideoZoom: number;
+  articleZoom: number;
+  lastZoom: number;
+}) {
+  if (isVideoPlatform)
+    return isVertical ? shortformVideoZoom : longformVideoZoom;
+  if (isArticlePlatform || isUnknownReadItem) return articleZoom;
+  return lastZoom;
+}
+
 export function useZoom() {
   const { pathname } = useLocation();
   const videoId = pathname.split("/watch/")[1]!;
   const contentId = pathname.split("/read/")[1]!;
-
-  const [zoom, setZoom] = useState(MIN_ZOOM);
 
   const feedItem = useFeedItemValue(videoId || contentId || "");
   const bookmark = useBookmarkValue(videoId || contentId || "");
@@ -48,32 +76,24 @@ export function useZoom() {
 
   const isVideoPlatform = VIDEO_PLATFORMS.includes(platform);
   const isArticlePlatform = ARTICLE_PLATFORMS.includes(platform);
+  const isUnknownReadItem = !platform && !!contentId;
 
-  useEffect(() => {
-    setZoom((prevZoom) => {
-      if (isVideoPlatform && isVertical) {
-        return shortformVideoZoom;
-      }
-      if (isVideoPlatform && !isVertical) {
-        return longformVideoZoom;
-      }
-      if (isArticlePlatform) {
-        return articleZoom;
-      }
-
-      // This value should default to MIN_ZOOM, but when naviating
-      // this value is used by the UI before the new UI has rendered.
-      // Therefore, we want to maintain the previously applied value
-      return prevZoom;
-    });
-  }, [
+  // Derived on render, not in an effect, so the server's HTML and the first
+  // client paint already have the right width.
+  const [lastZoom, setLastZoom] = useState(MIN_ZOOM);
+  const zoom = resolveZoom({
     isVideoPlatform,
-    longformVideoZoom,
-    shortformVideoZoom,
     isVertical,
     isArticlePlatform,
+    isUnknownReadItem,
+    shortformVideoZoom,
+    longformVideoZoom,
     articleZoom,
-  ]);
+    lastZoom,
+  });
+  useEffect(() => {
+    setLastZoom(zoom);
+  }, [zoom]);
 
   const zoomIn = useCallback(() => {
     if (isVideoPlatform) {

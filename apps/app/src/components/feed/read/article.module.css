@@ -14,6 +14,15 @@
   margin-block-start: var(--article-flow-spacing);
 }
 
+/* A skeleton line stands in for one wrapped line of text: it takes its
+   block's line box and stacks without the prose flow gap. */
+.article :global([data-reader-skeleton-line]) {
+  display: flex;
+  align-items: center;
+  height: 1lh;
+  margin-block-start: 0;
+}
+
 .article h1 {
   font-size: 1.5rem;
   font-weight: 900;

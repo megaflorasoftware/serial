@@ -6,6 +6,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
+import { ReaderBodySkeleton } from "~/components/content-reader/ReaderSkeleton";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 import { useFlagState } from "~/lib/hooks/useFlagState";
 import {
@@ -33,13 +34,7 @@ export function BookmarkArticleContent({ content }: { content: string }) {
     () => "",
   );
 
-  if (!sanitizedContent) {
-    return (
-      <p role="status" data-reader-content-pending>
-        Preparing Page capture…
-      </p>
-    );
-  }
+  if (!sanitizedContent) return <ReaderBodySkeleton />;
 
   const options: HTMLReactParserOptions = {
     replace: (node) => {
