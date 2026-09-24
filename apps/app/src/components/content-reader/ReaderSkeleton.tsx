@@ -11,10 +11,10 @@ import { Skeleton } from "~/components/ui/skeleton";
  * spacing. One line per wrapped line of text; the last line runs short.
  */
 const BODY_BLOCKS = [
-  { tag: "p", lines: ["w-full", "w-full", "w-full", "w-2/3"] },
-  { tag: "h2", lines: ["w-1/2"] },
-  { tag: "p", lines: ["w-full", "w-full", "w-3/4"] },
-  { tag: "p", lines: ["w-full", "w-full", "w-full", "w-1/2"] },
+  { id: "lead", tag: "p", lines: ["w-full", "w-full", "w-full", "w-2/3"] },
+  { id: "heading", tag: "h2", lines: ["w-1/2"] },
+  { id: "first", tag: "p", lines: ["w-full", "w-full", "w-3/4"] },
+  { id: "second", tag: "p", lines: ["w-full", "w-full", "w-full", "w-1/2"] },
 ] as const;
 
 /**
@@ -83,10 +83,10 @@ export function ReaderHeader({ header }: { header: ReaderHeaderInfo | null }) {
 export function ReaderBodySkeleton() {
   return (
     <div role="status" aria-label="Loading article" data-reader-content-pending>
-      {BODY_BLOCKS.map(({ tag: Block, lines }, index) => (
-        <Block key={index}>
+      {BODY_BLOCKS.map(({ id, tag: Block, lines }) => (
+        <Block key={id}>
           {lines.map((width, line) => (
-            <SkeletonLine key={line} width={width} />
+            <SkeletonLine key={`${id}-${line}`} width={width} />
           ))}
         </Block>
       ))}
