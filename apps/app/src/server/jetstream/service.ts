@@ -13,13 +13,16 @@ import {
   ORIGIN_PAGE_SIZE,
 } from "./store";
 import { recoverOrigin } from "./recovery";
+import { RecoveryDeferredError } from "./deferred";
 import { processOriginDocuments } from "./process";
 import { sweepReferenceSnapshots } from "./reference-snapshots";
 import { createStreamTransport, retryStream } from "./transport";
 import { normalizeService, sequence, StreamFailure } from "./protocol";
 import { createStreamReporter } from "./report";
 import { resolveStreamService } from "./endpoint";
+import type { RecoveryOutcome } from "./recovery";
 import type { FetchableOrigin } from "../rss/types";
+import type { FeedResult } from "../rss/fetchFeeds";
 import type { CommittedUpdate } from "./process";
 import type { StreamDatabase, StreamSettings } from "./store";
 import { ALL_CONTENT_STATUS_KEYS } from "~/lib/reconciliation/invalidation";
@@ -101,24 +104,31 @@ async function establishBoundary(
   }
 }
 
-/** Called by existing import/refresh entry points; the saved Feed survives failure. */
+/**
+ * Called by existing import/refresh entry points; the saved Feed survives
+ * failure. Recovery keeps its own backoff on the origin, so a failure stays an
+ * error until a later recovery succeeds. The generic fetch schedule is
+ * untouched: origins remain due and recovery decides whether to run.
+ */
 export async function refreshStreamOrigin(
   database: StreamDatabase,
   fetchable: FetchableOrigin,
-) {
+): Promise<FeedResult> {
   const config = await configuration();
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
+  const ids = { id: fetchable.feed.id, originId: fetchable.origin.id };
+  let outcome: RecoveryOutcome;
   try {
     await establishBoundary(database, config, signal);
-    await recoverOrigin(
+    outcome = await recoverOrigin(
       database,
       fetchable.origin.id,
       config.settings,
       config.transport,
       signal,
       {
-        // The ordinary fetch path already owns scheduling and eligibility.
+        // The ordinary fetch path already owns eligibility.
         manual: true,
         publish: async (update) => {
           updates.push(update);
@@ -127,12 +137,13 @@ export async function refreshStreamOrigin(
     );
   } catch (error) {
     config.transport.report(error, "feed-recovery");
-    throw error;
+    return { status: "error", ...ids, error };
   }
+  if (outcome === "deferred")
+    return { status: "error", ...ids, error: new RecoveryDeferredError() };
   return {
-    status: updates.length ? ("success" as const) : ("empty" as const),
-    id: fetchable.feed.id,
-    originId: fetchable.origin.id,
+    status: updates.length ? "success" : "empty",
+    ...ids,
     feedItems: updates.flatMap((update) => update.items),
     removedItemIds: updates.flatMap((update) => update.removedItemIds),
     metadataChanged: updates.some((update) => update.metadataChanged),

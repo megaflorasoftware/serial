@@ -1,5 +1,6 @@
 import { publisher } from "../api/publisher";
 import { captureException } from "../logger";
+import { isRecoveryDeferred } from "../jetstream/deferred";
 import { fetchAndInsertFeedData } from "./fetchFeeds";
 import { affectedFeedFromItems, emptyRefreshStats } from "./stats";
 import type { FeedResult } from "./fetchFeeds";
@@ -89,7 +90,8 @@ export async function refreshUserFeeds({
           : {}),
       });
     }
-    if (result.status === "error")
+    // A recovery in backoff was reported when it first failed.
+    if (result.status === "error" && !isRecoveryDeferred(result.error))
       captureException(
         result.error instanceof Error
           ? result.error

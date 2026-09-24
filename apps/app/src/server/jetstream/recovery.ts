@@ -17,11 +17,34 @@ import {
 } from "./store";
 import { processOriginDocuments } from "./process";
 import { captureRecordValue } from "./document-source";
+import type { atprotoStreamState } from "../db/schema";
 import type { StreamTransport } from "./transport";
 import type { StreamDatabase, StreamSettings } from "./store";
 import type { ProcessingOptions } from "./process";
 
-/** A bounded attempt retains scan/replay progress. It never truncates the missed interval. */
+/**
+ * A connected worker already applies live events to this origin, so its
+ * checkpoint bounds the interval no one covers. Otherwise the checkpoint may
+ * be frozen, and the transport's tip is the only truthful boundary, at the
+ * cost of one connection per read.
+ */
+async function currentBoundary(
+  state: typeof atprotoStreamState.$inferSelect,
+  transport: StreamTransport,
+  settings: StreamSettings,
+  signal: AbortSignal,
+) {
+  return streamIsConnected(state, nowFor(settings))
+    ? sequence(state.seq!)
+    : transport.tip(signal);
+}
+
+export type RecoveryOutcome = "done" | "deferred";
+
+/**
+ * A bounded attempt retains scan/replay progress. It never truncates the missed
+ * interval. `deferred` means an earlier failure's backoff still holds.
+ */
 export async function recoverOrigin(
   database: StreamDatabase,
   originId: number,
@@ -29,7 +52,7 @@ export async function recoverOrigin(
   transport: StreamTransport,
   signal: AbortSignal,
   options: ProcessingOptions = {},
-) {
+): Promise<RecoveryOutcome> {
   const candidate = await loadOrigin(database, originId);
   if (
     candidate?.atproto.streamService &&
@@ -40,7 +63,7 @@ export async function recoverOrigin(
     candidate?.atproto.recoveryRetryAt &&
     candidate.atproto.recoveryRetryAt > nowFor(settings)
   )
-    return;
+    return "deferred";
   if (
     !candidate ||
     !eligible(
@@ -50,7 +73,7 @@ export async function recoverOrigin(
       options.manual,
     )
   )
-    return;
+    return "done";
   const initialState = await ensureStream(database, settings.service);
   if (
     candidate.atproto.initialized &&
@@ -59,7 +82,7 @@ export async function recoverOrigin(
     streamIsConnected(initialState, nowFor(settings))
   ) {
     await processOriginDocuments(database, originId, settings, options);
-    return;
+    return "done";
   }
   const owner = randomUUID();
   const now = nowFor(settings);
@@ -78,7 +101,7 @@ export async function recoverOrigin(
       )
       .returning({ originId: feedOriginAtproto.originId }),
   );
-  if (!claimed.length) return;
+  if (!claimed.length) return "done";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45_000);
   const combined = AbortSignal.any([signal, controller.signal]);
@@ -112,7 +135,7 @@ export async function recoverOrigin(
       !row ||
       !eligible(row, await planFor(row, settings), settings, options.manual)
     )
-      return;
+      return "done";
     let state = await ensureStream(database, settings.service);
     if (state.seq === null)
       throw new Error("Waiting for a Jetstream bootstrap boundary");
@@ -133,10 +156,11 @@ export async function recoverOrigin(
       (!transport.hasReplay && !continuing) ||
       row.atproto.streamMode === "direct";
     if (!continuing) {
+      // With replay, the checkpoint is a safe lower bound: the archive fills the rest.
       const boundary = bootstrap
         ? transport.hasReplay
           ? sequence(state.seq)
-          : await transport.tip(combined)
+          : await currentBoundary(state, transport, settings, combined)
         : sequence(row.atproto.streamSeq ?? state.seq);
       await runDatabaseWrite(database, () =>
         database
@@ -210,7 +234,7 @@ export async function recoverOrigin(
         },
       });
       row = (await loadOrigin(database, originId))!;
-      if (!row.atproto.initialized || row.atproto.cursor) return;
+      if (!row.atproto.initialized || row.atproto.cursor) return "done";
     }
     if (row.atproto.streamMode !== "live" || options.manual) {
       await runDatabaseWrite(database, () =>
@@ -223,7 +247,7 @@ export async function recoverOrigin(
       const through = Math.max(
         sequence(row.atproto.streamSeq!),
         bootstrap || options.manual
-          ? await transport.tip(combined)
+          ? await currentBoundary(state, transport, settings, combined)
           : sequence(state.seq!),
       );
       {
@@ -264,6 +288,7 @@ export async function recoverOrigin(
         .set({ recoveryRetryAt: null, recoveryAttempts: 0 })
         .where(owned),
     );
+    return "done";
   } catch (error) {
     if (!signal.aborted)
       await runDatabaseWrite(database, () =>

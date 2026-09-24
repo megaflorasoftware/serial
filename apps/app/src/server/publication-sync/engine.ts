@@ -22,7 +22,10 @@ import type {
   SubscriptionRecordStore,
 } from "./record-store";
 import type { db as Database } from "~/server/db";
-import type { DatabaseSubscriptionMirror } from "~/server/db/schema";
+import type {
+  DatabaseFeedWithOrigins,
+  DatabaseSubscriptionMirror,
+} from "~/server/db/schema";
 import type {
   PublicationSyncProgress,
   PublicationSyncResult,
@@ -40,6 +43,9 @@ import {
   FeedImportSkippedError,
 } from "~/server/feeds/importErrors";
 import { deleteUserFeeds } from "~/server/feeds/delete";
+import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
+import { fetchableOriginsOf } from "~/server/feeds/origins";
+import { getUserChannel } from "~/server/api/channels";
 import {
   getActiveFeedCount,
   getFeedsActivationBudget,
@@ -59,6 +65,38 @@ function groupByPublication<T extends { publicationUri: string }>(rows: T[]) {
   }
   return grouped;
 }
+/** The same bound Add gives a new Feed's first fetch. */
+const FIRST_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * A Feed the sync created gets its first content at once, like a Feed the user
+ * added by hand: every origin, published to the user's channel. This runs
+ * outside the user's refresh window, bounded to Feeds this run created and to
+ * the Add path's timeout so one slow publication cannot hold the sync claim.
+ */
+async function fetchCreatedFeed(
+  database: typeof Database,
+  feed: DatabaseFeedWithOrigins,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      refreshUserFeeds({
+        db: database,
+        feedsList: fetchableOriginsOf([feed]),
+        channel: getUserChannel(feed.userId),
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("First fetch timed out")),
+          FIRST_FETCH_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function resolveImportedFeed(userId: string, publicationUri: string) {
   const { resolvePublicationFeed } =
     await import("~/server/feeds/resolveSelection");
@@ -76,6 +114,7 @@ export async function syncPublicationSubscriptions(input: {
     backfill?: typeof backfillPublicationOrigins;
     store?: SubscriptionRecordStore;
     resolveFeed?: typeof resolveImportedFeed;
+    fetchCreatedFeed?: typeof fetchCreatedFeed;
     activationBudget?: typeof getFeedsActivationBudget;
     invalidate?: typeof publishReconciliationInvalidation;
   };
@@ -113,6 +152,29 @@ export async function syncPublicationSubscriptions(input: {
     if (!retryAt || next < retryAt) retryAt = next;
   };
   let changedFeeds = false;
+  /** Publishes every Feed change so far; later changes publish again at the end. */
+  const publishFeedChanges = async () => {
+    await (input.dependencies?.invalidate ?? publishReconciliationInvalidation)(
+      userId,
+      organizationInvalidationSummary(),
+    );
+    changedFeeds = false;
+  };
+  /** Clients learn the Feed before its items arrive, as with Add. */
+  const fetchAfterImport = async (feed: DatabaseFeedWithOrigins) => {
+    try {
+      await renewSubscriptionSync(database, connection);
+      await publishFeedChanges();
+      await (input.dependencies?.fetchCreatedFeed ?? fetchCreatedFeed)(
+        database,
+        feed,
+      );
+    } catch (error) {
+      if (error instanceof SubscriptionSyncChangedError) throw error;
+      // The Feed exists either way; content failures surface on the Feed itself.
+      logError("[publication-sync] first fetch failed", error);
+    }
+  };
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
   let observedCompleteSnapshot = true;
@@ -363,7 +425,8 @@ export async function syncPublicationSubscriptions(input: {
           let feedId = localFeedId;
           let imported = 0,
             inactive = 0,
-            removed = 0;
+            removed = 0,
+            createdFeed: DatabaseFeedWithOrigins | null = null;
           if (prepared) {
             const activeCount = await getActiveFeedCount(tx, userId);
             const created = await commitFeedImport(
@@ -375,6 +438,8 @@ export async function syncPublicationSubscriptions(input: {
             feedId = created.feed.id;
             imported = Number(created.created || created.attached);
             inactive = Number(created.created && !created.feed.isActive);
+            if (created.created && created.feed.isActive)
+              createdFeed = created.feed;
           }
           if (action === "remove-local" && feedId !== null) {
             removed = (await deleteUserFeeds(tx, userId, [feedId])).length;
@@ -396,13 +461,15 @@ export async function syncPublicationSubscriptions(input: {
                 }
               : undefined,
           });
-          return { imported, inactive, removed };
+          return { imported, inactive, removed, createdFeed };
         });
         counts.imported += result.imported;
         counts.inactive += result.inactive;
         counts.removed += result.removed + Number(action === "remove-remote");
         counts.exported += Number(action === "export");
         changedFeeds ||= result.imported > 0 || result.removed > 0;
+        // The import is committed; nothing below may be read as its failure.
+        if (result.createdFeed) await fetchAfterImport(result.createdFeed);
       } catch (error) {
         if (
           action === "import" &&
@@ -507,10 +574,7 @@ export async function syncPublicationSubscriptions(input: {
           ),
         ),
       );
-    if (changedFeeds)
-      await (
-        input.dependencies?.invalidate ?? publishReconciliationInvalidation
-      )(userId, organizationInvalidationSummary());
+    if (changedFeeds) await publishFeedChanges();
   }
   return {
     ...counts,
