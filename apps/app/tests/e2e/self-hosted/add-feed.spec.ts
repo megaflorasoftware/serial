@@ -243,10 +243,16 @@ test.describe("add feed manually", () => {
       0,
     );
 
-    // Selecting a result creates it, then opens its Edit Feed modal.
+    // Selecting a result creates it, then opens its Edit Feed modal. The
+    // first item import continues behind a toast and clears on its own.
     await expect(
       dialog.getByRole("heading", { name: "Edit Feed" }),
     ).toBeVisible({ timeout: 10000 });
+    const importingToast = page.getByText("Importing items from CGP Grey…", {
+      exact: true,
+    });
+    await expect(importingToast).toBeVisible();
+    await expect(importingToast).toHaveCount(0, { timeout: 15000 });
     await expect(page.getByText("Feed added!", { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("heading", { name: "Add Feed" })).toHaveCount(
       0,

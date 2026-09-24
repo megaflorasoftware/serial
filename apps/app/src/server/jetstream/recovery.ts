@@ -15,7 +15,7 @@ import {
   stageDocuments,
   streamIsConnected,
 } from "./store";
-import { processOriginDocuments } from "./process";
+import { drainOriginDocuments } from "./process";
 import { captureRecordValue } from "./document-source";
 import type { atprotoStreamState } from "../db/schema";
 import type { StreamTransport } from "./transport";
@@ -81,7 +81,7 @@ export async function recoverOrigin(
     candidate.atproto.streamGeneration === initialState.generation &&
     streamIsConnected(initialState, nowFor(settings))
   ) {
-    await processOriginDocuments(database, originId, settings, options);
+    await drainOriginDocuments(database, originId, settings, options);
     return "done";
   }
   const owner = randomUUID();
@@ -281,7 +281,7 @@ export async function recoverOrigin(
       );
     }
     combined.throwIfAborted();
-    await processOriginDocuments(database, originId, settings, processing);
+    await drainOriginDocuments(database, originId, settings, processing);
     await runDatabaseWrite(database, () =>
       database
         .update(feedOriginAtproto)

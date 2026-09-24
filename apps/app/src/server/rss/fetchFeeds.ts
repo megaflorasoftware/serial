@@ -353,7 +353,7 @@ async function insertFeedItems(
 }
 
 export async function* fetchAndInsertFeedData(
-  context: { db: typeof Database; manual?: boolean },
+  context: { db: typeof Database; manual?: boolean; drain?: boolean },
   fetchableOrigins: FetchableOrigin[],
 ) {
   const now = new Date();
@@ -376,7 +376,9 @@ export async function* fetchAndInsertFeedData(
 
       if (origin.kind === "atproto") {
         const { refreshStreamOrigin } = await import("../jetstream/service");
-        return await refreshStreamOrigin(context.db, fetchable);
+        return await refreshStreamOrigin(context.db, fetchable, {
+          drain: context.drain,
+        });
       }
 
       const writeItems = async (data: RSSFeedWithMetadata) => {

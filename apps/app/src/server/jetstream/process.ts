@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lte, or } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
   listedRecordSchema,
@@ -55,6 +55,8 @@ export type CommittedUpdate = {
 };
 export type ProcessingOptions = {
   manual?: boolean;
+  /** Keep processing pages until nothing is pending; a user is waiting on the result. */
+  drain?: boolean;
   signal?: AbortSignal;
   workOwner?: string;
   client?: PublicationClient;
@@ -142,16 +144,7 @@ export async function processOriginDocuments(
   const pending = await database
     .select()
     .from(feedOriginAtprotoDocuments)
-    .where(
-      and(
-        eq(feedOriginAtprotoDocuments.originId, originId),
-        eq(feedOriginAtprotoDocuments.status, "retry"),
-        or(
-          isNull(feedOriginAtprotoDocuments.retryAt),
-          lte(feedOriginAtprotoDocuments.retryAt, nowFor(settings)),
-        ),
-      ),
-    )
+    .where(pendingDocuments(originId, settings))
     // Fresh work first, newest document first, so a bootstrap surfaces recent items.
     .orderBy(
       asc(feedOriginAtprotoDocuments.retryAt),
@@ -331,4 +324,58 @@ export async function processOriginDocuments(
       items: [...committed.values()],
       removedItemIds: [...removed],
     });
+}
+
+/**
+ * A fetch a user is waiting on keeps processing until nothing is pending, so
+ * the items it reports are complete. Every other pass stays bounded to one
+ * page so one large Publication cannot hold the worker or a job. The caller's
+ * signal bounds the whole drain; a page that only produced retries ends it.
+ */
+export async function drainOriginDocuments(
+  database: StreamDatabase,
+  originId: number,
+  settings: StreamSettings,
+  options: ProcessingOptions = {},
+) {
+  if (!options.drain) {
+    await processOriginDocuments(database, originId, settings, options);
+    return;
+  }
+  let before = await pendingDocumentCount(database, originId, settings);
+  while (before > 0) {
+    options.signal?.throwIfAborted();
+    // Each page depends on the writes of the previous one.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await processOriginDocuments(database, originId, settings, options);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const after = await pendingDocumentCount(database, originId, settings);
+    if (after >= before) return;
+    before = after;
+  }
+}
+
+async function pendingDocumentCount(
+  database: StreamDatabase,
+  originId: number,
+  settings: StreamSettings,
+) {
+  const row = await database
+    .select({ count: count() })
+    .from(feedOriginAtprotoDocuments)
+    .where(pendingDocuments(originId, settings))
+    .get();
+  return row?.count ?? 0;
+}
+
+/** Staged versions whose retry time, if any, has passed. */
+function pendingDocuments(originId: number, settings: StreamSettings) {
+  return and(
+    eq(feedOriginAtprotoDocuments.originId, originId),
+    eq(feedOriginAtprotoDocuments.status, "retry"),
+    or(
+      isNull(feedOriginAtprotoDocuments.retryAt),
+      lte(feedOriginAtprotoDocuments.retryAt, nowFor(settings)),
+    ),
+  );
 }
