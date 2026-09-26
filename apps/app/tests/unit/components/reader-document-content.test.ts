@@ -381,9 +381,7 @@ describe("Reader document content", () => {
 
     const hidden = render(document([video]), { externalContent: "hide" });
     expect(hidden.querySelector("[data-article-video-embed]")).toBeNull();
-    expect(
-      hidden.querySelector("[data-reader-notice='externalContent']"),
-    ).toBeTruthy();
+    expect(hidden.querySelector("[data-reader-notice='youtube']")).toBeTruthy();
   });
 
   it("uses the aspect ratio hint or the default height for frames without a height", () => {

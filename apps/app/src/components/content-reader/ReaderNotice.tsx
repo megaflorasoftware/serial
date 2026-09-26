@@ -6,16 +6,18 @@ import { Button } from "~/components/ui/button";
  * Reasons the reader shows a notice instead of content. The block reasons come
  * from the Reader document; `externalContent` is the reader's own, for any
  * External content it is not showing: hidden by preference, a never-online
- * visit, or a source it does not admit. It says the same thing in every case
- * and nothing more.
+ * visit, or a source it does not admit. Recognized YouTube videos use their
+ * own headline and link to the video.
  */
-export type ReaderNoticeKind = ReaderNoticeReason | "externalContent";
+export type ReaderNoticeKind =
+  ReaderNoticeReason | "externalContent" | "youtube";
 
 const HEADLINE = "Available on the original site";
 
 /** Interactive content names itself; a delimiter states its reason out loud. */
 const HEADLINES: Partial<Record<ReaderNoticeKind, string>> = {
   externalContent: "This interactive content is available on the original site",
+  youtube: "This video is available on YouTube",
   membersOnly: "The rest of this post is for members",
 };
 
@@ -30,7 +32,7 @@ const DESCRIPTIONS: Partial<Record<ReaderNoticeKind, string>> = {
 
 export type ReaderNoticeProps = {
   kind: ReaderNoticeKind;
-  /** The document page; the reader never sends people to an embed's own URL. */
+  /** The document page, or the video page for a YouTube notice. */
   href: string;
   originActionLabel: string;
 };

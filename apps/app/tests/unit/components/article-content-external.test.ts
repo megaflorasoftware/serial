@@ -111,15 +111,20 @@ describe("HTML body External content", () => {
     );
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector("[data-article-video-embed]")).toBeNull();
-    const notices = container.querySelectorAll(
-      "[data-reader-notice='externalContent']",
-    );
+    const notices = container.querySelectorAll("[data-reader-notice]");
     expect(notices).toHaveLength(2);
     expect(notices[0]?.textContent).toContain(
-      "This interactive content is available on the original site",
+      "This video is available on YouTube",
     );
     expect(notices[0]?.querySelector(".sr-only")).toBeNull();
     expect(notices[0]?.querySelector("a")?.getAttribute("href")).toBe(
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    );
+    expect(notices[0]?.querySelector("a")?.textContent).toBe("Open in YouTube");
+    expect(notices[1]?.textContent).toContain(
+      "This interactive content is available on the original site",
+    );
+    expect(notices[1]?.querySelector("a")?.getAttribute("href")).toBe(
       "https://example.com/post",
     );
     expect(container.textContent).toContain("Intro");

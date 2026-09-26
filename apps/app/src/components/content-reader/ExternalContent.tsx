@@ -52,11 +52,19 @@ export function ExternalContent({
   title = "Embedded content",
   youtube: derivedYouTube,
 }: ExternalContentProps) {
+  const youtube =
+    source.kind === "src" && isHttps(source.src)
+      ? (derivedYouTube ?? parseYouTubeReference(source.src))
+      : null;
   const notice = (
     <ReaderNotice
-      kind="externalContent"
-      href={noticeHref}
-      originActionLabel={originActionLabel}
+      kind={youtube ? "youtube" : "externalContent"}
+      href={
+        youtube
+          ? `https://www.youtube.com/watch?v=${youtube.videoId}${youtube.start ? `&t=${youtube.start}` : ""}`
+          : noticeHref
+      }
+      originActionLabel={youtube ? "Open in YouTube" : originActionLabel}
     />
   );
   if (visibility === "hide") return notice;
@@ -71,7 +79,6 @@ export function ExternalContent({
     );
   }
   if (!isHttps(source.src)) return notice;
-  const youtube = derivedYouTube ?? parseYouTubeReference(source.src);
   if (youtube)
     return (
       <ArticleVideoEmbed videoId={youtube.videoId} start={youtube.start} />

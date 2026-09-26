@@ -91,11 +91,11 @@ describe("Bookmark article content", () => {
       const container = render(content, "hide");
       expect(container.querySelector("iframe")).toBeNull();
       const notices = container.querySelectorAll(
-        "[data-reader-notice='externalContent']",
+        "[data-reader-notice='youtube']",
       );
       expect(notices.length).toBeGreaterThan(0);
       expect(notices[0]?.querySelector("a")?.getAttribute("href")).toBe(
-        "https://example.com/article",
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42",
       );
     }
   });
