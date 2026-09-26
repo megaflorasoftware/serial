@@ -38,7 +38,9 @@ export function Header() {
       <span className="inline-flex w-auto items-center justify-start md:w-16">
         <TopLeftButton />
       </span>
-      <HeaderCenterContent />
+      <span className="flex min-w-0 flex-1 items-center justify-center">
+        <HeaderCenterContent />
+      </span>
       <span className="inline-flex w-auto items-center justify-end md:w-16">
         <TopRightHeaderContent />
       </span>

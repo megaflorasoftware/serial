@@ -15,7 +15,7 @@ export function FeedLoader() {
   }
 
   return (
-    <div className="w-32">
+    <div className="w-full max-w-32">
       <Progress value={loading.progress} className="w-full" />
     </div>
   );
