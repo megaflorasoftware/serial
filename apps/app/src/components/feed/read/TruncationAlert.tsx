@@ -11,6 +11,7 @@ import {
 } from "~/lib/utils/truncationAlert";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { isTextPlatform } from "~/lib/content/descriptor";
 
 type ReaderFeed = ReturnType<typeof useFeeds>["feeds"][number];
 type ReaderFeedItem = ReturnType<typeof useFeedItemValue>;
@@ -38,7 +39,8 @@ export function useTruncationAlert({
 
   const shouldCheckTruncatedContent =
     !alertDismissed &&
-    platform === "website" &&
+    platform !== undefined &&
+    isTextPlatform(platform) &&
     !!feedId &&
     !hasTruncationAlertResponse &&
     !!feedItem;

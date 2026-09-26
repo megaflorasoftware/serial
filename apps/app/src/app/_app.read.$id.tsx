@@ -55,6 +55,7 @@ import {
   contentDestination,
   resolveContentItem,
 } from "~/lib/data/content-items/resolver";
+import { CONTENT_PLATFORM } from "~/lib/content/descriptor";
 
 const parser = unified()
   .use(rehypeParse, { fragment: true })
@@ -178,7 +179,7 @@ function FeedReaderBody({
         document={reader.document}
         documentUrl={feedItem?.url ?? ""}
         originActionLabel={getOriginActionLabel({
-          platform: feed?.platform ?? "website",
+          platform: feed?.platform ?? CONTENT_PLATFORM.WEBSITE,
           contentType: feedItem?.contentType ?? "text",
         })}
         simplified={simplified}

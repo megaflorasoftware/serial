@@ -1,4 +1,13 @@
-import { and, asc, eq, isNotNull, lte, notExists, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  lte,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import { parsePublicationUri } from "@serial/standard-site";
 import {
   assertSubscriptionSyncCurrent,
@@ -30,6 +39,7 @@ import { workerPool } from "~/lib/workerPool";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { hasAtprotoWriteScope } from "~/server/auth/atproto/config";
 import { logError } from "~/server/logger";
+import { TEXT_PLATFORMS } from "~/lib/content/descriptor";
 
 export const BACKFILL_BATCH_SIZE = 8;
 export const BACKFILL_CONCURRENCY = 2;
@@ -96,7 +106,7 @@ export async function backfillPublicationOrigins(
                 .where(
                   and(
                     eq(feeds.userId, userId),
-                    eq(feeds.platform, "website"),
+                    inArray(feeds.platform, TEXT_PLATFORMS),
                     notExists(
                       tx
                         .select({ id: feedOrigins.id })

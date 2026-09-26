@@ -23,7 +23,7 @@ import {
   viewSections,
 } from "~/server/db/schema";
 
-const VIDEO_PLATFORMS = ["youtube", "peertube", "nebula"] as const;
+import { TEXT_PLATFORMS, VIDEO_PLATFORMS } from "~/lib/content/descriptor";
 
 type MixedContentDatabase = typeof defaultDatabase;
 
@@ -119,14 +119,14 @@ export async function loadScopeData(input: {
 function compatibleFeedViewCondition() {
   return or(
     and(
-      eq(feeds.platform, "website"),
+      inArray(feeds.platform, TEXT_PLATFORMS),
       contentFilterColumnHasOption(
         views.contentFilter,
         CONTENT_FILTER_OPTION.TEXT,
       ),
     ),
     and(
-      inArray(feeds.platform, [...VIDEO_PLATFORMS]),
+      inArray(feeds.platform, VIDEO_PLATFORMS),
       or(
         contentFilterColumnHasOption(
           views.contentFilter,

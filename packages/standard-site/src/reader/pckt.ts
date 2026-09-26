@@ -34,6 +34,7 @@ import {
 import { buildBlueskyProfileUrl, parseAtUri } from "../uris";
 import { safeSourceUrl } from "../urls";
 import { validEntriesSchema } from "../parse";
+import { defineAdapter } from "./adapter";
 
 const PREFIX = "blog.pckt.block.";
 
@@ -61,8 +62,13 @@ const tableSchema = z.object({
   ),
 });
 
+const PCKT_CONTENT_TYPE = "blog.pckt.content";
+
+/** The standalone record a gallery block points at. */
+export const PCKT_GALLERY_COLLECTION = "blog.pckt.gallery";
+
 export const pcktContentSchema = z.object({
-  $type: z.literal("blog.pckt.content"),
+  $type: z.literal(PCKT_CONTENT_TYPE),
   items: blockArraySchema.optional(),
   blob: blobRefSchema.optional(),
   references: z.array(blobRefSchema).optional(),
@@ -337,3 +343,32 @@ export function derivePcktItems(
 ): ReaderBlock[] {
   return blocks(items, context);
 }
+
+/** pckt uses `blob` only when `items` is absent or empty. */
+export const pcktAdapter = defineAdapter<PcktContent>({
+  contentType: PCKT_CONTENT_TYPE,
+  platform: "pckt",
+  schema: pcktContentSchema,
+  overflowBlobCid: (content) =>
+    content.items?.length ? null : (content.blob?.ref.$link ?? null),
+  inlineOverflow: (content, blob) => {
+    const items = pcktBlobSchema.safeParse(blob);
+    return items.success
+      ? { $type: PCKT_CONTENT_TYPE, items: items.data }
+      : null;
+  },
+  derive: (content, context) => derivePcktItems(content.items ?? [], context),
+  facetFeatures: [
+    "bold",
+    "italic",
+    "code",
+    "strikethrough",
+    "underline",
+    "highlight",
+    "link",
+    "didMention",
+    "atMention",
+    "footnote",
+  ],
+  referenceCollections: [PCKT_GALLERY_COLLECTION],
+});

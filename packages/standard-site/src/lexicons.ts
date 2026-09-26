@@ -17,15 +17,6 @@ export const STANDARD_SITE_LINK_REL = {
   document: "site.standard.document",
 } as const;
 
-export const BLOCK_NATIVE_CONTENT_TYPES = {
-  leaflet: "pub.leaflet.content",
-  offprint: "app.offprint.content",
-  pckt: "blog.pckt.content",
-} as const;
-
-export type BlockNativeContentType =
-  (typeof BLOCK_NATIVE_CONTENT_TYPES)[keyof typeof BLOCK_NATIVE_CONTENT_TYPES];
-
 export const blobRefSchema = z.object({
   $type: z.literal("blob").optional(),
   ref: z.object({ $link: z.string() }),
@@ -135,18 +126,4 @@ export function parseDocumentRecord(input: unknown) {
 
 export function parseSubscriptionRecord(input: unknown) {
   return parseListedRecord(input, subscriptionRecordSchema);
-}
-
-export function isBlockNativeContentType(
-  type: string | undefined,
-): type is BlockNativeContentType {
-  return (
-    type === BLOCK_NATIVE_CONTENT_TYPES.leaflet ||
-    type === BLOCK_NATIVE_CONTENT_TYPES.offprint ||
-    type === BLOCK_NATIVE_CONTENT_TYPES.pckt
-  );
-}
-
-export function isBlockNativeDocument(document: DocumentRecord) {
-  return isBlockNativeContentType(document.content?.$type);
 }

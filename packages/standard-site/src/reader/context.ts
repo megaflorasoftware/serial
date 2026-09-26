@@ -11,6 +11,7 @@ import type {
 } from "./model";
 import { resolveRichText, richTextContext, richTextSchema } from "./rich-text";
 import type { RichTextContext } from "./rich-text";
+import type { FacetFeature } from "./adapter";
 import { strongRefSchema } from "../lexicons";
 import { recordCard } from "../record-card";
 import { recordPreview } from "../record-preview";
@@ -35,9 +36,10 @@ export const blockArraySchema = validEntriesSchema(blockSchema);
 export type Block = z.infer<typeof blockSchema>;
 
 /**
- * Per-derivation state shared by the three adapters: the repo DID that owns
- * every blob reference, the resolved records, the footnotes gathered while
- * resolving facets, and the current nesting depth.
+ * Per-derivation state shared by every adapter: the repo DID that owns every
+ * blob reference, the resolved records, the facet features the platform
+ * defines, the footnotes gathered while resolving facets, and the current
+ * nesting depth.
  */
 export class AdapterContext {
   readonly text: RichTextContext;
@@ -46,8 +48,9 @@ export class AdapterContext {
   constructor(
     readonly did: string,
     readonly records: RecordLookup = () => undefined,
+    features?: readonly FacetFeature[],
   ) {
-    this.text = richTextContext(records);
+    this.text = richTextContext(records, features);
   }
 
   get footnotes() {

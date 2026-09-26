@@ -175,6 +175,9 @@ importers:
       '@serial/bookmark-capture':
         specifier: workspace:*
         version: link:../../packages/bookmark-capture
+      '@serial/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@serial/extension-identity':
         specifier: workspace:*
         version: link:../../packages/extension-identity
@@ -649,12 +652,25 @@ importers:
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
+      '@serial/content':
+        specifier: workspace:*
+        version: link:../content
       '@serial/feed-discovery':
         specifier: workspace:*
         version: link:../feed-discovery
       dompurify:
         specifier: ^3.4.12
         version: 3.4.12
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/content:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: ^6.0.3
@@ -678,6 +694,9 @@ importers:
 
   packages/standard-site:
     dependencies:
+      '@serial/content':
+        specifier: workspace:*
+        version: link:../content
       multiformats:
         specifier: ^13.4.2
         version: 13.4.2

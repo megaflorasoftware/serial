@@ -14,6 +14,7 @@ import {
 import { getBookmarkAddedAt } from "./itemDate";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import type { ConnectionState } from "~/lib/data/atoms";
+import type { ContentPlatform } from "~/lib/content/descriptor";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
 import { useFeeds as useFeedsArray } from "~/lib/data/feeds/store";
@@ -45,6 +46,7 @@ import {
 } from "~/lib/data/offline-content";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 import { useBookmarkCaptureValue } from "~/lib/data/bookmarks/capture-store";
+import { isTextPlatform, itemDestinationOf } from "~/lib/content/descriptor";
 
 export type ItemSize = "standard" | "large";
 
@@ -122,7 +124,7 @@ type ThumbnailType =
 function getThumbnailType(
   item: {
     thumbnail?: string;
-    platform: string;
+    platform: ContentPlatform;
     orientation?: string | null;
   },
   feed?: { imageUrl?: string },
@@ -131,7 +133,7 @@ function getThumbnailType(
 ): ThumbnailType {
   if (item.thumbnail) {
     // Standard list uses icon style for non-video content
-    if (item.platform === "website") {
+    if (isTextPlatform(item.platform)) {
       return layout === "list"
         ? feed?.imageUrl && !hideFeedIcon
           ? "icon"
@@ -309,7 +311,7 @@ interface ItemActionsProps {
   item: {
     id: string;
     feedId: number;
-    platform: string;
+    platform: ContentPlatform;
     isWatchLater: boolean;
     isWatched: boolean;
   };
@@ -421,7 +423,7 @@ interface ItemThumbnailProps {
   item: {
     thumbnail?: string;
     title: string;
-    platform: string;
+    platform: ContentPlatform;
     orientation?: string | null;
     progress?: number;
     duration?: number;
@@ -982,7 +984,7 @@ function FeedGridItemDisplay({
 
   const feed = feeds.find((f) => f.id === item.feedId);
 
-  const itemDestination = item.platform === "website" ? "read" : "watch";
+  const itemDestination = itemDestinationOf(item.platform);
 
   const shouldOpenInSerial = feedOpensInSerial(feed);
 

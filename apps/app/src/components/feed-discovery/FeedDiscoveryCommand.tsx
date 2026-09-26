@@ -20,7 +20,8 @@ import {
 import type { ReactNode, Ref } from "react";
 import type { DiscoveredFeed } from "./FeedDiscoveryResults";
 import type { StaticFeedSearchOption } from "./feedSearchOptions";
-import type { ContentPlatform } from "~/lib/content/descriptor";
+import type { ContentPlatform, ContentType } from "~/lib/content/descriptor";
+import { contentMediumOf } from "~/lib/content/descriptor";
 import { TYPEAHEAD_DEBOUNCE_MS } from "~/lib/constants/search";
 import {
   Command,
@@ -117,12 +118,14 @@ interface FeedDiscoveryCommandProps {
   loadingLabel?: string;
 }
 
-const BOOKMARK_ACTION_LABEL: Record<ContentPlatform, string> = {
-  website: "Bookmark page to read later",
-  youtube: "Bookmark video to watch later",
-  peertube: "Bookmark video to watch later",
-  nebula: "Bookmark video to watch later",
+const BOOKMARK_ACTION_LABEL: Record<ContentType, string> = {
+  text: "Bookmark page to read later",
+  video: "Bookmark video to watch later",
 };
+
+function bookmarkActionLabel(platform: ContentPlatform) {
+  return BOOKMARK_ACTION_LABEL[contentMediumOf(platform)];
+}
 
 function FeedResults({
   query,
@@ -202,14 +205,14 @@ function BookmarkResult({
       {visible && (
         <CommandItem
           className="gap-2"
-          value={`${BOOKMARK_ACTION_LABEL[platform]} ${url}`}
+          value={`${bookmarkActionLabel(platform)} ${url}`}
           onSelect={() => onSelect(url)}
         >
           <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded">
             <BookmarkIcon className="size-4" />
           </span>
           <div className="min-w-0">
-            <p className="truncate">{BOOKMARK_ACTION_LABEL[platform]}</p>
+            <p className="truncate">{bookmarkActionLabel(platform)}</p>
             <p className="text-muted-foreground truncate text-xs">{url}</p>
           </div>
         </CommandItem>

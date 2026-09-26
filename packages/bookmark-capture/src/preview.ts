@@ -399,6 +399,18 @@ const PREVIEW_STRATEGIES = {
     text: useGeneralPreview,
     video: useGeneralPreview,
   },
+  leaflet: {
+    text: useGeneralPreview,
+    video: useGeneralPreview,
+  },
+  pckt: {
+    text: useGeneralPreview,
+    video: useGeneralPreview,
+  },
+  offprint: {
+    text: useGeneralPreview,
+    video: useGeneralPreview,
+  },
 } as const satisfies Record<
   BookmarkContentPlatform,
   Record<BookmarkContentType, PreviewStrategy>

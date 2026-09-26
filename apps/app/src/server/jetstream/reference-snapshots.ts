@@ -1,5 +1,6 @@
 import { and, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
+  ADAPTER_REFERENCE_COLLECTIONS,
   BLUESKY_PROFILE_COLLECTION,
   isDid,
   isReferenceSnapshotStale,
@@ -31,7 +32,7 @@ type SnapshotRow = typeof atprotoReferenceSnapshots.$inferSelect;
 const SUPPORTED_COLLECTIONS = new Set<string>([
   STANDARD_SITE_COLLECTIONS.document,
   STANDARD_SITE_COLLECTIONS.publication,
-  "blog.pckt.gallery",
+  ...ADAPTER_REFERENCE_COLLECTIONS,
   SOCIAL_POST_COLLECTIONS.bluesky,
   SOCIAL_POST_COLLECTIONS.pckt,
   BLUESKY_PROFILE_COLLECTION,

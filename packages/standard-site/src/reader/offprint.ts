@@ -30,6 +30,7 @@ import type {
 import { facetArraySchema, richTextSchema } from "./rich-text";
 import { blobRefSchema } from "../lexicons";
 import { calloutTint } from "./tint";
+import { defineAdapter } from "./adapter";
 
 const PREFIX = "app.offprint.block.";
 
@@ -69,8 +70,10 @@ const imageSetSchema = z.object({
 
 const GRID_RATIOS = new Set(["landscape", "portrait", "square", "mosaic"]);
 
+const OFFPRINT_CONTENT_TYPE = "app.offprint.content";
+
 export const offprintContentSchema = z.object({
-  $type: z.literal("app.offprint.content"),
+  $type: z.literal(OFFPRINT_CONTENT_TYPE),
   items: blockArraySchema,
 });
 
@@ -352,3 +355,25 @@ export function deriveOffprintContent(
 ): ReaderBlock[] {
   return deriveOffprintBlocks(content.items, context);
 }
+
+/** Offprint keeps everything inline; there is no overflow blob. */
+export const offprintAdapter = defineAdapter<OffprintContent>({
+  contentType: OFFPRINT_CONTENT_TYPE,
+  platform: "offprint",
+  schema: offprintContentSchema,
+  overflowBlobCid: () => null,
+  inlineOverflow: (content) => content,
+  derive: deriveOffprintContent,
+  facetFeatures: [
+    "bold",
+    "italic",
+    "underline",
+    "strikethrough",
+    "code",
+    "highlight",
+    "link",
+    "mention",
+    "webMention",
+  ],
+  referenceCollections: [],
+});

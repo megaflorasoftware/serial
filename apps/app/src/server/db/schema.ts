@@ -33,6 +33,7 @@ import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
   CONTENT_PLATFORM,
+  CONTENT_PLATFORMS,
   CONTENT_TYPE,
   contentPlatformSchema,
   contentTypeSchema,
@@ -745,14 +746,7 @@ export const bookmarks = sqliteTable(
     sourceUrl: text("source_url").notNull(),
     effectiveUrl: text("effective_url").notNull().default(""),
     canonicalUrl: text("canonical_url").notNull(),
-    platform: text("platform", {
-      enum: [
-        CONTENT_PLATFORM.WEBSITE,
-        CONTENT_PLATFORM.YOUTUBE,
-        CONTENT_PLATFORM.PEERTUBE,
-        CONTENT_PLATFORM.NEBULA,
-      ],
-    })
+    platform: text("platform", { enum: CONTENT_PLATFORMS })
       .notNull()
       .default(CONTENT_PLATFORM.WEBSITE),
     contentType: text("content_type", {

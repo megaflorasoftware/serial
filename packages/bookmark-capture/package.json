@@ -12,8 +12,9 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "dompurify": "^3.4.12",
-    "@serial/feed-discovery": "workspace:*"
+    "@serial/content": "workspace:*",
+    "@serial/feed-discovery": "workspace:*",
+    "dompurify": "^3.4.12"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

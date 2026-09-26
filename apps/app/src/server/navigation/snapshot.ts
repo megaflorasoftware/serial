@@ -12,7 +12,7 @@ import {
   SAVED_UNREAD_CONTENT_STATUS,
 } from "~/lib/content-status";
 import { UNCATEGORIZED_VIEW_ID } from "~/lib/data/views/constants";
-import { VIDEO_PLATFORMS } from "~/lib/data/feed-items/filters";
+import { TEXT_PLATFORMS, VIDEO_PLATFORMS } from "~/lib/content/descriptor";
 import {
   CONTENT_FILTER_OPTION,
   contentFilterColumnAllowsDescriptor,
@@ -102,14 +102,14 @@ function availabilityRecord(rows: AvailabilityRow[]) {
 function feedCompatibleWithView() {
   return or(
     and(
-      eq(feeds.platform, "website"),
+      inArray(feeds.platform, TEXT_PLATFORMS),
       contentFilterColumnHasOption(
         views.contentFilter,
         CONTENT_FILTER_OPTION.TEXT,
       ),
     ),
     and(
-      inArray(feeds.platform, [...VIDEO_PLATFORMS]),
+      inArray(feeds.platform, VIDEO_PLATFORMS),
       or(
         contentFilterColumnHasOption(
           views.contentFilter,
