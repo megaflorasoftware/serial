@@ -395,10 +395,8 @@ function RootLayout() {
             >
               <AppLeftSidebar />
               <SidebarInset
-                className={
-                  pathname.startsWith("/watch/")
-                    ? "md:[scrollbar-gutter:auto]"
-                    : undefined
+                scrollbarGutter={
+                  pathname.startsWith("/watch/") ? "auto" : "stable"
                 }
               >
                 <MobileFeedLoader />

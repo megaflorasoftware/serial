@@ -23,7 +23,7 @@ export function FeedLoader() {
   if (progress === null) return null;
 
   return (
-    <div className="hidden w-full max-w-32 md:block">
+    <div className="hidden w-32 md:block">
       <Progress value={progress} className="w-full" />
     </div>
   );

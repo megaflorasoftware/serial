@@ -325,8 +325,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
       (sidebar.isMobile ? sidebar.openLeftMobile : sidebar.open)
     )
       guideOnboarding("add-view");
-    if (state.instruction === "feed-added" && sidebar.isMobile)
-      sidebar.setOpenRightMobile(false);
   }, [state.instruction, dialog, sidebar]);
   useEffect(() => {
     if (state.step !== "atmosphere-sync-setup" || !state.consentResult) return;
@@ -382,14 +380,12 @@ function AccountOnboarding({ userId }: { userId: string }) {
 
 function OnboardingInstructions({ step }: { step: OnboardingStep }) {
   const state = useOnboarding();
-  const sidebar = useSidebar();
   const instruction = state.instruction
     ? INSTRUCTIONS[state.instruction]
     : null;
   const nextInstruction = () => {
     switch (state.instruction) {
       case "feed-added":
-        sidebar.setOpenRightMobile(false);
         guideOnboarding("open-menu");
         break;
       case "name-view":
