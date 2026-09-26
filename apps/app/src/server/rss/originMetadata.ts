@@ -7,11 +7,11 @@ import {
   feedOrigins,
   feeds,
 } from "../db/schema";
-import { CONTENT_PLATFORM, isVideoPlatform } from "~/lib/content/descriptor";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import type { FeedDatabase } from "~/server/feeds/origins";
 import type { db } from "../db";
 import type { DatabaseFeed, DatabaseFeedOrigin } from "../db/schema";
+import { CONTENT_PLATFORM, isVideoPlatform } from "~/lib/content/descriptor";
 import { dbSemaphore } from "~/lib/semaphore";
 
 type MetadataOrigin = { feed: DatabaseFeed; origin: DatabaseFeedOrigin };
@@ -110,19 +110,17 @@ export async function atmospherePlatformOf(
           feedOriginAtprotoDocumentSources.originId,
           feedOriginAtprotoDocuments.originId,
         ),
-        eq(feedOriginAtprotoDocumentSources.uri, feedOriginAtprotoDocuments.uri),
+        eq(
+          feedOriginAtprotoDocumentSources.uri,
+          feedOriginAtprotoDocuments.uri,
+        ),
         eq(
           feedOriginAtprotoDocumentSources.cid,
           feedOriginAtprotoDocuments.bodyCid,
         ),
       ),
     )
-    .where(
-      and(
-        eq(feedOriginAtprotoDocuments.originId, originId),
-        eq(feedOriginAtprotoDocuments.status, "ready"),
-      ),
-    )
+    .where(eq(feedOriginAtprotoDocuments.originId, originId))
     .limit(2);
   const platforms = new Set<ContentPlatform>(
     rows.map((row) => platformOfContentType(row.contentType)),

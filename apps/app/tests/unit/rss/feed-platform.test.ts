@@ -57,7 +57,10 @@ afterEach(() => fixture.cleanup());
 async function retain(
   rkey: string,
   contentType: string | null,
-  options: { status?: "ready" | "retry"; readable?: boolean } = {},
+  options: {
+    status?: "ready" | "retry" | "invalid" | "deleted";
+    readable?: boolean;
+  } = {},
 ) {
   const cid = `cid-${rkey}`;
   await fixture.database.insert(feedOriginAtprotoDocuments).values({
@@ -95,9 +98,9 @@ it("stays website at creation and with no retained sources", async () => {
   expect(await atmospherePlatformOf(fixture.database, origin.id)).toBe(
     "website",
   );
-  expect(
-    await recomputeFeedPlatform(fixture.database, feed, origin.id),
-  ).toBe(false);
+  expect(await recomputeFeedPlatform(fixture.database, feed, origin.id)).toBe(
+    false,
+  );
 });
 
 it.each([
@@ -109,9 +112,9 @@ it.each([
   async (contentType, platform) => {
     await retain("001", contentType);
     await retain("002", contentType);
-    expect(
-      await recomputeFeedPlatform(fixture.database, feed, origin.id),
-    ).toBe(true);
+    expect(await recomputeFeedPlatform(fixture.database, feed, origin.id)).toBe(
+      true,
+    );
     expect(await storedPlatform()).toBe(platform);
     // Unchanged on a second pass.
     expect(
@@ -139,14 +142,40 @@ it("falls back to website when the sources disagree or one is unregistered", asy
   );
 });
 
-it("reads only the readable version of ready documents", async () => {
+it("ignores sources without a readable body", async () => {
   await retain("001", "pub.leaflet.content");
-  await retain("002", "blog.pckt.content", { status: "retry" });
-  await retain("003", "app.offprint.content", { readable: false });
+  await retain("002", "app.offprint.content", { readable: false });
   expect(await atmospherePlatformOf(fixture.database, origin.id)).toBe(
     "leaflet",
   );
 });
+
+it.each(["retry", "invalid", "deleted"] as const)(
+  "includes the retained readable version while a replacement is %s",
+  async (status) => {
+    await retain("001", "pub.leaflet.content", { status });
+    await fixture.database
+      .update(feedOriginAtprotoDocuments)
+      .set({ cid: "replacement" })
+      .where(eq(feedOriginAtprotoDocuments.uri, uri("001")));
+    await fixture.database.insert(feedOriginAtprotoDocumentSources).values({
+      originId: origin.id,
+      uri: uri("001"),
+      cid: "replacement",
+      record: stringifyLosslessJson({
+        content: { $type: "blog.pckt.content" },
+      }),
+      createdAt: new Date(),
+    });
+    expect(await atmospherePlatformOf(fixture.database, origin.id)).toBe(
+      "leaflet",
+    );
+    await retain("002", "blog.pckt.content");
+    expect(await atmospherePlatformOf(fixture.database, origin.id)).toBe(
+      "website",
+    );
+  },
+);
 
 it("returns to website when a specific platform no longer agrees", async () => {
   await retain("001", "pub.leaflet.content");

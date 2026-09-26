@@ -22,7 +22,6 @@ export const MAX_ZOOM = 6;
 export const MIN_ZOOM_VERTICAL = 0;
 export const MAX_ZOOM_VERTICAL = 3;
 
-
 /**
  * The zoom for what is on screen. A /read item that is not known yet takes
  * the article zoom so its skeleton has the article's width; otherwise an

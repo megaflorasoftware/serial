@@ -9,8 +9,8 @@ import type {
   DatabaseFeedCategory,
 } from "~/server/db/schema";
 import type { ContentPlatform } from "~/lib/content/descriptor";
-import { isTextPlatform } from "~/lib/content/descriptor";
 import type { ContentFilter } from "~/lib/views/contentFilter";
+import { isTextPlatform } from "~/lib/content/descriptor";
 import {
   CONTENT_FILTER_OPTION,
   contentFilterSqlPredicate,

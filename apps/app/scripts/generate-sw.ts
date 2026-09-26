@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
 import { injectManifest } from "workbox-build";
+import { readerComponentAsset } from "./reader-component-asset";
 
 const OUTPUT_DIR = ".output/public";
 const SW_SRC = "src/sw.ts";
@@ -42,12 +43,12 @@ async function generateServiceWorker() {
     globIgnores: [
       "sw.js",
       "workbox-*.js",
-      // E2E fault control: leave the reader route chunks out of the
+      // E2E fault control: leave the lazy reader component out of the
       // precache so the production offline tests exercise the deploy-skew
       // path, where the controlling worker's manifest predates the chunk
       // and only the runtime script cache can serve it.
       ...(process.env.SERIAL_E2E_FAULT_CONTROLS === "1"
-        ? ["assets/_app.read*"]
+        ? [readerComponentAsset(OUTPUT_DIR)]
         : []),
     ],
     maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB

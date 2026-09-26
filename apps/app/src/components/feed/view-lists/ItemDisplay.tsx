@@ -14,6 +14,7 @@ import {
 import { getBookmarkAddedAt } from "./itemDate";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import type { ConnectionState } from "~/lib/data/atoms";
+import type { ContentPlatform } from "~/lib/content/descriptor";
 import { KeyboardShortcutDisplay } from "~/components/ButtonWithShortcut";
 import { Button } from "~/components/ui/button";
 import { useFeeds as useFeedsArray } from "~/lib/data/feeds/store";
@@ -46,7 +47,6 @@ import {
 import { useCanMutate } from "~/lib/data/offline-mutations";
 import { useBookmarkCaptureValue } from "~/lib/data/bookmarks/capture-store";
 import { isTextPlatform, itemDestinationOf } from "~/lib/content/descriptor";
-import type { ContentPlatform } from "~/lib/content/descriptor";
 
 export type ItemSize = "standard" | "large";
 

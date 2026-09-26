@@ -1,6 +1,6 @@
 import { Readability } from "@mozilla/readability";
-import { CONTENT_TYPE } from "@serial/content";
-import type { ContentPlatform } from "@serial/content";
+import { CONTENT_TYPE, getContentCapability } from "@serial/content";
+import type { ContentPlatform, ContentType } from "@serial/content";
 import {
   BOOKMARK_CAPTURE_LIMITS,
   READABILITY_EXTRACTOR_VERSION,
@@ -16,7 +16,7 @@ import { sanitizeCaptureHtml } from "./sanitize";
 
 export type ExtensionContentDescriptor = {
   platform: ContentPlatform;
-  contentType: "text" | "video";
+  contentType: ContentType;
   orientation: "horizontal" | "vertical" | null;
   contentId: string | null;
   classifierVersion: 1;
@@ -221,10 +221,7 @@ function discoveredFeeds(document: Document, effectiveUrl: string) {
 
 /** Only a text page on a plain website is read through Readability and captured. */
 function capturablePage(descriptor: ExtensionContentDescriptor) {
-  return (
-    descriptor.platform === "website" &&
-    descriptor.contentType === CONTENT_TYPE.TEXT
-  );
+  return getContentCapability(descriptor).pageCapture === "allowed";
 }
 
 export function extractPageObservation(

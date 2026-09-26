@@ -201,9 +201,7 @@ function quotedRecordUri(embed: z.infer<typeof embedSchema> | undefined) {
   if (!embed) return null;
   const direct = strongRefSchema.safeParse(embed.record);
   if (direct.success) return direct.data.uri;
-  const nested = z
-    .object({ record: strongRefSchema })
-    .safeParse(embed.record);
+  const nested = z.object({ record: strongRefSchema }).safeParse(embed.record);
   return nested.success ? nested.data.record.uri : null;
 }
 
@@ -239,6 +237,41 @@ function videoOf(
   };
 }
 
+/** The publication pointer is meaningful only on a pckt note. */
+function pcktPublicationUri(
+  collection: string,
+  publication: string | undefined,
+) {
+  return collection === SOCIAL_POST_COLLECTIONS.pckt &&
+    publication &&
+    parseAtUri(publication)?.collection ===
+      STANDARD_SITE_COLLECTIONS.publication
+    ? publication
+    : null;
+}
+
+/** Resolve the publication with the same validation used by a publication card. */
+function publicationAuthor(
+  publicationUri: string | null,
+  records: RecordLookup,
+) {
+  const parts = publicationUri ? parseAtUri(publicationUri) : null;
+  const record = publicationUri
+    ? parsePublicationRecord(records(publicationUri))
+    : null;
+  if (!publicationUri || !parts || !record) return null;
+  const publication = publicationPreview(
+    record,
+    parts.did,
+    buildPdslsUrl(publicationUri) ?? publicationUri,
+  );
+  return {
+    name: publication.title.trim() || null,
+    avatarUrl: publication.iconUrl,
+    siteUrl: normalizePublicationUrl(publication.url),
+  };
+}
+
 function authorOf(
   did: string,
   publicationUri: string | null,
@@ -248,28 +281,12 @@ function authorOf(
   const profile = profileUri
     ? recordValue(records, profileUri, profileRecordSchema)
     : null;
-  // The publication reads exactly as a publication card does; a record the
-  // card would reject voices the note as the profile instead.
-  const publicationParts = publicationUri ? parseAtUri(publicationUri) : null;
-  const publicationRecord = publicationUri
-    ? parsePublicationRecord(records(publicationUri))
-    : null;
-  const publication =
-    publicationRecord && publicationParts
-      ? publicationPreview(
-          publicationRecord,
-          publicationParts.did,
-          buildPdslsUrl(publicationUri!) ?? publicationUri!,
-        )
-      : null;
+  const publication = publicationAuthor(publicationUri, records);
   const handle = handleFromDidDocument(
     snapshotValueSchema.safeParse(records(did)).data?.value,
   );
-  const siteUrl = publication
-    ? normalizePublicationUrl(publication.url)
-    : null;
+  const siteUrl = publication?.siteUrl ?? null;
   const profileUrl = buildBlueskyProfileUrl(did)!;
-  const blogName = publication?.title.trim() || null;
   const profileAvatar = profile?.avatar
     ? buildBlueskyCdnImageUrl(did, profile.avatar.ref.$link, "avatar")
     : null;
@@ -277,8 +294,8 @@ function authorOf(
     author: {
       did,
       handle,
-      name: blogName ?? profile?.displayName?.trim() ?? null,
-      avatarUrl: publication?.iconUrl ?? profileAvatar,
+      name: publication?.name ?? profile?.displayName?.trim() ?? null,
+      avatarUrl: publication?.avatarUrl ?? profileAvatar,
       url: siteUrl ?? profileUrl,
     },
     siteUrl,
@@ -289,10 +306,7 @@ function authorOf(
  * One level of quoted record: a social post card without its own quote, or
  * a document card. Nothing further nests. Unresolved quotes stay a link.
  */
-function quoteBlock(
-  uri: string,
-  context: AdapterContext,
-): ReaderBlock | null {
+function quoteBlock(uri: string, context: AdapterContext): ReaderBlock | null {
   const parts = parseAtUri(uri);
   if (!parts) return null;
   const platform = socialPlatformOf(parts.collection);
@@ -331,14 +345,15 @@ export function socialPost(
   if (!parts || !platform || !url) return null;
   const record = recordValue(context.records, uri, socialPostRecordSchema);
   if (!record) return null;
-  const publicationUri =
-    platform === "pckt" &&
-    record.publication &&
-    parseAtUri(record.publication)?.collection ===
-      STANDARD_SITE_COLLECTIONS.publication
-      ? record.publication
-      : null;
-  const { author, siteUrl } = authorOf(parts.did, publicationUri, context.records);
+  const publicationUri = pcktPublicationUri(
+    parts.collection,
+    record.publication,
+  );
+  const { author, siteUrl } = authorOf(
+    parts.did,
+    publicationUri,
+    context.records,
+  );
   const media = mediaOf(record.embed);
   const mediaHidden = hidesMedia(record.labels);
   const quoted = quotedRecordUri(record.embed);
@@ -380,15 +395,12 @@ export function socialPostReferences(
   const record = recordValue(records, uri, socialPostRecordSchema);
   if (!record) return [];
   const references = [buildBlueskyProfileRecordUri(parts.did)!, parts.did];
-  if (
-    parts.collection === SOCIAL_POST_COLLECTIONS.pckt &&
-    record.publication &&
-    parseAtUri(record.publication)?.collection ===
-      STANDARD_SITE_COLLECTIONS.publication
-  )
-    references.push(record.publication);
+  const publicationUri = pcktPublicationUri(
+    parts.collection,
+    record.publication,
+  );
+  if (publicationUri) references.push(publicationUri);
   const quoted = quotedRecordUri(record.embed);
   if (quoted && parseAtUri(quoted)) references.push(quoted);
   return references;
 }
-

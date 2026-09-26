@@ -241,8 +241,9 @@ async function insertFeedItems(
   }
 
   const targetFeed = databaseFeeds.find((feed) => feed.id === feedId);
-  const feedContentType =
-    targetFeed ? contentMediumOf(targetFeed.platform) : CONTENT_TYPE.VIDEO;
+  const feedContentType = targetFeed
+    ? contentMediumOf(targetFeed.platform)
+    : CONTENT_TYPE.VIDEO;
   const feedItemList: Array<typeof feedItems.$inferInsert> = items.map(
     (item) => {
       let normalizedUrl: string | null = null;
