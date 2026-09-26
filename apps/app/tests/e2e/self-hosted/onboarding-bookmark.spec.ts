@@ -63,7 +63,7 @@ test("returns to feed discovery after organizing a bookmark during onboarding", 
   await expect(
     dialog.getByPlaceholder("Paste a URL or search for a feed..."),
   ).toBeVisible();
-  await expect(guide).toContainText("Enter a website address");
+  await expect(guide).toContainText("Enter a website URL");
   await expect(
     page.getByRole("button", { name: "Skip Tutorial", exact: true }),
   ).toBeVisible();
@@ -94,7 +94,7 @@ test("returns to feed discovery after organizing a bookmark during onboarding", 
     await expect(
       dialog.getByPlaceholder("Paste a URL or search for a feed..."),
     ).toBeVisible();
-    await expect(guide).toContainText("Enter a website address");
+    await expect(guide).toContainText("Enter a website URL");
     await expect.poll(bookmarkCount).toBe(0);
   } finally {
     db.close();

@@ -62,7 +62,7 @@ const INSTRUCTIONS: Record<
     anchorSelector:
       '[data-onboarding="find-feed"] [cmdk-input], [data-onboarding="find-feed"] [role="option"]',
     selector: '[data-onboarding="find-feed"]',
-    text: "Enter a website address, then choose a feed to follow.",
+    text: "Enter a website URL, then choose a feed to follow.",
   },
   "save-feed": {
     highlightDialog: true,
