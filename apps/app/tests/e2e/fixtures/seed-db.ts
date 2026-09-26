@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { JSDOM } from "jsdom";
+import { sanitizeCaptureHtml } from "@serial/bookmark-capture/sanitize";
 import { createClient } from "@libsql/client";
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
@@ -524,20 +526,34 @@ export async function seedBookmarkProjectionData(
     bookmarkId,
     viewId: userView.views.id,
   });
-  await db.insert(schema.pageCaptures).values({
-    bookmarkId,
-    contentHtml: `<p>Captured Bookmark body</p>
+  const dom = new JSDOM("", { url: item.url });
+  let contentHtml: string;
+  try {
+    const capture = sanitizeCaptureHtml(
+      `<p>Captured Bookmark body</p>
       <p><a href="https://example.com/next">External reader link</a></p>
       <a href="https://example.com/image-target">
         <img src="https://images.example.com/reader.jpg" alt="Reader image" onerror="steal()">
       </a>
-      <div data-serial-embed="youtube" data-video-id="dQw4w9WgXcQ" data-start="42"></div>
+      <iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42" height="315"></iframe>
       ${ARTICLE_HTML}
       <script data-testid="unsafe-capture-script">steal()</script>`,
+      item.url,
+      dom.window.document,
+    );
+    if (capture.contentHtml === undefined)
+      throw new Error("Invalid capture fixture");
+    contentHtml = capture.contentHtml;
+  } finally {
+    dom.window.close();
+  }
+  await db.insert(schema.pageCaptures).values({
+    bookmarkId,
+    contentHtml,
     contentHash: `hash-${bookmarkId}`,
     captureSource: "extension-live-dom",
     extractorVersion: "playwright-fixture",
-    sanitizerPolicyVersion: 1,
+    sanitizerPolicyVersion: 2,
     capturedAt: now,
   });
   client.close();

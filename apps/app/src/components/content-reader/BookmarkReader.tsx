@@ -36,6 +36,7 @@ import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import { useScrollDirection } from "~/lib/hooks/useScrollDirection";
 import { useRefreshBookmark } from "~/lib/hooks/useRefreshBookmark";
 import { useRestoreArticleProgress } from "~/lib/hooks/useRestoreArticleProgress";
+import { useExternalContentVisibility } from "~/lib/hooks/useExternalContentVisibility";
 import { orpcRouterClient } from "~/lib/orpc";
 import { getOriginActionLabel } from "~/lib/content/capabilities";
 
@@ -62,6 +63,7 @@ export function BookmarkReader({ id }: { id: string }) {
   const barsHidden = useAtomValue(barsHiddenAtom);
   useRetentionPin("bookmark", id);
   useOpenOriginalShortcut(bookmark?.sourceUrl);
+  const externalContent = useExternalContentVisibility(id);
 
   useEffect(() => {
     let active = true;
@@ -168,8 +170,8 @@ export function BookmarkReader({ id }: { id: string }) {
     return <ReaderSkeleton source={source} header={header} />;
   }
 
+  const originActionLabel = getOriginActionLabel(bookmark);
   if (!capture) {
-    const originActionLabel = getOriginActionLabel(bookmark);
     return (
       <div className="mx-auto max-w-xl p-6">
         <Alert>
@@ -200,7 +202,7 @@ export function BookmarkReader({ id }: { id: string }) {
       <div className="relative w-full">
         <ArticleSidebars
           article={articleElement}
-          contentKey={`${id}:${capture.contentHash}`}
+          contentKey={`${id}:${externalContent}:${capture.contentHash}`}
           scrollToElement={scrollToElement}
         />
         <article
@@ -208,7 +210,12 @@ export function BookmarkReader({ id }: { id: string }) {
           className={`h-full w-full px-6 sm:pb-6 ${classes.article}`}
         >
           <ReaderHeader header={header} />
-          <BookmarkArticleContent content={capture.contentHtml} />
+          <BookmarkArticleContent
+            content={capture.contentHtml}
+            externalContent={externalContent}
+            noticeHref={bookmark.sourceUrl}
+            originActionLabel={originActionLabel}
+          />
         </article>
       </div>
     </ReaderLayout>

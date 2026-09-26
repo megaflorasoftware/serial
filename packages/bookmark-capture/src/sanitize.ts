@@ -6,10 +6,6 @@ import {
   BOOKMARK_CAPTURE_LIMITS,
 } from "./policy";
 
-const YOUTUBE_EMBED_HOSTS = new Set([
-  "www.youtube.com",
-  "www.youtube-nocookie.com",
-]);
 const URL_ATTRIBUTES = ["href", "src"] as const;
 
 function allowedResolvedUrl(value: string, baseUrl: string, isLink: boolean) {
@@ -48,31 +44,28 @@ function rewriteSrcset(value: string, baseUrl: string) {
   return rewritten.join(", ");
 }
 
-function youtubePlaceholder(document: Document, iframe: HTMLIFrameElement) {
+/**
+ * A frame the reader may show as External content: the source, absolute and
+ * `https`, plus an integer height. Every other attribute is dropped, and a
+ * frame without an eligible source is removed. The reader decides at render
+ * time whether the source is shown; storage never carries a frame policy.
+ */
+function storedFrame(document: Document, iframe: HTMLIFrameElement) {
   const source = iframe.getAttribute("src");
   if (!source) return null;
+  let resolved: URL;
   try {
-    const parsed = new URL(source, document.baseURI);
-    const pathMatch = /^\/embed\/([A-Za-z0-9_-]{11})$/.exec(parsed.pathname);
-    const parameters = [...parsed.searchParams.keys()];
-    if (
-      parsed.protocol !== "https:" ||
-      !YOUTUBE_EMBED_HOSTS.has(parsed.hostname) ||
-      !pathMatch?.[1] ||
-      parameters.some((parameter) => parameter !== "start")
-    ) {
-      return null;
-    }
-    const start = parsed.searchParams.get("start");
-    if (start !== null && !/^\d+$/.test(start)) return null;
-    const placeholder = document.createElement("div");
-    placeholder.setAttribute("data-serial-embed", "youtube");
-    placeholder.setAttribute("data-video-id", pathMatch[1]);
-    if (start !== null) placeholder.setAttribute("data-start", start);
-    return placeholder;
+    resolved = new URL(source, document.baseURI);
   } catch {
     return null;
   }
+  if (resolved.protocol !== "https:" || resolved.username || resolved.password)
+    return null;
+  const height = iframe.getAttribute("height");
+  const frame = document.createElement("iframe");
+  frame.setAttribute("src", resolved.toString());
+  if (height && /^\d+$/.test(height)) frame.setAttribute("height", height);
+  return frame;
 }
 
 function captureIdPrefix(effectiveUrl: string) {
@@ -86,8 +79,8 @@ function captureIdPrefix(effectiveUrl: string) {
 
 function rewriteDocument(document: Document, effectiveUrl: string) {
   for (const iframe of document.querySelectorAll("iframe")) {
-    const placeholder = youtubePlaceholder(document, iframe);
-    if (placeholder) iframe.replaceWith(placeholder);
+    const frame = storedFrame(document, iframe);
+    if (frame) iframe.replaceWith(frame);
     else iframe.remove();
   }
 
@@ -138,6 +131,12 @@ export function sanitizeCaptureHtml(
       contentHtml,
       "text/html",
     );
+  if (
+    captureDocument.querySelectorAll("*").length >
+    BOOKMARK_CAPTURE_LIMITS.domElements
+  ) {
+    return { reason: "invalid_capture" as const };
+  }
   const base = captureDocument.createElement("base");
   base.href = effectiveUrl;
   captureDocument.head.append(base);

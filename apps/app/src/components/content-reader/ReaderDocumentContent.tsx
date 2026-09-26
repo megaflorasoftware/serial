@@ -9,17 +9,16 @@ import type {
   ReaderInline,
   ReaderRichText,
 } from "@serial/standard-site";
-import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
+import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
+import { ExternalContent } from "~/components/content-reader/ExternalContent";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
 import { LinkCard, RecordCard } from "~/components/content-reader/RecordCard";
 import { SocialPostCard } from "~/components/content-reader/SocialPostCard";
-import { SandboxedFrame } from "~/components/content-reader/SandboxedFrame";
 import { ReaderImageCarousel } from "~/components/content-reader/ReaderImageCarousel";
 import {
   ArticleImageLightboxGroup,
   ArticleImageLightboxTrigger,
 } from "~/components/feed/read/ArticleImageLightbox";
-import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 
 /**
  * Renders a Reader document with the DOM shapes the reader's navigation,
@@ -35,8 +34,8 @@ export type ReaderDocumentContentProps = {
   /** The document's own page, the target of every block notice. */
   documentUrl: string;
   originActionLabel: string;
-  /** No lightbox, no video, and frames show the notice. */
-  simplified?: boolean;
+  /** Whether External content frames load or show the notice. */
+  externalContent: ExternalContentVisibility;
 };
 
 type RenderOptions = Omit<ReaderDocumentContentProps, "document">;
@@ -108,50 +107,34 @@ function imageStyle(image: ReaderImage): CSSProperties | undefined {
   return Object.keys(style).length ? style : undefined;
 }
 
-/**
- * One image of a lightbox group. In the simplified style there is no
- * lightbox, so the image is drawn plain.
- */
+/** One image of a lightbox group. */
 function Picture({
   image,
   index,
-  simplified,
   fill = false,
 }: {
   image: ReaderImage;
   index: number;
-  simplified: boolean;
   /** Grid cells size the picture; the image's own hints are not applied. */
   fill?: boolean;
 }) {
-  const style = fill ? undefined : imageStyle(image);
-  if (simplified) {
-    return (
-      <img
-        {...REMOTE_IMAGE_PROPS}
-        src={image.url}
-        alt={image.alt}
-        title={image.title ?? undefined}
-        style={style}
-      />
-    );
-  }
   return (
-    <ArticleImageLightboxTrigger index={index} style={style} fill={fill} />
+    <ArticleImageLightboxTrigger
+      index={index}
+      style={fill ? undefined : imageStyle(image)}
+      fill={fill}
+    />
   );
 }
 
-/** Wraps a figure's pictures in one lightbox group; simplified rendering has none. */
+/** Wraps a figure's pictures in one lightbox group. */
 function Pictures({
   images,
-  simplified,
   children,
 }: {
   images: ReaderImage[];
-  simplified: boolean;
   children: ReactNode;
 }) {
-  if (simplified) return <>{children}</>;
   return (
     <ArticleImageLightboxGroup
       images={images.map((image) => ({
@@ -190,6 +173,130 @@ function Blocks({
   );
 }
 
+function ListBlock({
+  block,
+  options,
+}: {
+  block: Extract<ReaderBlock, { kind: "list" }>;
+  options: RenderOptions;
+}) {
+  const Tag = block.ordered ? "ol" : "ul";
+  const task = block.items.some((item) => item.checked !== null);
+  return (
+    <Tag
+      start={
+        block.ordered && block.start !== null && block.start !== 1
+          ? block.start
+          : undefined
+      }
+      className={task ? "contains-task-list" : undefined}
+    >
+      {block.items.map((item, index) => (
+        <li
+          key={index}
+          className={item.checked !== null ? "task-list-item" : undefined}
+        >
+          {item.checked !== null && (
+            <input type="checkbox" disabled checked={item.checked} readOnly />
+          )}{" "}
+          <Blocks blocks={item.content} options={options} />
+        </li>
+      ))}
+    </Tag>
+  );
+}
+
+function TableBlock({
+  block,
+  options,
+}: {
+  block: Extract<ReaderBlock, { kind: "table" }>;
+  options: RenderOptions;
+}) {
+  return (
+    <table>
+      <tbody>
+        {block.rows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {row.map((cell, cellIndex) => {
+              const Tag = cell.header ? "th" : "td";
+              return (
+                <Tag
+                  key={cellIndex}
+                  colSpan={cell.colspan ?? undefined}
+                  rowSpan={cell.rowspan ?? undefined}
+                >
+                  <Blocks blocks={cell.content} options={options} />
+                </Tag>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ImageGroupBlock({
+  block,
+}: {
+  block: Extract<ReaderBlock, { kind: "imageGroup" }>;
+}) {
+  const { layout } = block;
+  const grid = layout.mode === "grid" ? layout : null;
+  const picture = (index: number) => (
+    <Picture
+      key={index}
+      image={block.images[index]!}
+      index={index}
+      fill={grid !== null}
+    />
+  );
+  return (
+    <figure
+      data-reader-figure="group"
+      data-reader-align={block.align ?? undefined}
+      data-reader-image-group={layout.mode}
+      data-reader-grid-ratio={grid?.ratio ?? undefined}
+      style={
+        grid
+          ? ({
+              "--reader-grid-columns": grid.columns,
+              "--reader-grid-columns-narrow": Math.min(grid.columns, 2),
+            } as CSSProperties)
+          : undefined
+      }
+    >
+      {block.title && <p data-reader-image-group-title>{block.title}</p>}
+      <Pictures images={block.images}>
+        {layout.mode === "carousel" ? (
+          <ReaderImageCarousel
+            count={block.images.length}
+            renderSlide={picture}
+          />
+        ) : (
+          <div data-reader-image-group-items>
+            {block.images.map((image, index) =>
+              grid && !grid.ratio ? (
+                <div key={index} style={cellStyle(image)}>
+                  {picture(index)}
+                </div>
+              ) : (
+                picture(index)
+              ),
+            )}
+          </div>
+        )}
+      </Pictures>
+      {block.caption && (
+        <figcaption>
+          <RichText content={block.caption} />
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 function Block({
   block,
   options,
@@ -197,14 +304,6 @@ function Block({
   block: ReaderBlock;
   options: RenderOptions;
 }) {
-  const simplified = options.simplified === true;
-  const notice = (kind: Parameters<typeof ReaderNotice>[0]["kind"]) => (
-    <ReaderNotice
-      kind={kind}
-      href={options.documentUrl}
-      originActionLabel={options.originActionLabel}
-    />
-  );
   switch (block.kind) {
     case "paragraph":
       return (
@@ -243,37 +342,8 @@ function Block({
           </p>
         </aside>
       );
-    case "list": {
-      const Tag = block.ordered ? "ol" : "ul";
-      const task = block.items.some((item) => item.checked !== null);
-      return (
-        <Tag
-          start={
-            block.ordered && block.start !== null && block.start !== 1
-              ? block.start
-              : undefined
-          }
-          className={task ? "contains-task-list" : undefined}
-        >
-          {block.items.map((item, index) => (
-            <li
-              key={index}
-              className={item.checked !== null ? "task-list-item" : undefined}
-            >
-              {item.checked !== null && (
-                <input
-                  type="checkbox"
-                  disabled
-                  checked={item.checked}
-                  readOnly
-                />
-              )}{" "}
-              <Blocks blocks={item.content} options={options} />
-            </li>
-          ))}
-        </Tag>
-      );
-    }
+    case "list":
+      return <ListBlock block={block} options={options} />;
     case "code":
       return (
         <pre style={alignStyle(block)}>
@@ -295,36 +365,39 @@ function Block({
         </pre>
       );
     case "table":
-      return (
-        <table>
-          <tbody>
-            {block.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {row.map((cell, cellIndex) => {
-                  const Tag = cell.header ? "th" : "td";
-                  return (
-                    <Tag
-                      key={cellIndex}
-                      colSpan={cell.colspan ?? undefined}
-                      rowSpan={cell.rowspan ?? undefined}
-                    >
-                      <Blocks blocks={cell.content} options={options} />
-                    </Tag>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <TableBlock block={block} options={options} />;
+    case "divider":
+      return <hr />;
+    case "break":
+      return <br />;
+    default:
+      return <MediaBlock block={block} options={options} />;
+  }
+}
+
+function MediaBlock({
+  block,
+  options,
+}: {
+  block: ReaderBlock;
+  options: RenderOptions;
+}) {
+  const notice = (kind: Parameters<typeof ReaderNotice>[0]["kind"]) => (
+    <ReaderNotice
+      kind={kind}
+      href={options.documentUrl}
+      originActionLabel={options.originActionLabel}
+    />
+  );
+  switch (block.kind) {
     case "image":
       return (
         <figure
           data-reader-figure="image"
           data-reader-align={block.align ?? undefined}
         >
-          <Pictures images={[block.image]} simplified={simplified}>
-            <Picture image={block.image} index={0} simplified={simplified} />
+          <Pictures images={[block.image]}>
+            <Picture image={block.image} index={0} />
           </Pictures>
           {block.caption && (
             <figcaption>
@@ -333,66 +406,8 @@ function Block({
           )}
         </figure>
       );
-    case "imageGroup": {
-      const { layout } = block;
-      const grid = layout.mode === "grid" ? layout : null;
-      const picture = (index: number) => (
-        <Picture
-          key={index}
-          image={block.images[index]!}
-          index={index}
-          simplified={simplified}
-          fill={grid !== null}
-        />
-      );
-      return (
-        <figure
-          data-reader-figure="group"
-          data-reader-align={block.align ?? undefined}
-          data-reader-image-group={layout.mode}
-          data-reader-grid-ratio={grid?.ratio ?? undefined}
-          style={
-            grid
-              ? ({
-                  "--reader-grid-columns": grid.columns,
-                  "--reader-grid-columns-narrow": Math.min(grid.columns, 2),
-                } as CSSProperties)
-              : undefined
-          }
-        >
-          {block.title && <p data-reader-image-group-title>{block.title}</p>}
-          <Pictures images={block.images} simplified={simplified}>
-            {layout.mode === "carousel" ? (
-              <ReaderImageCarousel
-                count={block.images.length}
-                renderSlide={picture}
-              />
-            ) : (
-              <div data-reader-image-group-items>
-                {block.images.map((image, index) =>
-                  grid && !grid.ratio ? (
-                    <div key={index} style={cellStyle(image)}>
-                      {picture(index)}
-                    </div>
-                  ) : (
-                    picture(index)
-                  ),
-                )}
-              </div>
-            )}
-          </Pictures>
-          {block.caption && (
-            <figcaption>
-              <RichText content={block.caption} />
-            </figcaption>
-          )}
-        </figure>
-      );
-    }
-    case "divider":
-      return <hr />;
-    case "break":
-      return <br />;
+    case "imageGroup":
+      return <ImageGroupBlock block={block} />;
     case "linkCard":
       return <LinkCard card={block} align={block.align} />;
     case "recordPreview":
@@ -401,7 +416,6 @@ function Block({
       return (
         <SocialPostCard
           post={block.post}
-          simplified={simplified}
           text={<RichText content={block.post.text} />}
           quote={
             block.post.quote ? (
@@ -410,34 +424,31 @@ function Block({
           }
         />
       );
-    case "embed":
-      if (block.youtube && !simplified)
-        return (
-          <ArticleVideoEmbed
-            videoId={block.youtube.videoId}
-            start={block.youtube.start}
-          />
-        );
-      if (block.youtube)
-        return (
-          <p>
-            <a href={block.href} target="_blank" rel="noopener noreferrer">
-              <strong>Watch on YouTube</strong>
-            </a>
-          </p>
-        );
-      // Every other src frame waits on the sandboxed frame decision (ticket 38).
-      return notice("embed");
-    case "html":
+    case "embed": {
+      // A YouTube page link frames as the video; any other page-only block has nothing to frame.
+      const src = block.embedUrl ?? (block.youtube ? block.href : null);
+      if (src === null) return notice("externalContent");
       return (
-        <SandboxedFrame
-          html={block.html}
-          title="Embedded content"
-          height={block.height}
-          aspectRatio={block.aspectRatio}
-          simplified={simplified}
+        <ExternalContent
+          source={{ kind: "src", src }}
+          youtube={block.youtube}
+          visibility={options.externalContent}
           noticeHref={options.documentUrl}
           originActionLabel={options.originActionLabel}
+          height={block.height}
+          aspectRatio={block.aspectRatio}
+        />
+      );
+    }
+    case "html":
+      return (
+        <ExternalContent
+          source={{ kind: "html", html: block.html }}
+          visibility={options.externalContent}
+          noticeHref={options.documentUrl}
+          originActionLabel={options.originActionLabel}
+          height={block.height}
+          aspectRatio={block.aspectRatio}
         />
       );
     case "notice":

@@ -59,14 +59,42 @@ function aspectStyle(ratio: ReaderImage["aspectRatio"]) {
     : undefined;
 }
 
+function SocialPostHeader({ post }: { post: ReaderSocialPost }) {
+  const date = post.createdAt ? new Date(post.createdAt) : null;
+  const posted = date && Number.isFinite(date.getTime()) ? timeAgo(date) : null;
+  const name = post.author.name ?? post.author.handle ?? post.author.did;
+  return (
+    <div data-social-post-header>
+      <ExternalLink href={post.author.url} data-social-post-author="">
+        {post.author.avatarUrl ? (
+          <RemoteImage
+            key={post.author.avatarUrl}
+            src={post.author.avatarUrl}
+            attribute="data-social-post-avatar"
+          />
+        ) : (
+          <span data-social-post-avatar aria-hidden="true" />
+        )}
+        <span data-social-post-name>{name}</span>
+        {post.author.handle && post.author.name && (
+          <span data-social-post-handle>@{post.author.handle}</span>
+        )}
+      </ExternalLink>
+      {posted && (
+        <time dateTime={post.createdAt ?? undefined} data-social-post-time>
+          {posted}
+        </time>
+      )}
+    </div>
+  );
+}
+
 export type SocialPostCardProps = {
   post: ReaderSocialPost;
   /** The post's text, rendered by the caller so facets draw like body text. */
   text: ReactNode;
   /** The quoted record's card, rendered by the caller; null when unresolved. */
   quote: ReactNode;
-  /** The static style: a video stays a poster, never a player. */
-  simplified?: boolean;
 };
 
 /**
@@ -75,17 +103,9 @@ export type SocialPostCardProps = {
  * author link, the text's own links, the external preview and the quote
  * are layered above it. No engagement counts are drawn.
  */
-export function SocialPostCard({
-  post,
-  text,
-  quote,
-  simplified = false,
-}: SocialPostCardProps) {
+export function SocialPostCard({ post, text, quote }: SocialPostCardProps) {
   const platform = PLATFORM_NAMES[post.platform];
   const offline = useAtomValue(isDisconnectedAtom);
-  const date = post.createdAt ? new Date(post.createdAt) : null;
-  const posted = date && Number.isFinite(date.getTime()) ? timeAgo(date) : null;
-  const name = post.author.name ?? post.author.handle ?? post.author.did;
   return (
     <div
       role="note"
@@ -97,28 +117,7 @@ export function SocialPostCard({
       <ExternalLink href={post.url} data-social-post-link="">
         <span className="sr-only">Open post on {platform}</span>
       </ExternalLink>
-      <div data-social-post-header>
-        <ExternalLink href={post.author.url} data-social-post-author="">
-          {post.author.avatarUrl ? (
-            <RemoteImage
-              key={post.author.avatarUrl}
-              src={post.author.avatarUrl}
-              attribute="data-social-post-avatar"
-            />
-          ) : (
-            <span data-social-post-avatar aria-hidden="true" />
-          )}
-          <span data-social-post-name>{name}</span>
-          {post.author.handle && post.author.name && (
-            <span data-social-post-handle>@{post.author.handle}</span>
-          )}
-        </ExternalLink>
-        {posted && (
-          <time dateTime={post.createdAt ?? undefined} data-social-post-time>
-            {posted}
-          </time>
-        )}
-      </div>
+      <SocialPostHeader post={post} />
       <div data-social-post-body>
         <p data-social-post-text>{text}</p>
         {post.images.length > 0 && (
@@ -136,7 +135,7 @@ export function SocialPostCard({
         )}
         {post.video && (
           <div data-social-post-video>
-            {simplified || offline ? (
+            {offline ? (
               <RemoteImage
                 key={post.video.thumbnailUrl}
                 src={post.video.thumbnailUrl}

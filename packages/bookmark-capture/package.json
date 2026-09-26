@@ -8,7 +8,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./extract": "./src/extract.ts"
+    "./extract": "./src/extract.ts",
+    "./sanitize": "./src/sanitize.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

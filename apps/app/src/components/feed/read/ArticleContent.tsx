@@ -2,16 +2,10 @@
 
 import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
-import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
+import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
+import { ExternalContent } from "~/components/content-reader/ExternalContent";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
-
-function extractYouTubeVideoId(src: string): string | null {
-  const match = src.match(
-    /(?:youtube\.com|youtube-nocookie\.com)\/embed\/([^?/]+)/,
-  );
-  return match?.[1] ?? null;
-}
 
 function findImage(node: Element): { src: string; node: Element } | null {
   if (node.name === "img")
@@ -51,17 +45,34 @@ function isImageContainer(node: Element): boolean {
   return false;
 }
 
-/** Renders an HTML Reader body: RSS bodies and legacy stored HTML. */
+export type ArticleContentProps = {
+  content: string;
+  externalContent: ExternalContentVisibility;
+  /** The item's own page, the target of every External content notice. */
+  noticeHref: string;
+  originActionLabel: string;
+  /** A caller's own element mapping, consulted before the shared rules. */
+  replace?: HTMLReactParserOptions["replace"];
+};
+
+/**
+ * Renders an HTML Reader body: RSS bodies, legacy stored HTML and Bookmark
+ * captures. Every `iframe` in the markup, stored or legacy, is intercepted
+ * here so nothing renders unsandboxed.
+ */
 export function ArticleContent({
   content,
-  simplified = false,
-}: {
-  content: string;
-  simplified?: boolean;
-}) {
+  externalContent,
+  noticeHref,
+  originActionLabel,
+  replace,
+}: ArticleContentProps) {
   const options: HTMLReactParserOptions = {
-    replace: (domNode) => {
+    replace: (domNode, index) => {
       if (!(domNode instanceof Element)) return;
+
+      const replaced = replace?.(domNode, index);
+      if (replaced !== undefined) return replaced;
 
       // Open external links in new tabs. In-page links include footnote refs.
       if (
@@ -73,12 +84,10 @@ export function ArticleContent({
         domNode.attribs.rel = "noopener noreferrer";
       }
 
-      if (simplified) return;
-
       if (domNode.name === "img") {
         const src = domNode.attribs.src ?? "";
         const alt = domNode.attribs.alt ?? "";
-        if (!src) return;
+        if (!src) return <></>;
         return (
           <ArticleImageLightbox
             src={src}
@@ -100,16 +109,28 @@ export function ArticleContent({
       }
 
       if (domNode.name !== "iframe") return;
-
-      const src = domNode.attribs.src ?? "";
-      const videoId = extractYouTubeVideoId(src);
-      if (!videoId) return;
-      return <ArticleVideoEmbed videoId={videoId} />;
+      return (
+        <ExternalContent
+          source={{ kind: "src", src: domNode.attribs.src ?? "" }}
+          visibility={externalContent}
+          noticeHref={noticeHref}
+          originActionLabel={originActionLabel}
+          height={storedFrameHeight(domNode.attribs.height)}
+          aspectRatio={null}
+        />
+      );
     },
   };
 
   const parsed = parse(content, options);
   const nodes = Array.isArray(parsed) ? parsed : [parsed];
 
-  return <>{simplified ? nodes : flattenReaderImages(nodes)}</>;
+  return <>{flattenReaderImages(nodes)}</>;
+}
+
+/** A stored `height` attribute, accepted within the same range as authored frames. */
+function storedFrameHeight(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const height = Number(value);
+  return height >= 16 && height <= 1600 ? height : null;
 }
