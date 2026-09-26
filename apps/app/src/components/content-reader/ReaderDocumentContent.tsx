@@ -304,13 +304,6 @@ function Block({
   block: ReaderBlock;
   options: RenderOptions;
 }) {
-  const notice = (kind: Parameters<typeof ReaderNotice>[0]["kind"]) => (
-    <ReaderNotice
-      kind={kind}
-      href={options.documentUrl}
-      originActionLabel={options.originActionLabel}
-    />
-  );
   switch (block.kind) {
     case "paragraph":
       return (
@@ -373,6 +366,30 @@ function Block({
       );
     case "table":
       return <TableBlock block={block} options={options} />;
+    case "divider":
+      return <hr />;
+    case "break":
+      return <br />;
+    default:
+      return <MediaBlock block={block} options={options} />;
+  }
+}
+
+function MediaBlock({
+  block,
+  options,
+}: {
+  block: ReaderBlock;
+  options: RenderOptions;
+}) {
+  const notice = (kind: Parameters<typeof ReaderNotice>[0]["kind"]) => (
+    <ReaderNotice
+      kind={kind}
+      href={options.documentUrl}
+      originActionLabel={options.originActionLabel}
+    />
+  );
+  switch (block.kind) {
     case "image":
       return (
         <figure
@@ -391,10 +408,6 @@ function Block({
       );
     case "imageGroup":
       return <ImageGroupBlock block={block} />;
-    case "divider":
-      return <hr />;
-    case "break":
-      return <br />;
     case "linkCard":
       return <LinkCard card={block} align={block.align} />;
     case "recordPreview":

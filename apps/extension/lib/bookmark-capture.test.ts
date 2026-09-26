@@ -344,15 +344,15 @@ describe("extension live DOM Bookmark capture", () => {
       .spyOn(document.defaultView!.DOMParser.prototype, "parseFromString")
       .mockImplementation(function (this: DOMParser, html, type) {
         const parsed = original.call(this, html, type);
-        vi.spyOn(parsed, "querySelectorAll").mockImplementation(
-          ((selector: string) =>
-            selector === "*"
-              ? ({ length: BOOKMARK_CAPTURE_LIMITS.domElements + 1 } as never)
-              : Document.prototype.querySelectorAll.call(
-                  parsed,
-                  selector,
-                )) as typeof parsed.querySelectorAll,
-        );
+        vi.spyOn(parsed, "querySelectorAll").mockImplementation(((
+          selector: string,
+        ) =>
+          selector === "*"
+            ? ({ length: BOOKMARK_CAPTURE_LIMITS.domElements + 1 } as never)
+            : Document.prototype.querySelectorAll.call(
+                parsed,
+                selector,
+              )) as typeof parsed.querySelectorAll);
         return parsed;
       });
 
