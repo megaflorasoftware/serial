@@ -306,17 +306,23 @@ function Sidebar({
 function SidebarInset({
   className,
   style,
+  scrollbarGutter = "stable",
   ...props
-}: React.ComponentProps<"main">) {
+}: React.ComponentProps<"main"> & {
+  scrollbarGutter?: "stable" | "auto";
+}) {
   return (
     <main
       data-slot="sidebar-inset"
       className={cn(
         "bg-background relative flex min-h-0 w-full flex-1 flex-col overflow-y-auto overscroll-y-contain",
+        // Phones use overlay scrollbars, so a stable gutter there only
+        // reserves a blank strip on browsers that draw classic scrollbars.
+        scrollbarGutter === "stable" && "md:[scrollbar-gutter:stable]",
         "lg:peer-data-[variant=inset]:m-2 lg:peer-data-[variant=inset]:ml-0 lg:peer-data-[variant=inset]:rounded-xl lg:peer-data-[variant=inset]:shadow-sm lg:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className,
       )}
-      style={{ scrollbarGutter: "stable", ...style }}
+      style={style}
       {...props}
     />
   );

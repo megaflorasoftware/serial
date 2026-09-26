@@ -9,7 +9,6 @@ export function OpenRightSidebarButton() {
 
   return (
     <Button
-      data-onboarding="open-feed-menu"
       aria-label="Open Feed menu"
       onClick={() => toggleSidebar("right")}
       size="icon"

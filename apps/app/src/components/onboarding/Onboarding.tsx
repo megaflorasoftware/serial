@@ -51,15 +51,10 @@ const INSTRUCTIONS: Record<
     interactiveDialog?: boolean;
   }
 > = {
-  "open-feed-menu": {
-    dimmed: true,
-    selector: '[data-onboarding="open-menu"]',
-    text: "Let's start by adding your first feed. Open the menu to add one.",
-  },
   "add-feed": {
     dimmed: true,
     selector: '[data-onboarding="add-feed"]',
-    text: "Here's where you add a feed. Feeds are the parts of the web that you want to bring into Serial.",
+    text: "Let's start by adding your first feed. Feeds are the parts of the web that you want to show up in Serial.",
   },
   "find-feed": {
     hideWhenSelector:
@@ -67,7 +62,7 @@ const INSTRUCTIONS: Record<
     anchorSelector:
       '[data-onboarding="find-feed"] [cmdk-input], [data-onboarding="find-feed"] [role="option"]',
     selector: '[data-onboarding="find-feed"]',
-    text: "Enter a website address, then choose a feed to follow.",
+    text: "Enter a website URL, then choose a feed to follow.",
   },
   "save-feed": {
     highlightDialog: true,
@@ -319,11 +314,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
     userId,
   ]);
   useEffect(() => {
-    if (
-      state.instruction === "open-feed-menu" &&
-      (sidebar.isMobile ? sidebar.openRightMobile : sidebar.open)
-    )
-      guideOnboarding("add-feed");
     if (state.instruction === "add-feed" && dialog === "add-feed")
       guideOnboarding("find-feed");
     if (state.instruction === "add-view" && dialog === "add-view") {
@@ -335,8 +325,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
       (sidebar.isMobile ? sidebar.openLeftMobile : sidebar.open)
     )
       guideOnboarding("add-view");
-    if (state.instruction === "feed-added" && sidebar.isMobile)
-      sidebar.setOpenRightMobile(false);
   }, [state.instruction, dialog, sidebar]);
   useEffect(() => {
     if (state.step !== "atmosphere-sync-setup" || !state.consentResult) return;
@@ -392,14 +380,12 @@ function AccountOnboarding({ userId }: { userId: string }) {
 
 function OnboardingInstructions({ step }: { step: OnboardingStep }) {
   const state = useOnboarding();
-  const sidebar = useSidebar();
   const instruction = state.instruction
     ? INSTRUCTIONS[state.instruction]
     : null;
   const nextInstruction = () => {
     switch (state.instruction) {
       case "feed-added":
-        sidebar.setOpenRightMobile(false);
         guideOnboarding("open-menu");
         break;
       case "name-view":
@@ -418,11 +404,7 @@ function OnboardingInstructions({ step }: { step: OnboardingStep }) {
   return (
     <Guidance
       instructionKey={state.instruction ?? step}
-      selector={
-        state.instruction === "open-feed-menu" && sidebar.isMobile
-          ? '[data-onboarding="open-feed-menu"]'
-          : instruction?.selector
-      }
+      selector={instruction?.selector}
       anchorSelector={instruction?.anchorSelector}
       hideWhenSelector={instruction?.hideWhenSelector}
       highlightDialog={instruction?.highlightDialog}

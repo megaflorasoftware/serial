@@ -7,7 +7,6 @@ import {
 import type { OnboardingProgress, OnboardingStep } from "./progress";
 
 export type OnboardingInstruction =
-  | "open-feed-menu"
   | "add-feed"
   | "find-feed"
   | "save-feed"
@@ -47,7 +46,7 @@ function initialInstruction(
   step: OnboardingStep | null,
 ): OnboardingInstruction | null {
   if (step === "create-view") return "open-menu";
-  if (step === "add-feed") return "open-feed-menu";
+  if (step === "add-feed") return "add-feed";
   return null;
 }
 

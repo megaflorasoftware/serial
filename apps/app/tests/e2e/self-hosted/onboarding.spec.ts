@@ -156,7 +156,6 @@ test("keeps feed-entry guidance clear of its input with a short mobile keyboard 
   await expect(guide(page)).toContainText("adding your first feed", {
     timeout: 30_000,
   });
-  await page.locator('[data-onboarding="open-feed-menu"]').click();
   await page
     .locator('[data-onboarding="add-feed"]')
     .filter({ visible: true })
@@ -479,16 +478,10 @@ for (const mobile of [false, true]) {
       [60, 10, 100],
       [60, 10, 15],
     ]);
-    await page
-      .locator(
-        mobile
-          ? '[data-onboarding="open-feed-menu"]'
-          : '[data-onboarding="open-menu"]',
-      )
-      .click();
-    await expect(guide(page)).toContainText("Here's where you add a feed");
-    if (mobile) await expectNormalBackdrop(page);
-    else await expectSubtleButtonDimming(page);
+    await expect(guide(page)).toContainText(
+      "Feeds are the parts of the web that you want to show up in Serial.",
+    );
+    await expectSubtleButtonDimming(page);
     const addFeed = page
       .locator('[data-onboarding="add-feed"]')
       .filter({ visible: true });
@@ -514,7 +507,7 @@ for (const mobile of [false, true]) {
       .locator('[data-onboarding="add-feed"]')
       .filter({ visible: true })
       .click();
-    await expect(guide(page)).toContainText("Enter a website address");
+    await expect(guide(page)).toContainText("Enter a website URL");
     await expectNormalBackdrop(page);
     await expect(
       guide(page).getByRole("textbox", { name: "Suggested website" }),
@@ -537,7 +530,7 @@ for (const mobile of [false, true]) {
     await expect(copyWebsite.locator(".lucide-copy")).toBeVisible({
       timeout: 5000,
     });
-    await expect(guide(page)).toContainText("Enter a website address");
+    await expect(guide(page)).toContainText("Enter a website URL");
     await expect(guide(page).getByRole("button", { name: "Next" })).toHaveCount(
       0,
     );
@@ -554,7 +547,7 @@ for (const mobile of [false, true]) {
       page.getByRole("button", { name: "Skip Tutorial", exact: true }),
     ).toBeVisible();
     await search.fill("");
-    await expect(guide(page)).toContainText("Enter a website address");
+    await expect(guide(page)).toContainText("Enter a website URL");
     await search.fill(feedUrl);
     await expect(result).toBeVisible({ timeout: 15000 });
     await expect(guide(page)).toHaveCount(0);

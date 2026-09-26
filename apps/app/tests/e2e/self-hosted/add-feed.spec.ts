@@ -82,12 +82,26 @@ test.describe("add feed manually", () => {
     });
     await expect(manageHeaderButton).toBeVisible();
 
+    // The header Add Feed button opens the dialog; closing it leaves the
+    // "a" shortcut path below untouched.
+    const addFeedHeaderButton = page.getByRole("button", {
+      name: "Add Feed",
+      exact: true,
+    });
+    await expect(addFeedHeaderButton).toBeVisible();
+    await addFeedHeaderButton.click();
+    const dialog = page.locator('[role="dialog"]');
+    await expect(
+      dialog.getByPlaceholder("Paste a URL or search for a feed..."),
+    ).toBeVisible({ timeout: 5000 });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+
     // Open the Add Feed dialog with the "a" keyboard shortcut
     await page.keyboard.press("a");
     await page.waitForTimeout(300);
 
     // Discovery opens as a standalone command palette.
-    const dialog = page.locator('[role="dialog"]');
     await expect(
       dialog.getByPlaceholder("Paste a URL or search for a feed..."),
     ).toBeVisible({ timeout: 5000 });
