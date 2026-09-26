@@ -12,6 +12,7 @@ import { CheckIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppDialogs } from "../components/feed/AppDialogs";
+import { MobileFeedLoader } from "../components/feed/FeedLoader";
 import { Header } from "../components/feed/Header";
 import { GlobalImportDropzone } from "../components/feed/import/GlobalImportDropzone";
 import type React from "react";
@@ -394,12 +395,13 @@ function RootLayout() {
             >
               <AppLeftSidebar />
               <SidebarInset
-                style={
+                className={
                   pathname.startsWith("/watch/")
-                    ? { scrollbarGutter: "auto" }
+                    ? "md:[scrollbar-gutter:auto]"
                     : undefined
                 }
               >
+                <MobileFeedLoader />
                 <Header />
                 <main className="flex flex-col">
                   <div className="h-full w-full pb-6">
