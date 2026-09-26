@@ -2,8 +2,8 @@
 
 import { useLocation } from "@tanstack/react-router";
 import { PlusIcon } from "lucide-react";
+import { useDialogStore } from "./dialogStore";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
-import { useDialogStore } from "~/components/feed/dialogStore";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 
 // The "a" shortcut itself is owned by AddFeedDialog; this button only

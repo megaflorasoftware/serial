@@ -38,7 +38,6 @@ test("returns to feed discovery after organizing a bookmark during onboarding", 
   await expect(guide).toContainText("adding your first feed", {
     timeout: 30_000,
   });
-  await page.locator('[data-onboarding="open-menu"]').click();
   await page
     .locator('[data-onboarding="add-feed"]')
     .filter({ visible: true })
