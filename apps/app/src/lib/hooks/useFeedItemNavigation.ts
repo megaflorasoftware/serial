@@ -40,6 +40,7 @@ import {
 import { getNextRootItemId } from "~/lib/root-scroll-restoration";
 import { registerRootContentNavigation } from "~/lib/root-content-actions";
 import { canMutateNow } from "~/lib/data/offline-mutations";
+import { useIsMobile } from "~/hooks/use-mobile";
 
 interface SectionInfo {
   size: number;
@@ -161,6 +162,7 @@ export function useFeedItemNavigation(
   const feedFilter = useAtomValue(feedFilterAtom);
   const contentStatusFilter = useAtomValue(contentStatusFilterAtom);
   const { pathname } = useLocation();
+  const isMobile = useIsMobile();
 
   const prevViewFilterIdRef = useRef<number | null>(null);
   const prevCategoryFilterRef = useRef<number | null>(null);
@@ -226,6 +228,12 @@ export function useFeedItemNavigation(
       const currentItemId = items[currentIndex] ?? null;
       const nextItemId = getNextRootItemId(items, currentItemId);
 
+      if (isMobile) {
+        if (nextItemId) keyboardNavActiveRef.current = true;
+        setSelectedItemId(nextItemId);
+        return;
+      }
+
       if (!nextItemId) {
         setSelectedItemId(null);
         requestAnimationFrame(() => {
@@ -238,7 +246,7 @@ export function useFeedItemNavigation(
 
       selectItemAfterRender(nextItemId);
     },
-    [items, selectItemAfterRender, setSelectedItemId],
+    [isMobile, items, selectItemAfterRender, setSelectedItemId],
   );
 
   useEffect(() => {
