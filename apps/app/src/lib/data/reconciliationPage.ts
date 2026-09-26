@@ -5,6 +5,11 @@ import { getMixedScopeKey, mixedContentStore } from "./mixed-content/store";
 import { hydrateOfflineBodiesForPage } from "./offline-hydration";
 import { feedItemsStore } from "./store";
 import { viewsStore } from "./views/store";
+import { feedCategoriesStore } from "./feed-categories/store";
+import {
+  createFeedItemFilterIndex,
+  createFeedItemFilterPredicate,
+} from "./feed-items/listProjection";
 import {
   categoryFilterAtom,
   dateFilterAtom,
@@ -35,6 +40,36 @@ function removeFeedItem(id: string) {
   });
 }
 
+function canRetainCursorPages(target: ActiveFirstPageResult["target"]) {
+  const retained =
+    mixedContentStore.getState().scopes[
+      getMixedScopeKey(target.scope, target.contentStatus)
+    ];
+  if (!retained || retained.pages.length <= 1) return true;
+
+  const { views, viewsDict } = viewsStore.getState();
+  const scope = target.scope;
+  const view = scope.type === "view" ? viewsDict[scope.viewId] : null;
+  if (scope.type === "view" && !view) return false;
+  const matches = createFeedItemFilterPredicate({
+    contentStatusFilter: target.contentStatus,
+    categoryFilter: scope.type === "tag" ? scope.tagId : -1,
+    feedFilter: scope.type === "feed" ? scope.feedId : -1,
+    viewFilter: view ?? null,
+    filterIndex: createFeedItemFilterIndex(
+      feedCategoriesStore.getState().feedCategories,
+      views,
+    ),
+  });
+  const items = feedItemsStore.getState().feedItemsDict;
+  // An unchanged first page cannot establish membership for retained later pages.
+  return retained.references.every((reference) => {
+    if (reference.entityKind !== "feed-item") return true;
+    const item = items[reference.entityId];
+    return item !== undefined && matches(item);
+  });
+}
+
 export function applyReconciliationFirstPage(page: ActiveFirstPageResult) {
   if (page.membershipRevision !== getMixedContentMembershipRevision()) {
     return false;
@@ -61,6 +96,7 @@ export function applyReconciliationFirstPage(page: ActiveFirstPageResult) {
   const pageResult = mixedContentStore.getState().reconcileFirstPage({
     scope: page.target.scope,
     contentStatus: page.target.contentStatus,
+    retainCursorPages: canRetainCursorPages(page.target),
     page: {
       references: page.orderedRefs,
       feedItems: feedItemUpserts,
@@ -69,7 +105,7 @@ export function applyReconciliationFirstPage(page: ActiveFirstPageResult) {
       hasMore: page.hasMore,
     },
   });
-  if (pageResult.firstPageChanged) {
+  if (pageResult.replacedScope) {
     feedItemsStore.getState().retainFeedItemPage({
       scopeKey: `mixed:${getMixedScopeKey(
         page.target.scope,

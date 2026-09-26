@@ -1,7 +1,17 @@
+import { eq, ne } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { ORPCContext } from "~/server/orpc/base";
-import { feedItems, feeds, user, viewFeeds, views } from "~/server/db/schema";
+import {
+  contentCategories,
+  feedCategories,
+  feedItems,
+  feeds,
+  user,
+  viewCategories,
+  viewFeeds,
+  views,
+} from "~/server/db/schema";
 
 const testState = vi.hoisted(
   (): {
@@ -47,6 +57,7 @@ vi.mock("~/lib/orpc", async () => {
     ),
     orpcRouterClient: {
       feedItem: { setWatchedValue: real.feedItem.setWatchedValue },
+      viewFeeds: { bulkRemoveFromView: real.viewFeeds.bulkRemoveFromView },
       bookmark: { getCaptures: real.bookmark.getCaptures },
       initial: {
         reconcileApplicationState: real.initial.reconcileApplicationState,
@@ -363,4 +374,230 @@ describe("invalid request recovery through the transport", () => {
       recoveryFailed: false,
     });
   });
+});
+
+describe("Feed removal from a loaded View", () => {
+  it.each([
+    { sourceKind: "rss" as const, retainedByTag: false, remainingTail: false },
+    { sourceKind: "rss" as const, retainedByTag: false, remainingTail: true },
+    {
+      sourceKind: "atproto" as const,
+      retainedByTag: false,
+      remainingTail: false,
+    },
+    {
+      sourceKind: "atproto" as const,
+      retainedByTag: true,
+      remainingTail: false,
+    },
+  ])(
+    "reconciles later $sourceKind items after removal, retained by Tag: $retainedByTag, remaining tail: $remainingTail",
+    async ({ sourceKind, retainedByTag, remainingTail }) => {
+      await database.delete(feedItems).where(ne(feedItems.id, "unread-0"));
+      await database
+        .update(feedItems)
+        .set({
+          sourceKind,
+          atprotoUri:
+            sourceKind === "atproto"
+              ? "at://did:plc:example/site.standard.document/older"
+              : null,
+        })
+        .where(eq(feedItems.id, "unread-0"));
+      await database.insert(views).values({
+        id: 11,
+        userId: USER_ID,
+        name: "Other View",
+        contentFilter: 3,
+        placement: 2,
+      });
+      await database.insert(viewFeeds).values({ viewId: 11, feedId: FEED_ID });
+      if (retainedByTag) {
+        await database
+          .insert(contentCategories)
+          .values({ id: 1, userId: USER_ID, name: "Reading" });
+        await database
+          .insert(feedCategories)
+          .values({ feedId: FEED_ID, categoryId: 1 });
+        await database
+          .insert(viewCategories)
+          .values({ viewId: VIEW_ID, categoryId: 1 });
+      }
+      await database.insert(feeds).values({
+        id: 21,
+        userId: USER_ID,
+        name: "Newer feed",
+        platform: "website",
+      });
+      await database.insert(viewFeeds).values({ viewId: VIEW_ID, feedId: 21 });
+      await database.insert(feedItems).values(
+        Array.from({ length: 30 }, (_, index) => ({
+          id: `newer-${index}`,
+          feedId: 21,
+          contentId: `newer-${index}`,
+          title: `Newer ${index}`,
+          author: "Author",
+          url: `https://example.com/newer-${index}`,
+          postedAt: new Date(NOW.getTime() + 60_000 + index * 1000),
+          createdAt: NOW,
+          updatedAt: NOW,
+        })),
+      );
+      if (remainingTail) {
+        await database.insert(feedItems).values({
+          id: "remaining-tail",
+          feedId: 21,
+          contentId: "remaining-tail",
+          title: "Still included",
+          author: "Author",
+          url: "https://example.com/remaining",
+          postedAt: new Date(NOW.getTime() - 60_000),
+          createdAt: NOW,
+          updatedAt: NOW,
+        });
+      }
+      const { dataReconciliation } = await import("~/lib/data/reconciliation");
+      const { publisher } = await import("~/server/api/publisher");
+      const { mixedContentStore, getMixedScopeKey } =
+        await import("~/lib/data/mixed-content/store");
+      const { orpcRouterClient } = await import("~/lib/orpc");
+      const reconcile = vi.spyOn(
+        orpcRouterClient.initial,
+        "reconcileApplicationState",
+      );
+      const controller = new AbortController();
+      const subscription = publisher.subscribe(`user:${USER_ID}`, {
+        signal: controller.signal,
+      });
+      const forwarding = (async () => {
+        try {
+          for await (const payload of subscription)
+            dataReconciliation.receivePublishedChunks([payload]);
+        } catch {
+          // Subscription abort during cleanup.
+        }
+      })();
+      const scopeKey = getMixedScopeKey(
+        { type: "view", viewId: VIEW_ID },
+        { saveStatus: "inbox", archiveStatus: "unread" },
+      );
+      try {
+        await sleep(0);
+        dataReconciliation.start();
+        dataReconciliation.sseConnectionChanged(true);
+        await waitFor(() => dataReconciliation.getState().trustedUpToDate);
+        expect(
+          mixedContentStore.getState().scopes[scopeKey]?.references,
+        ).toHaveLength(30);
+        const { queryMixedContentPage } =
+          await import("~/server/mixed-content/projection");
+        const scope = { type: "view" as const, viewId: VIEW_ID };
+        const contentStatus = {
+          saveStatus: "inbox" as const,
+          archiveStatus: "unread" as const,
+        };
+        const firstPage =
+          mixedContentStore.getState().scopes[scopeKey]!.references;
+        expect(firstPage.some(({ entityId }) => entityId === "unread-0")).toBe(
+          false,
+        );
+        const cursor = mixedContentStore.getState().scopes[scopeKey]!.cursor;
+        const nextPage = await queryMixedContentPage({
+          database,
+          userId: USER_ID,
+          scope,
+          contentStatus,
+          cursor,
+          limit: 30,
+        });
+        const { applyRequestedMixedContentPage } =
+          await import("~/lib/data/subscriptionCoordinator");
+        applyRequestedMixedContentPage({
+          scope,
+          contentStatus,
+          page: nextPage,
+          replacesScope: false,
+        });
+        expect(
+          mixedContentStore.getState().scopes[scopeKey]?.references,
+        ).toHaveLength(remainingTail ? 32 : 31);
+        expect(
+          mixedContentStore
+            .getState()
+            .scopes[scopeKey]?.references.some(
+              ({ entityId }) => entityId === "unread-0",
+            ),
+        ).toBe(true);
+        const requestsBeforeRemoval = reconcile.mock.calls.length;
+        await orpcRouterClient.viewFeeds.bulkRemoveFromView({
+          viewId: VIEW_ID,
+          feedIds: [FEED_ID],
+        });
+        await waitFor(
+          () =>
+            reconcile.mock.calls.length > requestsBeforeRemoval &&
+            dataReconciliation.getState().inFlight === null &&
+            dataReconciliation.getState().trustedUpToDate,
+        );
+        const fresh = await queryMixedContentPage({
+          database,
+          userId: USER_ID,
+          scope,
+          contentStatus,
+          limit: 500,
+        });
+        expect(fresh.references.slice(0, 30)).toEqual(firstPage);
+        expect(fresh.references).toHaveLength(
+          retainedByTag || remainingTail ? 31 : 30,
+        );
+        expect(
+          fresh.references.some(({ entityId }) => entityId === "unread-0"),
+        ).toBe(retainedByTag);
+        const retained = mixedContentStore.getState().scopes[scopeKey]!;
+        expect(retained.references).toEqual(
+          retainedByTag ? fresh.references : fresh.references.slice(0, 30),
+        );
+        expect(retained.pages).toHaveLength(retainedByTag ? 2 : 1);
+        expect(retained.hasMore).toBe(retainedByTag || remainingTail);
+        const otherKey = getMixedScopeKey(
+          { type: "view", viewId: 11 },
+          contentStatus,
+        );
+        expect(
+          mixedContentStore
+            .getState()
+            .scopes[otherKey]?.references.map(({ entityId }) => entityId),
+        ).toEqual(["unread-0"]);
+        const { feedItemsStore } = await import("~/lib/data/store");
+        expect(
+          feedItemsStore.getState().feedItemsDict["unread-0"],
+        ).toBeDefined();
+        expect(
+          feedItemsStore.getState().scopeFeedItemIds[`mixed:${scopeKey}`],
+        ).toHaveLength(retainedByTag ? 31 : 30);
+        if (remainingTail) {
+          const next = await queryMixedContentPage({
+            database,
+            userId: USER_ID,
+            scope,
+            contentStatus,
+            cursor: retained.cursor,
+            limit: 30,
+          });
+          applyRequestedMixedContentPage({
+            scope,
+            contentStatus,
+            page: next,
+            replacesScope: false,
+          });
+          expect(
+            mixedContentStore.getState().scopes[scopeKey]?.references,
+          ).toEqual(fresh.references);
+        }
+      } finally {
+        controller.abort();
+        await forwarding;
+      }
+    },
+  );
 });
