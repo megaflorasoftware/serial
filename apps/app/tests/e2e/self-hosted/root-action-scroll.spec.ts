@@ -4,7 +4,11 @@ import {
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_TURSO_PORT,
 } from "../fixtures/ports";
-import { cleanupUser, seedMultipleArticleData } from "../fixtures/seed-db";
+import {
+  cleanupUser,
+  seedMixedViewSectionCase,
+  seedMultipleArticleData,
+} from "../fixtures/seed-db";
 import type { Locator } from "@playwright/test";
 
 async function observeActionScrolling(container: Locator) {
@@ -87,6 +91,48 @@ for (const width of [390, 767, 768]) {
         });
       }
     }
+
+    test(`section mark as read ${mobile ? "does not scroll" : "still scrolls"} to the next section`, async ({
+      page,
+    }) => {
+      const fixture = await seedMixedViewSectionCase(
+        SELF_HOSTED_TURSO_PORT,
+        SELF_HOSTED_APP_PORT,
+        {
+          feedSectionFeedItem: true,
+          tagSectionFeedItem: true,
+          tagSectionBookmark: false,
+          uncategorizedFeedItem: false,
+          uncategorizedBookmark: false,
+        },
+        { saveStatus: "inbox", archiveStatus: "unread" },
+      );
+      testEmail = fixture.email;
+      await signIn({ page, email: fixture.email, password: fixture.password });
+      await page
+        .getByRole("radio", { name: fixture.viewName, exact: true })
+        .click();
+      const item = page.locator(
+        `article[data-item-id="${fixture.items.feedSectionFeedItem}"]`,
+      );
+      const nextItem = page.locator(
+        `article[data-item-id="${fixture.items.tagSectionFeedItem}"]`,
+      );
+      await expect(item).toBeVisible();
+      await expect(nextItem).toBeVisible();
+      const action = page
+        .getByRole("heading", { name: "Test Blog", exact: true })
+        .locator("..")
+        .getByRole("button", { name: "Mark as read", exact: true });
+      await action.scrollIntoViewIfNeeded();
+      const container = page.locator('[data-slot="sidebar-inset"]');
+      await observeActionScrolling(container);
+      await action.click();
+      await page.mouse.move(5, 5);
+      await expect(item).toHaveCount(0);
+      await expect(nextItem.getByRole("link")).toHaveClass(/md:bg-muted/);
+      await expectActionScrolling(container, mobile);
+    });
 
     test(`bulk mark as read ${mobile ? "does not scroll" : "still scrolls"} after refill`, async ({
       page,

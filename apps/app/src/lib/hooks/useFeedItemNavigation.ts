@@ -47,7 +47,7 @@ interface SectionInfo {
   isGrid: boolean;
 }
 
-interface SelectNextItemOptions {
+interface ItemSelectionOptions {
   deferScroll?: boolean;
 }
 
@@ -196,19 +196,24 @@ export function useFeedItemNavigation(
     [setSelectedItemId, scrollToItem],
   );
 
-  const selectItemAfterRender = useCallback(
-    (itemId: string | null, forceInstant: boolean = false) => {
+  const selectItemAfterAction = useCallback(
+    (
+      itemId: string | null,
+      { deferScroll = true }: ItemSelectionOptions = {},
+    ) => {
       keyboardNavActiveRef.current = true;
-      pendingItemScrollRef.current = { itemId, forceInstant };
+      pendingItemScrollRef.current =
+        !isMobile && deferScroll ? { itemId, forceInstant: false } : null;
       setSelectedItemId(itemId);
+      if (!isMobile && !deferScroll) scrollToItem(itemId);
     },
-    [setSelectedItemId],
+    [isMobile, scrollToItem, setSelectedItemId],
   );
 
   const selectNextItem = useCallback(
-    (currentIndex: number, options: SelectNextItemOptions = {}) => {
+    (currentIndex: number, options: ItemSelectionOptions = {}) => {
       const selectItemForTiming = options.deferScroll
-        ? selectItemAfterRender
+        ? selectItemAfterAction
         : selectItem;
       const currentItemId = items[currentIndex] ?? null;
       const nextItemId = getNextRootItemId(items, currentItemId);
@@ -220,7 +225,7 @@ export function useFeedItemNavigation(
         selectItemForTiming(null);
       }
     },
-    [items, selectItem, selectItemAfterRender],
+    [items, selectItem, selectItemAfterAction],
   );
 
   const selectItemAfterCurrentItemLeavesView = useCallback(
@@ -228,14 +233,9 @@ export function useFeedItemNavigation(
       const currentItemId = items[currentIndex] ?? null;
       const nextItemId = getNextRootItemId(items, currentItemId);
 
-      if (isMobile) {
-        if (nextItemId) keyboardNavActiveRef.current = true;
-        setSelectedItemId(nextItemId);
-        return;
-      }
-
       if (!nextItemId) {
         setSelectedItemId(null);
+        if (isMobile) return;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             getScrollContainer().scrollTo({ top: 0, behavior: "smooth" });
@@ -244,9 +244,9 @@ export function useFeedItemNavigation(
         return;
       }
 
-      selectItemAfterRender(nextItemId);
+      selectItemAfterAction(nextItemId);
     },
-    [isMobile, items, selectItemAfterRender, setSelectedItemId],
+    [isMobile, items, selectItemAfterAction, setSelectedItemId],
   );
 
   useEffect(() => {
@@ -727,5 +727,5 @@ export function useFeedItemNavigation(
     [setSelectedItemId],
   );
 
-  return { selectedItemId, handleMouseSelect, selectItem };
+  return { selectedItemId, handleMouseSelect, selectItemAfterAction };
 }
