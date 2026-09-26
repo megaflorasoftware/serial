@@ -31,13 +31,16 @@ export function FeedLoader() {
 
 // Full-width edge strip between the banners and the header on phones,
 // sticky so it stays visible while a reader page scrolls its header away.
+// The strip keeps its height while idle so content does not jump when a
+// refresh starts; the header gives up the same height below `md`.
 export function MobileFeedLoader() {
   const progress = useBackgroundRefreshProgress();
-  if (progress === null) return null;
 
   return (
-    <div className="sticky top-0 z-20 w-full md:hidden">
-      <Progress value={progress} className="h-1 rounded-none" />
+    <div className="sticky top-0 z-20 h-1 w-full md:hidden">
+      {progress !== null && (
+        <Progress value={progress} className="h-1 rounded-none" />
+      )}
     </div>
   );
 }
