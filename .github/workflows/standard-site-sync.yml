@@ -4,10 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "apps/www/src/content/guides/**"
       - "apps/www/src/content/releases/**"
+      - "apps/www/src/lib/releases.ts"
       - "apps/www/src/lib/standard-site/**"
       - "apps/www/scripts/sync-standard-site.ts"
+      - "apps/www/scripts/lib/standard-site-content.ts"
       - ".github/workflows/standard-site-sync.yml"
   workflow_dispatch:
     inputs:

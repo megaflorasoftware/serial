@@ -11,7 +11,7 @@ Built with [Astro](https://astro.build) and Tailwind CSS 4.
 - `/guides`, `/guides/[slug]` — guide articles (content in `src/content/guides`)
 - `/releases`, `/releases/[slug]` — release notes
 - `/releases/rss.xml` — release notes RSS feed
-- `/sitemap.xml`, `/.well-known/site.standard.publication`
+- `/sitemap.xml`, `/.well-known/site.standard.publication/releases`
 - `/api/og/{releases,guides}/[slug].png` — generated Open Graph images
 
 ## Content
@@ -38,4 +38,4 @@ Environment variables are documented in `.env.example`.
 
 ## Standard.Site sync
 
-`pnpm --filter @serial/www standard-site:sync` publishes guides and release notes as `site.standard.document` records to an AT Protocol PDS, reading the markdown in `src/content` directly. Use `--dry-run` to preview and `--allow-large-delete` to override the delete guard. Requires the `WWW_STANDARD_SITE_*` variables from `.env.example`. The GitHub workflow always supports manual runs when credentials are configured; automatic push-triggered syncs also require the repository variable `WWW_STANDARD_SITE_SYNC_ENABLED=true`.
+`pnpm --filter @serial/www standard-site:sync` publishes the same public release notes as RSS under the `Serial Releases` publication at `https://www.serial.tube/releases`, reading the markdown in `src/content/releases` directly. Guides are excluded; sync removes previously published guide documents while retaining the publication and release record identities. Publication verification is served at `/.well-known/site.standard.publication/releases`. Use `--dry-run` to preview and `--allow-large-delete` to override the delete guard. Requires the `WWW_STANDARD_SITE_*` variables from `.env.example`. The GitHub workflow always supports manual runs when credentials are configured; automatic push-triggered syncs also require the repository variable `WWW_STANDARD_SITE_SYNC_ENABLED=true`.
