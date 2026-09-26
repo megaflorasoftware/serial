@@ -7,7 +7,8 @@ import type {
   ReaderSocialPost,
   ReaderSocialVideo,
 } from "./model";
-import { facetArraySchema } from "./rich-text";
+import { facetArraySchema, resolveRichText } from "./rich-text";
+import type { FacetFeature } from "./adapter";
 import { block } from "./context";
 import type { AdapterContext } from "./context";
 import {
@@ -46,6 +47,9 @@ import { validEntriesSchema } from "../parse";
  */
 
 const MAX_EMBEDDED_IMAGES = 4;
+
+/** `app.bsky.richtext.facet` features; a tag facet carries no destination the reader draws. */
+const SOCIAL_POST_FACET_FEATURES: readonly FacetFeature[] = ["mention", "link"];
 
 /** Self labels whose media the reader keeps off screen. */
 const MEDIA_HIDING_LABELS = new Set([
@@ -345,10 +349,10 @@ export function socialPost(
     url,
     author,
     siteUrl,
-    text: context.richText({
-      plaintext: record.text,
-      facets: record.facets,
-    }),
+    text: resolveRichText(
+      { plaintext: record.text, facets: record.facets },
+      { ...context.text, features: new Set(SOCIAL_POST_FACET_FEATURES) },
+    ),
     createdAt: record.createdAt ?? null,
     images: mediaHidden ? [] : embeddedImages(media?.images, parts.did),
     external: withoutHiddenThumb(

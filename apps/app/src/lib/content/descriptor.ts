@@ -1,30 +1,30 @@
 import { z } from "zod";
+import {
+  CONTENT_TYPE,
+  contentMediumOf,
+  contentPlatformSchema,
+  contentTypeSchema,
+} from "@serial/content";
 
-export const CONTENT_PLATFORM = {
-  WEBSITE: "website",
-  YOUTUBE: "youtube",
-  PEERTUBE: "peertube",
-  NEBULA: "nebula",
-} as const;
+export {
+  CONTENT_PLATFORM,
+  CONTENT_PLATFORMS,
+  CONTENT_TYPE,
+  contentMediumOf,
+  contentPlatformSchema,
+  contentTypeSchema,
+  isTextPlatform,
+  isVideoPlatform,
+  platformsOfMedium,
+  TEXT_PLATFORMS,
+  VIDEO_PLATFORMS,
+} from "@serial/content";
+export type { ContentPlatform, ContentType } from "@serial/content";
 
-export const contentPlatformSchema = z.enum([
-  CONTENT_PLATFORM.WEBSITE,
-  CONTENT_PLATFORM.YOUTUBE,
-  CONTENT_PLATFORM.PEERTUBE,
-  CONTENT_PLATFORM.NEBULA,
-]);
-export type ContentPlatform = z.infer<typeof contentPlatformSchema>;
-
-export const CONTENT_TYPE = {
-  TEXT: "text",
-  VIDEO: "video",
-} as const;
-
-export const contentTypeSchema = z.enum([
-  CONTENT_TYPE.TEXT,
-  CONTENT_TYPE.VIDEO,
-]);
-export type ContentType = z.infer<typeof contentTypeSchema>;
+/** The route an item of a platform opens in: the reader for text, the player for video. */
+export function itemDestinationOf(platform: string) {
+  return contentMediumOf(platform) === CONTENT_TYPE.TEXT ? "read" : "watch";
+}
 
 export const VIDEO_ORIENTATION = {
   HORIZONTAL: "horizontal",

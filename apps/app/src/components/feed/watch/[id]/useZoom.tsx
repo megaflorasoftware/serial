@@ -3,7 +3,11 @@
 import { useLocation } from "@tanstack/react-router";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
-import type { ContentPlatform } from "~/lib/content/descriptor";
+import {
+  CONTENT_PLATFORM,
+  isTextPlatform,
+  isVideoPlatform as isVideoPlatformOf,
+} from "~/lib/content/descriptor";
 import {
   articleZoomAtom,
   longformVideoZoomAtom,
@@ -18,8 +22,6 @@ export const MAX_ZOOM = 6;
 export const MIN_ZOOM_VERTICAL = 0;
 export const MAX_ZOOM_VERTICAL = 3;
 
-const VIDEO_PLATFORMS: ContentPlatform[] = ["youtube", "peertube"];
-const ARTICLE_PLATFORMS: ContentPlatform[] = ["website"];
 
 /**
  * The zoom for what is on screen. A /read item that is not known yet takes
@@ -74,8 +76,12 @@ export function useZoom() {
   );
   const [articleZoom, setArticleZoom] = useAtom(articleZoomAtom);
 
-  const isVideoPlatform = VIDEO_PLATFORMS.includes(platform);
-  const isArticlePlatform = ARTICLE_PLATFORMS.includes(platform);
+  // Nebula plays on its own site, so its zoom is never on screen here.
+  const isVideoPlatform =
+    platform !== "" &&
+    isVideoPlatformOf(platform) &&
+    platform !== CONTENT_PLATFORM.NEBULA;
+  const isArticlePlatform = platform !== "" && isTextPlatform(platform);
   const isUnknownReadItem = !platform && !!contentId;
 
   // Derived on render, not in an effect, so the server's HTML and the first

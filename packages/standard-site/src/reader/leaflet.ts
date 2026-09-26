@@ -30,6 +30,7 @@ import type {
 import { richTextSchema } from "./rich-text";
 import { blobRefSchema } from "../lexicons";
 import { validEntriesSchema } from "../parse";
+import { defineAdapter } from "./adapter";
 
 const PREFIX = "pub.leaflet.blocks.";
 
@@ -72,13 +73,19 @@ const pageSchema = z.object({
   blocks: validEntriesSchema(linearBlockSchema).optional(),
 });
 
+const LEAFLET_CONTENT_TYPE = "pub.leaflet.content";
+
 // Pages parse one at a time so a malformed page drops itself, not the document.
+// An overflowed record may carry no inline pages at all.
 export const leafletContentSchema = z.object({
-  $type: z.literal("pub.leaflet.content"),
-  pages: z.array(z.unknown()),
+  $type: z.literal(LEAFLET_CONTENT_TYPE),
+  pages: z.array(z.unknown()).optional(),
+  blobPages: z.object({ ref: z.object({ $link: z.string() }) }).optional(),
 });
 
 export type LeafletContent = z.infer<typeof leafletContentSchema>;
+
+const leafletBlobPagesSchema = z.array(z.unknown());
 
 const LINEAR_DOCUMENT_TYPE = "pub.leaflet.pages.linearDocument";
 const CANVAS_TYPE = "pub.leaflet.pages.canvas";
@@ -370,7 +377,7 @@ export function deriveLeafletContent(
   context: AdapterContext,
 ): ReaderBlock[] {
   const blocks: ReaderBlock[] = [];
-  for (const entry of content.pages) {
+  for (const entry of content.pages ?? []) {
     const page = pageSchema.safeParse(entry);
     if (!page.success) continue;
     if (page.data.$type === CANVAS_TYPE) {
@@ -389,3 +396,34 @@ export function deriveLeafletContent(
   }
   return blocks;
 }
+
+/**
+ * Leaflet consumers must ignore `pages` when `blobPages` is set: the blob is
+ * the JSON page array.
+ */
+export const leafletAdapter = defineAdapter<LeafletContent>({
+  contentType: LEAFLET_CONTENT_TYPE,
+  platform: "leaflet",
+  schema: leafletContentSchema,
+  overflowBlobCid: (content) => content.blobPages?.ref.$link ?? null,
+  inlineOverflow: (content, blob) => {
+    const pages = leafletBlobPagesSchema.safeParse(blob);
+    return pages.success
+      ? { $type: LEAFLET_CONTENT_TYPE, pages: pages.data }
+      : null;
+  },
+  derive: deriveLeafletContent,
+  facetFeatures: [
+    "bold",
+    "italic",
+    "code",
+    "strikethrough",
+    "underline",
+    "highlight",
+    "link",
+    "didMention",
+    "atMention",
+    "footnote",
+  ],
+  referenceCollections: [],
+});

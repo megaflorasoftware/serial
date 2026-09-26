@@ -12,11 +12,13 @@ import type { RecordLookup } from "../record-preview";
 import { buildPdslsUrl, buildBlueskyProfileUrl } from "../uris";
 import { safeLinkUrl } from "../urls";
 import { validEntriesSchema } from "../parse";
+import type { FacetFeature } from "./adapter";
 
 /**
- * The three platforms share one rich-text model: plaintext plus byte-indexed facets
- * whose features name a formatting or link. Feature $types differ per platform only
- * in their NSID prefix, so features are matched on the fragment after `#`.
+ * Every platform shares one rich-text model: plaintext plus byte-indexed facets
+ * whose features name a formatting or link. The mechanics here are shared;
+ * which feature names a platform defines is the adapter's table, matched on
+ * the fragment after `#` since the NSID prefix is the only per-platform part.
  */
 export const facetSchema = z.object({
   index: z.object({ byteStart: z.int(), byteEnd: z.int() }),
@@ -43,6 +45,8 @@ type Feature = Facet["features"][number];
 export type RichTextContext = {
   footnotes: ReaderFootnote[];
   records: RecordLookup;
+  /** Feature names the platform defines; anything else is ignored. */
+  features: ReadonlySet<string>;
   /** Numbers already given to ids, so a second reference reuses the first. */
   footnoteNumbers: Map<string, number>;
   /** How many footnote texts are being resolved inside one another right now. */
@@ -52,12 +56,30 @@ export type RichTextContext = {
 /** Footnote text nested deeper than this keeps its plaintext and drops its facets. */
 export const MAX_FOOTNOTE_NESTING_DEPTH = 32;
 
+/** Every feature the shared mechanics know; the default when no adapter narrows it. */
+export const ALL_FACET_FEATURES: readonly FacetFeature[] = [
+  "bold",
+  "italic",
+  "code",
+  "strikethrough",
+  "underline",
+  "highlight",
+  "link",
+  "webMention",
+  "mention",
+  "didMention",
+  "atMention",
+  "footnote",
+];
+
 export function richTextContext(
   records: RecordLookup = () => undefined,
+  features: readonly FacetFeature[] = ALL_FACET_FEATURES,
 ): RichTextContext {
   return {
     footnotes: [],
     records,
+    features: new Set(features),
     footnoteNumbers: new Map(),
     footnoteDepth: 0,
   };
@@ -84,7 +106,9 @@ function contributionFor(
   feature: Feature,
   context: RichTextContext,
 ): Contribution | null {
-  switch (featureName(feature)) {
+  const name = featureName(feature);
+  if (!context.features.has(name)) return null;
+  switch (name as FacetFeature) {
     case "bold":
       return { marks: { bold: true } };
     case "italic":

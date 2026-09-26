@@ -128,6 +128,7 @@
     "@sendgrid/mail": "^8.1.6",
     "@sentry/tanstackstart-react": "^10.64.0",
     "@serial/bookmark-capture": "workspace:*",
+    "@serial/content": "workspace:*",
     "@serial/extension-identity": "workspace:*",
     "@serial/feed-discovery": "workspace:*",
     "@serial/standard-site": "workspace:*",

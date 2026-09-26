@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  isBlockNativeDocument,
   parseDocumentRecord,
   parsePublicationRecord,
   parseSubscriptionRecord,
 } from "../src/lexicons";
+import { isBlockNativeDocument } from "../src/reader";
 import { buildSubscriptionRecordKey } from "../src/subscription-key";
 import {
   ARTICLE_SANITIZE_SCHEMA,

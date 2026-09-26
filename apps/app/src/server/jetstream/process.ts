@@ -18,7 +18,10 @@ import {
 } from "../rss/documentObservation";
 import { enrichObservationImages } from "../rss/observationImages";
 import { writeObservedItems } from "../rss/writeItems";
-import { applyOriginMetadata } from "../rss/originMetadata";
+import {
+  applyOriginMetadata,
+  recomputeFeedPlatform,
+} from "../rss/originMetadata";
 import { readFeedHttp } from "../rss/feedHttp";
 import {
   referenceReaders,
@@ -317,12 +320,28 @@ export async function processOriginDocuments(
   })) {
     void unused;
   }
+  // The retained sources decide the Feed's platform; a batch that wrote nothing
+  // readable cannot have changed it.
+  const platformChanged = committed.size
+    ? await runDatabaseWrite(database, () =>
+        database.transaction(
+          async (tx) => {
+            const latest = await loadOrigin(tx, originId);
+            return latest
+              ? recomputeFeedPlatform(tx, latest.feed, originId)
+              : false;
+          },
+          { behavior: "immediate" },
+        ),
+      )
+    : false;
   if (committed.size || removed.size)
     await options.publish?.({
       userId: row.account.id,
       feedId: row.feed.id,
       items: [...committed.values()],
       removedItemIds: [...removed],
+      ...(platformChanged ? { metadataChanged: true } : {}),
     });
 }
 

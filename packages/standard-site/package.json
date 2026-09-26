@@ -11,6 +11,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@serial/content": "workspace:*",
     "multiformats": "^13.4.2",
     "rehype-parse": "^9.0.1",
     "rehype-sanitize": "^6.0.0",

@@ -41,7 +41,11 @@ import type {
   RSSFeedWithMetadata,
 } from "./types";
 import { normalizedBookmarkUrlOverride } from "~/server/bookmarks/url";
-import { CONTENT_TYPE } from "~/lib/content/descriptor";
+import {
+  CONTENT_TYPE,
+  contentMediumOf,
+  isTextPlatform,
+} from "~/lib/content/descriptor";
 import { env } from "~/env";
 import { dbSemaphore } from "~/lib/semaphore";
 import { workerPool } from "~/lib/workerPool";
@@ -238,7 +242,7 @@ async function insertFeedItems(
 
   const targetFeed = databaseFeeds.find((feed) => feed.id === feedId);
   const feedContentType =
-    targetFeed?.platform === "website" ? CONTENT_TYPE.TEXT : CONTENT_TYPE.VIDEO;
+    targetFeed ? contentMediumOf(targetFeed.platform) : CONTENT_TYPE.VIDEO;
   const feedItemList: Array<typeof feedItems.$inferInsert> = items.map(
     (item) => {
       let normalizedUrl: string | null = null;
@@ -382,7 +386,7 @@ export async function* fetchAndInsertFeedData(
       }
 
       const writeItems = async (data: RSSFeedWithMetadata) => {
-        if (feed.platform === "website") {
+        if (isTextPlatform(feed.platform)) {
           const metadataChanged = await refreshOriginMetadata(
             context.db,
             fetchable,
@@ -488,7 +492,8 @@ export async function* fetchAndInsertFeedData(
         feedData = await fetchPeerTubeFeedData(fetchable, cached);
       } else if (feed.platform === "nebula") {
         feedData = await fetchNebulaFeedData(fetchable, cached);
-      } else if (feed.platform === "website") {
+      } else if (isTextPlatform(feed.platform)) {
+        // Every text Feed's RSS origin is a plain syndication feed.
         feedData = await fetchWebsiteFeedData(fetchable, cached);
       }
 

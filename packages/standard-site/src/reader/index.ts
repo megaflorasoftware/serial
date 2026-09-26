@@ -1,16 +1,11 @@
 import { z } from "zod";
 import { AdapterContext, MAX_BLOCK_NESTING_DEPTH } from "./context";
-import { deriveLeafletContent, leafletContentSchema } from "./leaflet";
-import { deriveOffprintContent, offprintContentSchema } from "./offprint";
-import { derivePcktItems, pcktBlobSchema, pcktContentSchema } from "./pckt";
 import { boundReaderDocument } from "./bounds";
 import type { ReaderDocument, ReaderSummary } from "./model";
 import { richTextPlaintext } from "./rich-text";
-import {
-  BLOCK_NATIVE_CONTENT_TYPES,
-  isBlockNativeContentType,
-  parseDocumentRecord,
-} from "../lexicons";
+import { adapterFor } from "./registry";
+import { parseDocumentRecord } from "../lexicons";
+import type { DocumentRecord } from "../lexicons";
 import { parseLosslessJson } from "../lossless-json";
 import { documentPublicationUri } from "../record-preview";
 import { socialPostReferences } from "./social";
@@ -19,6 +14,16 @@ import { base64ToBytes } from "../reader-body";
 import type { DocumentSource, SourceReaderBody } from "../reader-body";
 
 export * from "./model";
+export type { FacetFeature, PlatformAdapter } from "./adapter";
+export {
+  ADAPTER_REFERENCE_COLLECTIONS,
+  adapterFor,
+  BLOCK_NATIVE_CONTENT_TYPES,
+  isBlockNativeContentType,
+  PLATFORM_ADAPTERS,
+  platformOfContentType,
+} from "./registry";
+export { PCKT_GALLERY_COLLECTION } from "./pckt";
 export {
   boundReaderDocument,
   READER_DOCUMENT_BLOCK_LIMIT,
@@ -44,89 +49,51 @@ export {
 } from "./rich-text";
 export type { Facet, RichText, RichTextContext } from "./rich-text";
 
-const leafletBlobPagesSchema = z.array(z.unknown());
-
-const leafletOverflowSchema = z.object({
-  blobPages: z.object({ ref: z.object({ $link: z.string() }) }).optional(),
-});
-
 function decodeJsonBlob(bytes: Uint8Array): unknown {
   return parseLosslessJson(new TextDecoder().decode(bytes));
 }
 
 /** The one overflow blob a block-native content object may point at. */
 export function overflowBlobCid(content: unknown): string | null {
-  const typed = z.looseObject({ $type: z.string() }).safeParse(content);
-  if (!typed.success) return null;
-  switch (typed.data.$type) {
-    case BLOCK_NATIVE_CONTENT_TYPES.leaflet: {
-      const overflow = leafletOverflowSchema.safeParse(typed.data);
-      return overflow.success
-        ? (overflow.data.blobPages?.ref.$link ?? null)
-        : null;
-    }
-    case BLOCK_NATIVE_CONTENT_TYPES.pckt: {
-      const parsed = pcktContentSchema.safeParse(typed.data);
-      if (!parsed.success || parsed.data.items?.length) return null;
-      return parsed.data.blob?.ref.$link ?? null;
-    }
-    default:
-      return null;
-  }
+  const adapter = adapterFor(content);
+  const parsed = adapter?.schema.safeParse(content);
+  return parsed?.success ? adapter!.overflowBlobCid(parsed.data) : null;
 }
 
-/**
- * Pulls overflowed content back inline. Leaflet consumers must ignore `pages`
- * when `blobPages` is set; pckt uses `blob` only when `items` is absent or empty.
- */
+/** Pulls overflowed content back inline; null when the blob is absent or malformed. */
 function inlineOverflow(content: unknown, bytes: Uint8Array | null): unknown {
-  const cid = overflowBlobCid(content);
-  if (cid === null) return content;
+  const adapter = adapterFor(content);
+  const parsed = adapter?.schema.safeParse(content);
+  if (!adapter || !parsed?.success) return null;
+  const cid = adapter.overflowBlobCid(parsed.data);
+  if (cid === null) return parsed.data;
   if (!bytes) return null;
-  const typed = content as { $type: string };
-  const decoded = decodeJsonBlob(bytes);
-  if (typed.$type === BLOCK_NATIVE_CONTENT_TYPES.leaflet) {
-    const pages = leafletBlobPagesSchema.safeParse(decoded);
-    return pages.success
-      ? { $type: BLOCK_NATIVE_CONTENT_TYPES.leaflet, pages: pages.data }
-      : null;
-  }
-  const items = pcktBlobSchema.safeParse(decoded);
-  return items.success
-    ? { $type: BLOCK_NATIVE_CONTENT_TYPES.pckt, items: items.data }
-    : null;
+  return adapter.inlineOverflow(parsed.data, decodeJsonBlob(bytes));
 }
 
 /**
  * Derives the Reader document from content with no blob overflow left. Null
- * when the content is not one of the three block-native shapes. Exported for
- * tests and for the reference discovery pass.
+ * when no registered adapter reads the content's `$type`. Exported for tests
+ * and for the reference discovery pass.
  */
 export function deriveResolvedContent(
   content: unknown,
   did: string,
   records?: RecordLookup,
 ): ReaderDocument | null {
-  const context = new AdapterContext(did, records);
-  const leaflet = leafletContentSchema.safeParse(content);
-  if (leaflet.success)
-    return boundReaderDocument(
-      deriveLeafletContent(leaflet.data, context),
-      context.footnotes,
-    );
-  const offprint = offprintContentSchema.safeParse(content);
-  if (offprint.success)
-    return boundReaderDocument(
-      deriveOffprintContent(offprint.data, context),
-      context.footnotes,
-    );
-  const pckt = pcktContentSchema.safeParse(content);
-  if (pckt.success && pckt.data.items)
-    return boundReaderDocument(
-      derivePcktItems(pckt.data.items, context),
-      context.footnotes,
-    );
-  return null;
+  const adapter = adapterFor(content);
+  const parsed = adapter?.schema.safeParse(content);
+  if (!adapter || !parsed?.success) return null;
+  const context = new AdapterContext(did, records, adapter.facetFeatures);
+  return boundReaderDocument(
+    adapter.derive(parsed.data, context),
+    context.footnotes,
+  );
+}
+
+/** Whether a document's content is a registered platform content type. */
+export function isBlockNativeDocument(document: DocumentRecord) {
+  return adapterFor(document.content) !== null;
 }
 
 export const MAX_EMBEDDED_RECORDS_PER_DOCUMENT = 16;
@@ -196,8 +163,7 @@ export function resolveDocumentSourceContent(source: DocumentSource) {
   const value = documentValueSchema.safeParse(parseLosslessJson(source.record));
   if (!value.success) return null;
   const content = value.data.content;
-  if (!isBlockNativeContentType((content as { $type?: string })?.$type))
-    return null;
+  if (!adapterFor(content)) return null;
   const cid = overflowBlobCid(content);
   const blob = cid ? source.blobs.find((entry) => entry.cid === cid) : null;
   return inlineOverflow(content, blob ? base64ToBytes(blob.bytes) : null);

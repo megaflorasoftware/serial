@@ -230,6 +230,13 @@ describe("extension live DOM Bookmark capture", () => {
       platform: "nebula",
       contentType: "video",
     },
+    {
+      name: "Leaflet page",
+      url: "https://leaflet.pub/lish/example/post",
+      head: "",
+      platform: "website",
+      contentType: "text",
+    },
   ] as const)("fills general preview defaults for $name", (fixture) => {
     const document = new JSDOM(
       `<!doctype html><html><head>

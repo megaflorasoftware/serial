@@ -9,6 +9,7 @@ import type {
   DatabaseFeedCategory,
 } from "~/server/db/schema";
 import type { ContentPlatform } from "~/lib/content/descriptor";
+import { isTextPlatform } from "~/lib/content/descriptor";
 import type { ContentFilter } from "~/lib/views/contentFilter";
 import {
   CONTENT_FILTER_OPTION,
@@ -16,11 +17,6 @@ import {
   hasContentFilterOption,
 } from "~/lib/views/contentFilter";
 import { feedItems } from "~/server/db/schema";
-
-/** Video platforms that support orientation filtering */
-export const VIDEO_PLATFORMS = ["youtube", "peertube", "nebula"] as const;
-
-export type VideoPlatform = (typeof VIDEO_PLATFORMS)[number];
 
 /**
  * Check whether a Feed can produce items accepted by a View filter.
@@ -33,7 +29,7 @@ export function isFeedCompatibleWithContentFilter(
   feedPlatform: ContentPlatform,
   contentFilter: ContentFilter,
 ): boolean {
-  if (feedPlatform === "website") {
+  if (isTextPlatform(feedPlatform)) {
     return hasContentFilterOption(contentFilter, CONTENT_FILTER_OPTION.TEXT);
   }
   if (feedPlatform === "youtube") {
