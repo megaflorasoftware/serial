@@ -200,7 +200,7 @@ describe("mixed-content page retention", () => {
           hasMore: true,
         },
       }),
-    ).toEqual({ firstPageChanged: false });
+    ).toEqual({ replacedScope: false });
     expect(
       mixedContentStore.getState().scopes[scopeKey]?.references,
     ).toHaveLength(90);
@@ -218,7 +218,7 @@ describe("mixed-content page retention", () => {
           hasMore: false,
         },
       }),
-    ).toEqual({ firstPageChanged: true });
+    ).toEqual({ replacedScope: true });
     expect(mixedContentStore.getState().scopes[scopeKey]?.references).toEqual(
       [...changedReferences].reverse(),
     );
@@ -249,7 +249,7 @@ describe("mixed-content page retention", () => {
           hasMore: false,
         },
       }),
-    ).toEqual({ firstPageChanged: false });
+    ).toEqual({ replacedScope: false });
 
     const scope = mixedContentStore.getState().scopes[scopeKey];
     expect(scope?.references).toHaveLength(90);
