@@ -295,9 +295,7 @@ describe("Reader document content", () => {
     });
     const shown = render(document([html]));
     const frame = shown.querySelector("iframe")!;
-    expect(frame.parentElement?.getAttribute("data-reader-frame")).toBe(
-      "html",
-    );
+    expect(frame.parentElement?.getAttribute("data-reader-frame")).toBe("html");
     expect(frame.getAttribute("sandbox")).toBe(SANDBOXED_FRAME_SANDBOX);
     expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
     expect(frame.getAttribute("sandbox")).not.toContain("allow-same-origin");

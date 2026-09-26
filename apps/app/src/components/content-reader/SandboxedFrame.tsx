@@ -54,8 +54,7 @@ export function sandboxedFrameDocument(html: string) {
 
 /** A frame's source: authored markup rendered through `srcdoc`, or an `https` page. */
 export type SandboxedFrameSource =
-  | { kind: "html"; html: string }
-  | { kind: "src"; src: string };
+  { kind: "html"; html: string } | { kind: "src"; src: string };
 
 export type SandboxedFrameProps = {
   source: SandboxedFrameSource;

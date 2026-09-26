@@ -1,7 +1,10 @@
 "use client";
 
 import { parseYouTubeReference } from "@serial/standard-site";
-import type { ReaderAspectRatio, YouTubeReference } from "@serial/standard-site";
+import type {
+  ReaderAspectRatio,
+  YouTubeReference,
+} from "@serial/standard-site";
 import type { SandboxedFrameSource } from "~/components/content-reader/SandboxedFrame";
 import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
@@ -67,10 +70,12 @@ export function ExternalContent({
       />
     );
   }
+  if (!isHttps(source.src)) return notice;
   const youtube = derivedYouTube ?? parseYouTubeReference(source.src);
   if (youtube)
-    return <ArticleVideoEmbed videoId={youtube.videoId} start={youtube.start} />;
-  if (!isHttps(source.src)) return notice;
+    return (
+      <ArticleVideoEmbed videoId={youtube.videoId} start={youtube.start} />
+    );
   return (
     <SandboxedFrame
       source={source}
@@ -79,11 +84,4 @@ export function ExternalContent({
       aspectRatio={aspectRatio}
     />
   );
-}
-
-/** A stored `height` attribute, accepted within the same range as authored frames. */
-export function storedFrameHeight(value: string | undefined) {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const height = Number(value);
-  return height >= 16 && height <= 1600 ? height : null;
 }

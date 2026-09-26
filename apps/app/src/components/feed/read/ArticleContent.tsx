@@ -3,10 +3,7 @@
 import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
-import {
-  ExternalContent,
-  storedFrameHeight,
-} from "~/components/content-reader/ExternalContent";
+import { ExternalContent } from "~/components/content-reader/ExternalContent";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 
@@ -129,4 +126,11 @@ export function ArticleContent({
   const nodes = Array.isArray(parsed) ? parsed : [parsed];
 
   return <>{flattenReaderImages(nodes)}</>;
+}
+
+/** A stored `height` attribute, accepted within the same range as authored frames. */
+function storedFrameHeight(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const height = Number(value);
+  return height >= 16 && height <= 1600 ? height : null;
 }

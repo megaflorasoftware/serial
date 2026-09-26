@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtomValue } from "jotai";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
 import { isDisconnectedAtom } from "~/lib/data/atoms";
 import { useFlagState } from "~/lib/hooks/useFlagState";
@@ -23,14 +23,9 @@ export function useExternalContentVisibility(
     itemId,
     online: !offline,
   });
-  useEffect(() => {
-    if (offline) return;
-    setLatched((current) =>
-      current.itemId === itemId && current.online
-        ? current
-        : { itemId, online: true },
-    );
-  }, [itemId, offline]);
-  const online = latched.itemId === itemId ? latched.online : !offline;
+  const online = !offline || (latched.itemId === itemId && latched.online);
+  if (latched.itemId !== itemId || latched.online !== online) {
+    setLatched({ itemId, online });
+  }
   return preference === "hide" || !online ? "hide" : "show";
 }

@@ -173,6 +173,130 @@ function Blocks({
   );
 }
 
+function ListBlock({
+  block,
+  options,
+}: {
+  block: Extract<ReaderBlock, { kind: "list" }>;
+  options: RenderOptions;
+}) {
+  const Tag = block.ordered ? "ol" : "ul";
+  const task = block.items.some((item) => item.checked !== null);
+  return (
+    <Tag
+      start={
+        block.ordered && block.start !== null && block.start !== 1
+          ? block.start
+          : undefined
+      }
+      className={task ? "contains-task-list" : undefined}
+    >
+      {block.items.map((item, index) => (
+        <li
+          key={index}
+          className={item.checked !== null ? "task-list-item" : undefined}
+        >
+          {item.checked !== null && (
+            <input type="checkbox" disabled checked={item.checked} readOnly />
+          )}{" "}
+          <Blocks blocks={item.content} options={options} />
+        </li>
+      ))}
+    </Tag>
+  );
+}
+
+function TableBlock({
+  block,
+  options,
+}: {
+  block: Extract<ReaderBlock, { kind: "table" }>;
+  options: RenderOptions;
+}) {
+  return (
+    <table>
+      <tbody>
+        {block.rows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {row.map((cell, cellIndex) => {
+              const Tag = cell.header ? "th" : "td";
+              return (
+                <Tag
+                  key={cellIndex}
+                  colSpan={cell.colspan ?? undefined}
+                  rowSpan={cell.rowspan ?? undefined}
+                >
+                  <Blocks blocks={cell.content} options={options} />
+                </Tag>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ImageGroupBlock({
+  block,
+}: {
+  block: Extract<ReaderBlock, { kind: "imageGroup" }>;
+}) {
+  const { layout } = block;
+  const grid = layout.mode === "grid" ? layout : null;
+  const picture = (index: number) => (
+    <Picture
+      key={index}
+      image={block.images[index]!}
+      index={index}
+      fill={grid !== null}
+    />
+  );
+  return (
+    <figure
+      data-reader-figure="group"
+      data-reader-align={block.align ?? undefined}
+      data-reader-image-group={layout.mode}
+      data-reader-grid-ratio={grid?.ratio ?? undefined}
+      style={
+        grid
+          ? ({
+              "--reader-grid-columns": grid.columns,
+              "--reader-grid-columns-narrow": Math.min(grid.columns, 2),
+            } as CSSProperties)
+          : undefined
+      }
+    >
+      {block.title && <p data-reader-image-group-title>{block.title}</p>}
+      <Pictures images={block.images}>
+        {layout.mode === "carousel" ? (
+          <ReaderImageCarousel
+            count={block.images.length}
+            renderSlide={picture}
+          />
+        ) : (
+          <div data-reader-image-group-items>
+            {block.images.map((image, index) =>
+              grid && !grid.ratio ? (
+                <div key={index} style={cellStyle(image)}>
+                  {picture(index)}
+                </div>
+              ) : (
+                picture(index)
+              ),
+            )}
+          </div>
+        )}
+      </Pictures>
+      {block.caption && (
+        <figcaption>
+          <RichText content={block.caption} />
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 function Block({
   block,
   options,
@@ -225,37 +349,8 @@ function Block({
           </p>
         </aside>
       );
-    case "list": {
-      const Tag = block.ordered ? "ol" : "ul";
-      const task = block.items.some((item) => item.checked !== null);
-      return (
-        <Tag
-          start={
-            block.ordered && block.start !== null && block.start !== 1
-              ? block.start
-              : undefined
-          }
-          className={task ? "contains-task-list" : undefined}
-        >
-          {block.items.map((item, index) => (
-            <li
-              key={index}
-              className={item.checked !== null ? "task-list-item" : undefined}
-            >
-              {item.checked !== null && (
-                <input
-                  type="checkbox"
-                  disabled
-                  checked={item.checked}
-                  readOnly
-                />
-              )}{" "}
-              <Blocks blocks={item.content} options={options} />
-            </li>
-          ))}
-        </Tag>
-      );
-    }
+    case "list":
+      return <ListBlock block={block} options={options} />;
     case "code":
       return (
         <pre style={alignStyle(block)}>
@@ -277,28 +372,7 @@ function Block({
         </pre>
       );
     case "table":
-      return (
-        <table>
-          <tbody>
-            {block.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {row.map((cell, cellIndex) => {
-                  const Tag = cell.header ? "th" : "td";
-                  return (
-                    <Tag
-                      key={cellIndex}
-                      colSpan={cell.colspan ?? undefined}
-                      rowSpan={cell.rowspan ?? undefined}
-                    >
-                      <Blocks blocks={cell.content} options={options} />
-                    </Tag>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <TableBlock block={block} options={options} />;
     case "image":
       return (
         <figure
@@ -315,61 +389,8 @@ function Block({
           )}
         </figure>
       );
-    case "imageGroup": {
-      const { layout } = block;
-      const grid = layout.mode === "grid" ? layout : null;
-      const picture = (index: number) => (
-        <Picture
-          key={index}
-          image={block.images[index]!}
-          index={index}
-          fill={grid !== null}
-        />
-      );
-      return (
-        <figure
-          data-reader-figure="group"
-          data-reader-align={block.align ?? undefined}
-          data-reader-image-group={layout.mode}
-          data-reader-grid-ratio={grid?.ratio ?? undefined}
-          style={
-            grid
-              ? ({
-                  "--reader-grid-columns": grid.columns,
-                  "--reader-grid-columns-narrow": Math.min(grid.columns, 2),
-                } as CSSProperties)
-              : undefined
-          }
-        >
-          {block.title && <p data-reader-image-group-title>{block.title}</p>}
-          <Pictures images={block.images}>
-            {layout.mode === "carousel" ? (
-              <ReaderImageCarousel
-                count={block.images.length}
-                renderSlide={picture}
-              />
-            ) : (
-              <div data-reader-image-group-items>
-                {block.images.map((image, index) =>
-                  grid && !grid.ratio ? (
-                    <div key={index} style={cellStyle(image)}>
-                      {picture(index)}
-                    </div>
-                  ) : (
-                    picture(index)
-                  ),
-                )}
-              </div>
-            )}
-          </Pictures>
-          {block.caption && (
-            <figcaption>
-              <RichText content={block.caption} />
-            </figcaption>
-          )}
-        </figure>
-      );
-    }
+    case "imageGroup":
+      return <ImageGroupBlock block={block} />;
     case "divider":
       return <hr />;
     case "break":

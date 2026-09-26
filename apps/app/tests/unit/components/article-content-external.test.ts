@@ -40,6 +40,16 @@ afterEach(() => {
 });
 
 describe("HTML body External content", () => {
+  it("shows a notice for an insecure YouTube source", () => {
+    const container = render(
+      '<iframe src="http://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>',
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(
+      container.querySelector("[data-reader-notice='externalContent']"),
+    ).not.toBeNull();
+  });
+
   it("routes a stored YouTube frame to the video embed", () => {
     const container = render(
       '<p>Intro</p><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42" height="315"></iframe>',
@@ -83,7 +93,9 @@ describe("HTML body External content", () => {
     );
     const frames = container.querySelectorAll("iframe");
     expect(frames).toHaveLength(1);
-    expect(frames[0]?.getAttribute("sandbox")).toBe(SANDBOXED_SRC_FRAME_SANDBOX);
+    expect(frames[0]?.getAttribute("sandbox")).toBe(
+      SANDBOXED_SRC_FRAME_SANDBOX,
+    );
     expect(frames[0]?.hasAttribute("allow")).toBe(true);
     expect(frames[0]?.getAttribute("allow")).not.toContain("autoplay");
     expect(

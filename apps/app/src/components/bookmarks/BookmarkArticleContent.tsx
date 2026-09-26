@@ -46,7 +46,7 @@ function legacyYouTubePlaceholder(
   noticeHref: string,
   originActionLabel: string,
 ): HTMLReactParserOptions["replace"] {
-  return (node) => {
+  return function LegacyYouTubePlaceholder(node) {
     if (!(node instanceof Element)) return;
     if (node.attribs["data-serial-embed"] !== "youtube") return;
     const videoId = node.attribs["data-video-id"];

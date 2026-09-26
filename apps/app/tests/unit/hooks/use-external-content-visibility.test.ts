@@ -81,6 +81,8 @@ describe("External content visibility", () => {
     expect(visibility()).toBe("show");
     rerender("item-2");
     expect(visibility()).toBe("hide");
+    rerender("item-1");
+    expect(visibility()).toBe("hide");
   });
 
   it("hides immediately even while latched online", () => {

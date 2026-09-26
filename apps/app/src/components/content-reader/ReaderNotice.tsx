@@ -15,8 +15,7 @@ const HEADLINE = "Available on the original site";
 
 /** Interactive content names itself; a delimiter states its reason out loud. */
 const HEADLINES: Partial<Record<ReaderNoticeKind, string>> = {
-  externalContent:
-    "This interactive content is available on the original site",
+  externalContent: "This interactive content is available on the original site",
   membersOnly: "The rest of this post is for members",
 };
 
@@ -51,9 +50,7 @@ export function ReaderNotice({
     <div role="note" data-reader-notice={kind} data-article-block="">
       <div>
         <p data-reader-notice-headline>{HEADLINES[kind] ?? HEADLINE}</p>
-        {DESCRIPTIONS[kind] && (
-          <p className="sr-only">{DESCRIPTIONS[kind]}</p>
-        )}
+        {DESCRIPTIONS[kind] && <p className="sr-only">{DESCRIPTIONS[kind]}</p>}
       </div>
       <Button asChild>
         <a href={href} target="_blank" rel="noopener noreferrer">

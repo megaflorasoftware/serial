@@ -10,7 +10,10 @@ import { extractStaticCapture } from "~/server/bookmarks/extract";
  * a JSDOM window. These tests drive it through the static capture path, the
  * server's only entry to it.
  */
-function sanitize(contentHtml: string, effectiveUrl = "https://example.com/articles/post") {
+function sanitize(
+  contentHtml: string,
+  effectiveUrl = "https://example.com/articles/post",
+) {
   const result = extractStaticCapture({
     sourceUrl: effectiveUrl,
     effectiveUrl,
@@ -36,7 +39,9 @@ describe("Page capture sanitization", () => {
     );
     expect(capture).not.toBeNull();
     expect(capture!.contentHtml).toContain('href="https://example.com/next"');
-    expect(capture!.contentHtml).toContain('src="https://example.com/image.jpg"');
+    expect(capture!.contentHtml).toContain(
+      'src="https://example.com/image.jpg"',
+    );
     expect(capture!.contentHtml).not.toMatch(
       /script|style|form|input|onclick|class|secret|referrerpolicy/,
     );
@@ -80,15 +85,23 @@ describe("Page capture sanitization", () => {
     );
     // Readability keeps only video-host frames before the sanitizer runs; a
     // non-numeric height is dropped.
-    expect(html).toContain('<iframe src="https://player.vimeo.com/video/1"></iframe>');
+    expect(html).toContain(
+      '<iframe src="https://player.vimeo.com/video/1"></iframe>',
+    );
     expect(html.match(/<iframe/g)).toHaveLength(2);
-    expect(html).not.toMatch(/insecure|javascript|srcdoc|tracker|allow|sandbox|width/);
+    expect(html).not.toMatch(
+      /insecure|javascript|srcdoc|tracker|allow|sandbox|width/,
+    );
     expect(html).not.toContain("data-serial-embed");
   });
 
   it("still lets a version 1 placeholder through the allowlist", () => {
     expect(BOOKMARK_CAPTURE_ALLOWED_ATTRIBUTES).toEqual(
-      expect.arrayContaining(["data-serial-embed", "data-video-id", "data-start"]),
+      expect.arrayContaining([
+        "data-serial-embed",
+        "data-video-id",
+        "data-start",
+      ]),
     );
   });
 

@@ -255,7 +255,7 @@ function FeedReader({
       <div key={id} className="relative w-full">
         <ArticleSidebars
           article={articleElement}
-          contentKey={`${id}:${externalContent}:${zoom}:${body?.revision ?? ""}:${reader?.form === "document" ? reader.document.footnotes.length : reader?.html ?? ""}`}
+          contentKey={`${id}:${externalContent}:${zoom}:${body?.revision ?? ""}:${reader?.form === "document" ? reader.document.footnotes.length : (reader?.html ?? "")}`}
           scrollToElement={scrollToElement}
         />
         <div
