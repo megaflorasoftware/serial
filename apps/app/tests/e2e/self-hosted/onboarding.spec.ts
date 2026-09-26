@@ -156,7 +156,6 @@ test("keeps feed-entry guidance clear of its input with a short mobile keyboard 
   await expect(guide(page)).toContainText("adding your first feed", {
     timeout: 30_000,
   });
-  await page.locator('[data-onboarding="open-feed-menu"]').click();
   await page
     .locator('[data-onboarding="add-feed"]')
     .filter({ visible: true })
@@ -479,16 +478,10 @@ for (const mobile of [false, true]) {
       [60, 10, 100],
       [60, 10, 15],
     ]);
-    await page
-      .locator(
-        mobile
-          ? '[data-onboarding="open-feed-menu"]'
-          : '[data-onboarding="open-menu"]',
-      )
-      .click();
-    await expect(guide(page)).toContainText("Here's where you add a feed");
-    if (mobile) await expectNormalBackdrop(page);
-    else await expectSubtleButtonDimming(page);
+    await expect(guide(page)).toContainText(
+      "Feeds are the parts of the web that you want to show up in Serial.",
+    );
+    await expectSubtleButtonDimming(page);
     const addFeed = page
       .locator('[data-onboarding="add-feed"]')
       .filter({ visible: true });

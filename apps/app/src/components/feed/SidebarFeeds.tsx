@@ -347,7 +347,6 @@ export function SidebarFeeds() {
                   disabled={!canMutate}
                   shortcut="a"
                   variant="ghost"
-                  data-onboarding="add-feed"
                   aria-label="Add Feed or Bookmark"
                 >
                   <PlusIcon />
@@ -394,7 +393,6 @@ export function SidebarFeeds() {
             </SidebarMenuButton>
             <SidebarMenuButton
               size="default-icon"
-              data-onboarding="add-feed"
               aria-label="Add Feed or Bookmark"
               disabled={!canMutate}
               onClick={() => launchDialog("add-feed")}

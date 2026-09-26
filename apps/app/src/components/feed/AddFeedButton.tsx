@@ -22,6 +22,7 @@ export function AddFeedButton() {
       onClick={() => launchDialog("add-feed")}
       disabled={!canMutate}
       shortcut="a"
+      data-onboarding="add-feed"
       aria-label="Add Feed"
     >
       <PlusIcon size={16} />

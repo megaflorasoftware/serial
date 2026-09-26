@@ -51,15 +51,10 @@ const INSTRUCTIONS: Record<
     interactiveDialog?: boolean;
   }
 > = {
-  "open-feed-menu": {
-    dimmed: true,
-    selector: '[data-onboarding="open-menu"]',
-    text: "Let's start by adding your first feed. Open the menu to add one.",
-  },
   "add-feed": {
     dimmed: true,
     selector: '[data-onboarding="add-feed"]',
-    text: "Here's where you add a feed. Feeds are the parts of the web that you want to bring into Serial.",
+    text: "Let's start by adding your first feed. Feeds are the parts of the web that you want to show up in Serial.",
   },
   "find-feed": {
     hideWhenSelector:
@@ -319,11 +314,6 @@ function AccountOnboarding({ userId }: { userId: string }) {
     userId,
   ]);
   useEffect(() => {
-    if (
-      state.instruction === "open-feed-menu" &&
-      (sidebar.isMobile ? sidebar.openRightMobile : sidebar.open)
-    )
-      guideOnboarding("add-feed");
     if (state.instruction === "add-feed" && dialog === "add-feed")
       guideOnboarding("find-feed");
     if (state.instruction === "add-view" && dialog === "add-view") {
@@ -418,11 +408,7 @@ function OnboardingInstructions({ step }: { step: OnboardingStep }) {
   return (
     <Guidance
       instructionKey={state.instruction ?? step}
-      selector={
-        state.instruction === "open-feed-menu" && sidebar.isMobile
-          ? '[data-onboarding="open-feed-menu"]'
-          : instruction?.selector
-      }
+      selector={instruction?.selector}
       anchorSelector={instruction?.anchorSelector}
       hideWhenSelector={instruction?.hideWhenSelector}
       highlightDialog={instruction?.highlightDialog}
