@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
-import type { Locator } from "@playwright/test";
 import { signIn } from "../fixtures/auth";
 import {
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_TURSO_PORT,
 } from "../fixtures/ports";
 import { cleanupUser, seedMultipleArticleData } from "../fixtures/seed-db";
+import type { Locator } from "@playwright/test";
 
 async function observeActionScrolling(container: Locator) {
   await container.evaluate((element) => {
@@ -63,6 +63,7 @@ for (const width of [390, 767, 768]) {
           const itemId = feedItemIds[position === "middle" ? 10 : 19]!;
           const item = page.locator(`article[data-item-id="${itemId}"]`);
           await item.scrollIntoViewIfNeeded();
+          await item.getByRole("link").hover();
           const actionButton = item.getByRole("button", {
             name: action,
             exact: true,
