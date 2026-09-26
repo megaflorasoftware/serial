@@ -281,7 +281,7 @@ function ContentStatusSectionList({
   const navigationIsGridLayout =
     navigationSectionInfo.length === 1 &&
     navigationSectionInfo[0]?.isGrid === true;
-  const { handleMouseSelect, selectItem } = useFeedItemNavigation(
+  const { handleMouseSelect, selectItemAfterAction } = useFeedItemNavigation(
     navigationItems,
     navigationIsGridLayout,
     navigationSectionInfo,
@@ -295,10 +295,12 @@ function ContentStatusSectionList({
       );
 
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => selectItem(nextItemId));
+        requestAnimationFrame(() =>
+          selectItemAfterAction(nextItemId, { deferScroll: false }),
+        );
       });
     },
-    [fullComputedSections, selectItem],
+    [fullComputedSections, selectItemAfterAction],
   );
 
   return (
