@@ -1,19 +1,14 @@
 "use client";
 
-import { ARTICLE_SANITIZE_SCHEMA } from "@serial/standard-site";
-
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import rehypeParse from "rehype-parse";
-import rehypeSanitize from "rehype-sanitize";
-import rehypeStringify from "rehype-stringify";
-import { unified } from "unified";
 import { useZoom } from "../components/feed/watch/[id]/useZoom";
 import { ContentActions } from "../components/feed/watch/[id]/ContentActions";
+import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
 import { useFeeds } from "~/lib/data/feeds";
 import { barsHiddenAtom } from "~/lib/data/atoms";
-import { useFlagState } from "~/lib/hooks/useFlagState";
+import { useExternalContentVisibility } from "~/lib/hooks/useExternalContentVisibility";
 import classes from "~/components/feed/read/article.module.css";
 import { useFeedItemValue } from "~/lib/data/store";
 import {
@@ -56,21 +51,6 @@ import {
   resolveContentItem,
 } from "~/lib/data/content-items/resolver";
 import { CONTENT_PLATFORM } from "~/lib/content/descriptor";
-
-const parser = unified()
-  .use(rehypeParse, { fragment: true })
-  .use(rehypeSanitize, ARTICLE_SANITIZE_SCHEMA)
-  .use(rehypeStringify);
-
-function getReaderContent(
-  bodyHtml: string,
-  articleStyle: "simplified" | "full",
-) {
-  if (articleStyle === "simplified") {
-    return String(parser.processSync(bodyHtml));
-  }
-  return bodyHtml;
-}
 
 export const Route = createFileRoute("/_app/read/$id")({
   component: ReadPage,
@@ -160,33 +140,40 @@ function feedReaderHeader(
 function FeedReaderBody({
   pending,
   reader,
-  content,
   feedItem,
   feed,
-  simplified,
+  externalContent,
 }: {
   pending: boolean;
   reader: ReturnType<typeof readerContent>;
-  content: string;
   feedItem: FeedReaderItem;
   feed: FeedReaderFeed | undefined;
-  simplified: boolean;
+  externalContent: ExternalContentVisibility;
 }) {
   if (pending) return <ReaderBodySkeleton />;
+  const noticeHref = feedItem?.url ?? "";
+  const originActionLabel = getOriginActionLabel({
+    platform: feed?.platform ?? CONTENT_PLATFORM.WEBSITE,
+    contentType: feedItem?.contentType ?? "text",
+  });
   if (reader?.form === "document") {
     return (
       <ReaderDocumentContent
         document={reader.document}
-        documentUrl={feedItem?.url ?? ""}
-        originActionLabel={getOriginActionLabel({
-          platform: feed?.platform ?? CONTENT_PLATFORM.WEBSITE,
-          contentType: feedItem?.contentType ?? "text",
-        })}
-        simplified={simplified}
+        documentUrl={noticeHref}
+        originActionLabel={originActionLabel}
+        externalContent={externalContent}
       />
     );
   }
-  return <ArticleContent content={content} simplified={simplified} />;
+  return (
+    <ArticleContent
+      content={reader?.form === "html" ? reader.html : ""}
+      externalContent={externalContent}
+      noticeHref={noticeHref}
+      originActionLabel={originActionLabel}
+    />
+  );
 }
 
 function FeedReader({
@@ -199,7 +186,7 @@ function FeedReader({
   const canMutate = useCanMutate();
   useRetentionPin("feed-item", id);
 
-  const [articleStyle] = useFlagState("ARTICLE_STYLE");
+  const externalContent = useExternalContentVisibility(id);
 
   const feedItem = useFeedItemValue(id);
 
@@ -210,7 +197,7 @@ function FeedReader({
   const { zoom } = useZoom();
 
   // Deriving a Document source is the expensive step, so it is keyed on the
-  // body identity rather than on the zoom and style the reader also reads.
+  // body identity rather than on the zoom the reader also reads.
   // A reference refresh replaces the body object and re-derives; the
   // revision stays, so progress does not move.
   const body = feedItem?.body;
@@ -218,8 +205,6 @@ function FeedReader({
   // A body already on the client draws at once; the skeleton fills in only
   // while the server has not yet answered. An empty answer draws nothing.
   const isBodyPending = !hasReaderBodyContent(body) && !hasRefreshedFeedItem;
-  const content =
-    reader?.form === "html" ? getReaderContent(reader.html, articleStyle) : "";
 
   const articleRef = useRef<HTMLDivElement>(null);
   const [articleElement, setArticleElement] = useState<HTMLDivElement | null>(
@@ -270,7 +255,7 @@ function FeedReader({
       <div key={id} className="relative w-full">
         <ArticleSidebars
           article={articleElement}
-          contentKey={`${id}:${articleStyle}:${zoom}:${body?.revision ?? ""}:${reader?.form === "document" ? reader.document.footnotes.length : content}`}
+          contentKey={`${id}:${externalContent}:${zoom}:${body?.revision ?? ""}:${reader?.form === "document" ? reader.document.footnotes.length : reader?.html ?? ""}`}
           scrollToElement={scrollToElement}
         />
         <div
@@ -281,10 +266,9 @@ function FeedReader({
           <FeedReaderBody
             pending={isBodyPending}
             reader={reader}
-            content={content}
             feedItem={feedItem}
             feed={feed}
-            simplified={articleStyle === "simplified"}
+            externalContent={externalContent}
           />
         </div>
       </div>

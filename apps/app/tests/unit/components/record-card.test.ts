@@ -30,7 +30,7 @@ const preview = {
 function document(blocks: ReaderDocument["blocks"]): ReaderDocument {
   return { blocks, footnotes: [], truncated: false };
 }
-function render(doc: ReaderDocument, simplified: boolean) {
+function render(doc: ReaderDocument) {
   const container = window.document.createElement("div");
   const root = createRoot(container);
   act(() =>
@@ -39,20 +39,19 @@ function render(doc: ReaderDocument, simplified: boolean) {
         document: doc,
         documentUrl: "https://example.com/post",
         originActionLabel: "Open in Website",
-        simplified,
+        externalContent: "show",
       }),
     ),
   );
   return { container, unmount: () => act(() => root.unmount()) };
 }
-describe.each([false, true])("reader simplified=%s", (simplified) => {
+describe("reader record cards", () => {
   it.each(["small", "medium", "large", "row"] as const)(
     "renders %s cards with safe links and metadata",
     (size) => {
       const card = recordCard(preview, size)!;
       const { container, unmount } = render(
         document([{ kind: "recordPreview", card, source: null, align: null }]),
-        simplified,
       );
       const link = container.querySelector<HTMLAnchorElement>(
         `[data-record-card="${size}"]`,
@@ -94,7 +93,6 @@ describe.each([false, true])("reader simplified=%s", (simplified) => {
           ],
         },
       ]),
-      simplified,
     );
     act(() =>
       container

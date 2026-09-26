@@ -4,29 +4,29 @@ import { Button } from "~/components/ui/button";
 
 /**
  * Reasons the reader shows a notice instead of content. The block reasons come
- * from the Reader document; `embed` and `frame` are the reader's own, for a
- * src frame it does not admit yet and a sandboxed frame it will not load
- * offline or in simplified mode.
+ * from the Reader document; `externalContent` is the reader's own, for any
+ * External content it is not showing: hidden by preference, a never-online
+ * visit, or a source it does not admit. It says the same thing in every case
+ * and nothing more.
  */
-export type ReaderNoticeKind = ReaderNoticeReason | "embed" | "frame";
+export type ReaderNoticeKind = ReaderNoticeReason | "externalContent";
 
 const HEADLINE = "Available on the original site";
 
 /** Interactive content names itself; a delimiter states its reason out loud. */
 const HEADLINES: Partial<Record<ReaderNoticeKind, string>> = {
-  embed: "This interactive content is available on the original site",
-  frame: "This interactive content is available on the original site",
+  externalContent:
+    "This interactive content is available on the original site",
   membersOnly: "The rest of this post is for members",
 };
 
-const DESCRIPTIONS: Record<ReaderNoticeKind, string> = {
+/** Block reasons explain themselves to screen readers; External content has said all it says. */
+const DESCRIPTIONS: Partial<Record<ReaderNoticeKind, string>> = {
   unsupported: "This block is not supported in the reader yet.",
   canvas: "This page is a canvas layout, which the reader does not show yet.",
   truncated: "The rest of this document is longer than the reader can show.",
   membersOnly: "The rest of this document is for members of the publication.",
   depth: "This section is nested too deeply for the reader to show.",
-  embed: "This embedded content is not available in the Serial reader.",
-  frame: "Embedded content is not shown offline or in simplified mode.",
 };
 
 export type ReaderNoticeProps = {
@@ -51,7 +51,9 @@ export function ReaderNotice({
     <div role="note" data-reader-notice={kind} data-article-block="">
       <div>
         <p data-reader-notice-headline>{HEADLINES[kind] ?? HEADLINE}</p>
-        <p className="sr-only">{DESCRIPTIONS[kind]}</p>
+        {DESCRIPTIONS[kind] && (
+          <p className="sr-only">{DESCRIPTIONS[kind]}</p>
+        )}
       </div>
       <Button asChild>
         <a href={href} target="_blank" rel="noopener noreferrer">

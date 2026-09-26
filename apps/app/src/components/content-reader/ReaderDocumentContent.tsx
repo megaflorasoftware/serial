@@ -9,17 +9,16 @@ import type {
   ReaderInline,
   ReaderRichText,
 } from "@serial/standard-site";
-import { ArticleVideoEmbed } from "~/components/content-reader/ArticleVideoEmbed";
+import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
+import { ExternalContent } from "~/components/content-reader/ExternalContent";
 import { ReaderNotice } from "~/components/content-reader/ReaderNotice";
 import { LinkCard, RecordCard } from "~/components/content-reader/RecordCard";
 import { SocialPostCard } from "~/components/content-reader/SocialPostCard";
-import { SandboxedFrame } from "~/components/content-reader/SandboxedFrame";
 import { ReaderImageCarousel } from "~/components/content-reader/ReaderImageCarousel";
 import {
   ArticleImageLightboxGroup,
   ArticleImageLightboxTrigger,
 } from "~/components/feed/read/ArticleImageLightbox";
-import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 
 /**
  * Renders a Reader document with the DOM shapes the reader's navigation,
@@ -35,8 +34,8 @@ export type ReaderDocumentContentProps = {
   /** The document's own page, the target of every block notice. */
   documentUrl: string;
   originActionLabel: string;
-  /** No lightbox, no video, and frames show the notice. */
-  simplified?: boolean;
+  /** Whether External content frames load or show the notice. */
+  externalContent: ExternalContentVisibility;
 };
 
 type RenderOptions = Omit<ReaderDocumentContentProps, "document">;
@@ -108,50 +107,34 @@ function imageStyle(image: ReaderImage): CSSProperties | undefined {
   return Object.keys(style).length ? style : undefined;
 }
 
-/**
- * One image of a lightbox group. In the simplified style there is no
- * lightbox, so the image is drawn plain.
- */
+/** One image of a lightbox group. */
 function Picture({
   image,
   index,
-  simplified,
   fill = false,
 }: {
   image: ReaderImage;
   index: number;
-  simplified: boolean;
   /** Grid cells size the picture; the image's own hints are not applied. */
   fill?: boolean;
 }) {
-  const style = fill ? undefined : imageStyle(image);
-  if (simplified) {
-    return (
-      <img
-        {...REMOTE_IMAGE_PROPS}
-        src={image.url}
-        alt={image.alt}
-        title={image.title ?? undefined}
-        style={style}
-      />
-    );
-  }
   return (
-    <ArticleImageLightboxTrigger index={index} style={style} fill={fill} />
+    <ArticleImageLightboxTrigger
+      index={index}
+      style={fill ? undefined : imageStyle(image)}
+      fill={fill}
+    />
   );
 }
 
-/** Wraps a figure's pictures in one lightbox group; simplified rendering has none. */
+/** Wraps a figure's pictures in one lightbox group. */
 function Pictures({
   images,
-  simplified,
   children,
 }: {
   images: ReaderImage[];
-  simplified: boolean;
   children: ReactNode;
 }) {
-  if (simplified) return <>{children}</>;
   return (
     <ArticleImageLightboxGroup
       images={images.map((image) => ({
@@ -197,7 +180,6 @@ function Block({
   block: ReaderBlock;
   options: RenderOptions;
 }) {
-  const simplified = options.simplified === true;
   const notice = (kind: Parameters<typeof ReaderNotice>[0]["kind"]) => (
     <ReaderNotice
       kind={kind}
@@ -323,8 +305,8 @@ function Block({
           data-reader-figure="image"
           data-reader-align={block.align ?? undefined}
         >
-          <Pictures images={[block.image]} simplified={simplified}>
-            <Picture image={block.image} index={0} simplified={simplified} />
+          <Pictures images={[block.image]}>
+            <Picture image={block.image} index={0} />
           </Pictures>
           {block.caption && (
             <figcaption>
@@ -341,7 +323,6 @@ function Block({
           key={index}
           image={block.images[index]!}
           index={index}
-          simplified={simplified}
           fill={grid !== null}
         />
       );
@@ -361,7 +342,7 @@ function Block({
           }
         >
           {block.title && <p data-reader-image-group-title>{block.title}</p>}
-          <Pictures images={block.images} simplified={simplified}>
+          <Pictures images={block.images}>
             {layout.mode === "carousel" ? (
               <ReaderImageCarousel
                 count={block.images.length}
@@ -401,7 +382,6 @@ function Block({
       return (
         <SocialPostCard
           post={block.post}
-          simplified={simplified}
           text={<RichText content={block.post.text} />}
           quote={
             block.post.quote ? (
@@ -410,34 +390,31 @@ function Block({
           }
         />
       );
-    case "embed":
-      if (block.youtube && !simplified)
-        return (
-          <ArticleVideoEmbed
-            videoId={block.youtube.videoId}
-            start={block.youtube.start}
-          />
-        );
-      if (block.youtube)
-        return (
-          <p>
-            <a href={block.href} target="_blank" rel="noopener noreferrer">
-              <strong>Watch on YouTube</strong>
-            </a>
-          </p>
-        );
-      // Every other src frame waits on the sandboxed frame decision (ticket 38).
-      return notice("embed");
-    case "html":
+    case "embed": {
+      // A YouTube page link frames as the video; any other page-only block has nothing to frame.
+      const src = block.embedUrl ?? (block.youtube ? block.href : null);
+      if (src === null) return notice("externalContent");
       return (
-        <SandboxedFrame
-          html={block.html}
-          title="Embedded content"
-          height={block.height}
-          aspectRatio={block.aspectRatio}
-          simplified={simplified}
+        <ExternalContent
+          source={{ kind: "src", src }}
+          youtube={block.youtube}
+          visibility={options.externalContent}
           noticeHref={options.documentUrl}
           originActionLabel={options.originActionLabel}
+          height={block.height}
+          aspectRatio={block.aspectRatio}
+        />
+      );
+    }
+    case "html":
+      return (
+        <ExternalContent
+          source={{ kind: "html", html: block.html }}
+          visibility={options.externalContent}
+          noticeHref={options.documentUrl}
+          originActionLabel={options.originActionLabel}
+          height={block.height}
+          aspectRatio={block.aspectRatio}
         />
       );
     case "notice":

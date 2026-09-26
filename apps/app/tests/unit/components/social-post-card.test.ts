@@ -59,7 +59,7 @@ const post: ReaderSocialPost = {
 function document(blocks: ReaderDocument["blocks"]): ReaderDocument {
   return { blocks, footnotes: [], truncated: false };
 }
-function render(doc: ReaderDocument, simplified = false) {
+function render(doc: ReaderDocument) {
   const container = window.document.createElement("div");
   const root = createRoot(container);
   act(() =>
@@ -68,7 +68,7 @@ function render(doc: ReaderDocument, simplified = false) {
         document: doc,
         documentUrl: "https://example.com/post",
         originActionLabel: "Open in Website",
-        simplified,
+        externalContent: "show",
       }),
     ),
   );
@@ -80,13 +80,10 @@ const links = (container: HTMLElement) =>
     link.textContent?.trim(),
   ]);
 
-describe.each([false, true])(
-  "social post cards simplified=%s",
-  (simplified) => {
+describe("social post cards", () => {
     it("draws a Bluesky post as a static card with author, text links, media and a footer", () => {
       const { container, unmount } = render(
         document([{ kind: "socialPost", post, source: null, align: null }]),
-        simplified,
       );
       const card = container.querySelector('[data-social-post="bluesky"]')!;
       expect(card.tagName).toBe("DIV");
@@ -154,7 +151,6 @@ describe.each([false, true])(
             },
           },
         ]),
-        simplified,
       );
       const external = container.querySelector<HTMLAnchorElement>(
         "[data-reader-link-card]",
@@ -166,11 +162,7 @@ describe.each([false, true])(
       expect(external.textContent).toContain("An article");
       const video = container.querySelector("[data-social-post-video]")!;
       expect(video.tagName).toBe("DIV");
-      if (simplified) {
-        // The static style keeps the poster and never mounts a player.
-        expect(video.querySelector("video")).toBeNull();
-        expect(video.querySelector("img")?.alt).toContain("Video preview");
-      } else {
+      {
         // The player holds the poster and a play button; the stream attaches on first play.
         const player = video.querySelector<HTMLElement>(
           "[data-social-post-video-player='video']",
@@ -229,7 +221,6 @@ describe.each([false, true])(
         document([
           { kind: "socialPost", post: note, source: null, align: null },
         ]),
-        simplified,
       );
       expect(links(container)).toEqual([
         ["https://pckt.blog/n/did:plc:author/n", "Open post on pckt"],
@@ -251,7 +242,6 @@ describe.each([false, true])(
     it("drops a failed avatar or image without leaving a gap", () => {
       const { container, unmount } = render(
         document([{ kind: "socialPost", post, source: null, align: null }]),
-        simplified,
       );
       act(() =>
         container
@@ -264,5 +254,4 @@ describe.each([false, true])(
       ).not.toBeNull();
       unmount();
     });
-  },
-);
+});

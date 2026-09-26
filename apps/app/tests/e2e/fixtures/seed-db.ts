@@ -531,13 +531,13 @@ export async function seedBookmarkProjectionData(
       <a href="https://example.com/image-target">
         <img src="https://images.example.com/reader.jpg" alt="Reader image" onerror="steal()">
       </a>
-      <div data-serial-embed="youtube" data-video-id="dQw4w9WgXcQ" data-start="42"></div>
+      <iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42" height="315"></iframe>
       ${ARTICLE_HTML}
       <script data-testid="unsafe-capture-script">steal()</script>`,
     contentHash: `hash-${bookmarkId}`,
     captureSource: "extension-live-dom",
     extractorVersion: "playwright-fixture",
-    sanitizerPolicyVersion: 1,
+    sanitizerPolicyVersion: 2,
     capturedAt: now,
   });
   client.close();

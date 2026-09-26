@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 // @vitest-environment-options { "url": "https://serial.test/" }
 
-import { getDefaultStore } from "jotai";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,9 +14,9 @@ import type {
 import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
 import {
   SANDBOXED_FRAME_SANDBOX,
+  SANDBOXED_SRC_FRAME_SANDBOX,
   sandboxedFrameDocument,
 } from "~/components/content-reader/SandboxedFrame";
-import { connectionStateAtom } from "~/lib/data/atoms";
 import { getElements } from "~/lib/hooks/useArticleNavigation";
 
 vi.mock("~/lib/hooks/useFlagState", () => ({ useFlagState: () => ["iframe"] }));
@@ -30,7 +29,7 @@ const roots: Array<ReturnType<typeof createRoot>> = [];
 
 function render(
   document: ReaderDocument,
-  options: { simplified?: boolean } = {},
+  options: { externalContent?: "show" | "hide" } = {},
 ) {
   const container = window.document.createElement("div");
   window.document.body.append(container);
@@ -42,6 +41,7 @@ function render(
         document,
         documentUrl: "https://example.com/post",
         originActionLabel: "Open in Website",
+        externalContent: "show",
         ...options,
       }),
     ),
@@ -52,7 +52,6 @@ function render(
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   window.document.body.innerHTML = "";
-  getDefaultStore().set(connectionStateAtom, "unknown");
 });
 
 const text = (value: string): ReaderInline => ({
@@ -239,7 +238,7 @@ describe("Reader document content", () => {
         block({
           kind: "embed",
           href: "https://codepen.io/pen",
-          embedUrl: "https://codepen.io/pen/embed",
+          embedUrl: "http://codepen.io/pen/embed",
           youtube: null,
           height: 300,
           aspectRatio: null,
@@ -259,10 +258,14 @@ describe("Reader document content", () => {
     expect(
       notices[0]?.querySelector("[data-reader-notice-headline]")?.textContent,
     ).toBe("The rest of this post is for members");
-    expect(notices[1]?.getAttribute("data-reader-notice")).toBe("embed");
+    expect(notices[1]?.getAttribute("data-reader-notice")).toBe(
+      "externalContent",
+    );
     expect(
       notices[1]?.querySelector("[data-reader-notice-headline]")?.textContent,
     ).toBe("This interactive content is available on the original site");
+    // External content says one thing and nothing more, in every case.
+    expect(notices[1]?.querySelector(".sr-only")).toBeNull();
     expect(notices[0]?.querySelector(".sr-only")?.textContent).toContain(
       "members",
     );
@@ -272,7 +275,7 @@ describe("Reader document content", () => {
     expect(notices[0]?.querySelector("a")?.textContent).toContain(
       "Open in Website",
     );
-    // A src frame's notice opens the document page, never the embed's own URL.
+    // A refused frame's notice opens the document page, never the embed's own URL.
     expect(notices[1]?.querySelector("a")?.getAttribute("href")).toBe(
       "https://example.com/post",
     );
@@ -283,15 +286,18 @@ describe("Reader document content", () => {
     expect(container.querySelectorAll("iframe")).toHaveLength(0);
   });
 
-  it("sandboxes authored HTML in one locked-down frame and shows the notice offline or simplified", () => {
+  it("sandboxes authored HTML in one locked-down frame and shows the notice when External content is hidden", () => {
     const html = block({
       kind: "html",
       html: "<p>Page</p><script>alert(1)</script>",
       height: 243,
       aspectRatio: null,
     });
-    const online = render(document([html]));
-    const frame = online.querySelector("iframe")!;
+    const shown = render(document([html]));
+    const frame = shown.querySelector("iframe")!;
+    expect(frame.parentElement?.getAttribute("data-reader-frame")).toBe(
+      "html",
+    );
     expect(frame.getAttribute("sandbox")).toBe(SANDBOXED_FRAME_SANDBOX);
     expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
     expect(frame.getAttribute("sandbox")).not.toContain("allow-same-origin");
@@ -299,6 +305,7 @@ describe("Reader document content", () => {
     expect(frame.getAttribute("loading")).toBe("lazy");
     expect(frame.getAttribute("allow")).toContain("camera 'none'");
     expect(frame.getAttribute("csp")).toContain("default-src 'none'");
+    expect(frame.getAttribute("csp")).not.toContain("frame-ancestors");
     expect(frame.style.height).toBe("243px");
     const srcdoc = frame.getAttribute("srcdoc")!;
     expect(srcdoc).toBe(
@@ -307,15 +314,77 @@ describe("Reader document content", () => {
     expect(srcdoc).toContain('<base target="_blank">');
     expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
 
-    act(() => getDefaultStore().set(connectionStateAtom, "disconnected"));
-    const offline = render(document([html]));
-    expect(offline.querySelector("iframe")).toBeNull();
-    expect(offline.querySelector("[data-reader-notice='frame']")).toBeTruthy();
-    act(() => getDefaultStore().set(connectionStateAtom, "connected"));
-    const simplified = render(document([html]), { simplified: true });
-    expect(simplified.querySelector("iframe")).toBeNull();
+    const hidden = render(document([html]), { externalContent: "hide" });
+    expect(hidden.querySelector("iframe")).toBeNull();
     expect(
-      simplified.querySelector("[data-reader-notice='frame']"),
+      hidden.querySelector("[data-reader-notice='externalContent']"),
+    ).toBeTruthy();
+  });
+
+  it("frames an https embed with scripts at an opaque origin and refuses anything else", () => {
+    const embed = (embedUrl: string) =>
+      block({
+        kind: "embed",
+        href: "https://tally.so/r/form",
+        embedUrl,
+        youtube: null,
+        height: 500,
+        aspectRatio: null,
+      });
+    const shown = render(document([embed("https://tally.so/embed/form")]));
+    const frame = shown.querySelector("iframe")!;
+    expect(frame.parentElement?.getAttribute("data-reader-frame")).toBe("src");
+    expect(frame.getAttribute("src")).toBe("https://tally.so/embed/form");
+    expect(frame.getAttribute("sandbox")).toBe(SANDBOXED_SRC_FRAME_SANDBOX);
+    expect(frame.getAttribute("sandbox")).toContain("allow-scripts");
+    expect(frame.getAttribute("sandbox")).not.toContain("allow-same-origin");
+    expect(frame.getAttribute("referrerpolicy")).toBe(
+      "strict-origin-when-cross-origin",
+    );
+    expect(frame.getAttribute("loading")).toBe("lazy");
+    expect(frame.getAttribute("allow")).toContain("camera 'none'");
+    expect(frame.getAttribute("allow")).not.toContain("fullscreen");
+    expect(frame.hasAttribute("csp")).toBe(false);
+    expect(frame.hasAttribute("srcdoc")).toBe(false);
+    expect(frame.style.height).toBe("500px");
+    // One atomic navigation stop, like every other block root.
+    expect(getElements(shown)).toHaveLength(1);
+
+    const hidden = render(document([embed("https://tally.so/embed/form")]), {
+      externalContent: "hide",
+    });
+    expect(hidden.querySelector("iframe")).toBeNull();
+    expect(
+      hidden.querySelector("[data-reader-notice='externalContent']"),
+    ).toBeTruthy();
+
+    const insecure = render(document([embed("http://tally.so/embed/form")]));
+    expect(insecure.querySelector("iframe")).toBeNull();
+    expect(
+      insecure.querySelector("[data-reader-notice='externalContent']"),
+    ).toBeTruthy();
+  });
+
+  it("routes a YouTube embed to the video embed and hides it with the rest of External content", () => {
+    const video = block({
+      kind: "embed",
+      href: "https://youtu.be/d-H1nzWHLoI",
+      embedUrl: "https://www.youtube.com/embed/d-H1nzWHLoI?start=7",
+      youtube: { videoId: "d-H1nzWHLoI", start: "7" },
+      height: null,
+      aspectRatio: null,
+    });
+    const shown = render(document([video]));
+    const player = shown.querySelector("[data-article-video-embed] iframe")!;
+    expect(player.getAttribute("src")).toBe(
+      "https://www.youtube-nocookie.com/embed/d-H1nzWHLoI?start=7",
+    );
+    expect(shown.querySelector("[data-reader-frame]")).toBeNull();
+
+    const hidden = render(document([video]), { externalContent: "hide" });
+    expect(hidden.querySelector("[data-article-video-embed]")).toBeNull();
+    expect(
+      hidden.querySelector("[data-reader-notice='externalContent']"),
     ).toBeTruthy();
   });
 
@@ -505,31 +574,6 @@ describe("Reader document content", () => {
     expect(counter()).toBe("3 / 3");
   });
 
-  it("keeps a carousel interactive but without a lightbox in simplified mode", () => {
-    const container = render(
-      document([
-        block({
-          kind: "imageGroup",
-          images: [
-            readerImage("https://example.com/1.png"),
-            readerImage("https://example.com/2.png"),
-          ],
-          title: null,
-          caption: null,
-          layout: { mode: "carousel" },
-        }),
-      ]),
-      { simplified: true },
-    );
-    expect(container.querySelector("[data-lightbox]")).toBeNull();
-    expect(
-      container.querySelector("[data-reader-carousel-arrow='next']"),
-    ).not.toBeNull();
-    expect(
-      container.querySelectorAll("[data-reader-carousel-slide] img"),
-    ).toHaveLength(2);
-  });
-
   it("makes every non-text block one keyboard stop however its markup nests", () => {
     const container = render(
       document([
@@ -622,41 +666,5 @@ describe("Reader document content", () => {
     );
     expect(frames[0]!.getAttribute("data-image-frame")).toBe("loaded");
     expect(frames[1]!.getAttribute("data-image-frame")).toBe("loading");
-  });
-
-  it("keeps images plain and videos as links in simplified mode", () => {
-    const container = render(
-      document([
-        block({
-          kind: "image",
-          image: {
-            url: "https://example.com/a.png",
-            alt: "A",
-            title: null,
-            aspectRatio: null,
-            width: null,
-            fullBleed: false,
-          },
-          caption: null,
-        }),
-        block({
-          kind: "embed",
-          href: "https://youtu.be/d-H1nzWHLoI",
-          embedUrl: null,
-          youtube: { videoId: "d-H1nzWHLoI", start: null },
-          height: null,
-          aspectRatio: null,
-        }),
-      ]),
-      { simplified: true },
-    );
-    expect(container.querySelector("[data-lightbox]")).toBeNull();
-    expect(container.querySelector("figure img")?.getAttribute("src")).toBe(
-      "https://example.com/a.png",
-    );
-    expect(container.querySelector("[data-article-video-embed]")).toBeNull();
-    expect(container.querySelector("p > a")?.textContent).toBe(
-      "Watch on YouTube",
-    );
   });
 });

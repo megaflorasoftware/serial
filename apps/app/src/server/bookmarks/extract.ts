@@ -1,11 +1,16 @@
+import { createHash } from "node:crypto";
 import { Readability } from "@mozilla/readability";
-import { selectBookmarkPreviewThumbnail } from "@serial/bookmark-capture";
+import {
+  ACCEPTED_SANITIZER_POLICY_VERSIONS,
+  selectBookmarkPreviewThumbnail,
+} from "@serial/bookmark-capture";
+import { sanitizeCaptureHtml } from "@serial/bookmark-capture/sanitize";
 import { JSDOM } from "jsdom";
 import {
   BOOKMARK_CAPTURE_LIMITS,
   READABILITY_EXTRACTOR_VERSION,
+  SANITIZER_POLICY_VERSION,
 } from "./contracts";
-import { InvalidCaptureHtmlError, sanitizeCaptureHtml } from "./sanitize";
 import {
   chooseCanonicalUrl,
   normalizeBookmarkUrl,
@@ -60,16 +65,47 @@ function boundedText(value: string | null | undefined, maximum: number) {
   return codePointLength(normalized) <= maximum ? normalized : null;
 }
 
+export class InvalidCaptureHtmlError extends Error {}
+
+/**
+ * The server's adapter over the shared capture sanitizer: a JSDOM window in
+ * place of the extension's page, the stored content hash, and the policy
+ * version the server writes. Failures become the capture failure reason.
+ */
+function sanitizeServerCaptureHtml(extracted: string, effectiveUrl: string) {
+  const dom = new JSDOM("", { url: effectiveUrl });
+  try {
+    const sanitized = sanitizeCaptureHtml(
+      extracted,
+      effectiveUrl,
+      dom.window.document,
+    );
+    if (sanitized.contentHtml === undefined) {
+      throw new InvalidCaptureHtmlError(
+        sanitized.reason === "too_large"
+          ? "The captured document is too large"
+          : "The captured document is empty or has too many elements",
+      );
+    }
+    const { contentHtml } = sanitized;
+    return {
+      contentHtml,
+      contentHash: createHash("sha256").update(contentHtml).digest("hex"),
+      sanitizerPolicyVersion: SANITIZER_POLICY_VERSION,
+    };
+  } finally {
+    dom.window.close();
+  }
+}
+
 function buildPageCapture(input: {
   effectiveUrl: string;
   contentHtml: string;
   captureSource: TrustedPageCapture["captureSource"];
   extractorVersion: string;
 }): TrustedPageCapture {
-  const sanitized = sanitizeCaptureHtml({
-    contentHtml: input.contentHtml,
-    effectiveUrl: input.effectiveUrl,
-  });
+  const effectiveUrl = normalizeBookmarkUrl(input.effectiveUrl);
+  const sanitized = sanitizeServerCaptureHtml(input.contentHtml, effectiveUrl);
   return {
     contentHtml: sanitized.contentHtml,
     contentHash: sanitized.contentHash,
@@ -227,7 +263,9 @@ export function prepareExtensionCapture(input: {
   if (
     input.candidate.contentHtml !== undefined &&
     (input.candidate.extractorVersion !== READABILITY_EXTRACTOR_VERSION ||
-      input.candidate.sanitizerPolicyVersion !== 1)
+      !ACCEPTED_SANITIZER_POLICY_VERSIONS.includes(
+        input.candidate.sanitizerPolicyVersion ?? -1,
+      ))
   ) {
     return { ok: false, reason: "unsupported_capture_version" };
   }

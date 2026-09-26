@@ -14,9 +14,9 @@ const LOCAL_STORAGE_FLAGS = {
     key: "serial-flag-display-inline-shortcuts",
     schema: z.enum(["show-shortcuts", "hide-shortcuts"]),
   },
-  ARTICLE_STYLE: {
-    key: "serial-flag-article-style",
-    schema: z.enum(["simplified", "full"]),
+  ARTICLE_EXTERNAL_CONTENT: {
+    key: "serial-article-external-content",
+    schema: z.enum(["show", "hide"]),
   },
   ARTICLE_FOOTNOTES: {
     key: "serial-article-footnotes",
@@ -62,7 +62,8 @@ const flagsAtom = atom({
     parseFlagLocalStorageValue("CUSTOM_VIDEO_PLAYER") ?? "serial",
   INLINE_SHORTCUTS:
     parseFlagLocalStorageValue("INLINE_SHORTCUTS") ?? "hide-shortcuts",
-  ARTICLE_STYLE: parseFlagLocalStorageValue("ARTICLE_STYLE") ?? "full",
+  ARTICLE_EXTERNAL_CONTENT:
+    parseFlagLocalStorageValue("ARTICLE_EXTERNAL_CONTENT") ?? "show",
   ARTICLE_FOOTNOTES: parseFlagLocalStorageValue("ARTICLE_FOOTNOTES") ?? "show",
   ARTICLE_TABLE_OF_CONTENTS:
     parseFlagLocalStorageValue("ARTICLE_TABLE_OF_CONTENTS") ?? "hover",
@@ -80,7 +81,7 @@ export const flagAtoms: {
 } = {
   CUSTOM_VIDEO_PLAYER: createFlagAtom("CUSTOM_VIDEO_PLAYER"),
   INLINE_SHORTCUTS: createFlagAtom("INLINE_SHORTCUTS"),
-  ARTICLE_STYLE: createFlagAtom("ARTICLE_STYLE"),
+  ARTICLE_EXTERNAL_CONTENT: createFlagAtom("ARTICLE_EXTERNAL_CONTENT"),
   ARTICLE_FOOTNOTES: createFlagAtom("ARTICLE_FOOTNOTES"),
   ARTICLE_TABLE_OF_CONTENTS: createFlagAtom("ARTICLE_TABLE_OF_CONTENTS"),
 };

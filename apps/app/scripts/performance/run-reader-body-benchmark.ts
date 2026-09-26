@@ -178,6 +178,7 @@ try {
             document,
             documentUrl: "https://example.com/",
             originActionLabel: "Open in Website",
+            externalContent: "show",
           }),
         ),
       );

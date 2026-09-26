@@ -6,11 +6,7 @@ import {
 } from "../src/lexicons";
 import { isBlockNativeDocument } from "../src/reader";
 import { buildSubscriptionRecordKey } from "../src/subscription-key";
-import {
-  ARTICLE_SANITIZE_SCHEMA,
-  sanitizeArticleHtml,
-  sanitizeEmbeddedHtml,
-} from "../src/sanitize";
+import { ARTICLE_SANITIZE_SCHEMA, sanitizeEmbeddedHtml } from "../src/sanitize";
 import {
   buildBlueskyCdnImageUrl,
   buildBlueskyPostUrl,
@@ -311,30 +307,39 @@ describe("subscription record key", () => {
 });
 
 describe("article sanitizer", () => {
-  it("keeps underline, highlight, figures, and known placeholders only", () => {
+  it("keeps underline, highlight and figures, and reduces frames to their source and height", () => {
     const html =
       '<p><u>u</u><mark>m</mark></p><figure><img src="https://x/y.jpg" alt="a"><figcaption>c</figcaption></figure>' +
-      '<div data-serial-embed="youtube" data-video-id="abc" data-start="5" data-other="x"><p>v</p></div>' +
-      '<div data-serial-embed="evil" data-href="https://a">t</div><iframe src="https://x"></iframe><script>x()</script>';
-    expect(sanitizeArticleHtml(html)).toBe(
+      '<div data-serial-embed="youtube" data-video-id="abc" data-start="5"><p>v</p></div>' +
+      '<iframe src="https://x/embed" height="300" width="500" allow="autoplay" sandbox="" srcdoc="<b>x</b>" loading="lazy"></iframe>' +
+      "<script>x()</script>";
+    expect(sanitizeEmbeddedHtml(html)).toBe(
       '<p><u>u</u><mark>m</mark></p><figure><img src="https://x/y.jpg" alt="a"><figcaption>c</figcaption></figure>' +
-        '<div data-serial-embed="youtube" data-video-id="abc" data-start="5"><p>v</p></div>' +
-        '<div data-href="https://a">t</div>',
+        "<div><p>v</p></div>" +
+        '<iframe src="https://x/embed" height="300"></iframe>',
     );
   });
 
-  it("still prefixes ids like the default schema", () => {
-    expect(sanitizeArticleHtml('<p id="x">t</p>')).toBe(
-      '<p id="user-content-x">t</p>',
-    );
+  it("drops frame sources outside http and https but keeps the frame for the reader to refuse", () => {
+    expect(
+      sanitizeEmbeddedHtml(
+        '<iframe src="javascript:alert(1)"></iframe><iframe src="http://x/e"></iframe><iframe></iframe>',
+      ),
+    ).toBe('<iframe></iframe><iframe src="http://x/e"></iframe><iframe></iframe>');
+  });
+
+  it("prefixes ids like the default schema", () => {
     expect(ARTICLE_SANITIZE_SCHEMA.clobberPrefix).toBe("user-content-");
+    expect(ARTICLE_SANITIZE_SCHEMA.tagNames).toContain("iframe");
   });
 
   it("strips clobbered attributes from embedded html so the result stays a fixed point", () => {
     const embedded = sanitizeEmbeddedHtml(
-      '<p id="x" name="n" aria-label="l" title="t">t</p><a href="#x">j</a>',
+      '<p id="x" name="n" aria-label="l" title="t">t</p><a href="#x">j</a><iframe src="https://x/e" height="10"></iframe>',
     );
-    expect(embedded).toBe('<p title="t">t</p><a href="#x">j</a>');
-    expect(sanitizeArticleHtml(embedded)).toBe(embedded);
+    expect(embedded).toBe(
+      '<p title="t">t</p><a href="#x">j</a><iframe src="https://x/e" height="10"></iframe>',
+    );
+    expect(sanitizeEmbeddedHtml(embedded)).toBe(embedded);
   });
 });

@@ -28,7 +28,14 @@ const FEED_ADD_FETCH_WAVES = Math.ceil(
 export const EXTENSION_FEED_ADD_REQUEST_TIMEOUT_MS =
   FEED_HTTP_REQUEST_TIMEOUT_MS * (1 + FEED_ADD_FETCH_WAVES * 2) + 10_000;
 
-export const SANITIZER_POLICY_VERSION = 1;
+/**
+ * Version 2 retains `<iframe src height>` as External content. Version 1
+ * replaced YouTube frames with a `data-serial-embed` placeholder; the server
+ * still accepts version 1 captures and the placeholder attributes stay in the
+ * allowlist so those captures survive re-sanitization until the sunset.
+ */
+export const SANITIZER_POLICY_VERSION = 2;
+export const ACCEPTED_SANITIZER_POLICY_VERSIONS: readonly number[] = [1, 2];
 export const EXTENSION_BOOKMARK_CONTRACT_VERSION = 2;
 export const READABILITY_EXTRACTOR_VERSION = "mozilla-readability-0.6";
 
@@ -64,6 +71,7 @@ export const BOOKMARK_CAPTURE_ALLOWED_TAGS = [
   "header",
   "hr",
   "i",
+  "iframe",
   "img",
   "ins",
   "kbd",
@@ -115,6 +123,7 @@ export const BOOKMARK_CAPTURE_ALLOWED_ATTRIBUTES = [
   "srcset",
   "title",
   "width",
+  // Version 1 placeholder attributes; see SANITIZER_POLICY_VERSION.
   "data-serial-embed",
   "data-video-id",
   "data-start",

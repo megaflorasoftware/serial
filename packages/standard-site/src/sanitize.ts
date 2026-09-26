@@ -5,14 +5,12 @@ import { unified } from "unified";
 import type { Options as SanitizeSchema } from "rehype-sanitize";
 import { safeSourceUrl } from "./urls";
 
-export const SERIAL_EMBED_KINDS = ["youtube", "interactive"] as const;
-export type SerialEmbedKind = (typeof SERIAL_EMBED_KINDS)[number];
-
 /**
  * The schema every stored HTML body is a fixed point of. It extends the
- * rehype-sanitize default (which the reader's simplified mode already applies)
- * with underline, highlight, figures, and the inert placeholder attributes that
- * stand in for embedded video.
+ * rehype-sanitize default with underline, highlight, figures, and the one
+ * element the default drops that the reader admits: an `iframe` reduced to
+ * its `src` and `height`. Stored HTML never carries a live frame policy; the
+ * reader decides at render time how External content is shown.
  *
  * Contract for callers: bodies from RSS or author HTML go through
  * `sanitizeEmbeddedHtml` once at ingest; the article schema prefixes `id` and
@@ -28,16 +26,11 @@ export const ARTICLE_SANITIZE_SCHEMA: SanitizeSchema = {
     "mark",
     "figure",
     "figcaption",
+    "iframe",
   ],
   attributes: {
     ...defaultSchema.attributes,
-    div: [
-      ...(defaultSchema.attributes?.div ?? []),
-      ["dataSerialEmbed", ...SERIAL_EMBED_KINDS],
-      "dataVideoId",
-      "dataStart",
-      "dataHref",
-    ],
+    iframe: ["src", "height"],
   },
 };
 
@@ -64,18 +57,34 @@ export const EMBEDDED_HTML_SANITIZE_SCHEMA: SanitizeSchema = {
   ),
 };
 
+const htmlParser = unified().use(rehypeParse, { fragment: true });
+type HtmlTree = ReturnType<typeof htmlParser.parse>;
+type HtmlNode = HtmlTree | HtmlTree["children"][number];
+
+/** The attributes a stored frame keeps; the schema's global list would let more through. */
+const STORED_IFRAME_ATTRIBUTES = new Set(["src", "height"]);
+
+/** Reduce every frame to its source and height after the schema has run. */
+function pruneStoredFrames() {
+  return (tree: HtmlTree) => {
+    for (const { node } of walkHtml(tree)) {
+      if (node.type !== "element" || node.tagName !== "iframe") continue;
+      for (const name of Object.keys(node.properties)) {
+        if (!STORED_IFRAME_ATTRIBUTES.has(name)) delete node.properties[name];
+      }
+    }
+  };
+}
+
 function buildProcessor(schema: SanitizeSchema) {
   return unified()
     .use(rehypeParse, { fragment: true })
     .use(rehypeSanitize, schema)
+    .use(pruneStoredFrames)
     .use(rehypeStringify);
 }
 
-const articleProcessor = buildProcessor(ARTICLE_SANITIZE_SCHEMA);
 const embeddedProcessor = buildProcessor(EMBEDDED_HTML_SANITIZE_SCHEMA);
-
-type HtmlTree = ReturnType<typeof embeddedProcessor.parse>;
-type HtmlNode = HtmlTree | HtmlTree["children"][number];
 
 /** Walk in document order without adding recursion for author-controlled HTML. */
 function* walkHtml(root: HtmlNode) {
@@ -139,10 +148,6 @@ export function sanitizeEmbeddedContent(html: string) {
     firstParagraph,
     firstImageUrl,
   };
-}
-
-export function sanitizeArticleHtml(html: string) {
-  return String(articleProcessor.processSync(html));
 }
 
 export function sanitizeEmbeddedHtml(html: string) {

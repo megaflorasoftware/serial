@@ -294,13 +294,16 @@ describe("extension live DOM Bookmark capture", () => {
     expect(document.querySelector("img")?.hasAttribute("src")).toBe(false);
   });
 
-  it("converts supported YouTube embeds and removes unsafe page material", () => {
+  it("retains https frames as source and height and removes unsafe page material", () => {
     const secret = "private-pre-extraction-source";
     const document = pageDocument(
       readableArticle(`
         <p onclick="steal()">Readable copy</p>
-        <iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42"></iframe>
-        <iframe src="https://tracker.example/embed/private"></iframe>
+        <iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42" width="560" height="315" allow="autoplay" allowfullscreen></iframe>
+        <iframe src="https://player.vimeo.com/video/1?autoplay=1" height="200" allow="autoplay"></iframe>
+        <iframe src="https://tracker.example/embed/private" height="200"></iframe>
+        <iframe src="http://insecure.example/embed"></iframe>
+        <iframe srcdoc="<script>${secret}</script>"></iframe>
         <form><input value="credential"></form>
         <script>${secret}</script>
       `),
@@ -309,14 +312,55 @@ describe("extension live DOM Bookmark capture", () => {
     const result = extractPageObservation(document);
     const serialized = JSON.stringify(result);
 
-    expect(result.capture.contentHtml).toContain('data-serial-embed="youtube"');
-    expect(result.capture.contentHtml).toContain('data-start="42"');
+    expect(result.capture.contentHtml).toContain(
+      '<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42" height="315"></iframe>',
+    );
+    // Any https frame Readability keeps is retained as source and height; the
+    // reader decides whether to show it. Readability itself drops frames from
+    // hosts outside its video list, tracker.example among them.
+    expect(result.capture.contentHtml).toContain(
+      '<iframe src="https://player.vimeo.com/video/1?autoplay=1" height="200"></iframe>',
+    );
     expect(result.capture.contentHtml).not.toContain("tracker.example");
+    expect(result.capture.contentHtml).not.toContain("insecure.example");
+    expect(result.capture.contentHtml).not.toContain("data-serial-embed");
+    expect(result.capture.contentHtml).not.toMatch(/allow=|width|srcdoc/);
+    expect(result.capture.sanitizerPolicyVersion).toBe(2);
     expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain("onclick");
     expect(serialized).not.toContain("credential");
     expect(serialized).not.toContain("<form");
     expect(Object.keys(result)).toEqual(["sourceUrl", "capture", "feeds"]);
+  });
+
+  it("reports an extracted body beyond the element limit as an invalid capture", () => {
+    const document = pageDocument(
+      readableArticle(`<p>Readable copy</p>${"<span>x</span>".repeat(50)}`),
+    );
+    // The page itself passes the pre-extraction limit; the shared sanitizer
+    // guards the extracted body on its own.
+    const original = document.defaultView!.DOMParser.prototype.parseFromString;
+    const spy = vi
+      .spyOn(document.defaultView!.DOMParser.prototype, "parseFromString")
+      .mockImplementation(function (this: DOMParser, html, type) {
+        const parsed = original.call(this, html, type);
+        vi.spyOn(parsed, "querySelectorAll").mockImplementation(
+          ((selector: string) =>
+            selector === "*"
+              ? ({ length: BOOKMARK_CAPTURE_LIMITS.domElements + 1 } as never)
+              : Document.prototype.querySelectorAll.call(
+                  parsed,
+                  selector,
+                )) as typeof parsed.querySelectorAll,
+        );
+        return parsed;
+      });
+
+    const result = extractPageObservation(document);
+    spy.mockRestore();
+
+    expect(result.capture.contentHtml).toBeUndefined();
+    expect(result.captureFailureReason).toBe("invalid_capture");
   });
 
   it("keeps video metadata but prohibits Page capture for unsupported content", () => {
@@ -354,7 +398,7 @@ describe("extension live DOM Bookmark capture", () => {
       BOOKMARK_CAPTURE_LIMITS.extensionRequestBytes,
     );
     observation.capture.extractorVersion = "mozilla-readability-0.6";
-    observation.capture.sanitizerPolicyVersion = 1;
+    observation.capture.sanitizerPolicyVersion = 2;
 
     const result = serializeBookmarkRequest(observation);
     const parsed = JSON.parse(result.serialized) as {

@@ -65,8 +65,6 @@ export type SocialPostCardProps = {
   text: ReactNode;
   /** The quoted record's card, rendered by the caller; null when unresolved. */
   quote: ReactNode;
-  /** The static style: a video stays a poster, never a player. */
-  simplified?: boolean;
 };
 
 /**
@@ -79,7 +77,6 @@ export function SocialPostCard({
   post,
   text,
   quote,
-  simplified = false,
 }: SocialPostCardProps) {
   const platform = PLATFORM_NAMES[post.platform];
   const offline = useAtomValue(isDisconnectedAtom);
@@ -136,7 +133,7 @@ export function SocialPostCard({
         )}
         {post.video && (
           <div data-social-post-video>
-            {simplified || offline ? (
+            {offline ? (
               <RemoteImage
                 key={post.video.thumbnailUrl}
                 src={post.video.thumbnailUrl}
