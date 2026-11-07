@@ -19,10 +19,9 @@ pnpm --filter @serial/extension dev:firefox
 The root `build`, `typecheck`, `lint`, and `format` commands include this
 workspace automatically.
 
-Production Chrome and Firefox store deployment is documented in
-[`../../.github/EXTENSION_DEPLOYMENT.md`](../../.github/EXTENSION_DEPLOYMENT.md).
-The first store listings are created manually; affected updates are submitted
-from `main` by GitHub Actions after that bootstrap is complete.
+The first store listings are created manually. After bootstrap, the
+[extension release workflow](../../.github/workflows/deploy-extension.yml)
+submits affected updates from `main` after approval in GitHub Actions.
 
 The Firefox source archive contains the locked monorepo inputs needed to
 reproduce the submitted package. From the archive root, use the version from

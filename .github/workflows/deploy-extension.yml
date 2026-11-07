@@ -49,9 +49,20 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
         run: .github/scripts/check-deployable-affected.sh extension
 
-  release-gate:
+  approve-release:
+    name: Approve extension release
     needs: affected
     if: needs.affected.outputs.extension == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    environment: extension-release
+    steps:
+      - name: Confirm shared Chrome and Firefox release approval
+        run: echo "Extension release approved for $GITHUB_SHA."
+
+  release-gate:
+    needs: [affected, approve-release]
+    if: needs.affected.outputs.extension == 'true' && needs.approve-release.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

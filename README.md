@@ -18,13 +18,13 @@ Getting up and running with Serial is easy. Here are the steps you need to start
 
 1. Clone the repository locally
 2. Install the Turso CLI: https://github.com/tursodatabase/turso-cli
-3. Copy `apps/app/.env.example` to `apps/app/.env`
-4. Set `PUBLIC_BASE_URL` to `http://localhost:3000`
-5. Navigate to [Better Auth](https://www.better-auth.com/docs/installation#set-environment-variables) and generate an auth secret. Set it as `BETTER_AUTH_SECRET`
-6. Install Node.js 22.12 or newer.
-7. Install [pnpm](https://pnpm.io/) if you don't have it already.
-8. Run `pnpm i` to install packages.
-9. Run `pnpm dev` to create, migrate, and run your database for the first time, then boot up the development server.
+3. Make a local env file: `cp apps/app/.env.example apps/app/.env.local`
+4. Set `PUBLIC_BASE_URL` in `.env.local` to `http://localhost:3000`
+5. Navigate to [Better Auth](https://www.better-auth.com/docs/installation#set-environment-variables) and generate an auth secret. Set it as `BETTER_AUTH_SECRET` in `.env.local`
+6. Check your Node version with `node -v`; you should install Node.js 22.12 or newer
+7. Install [pnpm](https://pnpm.io/) if you don't have it already
+8. Run `pnpm i` to install packages
+9. Run `pnpm dev` to create, migrate, and run your database for the first time, then boot up the development server
 
 If you'd like to support additional features in development, [see below!](#enabling-additional-features)
 

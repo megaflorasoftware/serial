@@ -5,14 +5,29 @@ import type { HTMLReactParserOptions } from "html-react-parser";
 import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
 import { ExternalContent } from "~/components/content-reader/ExternalContent";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
+import { replaceReaderCodeBlock } from "~/components/content-reader/ReaderCodeBlock";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
 
-function findImage(node: Element): { src: string; node: Element } | null {
-  if (node.name === "img")
-    return node.attribs.src ? { src: node.attribs.src, node } : null;
+function findImage(
+  node: Element,
+): { src: string; alt?: string; node: Element } | null {
+  if (node.name === "img") {
+    return node.attribs.src
+      ? { src: node.attribs.src, alt: node.attribs.alt, node }
+      : null;
+  }
   if (node.name === "source") {
     const src = node.attribs.srcset?.split(/\s/)[0];
-    return src ? { src, node } : null;
+    const image = node.parent?.children.find(
+      (child) => child instanceof Element && child.name === "img",
+    );
+    return src
+      ? {
+          src,
+          alt: image instanceof Element ? image.attribs.alt : undefined,
+          node,
+        }
+      : null;
   }
   for (const child of node.children) {
     if (child instanceof Element) {
@@ -40,7 +55,7 @@ function isImageContainer(node: Element): boolean {
     const cls = node.attribs.class ?? "";
     if (cls.includes("image-link") || cls.includes("image2")) return true;
   }
-  if (node.name === "figure") return !!findImage(node);
+  if (node.name === "figure") return true;
   if (node.attribs.class?.includes("captioned-image-container")) return true;
   return false;
 }
@@ -74,6 +89,9 @@ export function ArticleContent({
       const replaced = replace?.(domNode, index);
       if (replaced !== undefined) return replaced;
 
+      const codeBlock = replaceReaderCodeBlock(domNode);
+      if (codeBlock) return codeBlock;
+
       // Open external links in new tabs. In-page links include footnote refs.
       if (
         domNode.name === "a" &&
@@ -84,28 +102,18 @@ export function ArticleContent({
         domNode.attribs.rel = "noopener noreferrer";
       }
 
-      if (domNode.name === "img") {
-        const src = domNode.attribs.src ?? "";
-        const alt = domNode.attribs.alt ?? "";
-        if (!src) return <></>;
-        return (
-          <ArticleImageLightbox
-            src={src}
-            alt={alt}
-            aspectRatio={htmlImageAspectRatio(domNode)}
-          />
-        );
-      }
-
-      if (isImageContainer(domNode)) {
+      if (domNode.name === "img" || isImageContainer(domNode)) {
         const image = findImage(domNode);
         if (image)
           return (
             <ArticleImageLightbox
               src={image.src}
+              alt={image.alt ?? ""}
               aspectRatio={htmlImageAspectRatio(image.node)}
             />
           );
+        // An image without a source has nothing to show.
+        if (domNode.name === "img") return <></>;
       }
 
       if (domNode.name !== "iframe") return;

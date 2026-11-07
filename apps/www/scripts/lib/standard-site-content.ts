@@ -10,6 +10,9 @@ const frontmatterSchema = z.object({
   public: z.boolean(),
 });
 
+// The sync script runs under plain Node, so it cannot import the Astro content
+// collection loader in src/lib/content.ts (an `astro:content` virtual module).
+// Keep this reader aligned with that loader's frontmatter contract.
 const RELEASES_DIR = new URL("../../src/content/releases/", import.meta.url);
 
 export async function loadReleaseDocuments(directory = RELEASES_DIR) {

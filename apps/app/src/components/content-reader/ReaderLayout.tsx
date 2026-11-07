@@ -25,7 +25,7 @@ export function ReaderLayout({
   return (
     <div
       className={clsx(
-        "mx-auto grid h-full w-full place-items-center",
+        "mx-auto grid h-full w-full grid-cols-1 place-items-center",
         articleWidthLayout.className,
       )}
       style={articleWidthLayout.style}
