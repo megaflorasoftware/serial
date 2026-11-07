@@ -1,0 +1,563 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We shipped post recommendations, and improved Leaflet Reader. We also reworked overall Leaflet nav, with clearer \"Read\" and \"Write\" modes. Here's what's new!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Recommend posts",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "You can hit the \"recommend\" button (heart icon) from the top or bottom of a post, to show your appreciation.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Yes, basically a ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "like",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " button, but…for recommending!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Publishers can turn off recommendations for a publication, or per-post if you like.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "image",
+      "image": {
+        "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:btxrwcaeyodrap5mnjw2fvmz/bafkreihaqhlzbfhnn6kcqjs52kltlozf5wlsiwsqluwah5kpw6l4myhete@jpeg",
+        "alt": "header of post \"Atmospheric Weather Report #2\" with small recommend button highlighted, showing 7 recommends",
+        "title": null,
+        "aspectRatio": {
+          "width": 1592,
+          "height": 448
+        },
+        "width": null,
+        "fullBleed": false
+      },
+      "caption": null
+    },
+    {
+      "align": null,
+      "kind": "image",
+      "image": {
+        "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:btxrwcaeyodrap5mnjw2fvmz/bafkreif3kdmpfs2vkumif5qsskyaacv6iiz57l2fbm7kwsjjpxupvf5pau@jpeg",
+        "alt": "footer of post \"Atmospheric Weather Report #2\" with larger recommend button showing \"recommended!\" and 7 recommends",
+        "title": null,
+        "aspectRatio": {
+          "width": 1592,
+          "height": 448
+        },
+        "width": null,
+        "fullBleed": false
+      },
+      "caption": null
+    },
+    {
+      "align": "center",
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "same post, \"recommended\" at top and bottom",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": "center",
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "⁂ ⁂ ⁂",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Leaflet Reader",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We merged our old Reader (showing your subscriptions) and our previous Discover page into a new \"Reader\" with multiple feeds:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "list",
+      "ordered": false,
+      "start": null,
+      "items": [
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Subs: posts from your subscribed publications",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Trending: hottest recent posts",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "New: all posts, by recency",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "image",
+      "image": {
+        "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:btxrwcaeyodrap5mnjw2fvmz/bafkreibbhedxkn64kiorp77z5lt6wabivnw34misxus2yttfmsspym6dvq@jpeg",
+        "alt": "leaflet reader, with \"what's hot\" (since renamed \"trending\") feed shown, with post list + comments for one of the visible posts, \"Announcing Skyboard\", open in sidebar",
+        "title": null,
+        "aspectRatio": {
+          "width": 2634,
+          "height": 1380
+        },
+        "width": null,
+        "fullBleed": false
+      },
+      "caption": null
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "From the Reader feeds, you can open posts, hit recommend, and copy the share link directly. You can also click the comments and mentions buttons to preview the social context before reading.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Also worth noting — this shows not only posts created on Leaflet, but any ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "standard.site",
+          "marks": {},
+          "link": {
+            "href": "https://standard.site/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " published posts!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "In the process we removed the ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "publication",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "-focused Discover page, which was less useful — maybe we'll revisit in some form (like a way to recommend pubs) but here we want posts to shine. This is also a fun area for global ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "standard.site",
+          "marks": {},
+          "link": {
+            "href": "https://standard.site/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " tools to explore!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Some good responses on our ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "announcement post",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/leaflet.pub/post/3merkri5lcs2e",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": "; thanks to ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@zzstoatzz.io",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:xbtmt2zjwlrfegqvch7fboei",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " for ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "feedback",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/zzstoatzz.io/post/3mfubyiph422y",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " on some issues, now mostly fixed :)",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": "center",
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "⁂ ⁂ ⁂",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Sidebar: the ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Trending",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " feed",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "How does the ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Trending",
+          "marks": {
+            "bold": true,
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " algo work? It's basically the Hacker News homepage ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "ranking algo",
+          "marks": {},
+          "link": {
+            "href": "https://www.righto.com/2013/11/how-hacker-news-ranking-really-works.html",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ", lightly tweaked. We calculate a score for recent posts, based on both Bluesky likes and Leaflet recommendations (the latter weighted more strongly).",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Right now we show the top 50 recent posts. The score decays rapidly, within hours, so we could play with that variable so posts stick around a bit longer.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "code",
+      "code": "SELECT uri\nFROM documents\nWHERE indexed = true\nAND sort_date > now() - interval '7 days'\nORDER BY\n(bsky_like_count + recommend_count * 5)::numeric \n/ power(extract(epoch from (now() - sort_date)) / 3600 + 2, 1.5) DESC\nLIMIT 50",
+      "language": null
+    },
+    {
+      "align": "center",
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "⁂ ⁂ ⁂",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Future ideas for Reader",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "One thing that'd be really cool to build on this: custom feeds.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We'd love to show more things in Reader feeds too, e.g. more context-rich recommendations, or surfacing things your friends are reading.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "And we'd like to have some nicer way to navigate between posts as you read, maybe an iframe wrapper, with footer for interactions and navigation / browsing.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Since we can show not only Leaflet posts but any ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "standard.site",
+          "marks": {},
+          "link": {
+            "href": "https://standard.site/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " compatible posts, it'd be nice to support more standard social interactions (like comments) on all posts in some form, too.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

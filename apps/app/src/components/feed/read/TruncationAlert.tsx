@@ -4,13 +4,14 @@ import type { useFeedItemValue } from "~/lib/data/store";
 import { useEditFeedMutation } from "~/lib/data/feeds/mutations";
 import { useFeedCategories } from "~/lib/data/feed-categories/store";
 import { useViewFeeds } from "~/lib/data/view-feeds/store";
-import { detectTruncatedContent } from "~/lib/utils/detectTruncatedContent";
+import { isTruncatedReaderBody } from "~/lib/data/feed-items/readerBody";
 import {
   hasRespondedToTruncationAlert,
   setTruncationAlertResponded,
 } from "~/lib/utils/truncationAlert";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { isTextPlatform } from "~/lib/content/descriptor";
 
 type ReaderFeed = ReturnType<typeof useFeeds>["feeds"][number];
 type ReaderFeedItem = ReturnType<typeof useFeedItemValue>;
@@ -38,14 +39,15 @@ export function useTruncationAlert({
 
   const shouldCheckTruncatedContent =
     !alertDismissed &&
-    platform === "website" &&
+    platform !== undefined &&
+    isTextPlatform(platform) &&
     !!feedId &&
     !hasTruncationAlertResponse &&
     !!feedItem;
   const shouldShowTruncationAlert =
     shouldCheckTruncatedContent &&
     feedItem !== undefined &&
-    detectTruncatedContent(feedItem.content, feedItem.contentSnippet);
+    isTruncatedReaderBody(feedItem.body, feedItem.contentSnippet);
 
   const handleAlertResponse = (openLocation: "serial" | "origin") => {
     if (!feedId || !canMutate) return;

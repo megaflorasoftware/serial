@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { attachJetstream } from "./jetstream-server";
 
 const port = Number(process.argv[2]) || 3003;
 const BASE = `http://127.0.0.1:${port}`;
@@ -69,6 +70,25 @@ const feeds: Record<string, string> = {
 
 const server = createServer((req, res) => {
   const url = req.url ?? "/";
+
+  const publication = /^\/publications\/([a-z0-9-]+)$/.exec(url);
+  if (publication) {
+    const key = publication[1];
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(
+      `<html><head><title>Publication ${key}</title><link rel="alternate" type="application/rss+xml" href="${BASE}/publication-feed/${key}"></head><body>Publication ${key}</body></html>`,
+    );
+    return;
+  }
+  const publicationFeed = /^\/publication-feed\/([a-z0-9-]+)$/.exec(url);
+  if (publicationFeed) {
+    const key = publicationFeed[1];
+    res.writeHead(200, { "Content-Type": "application/rss+xml" });
+    res.end(
+      `<?xml version="1.0"?><rss version="2.0"><channel><title>Publication ${key}</title><link>${BASE}/publications/${key}</link><description>Local publication</description><item><title>Article ${key}</title><link>${BASE}/articles/${key}</link><guid>${key}</guid><description>Publication fixture article.</description></item></channel></rss>`,
+    );
+    return;
+  }
 
   if (url === "/delayed/missing-feed") {
     setTimeout(() => {
@@ -179,6 +199,7 @@ const server = createServer((req, res) => {
   res.end();
 });
 
+attachJetstream(server);
 server.listen(port, "127.0.0.1", () => {
   console.log(`RSS test server running on ${BASE}`);
 });

@@ -1,3 +1,5 @@
+import { classifyDiscoveryInput } from "@serial/feed-discovery";
+
 export type StaticFeedSearchOption = {
   label: string;
   description?: string;
@@ -16,23 +18,5 @@ export type StaticFeedSearchOption = {
 export const STATIC_FEED_SEARCH_OPTIONS: StaticFeedSearchOption[] = [];
 
 export function normalizeFeedSearchUrl(value: string) {
-  const trimmedValue = value.trim();
-  if (!trimmedValue) return null;
-
-  const hasExplicitScheme = /^https?:\/\//i.test(trimmedValue);
-  const normalizedValue = hasExplicitScheme
-    ? trimmedValue
-    : `https://${trimmedValue}`;
-
-  try {
-    const parsedUrl = new URL(normalizedValue);
-    const looksLikeHostname =
-      parsedUrl.hostname.includes(".") ||
-      parsedUrl.hostname === "localhost" ||
-      parsedUrl.hostname.includes(":");
-
-    return hasExplicitScheme || looksLikeHostname ? normalizedValue : null;
-  } catch {
-    return null;
-  }
+  return classifyDiscoveryInput(value)?.websiteUrl ?? null;
 }

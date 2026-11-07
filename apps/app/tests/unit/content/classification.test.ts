@@ -8,6 +8,7 @@ import {
   classifyDocument,
   classifyUrl,
   createFallbackPreview,
+  isValidNativeContentId,
   isValidNativeContentIdForUrl,
   mergeClassification,
   mergePreview,
@@ -187,4 +188,20 @@ describe("content classification", () => {
       );
     },
   );
+});
+
+describe("Atmosphere platforms", () => {
+  it("never come from a URL and carry no native content id", () => {
+    for (const url of [
+      "https://leaflet.pub/lish/example/post",
+      "https://pckt.blog/example",
+      "https://offprint.app/example",
+    ])
+      expect(classifyUrl(url)).toMatchObject({
+        platform: "website",
+        contentType: "text",
+      });
+    for (const platform of ["leaflet", "pckt", "offprint"] as const)
+      expect(isValidNativeContentId(platform, "anything")).toBe(false);
+  });
 });

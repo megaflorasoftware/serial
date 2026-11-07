@@ -93,3 +93,32 @@ export const getConfig = publicProcedure.handler(
     };
   },
 );
+
+export const setThemePair = protectedProcedure
+  .input(
+    z.object({
+      light: z.tuple([
+        z.number().min(0).max(360),
+        z.number().min(0).max(100),
+        z.number().min(70).max(100),
+      ]),
+      dark: z.tuple([
+        z.number().min(0).max(360),
+        z.number().min(0).max(100),
+        z.number().min(0).max(30),
+      ]),
+    }),
+  )
+  .handler(async ({ context, input }) => {
+    const colors = {
+      lightHSL: serializeHSL(input.light),
+      darkHSL: serializeHSL(input.dark),
+    };
+    await context.db
+      .insert(userConfig)
+      .values({ userId: context.user.id, ...colors })
+      .onConflictDoUpdate({
+        target: userConfig.userId,
+        set: { ...colors, updatedAt: sql`CURRENT_TIMESTAMP` },
+      });
+  });

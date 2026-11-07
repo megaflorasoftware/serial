@@ -7,3 +7,5 @@ export type {
   ExtensionCaptureCandidate,
   ExtensionPageObservation,
 } from "./extract";
+
+export { openGraphImageUrl } from "./metadata";

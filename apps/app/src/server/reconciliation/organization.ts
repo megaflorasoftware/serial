@@ -5,6 +5,7 @@ import type {
   ApplicationView,
   DatabaseContentCategory,
   DatabaseFeedCategory,
+  DatabaseFeedWithOrigins,
   DatabaseViewCategory,
   DatabaseViewFeed,
   DatabaseViewSection,
@@ -15,10 +16,10 @@ import { UNCATEGORIZED_VIEW_ID } from "~/lib/data/views/constants";
 import { sortViewsByPlacement } from "~/lib/data/views/utils";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import { buildUncategorizedView } from "~/server/api/utils/buildUncategorizedView";
+import { loadUserFeedsWithOrigins } from "~/server/feeds/origins";
 import {
   contentCategories,
   feedCategories,
-  feeds,
   feedsSchema,
   viewCategories,
   viewFeeds,
@@ -30,7 +31,7 @@ type ReconciliationDatabase = typeof defaultDatabase;
 
 type OrganizationRows = {
   views: Array<typeof views.$inferSelect>;
-  feeds: Array<typeof feeds.$inferSelect>;
+  feeds: DatabaseFeedWithOrigins[];
   tags: DatabaseContentCategory[];
   feedTags: DatabaseFeedCategory[];
   viewTags: DatabaseViewCategory[];
@@ -138,9 +139,7 @@ async function loadOrganizationRows(input: {
       .from(views)
       .where(eq(views.userId, input.userId))
       .orderBy(asc(views.placement)),
-    input.database.query.feeds.findMany({
-      where: eq(feeds.userId, input.userId),
-    }),
+    loadUserFeedsWithOrigins(input.database, input.userId),
     input.database
       .select()
       .from(contentCategories)

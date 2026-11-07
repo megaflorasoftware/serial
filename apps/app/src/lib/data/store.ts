@@ -4,9 +4,11 @@ import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { orpcRouterClient } from "../orpc";
 import { createSelectorHooks } from "./createSelectorHooks";
+import { retainEqualEntity } from "./entity-equality";
 import {
   applyFeedItemPageRetention,
   getPersistedFeedItemRetentionState,
+  removeRetainedFeedItems,
 } from "./feed-page-retention";
 import { mergeFeedItem } from "./feed-items/mergeFeedItem";
 import { hasFeedItemListProjectionChanged } from "./feed-items/listProjection";
@@ -30,9 +32,9 @@ import type {
 } from "./feed-page-retention";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import type { ApplicationFeedItem } from "~/server/db/schema";
-import type { FeedItemFulltext } from "~/server/api/routers/initialRouter";
 import type { PublishedChunk } from "~/server/api/publisher";
 import type { IncomingFeedItem } from "./feed-items/mergeFeedItem";
+import type { FeedItemFulltext } from "~/server/api/routers/initialRouter";
 
 export { getFeedItemScopeKey } from "./scopeMembership";
 export type { FeedItemScopeType } from "./scopeMembership";
@@ -109,7 +111,23 @@ export type ApplicationStore = {
   scheduleFulltextFetch: () => void;
 };
 
-function getPersistedApplicationState(state: ApplicationStore) {
+function selectApplicationCache(state: ApplicationStore) {
+  return {
+    feedItemsDict: state.feedItemsDict,
+    feedItemsOrder: state.feedItemsOrder,
+    scopeFeedItemIds: state.scopeFeedItemIds,
+    retainedFeedPages: state.retainedFeedPages,
+    retainedFeedPageBytes: state.retainedFeedPageBytes,
+    pageOwnedFeedItemIds: state.pageOwnedFeedItemIds,
+    retainedFeedItemBodyIds: state.retainedFeedItemBodyIds,
+    viewFeedIds: state.viewFeedIds,
+    hasInitialData: state.hasInitialData,
+  };
+}
+
+function getPersistedApplicationState(
+  state: ReturnType<typeof selectApplicationCache>,
+) {
   const retainedState = getPersistedFeedItemRetentionState(state);
   return {
     ...retainedState,
@@ -160,7 +178,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       setFeedItem: (id, item) => {
         const state = get();
         const previousItem = state.feedItemsDict[id];
-        const retainedItem = retainEligibleFeedBody(previousItem, item);
+        const retainedItem = retainEqualEntity(
+          previousItem,
+          retainEligibleFeedBody(previousItem, item),
+        );
         const retainedFeedItemBodyIds = {
           ...state.retainedFeedItemBodyIds,
         };
@@ -202,9 +223,9 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         };
 
         for (const item of items) {
-          const retainedItem = retainEligibleFeedBody(
+          const retainedItem = retainEqualEntity(
             state.feedItemsDict[item.id],
-            item,
+            retainEligibleFeedBody(state.feedItemsDict[item.id], item),
           );
           if (
             hasFeedItemListProjectionChanged(
@@ -271,7 +292,7 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
           if (existing) {
             const updated = {
               ...existing,
-              content: item.content,
+              body: item.body,
               contentSnippet: item.contentSnippet,
             };
             feedItemsDict[item.id] = updated;
@@ -322,8 +343,15 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
             .requestFullTextForItems({
               itemIds,
             })
-            .then((items) => {
-              get().applyFulltextItems(items);
+            .then((response) => {
+              get().applyFulltextItems(response.items);
+              // Omitted ids were cut by the response byte cap, so they are
+              // re-queued rather than treated as bodyless.
+              if (response.omitted.length > 0) {
+                const pending = new Set(get().pendingFulltextItems);
+                for (const itemId of response.omitted) pending.add(itemId);
+                set({ pendingFulltextItems: [...pending] });
+              }
             })
             .catch((error) => {
               console.error("Error fetching fulltext:", error);
@@ -444,6 +472,13 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
         switch (source) {
           case "rss": {
             switch (chunk.type) {
+              case "refresh-progress":
+                loadingActor.send({
+                  type: "REFRESH_PROGRESS",
+                  total: chunk.total,
+                  completed: chunk.completed,
+                });
+                break;
               case "refresh-start":
                 set({ feedStatusDict: {} });
                 updateRefreshCooldown(new Date(chunk.nextRefreshAt));
@@ -462,9 +497,22 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
                 loadingActor.send({ type: "FEED_STATUS" });
                 break;
               }
-              case "feed-items":
+              case "feed-items": {
+                if (chunk.removedItemIds?.length) {
+                  const removed = new Set(chunk.removedItemIds);
+                  const state = get();
+                  set({
+                    ...removeRetainedFeedItems(state, removed),
+                    feedItemProjectionRevision:
+                      state.feedItemProjectionRevision + 1,
+                    pendingFulltextItems: state.pendingFulltextItems.filter(
+                      (id) => !removed.has(id),
+                    ),
+                  });
+                }
                 mergeFeedItems(chunk.feedItems);
                 break;
+              }
               case "rss-attempt-complete":
                 loadingActor.send({ type: "BACKGROUND_REFRESH_COMPLETE" });
                 break;
@@ -483,9 +531,10 @@ const vanillaApplicationStore = createStore<ApplicationStore>()(
       storage: createNormalizedIDBStorage({
         recordFields: ["feedItemsDict", "retainedFeedItemBodyIds"],
         arrayFields: ["feedItemsOrder"],
+        prepareWrite: getPersistedApplicationState,
       }),
       version: 1,
-      partialize: getPersistedApplicationState,
+      partialize: selectApplicationCache,
       merge: (persisted, current) => {
         const persistedState =
           (persisted as Partial<ApplicationStore> | undefined) ?? {};
@@ -593,11 +642,11 @@ export async function retainFeedItemBody(itemId: string) {
   }
   if (retainLoadedFeedItemBody(itemId)) return;
   // Retention is best effort; a failed fetch stays silent.
-  const items = await orpcRouterClient.initial
+  const response = await orpcRouterClient.initial
     .requestFullTextForItems({ itemIds: [itemId] })
     .catch(() => null);
-  if (!items) return;
-  feedItemsStore.getState().applyFulltextItems(items);
+  if (!response) return;
+  feedItemsStore.getState().applyFulltextItems(response.items);
 }
 
 export const useFeedItemsListProjection = () => {

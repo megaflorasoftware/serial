@@ -1,3 +1,5 @@
+import { feedDiscoveryKey } from "@serial/feed-discovery";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { ReactNode } from "react";
 import {
   Alert,
@@ -6,8 +8,7 @@ import {
   Button,
   Item,
   ItemContent,
-  ItemDescription,
-  ItemTitle,
+  PublicationRowContent,
 } from "@serial/ui";
 import { Check, Info, Loader2, LogOut, Plus, Rss } from "lucide-react";
 
@@ -56,7 +57,7 @@ export function FeedDiscovery({
   pendingFeedUrls: string[];
   addedFeedUrls: string[];
   status: FeedDiscoveryStatus;
-  onAddFeed: (url: string) => void;
+  onAddFeed: (feed: DiscoveredFeed) => void;
 }) {
   if (status === "loading") {
     return (
@@ -89,20 +90,17 @@ export function FeedDiscovery({
         <Rss className="text-muted-foreground size-4" />
       </div>
       {workspace.feeds.map((feed) => {
-        const pending = pendingFeedUrlSet.has(feed.url);
-        const added = addedFeedUrlSet.has(feed.url);
+        const pending = pendingFeedUrlSet.has(feedDiscoveryKey(feed));
+        const added = addedFeedUrlSet.has(feedDiscoveryKey(feed));
         return (
           <Item
-            key={feed.url}
+            key={feedDiscoveryKey(feed)}
             size="xs"
             variant="outline"
             className="min-w-0 flex-nowrap"
           >
             <ItemContent className="min-w-0">
-              <ItemTitle className="max-w-full">
-                {feed.title || new URL(feed.url).hostname}
-              </ItemTitle>
-              <ItemDescription className="truncate">{feed.url}</ItemDescription>
+              <PublicationRowContent feed={feed} />
             </ItemContent>
             <Button
               type="button"
@@ -116,7 +114,7 @@ export function FeedDiscovery({
                     ? "Feed added"
                     : `Add ${feed.title || "Feed"}`
               }
-              onClick={() => onAddFeed(feed.url)}
+              onClick={() => onAddFeed(feed)}
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />

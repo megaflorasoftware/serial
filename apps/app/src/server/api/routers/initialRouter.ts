@@ -7,6 +7,7 @@ import {
   insertFeedWithCategories,
   runInChunks,
 } from "./feed-router/utils";
+import type { ReaderBody } from "@serial/standard-site";
 import type { PublishedChunk } from "../publisher";
 import type { InsertFeedWithCategoriesResult } from "./feed-router/utils";
 import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
@@ -15,6 +16,8 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
+import { loadCappedReaderBodies } from "~/server/feeds/reader-bodies";
+import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
@@ -24,6 +27,8 @@ import {
   VIEW_LAYOUT_ITEM_TYPE,
 } from "~/server/db/constants";
 import { dbSemaphore } from "~/lib/semaphore";
+import { prepareRssFeedImport } from "~/server/feeds/imports";
+import { runDatabaseWrite } from "~/server/db/retry-write";
 import { workerPool } from "~/lib/workerPool";
 import {
   contentCategories,
@@ -36,6 +41,12 @@ import {
   viewSections,
 } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
+import { getFeedRssUrl } from "~/lib/feeds/origins";
+import {
+  fetchableOriginsOf,
+  findFeedsByRssUrls,
+  withOrigins,
+} from "~/server/feeds/origins";
 import { protectedProcedure } from "~/server/orpc/base";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import {
@@ -105,8 +116,11 @@ export const reconcileApplicationState = protectedProcedure
 
 export const fetchDueSources = protectedProcedure
   .input(z.object({ trigger: z.enum(["automatic", "manual"]) }))
-  .handler(async ({ context, input }) =>
-    runFetchDueSources({
+  .handler(async ({ context, input }) => {
+    if (input.trigger === "manual") {
+      await recordUserActivity(context.db, context.user.id);
+    }
+    return runFetchDueSources({
       database: context.db,
       userId: context.user.id,
       trigger: input.trigger,
@@ -114,14 +128,20 @@ export const fetchDueSources = protectedProcedure
       publish: async (channel, chunk) => {
         await publisher.publish(channel, { source: "rss", chunk });
       },
-    }),
-  );
+    });
+  });
 
-/** Fulltext content patch for items that need it after the lightweight fetch. */
+/** Reader body patch for items that need it after the lightweight fetch. */
 export type FeedItemFulltext = {
   id: string;
-  content: string;
+  body: ReaderBody | null;
   contentSnippet: string;
+};
+
+/** Ids past the response byte cap are named so the client asks again. */
+export type FeedItemFulltextResponse = {
+  items: FeedItemFulltext[];
+  omitted: string[];
 };
 
 export type ImportProgressChunk =
@@ -376,17 +396,10 @@ export const streamingImport = protectedProcedure
     const inputFeedUrls = getUniqueNames(
       input.feeds.map((feed) => feed.feedUrl),
     );
-    const ownedFeeds = await runInChunks(inputFeedUrls, (urlChunk) =>
-      context.db
-        .select()
-        .from(feeds)
-        .where(
-          and(eq(feeds.userId, context.user.id), inArray(feeds.url, urlChunk)),
-        ),
-    );
-    const ownedFeedByUrl = new Map(
-      ownedFeeds.flat().map((feed) => [feed.url, feed]),
-    );
+    const ownedFeedByUrl = await findFeedsByRssUrls(context.db, {
+      userId: context.user.id,
+      feedUrls: inputFeedUrls,
+    });
 
     // OPML sections always become views; only explicit Serial tag metadata
     // becomes feed tags.
@@ -399,18 +412,12 @@ export const streamingImport = protectedProcedure
     const feedsToInsert = feedsToImport.filter((feed) => !feed.ownedFeed);
 
     // Check activation budget upfront
-    const { remainingSlots, maxActiveFeeds } = await getFeedsActivationBudget(
+    const { maxActiveFeeds } = await getFeedsActivationBudget(
       context.db,
       context.user.id,
     );
-    const deactivatedCount = Math.max(0, feedsToInsert.length - remainingSlots);
-
-    const feedsWithActivation = feedsToInsert.map((feed, index) => ({
-      feedUrl: feed.feedUrl,
-      categories: feed.categories,
-      categoryPaths: feed.categoryPaths,
-      shouldBeActive: index < remainingSlots,
-    }));
+    let deactivatedCount = 0;
+    const feedsWithActivation = feedsToInsert;
 
     // Publish import start with total feeds count (must come before
     // import-limit-warning so the client's loading machine is initialized first)
@@ -418,15 +425,6 @@ export const streamingImport = protectedProcedure
       type: "import-start",
       totalFeeds: input.feeds.length,
     } satisfies ImportProgressChunk;
-
-    // Publish warning if some feeds will be inactive
-    if (deactivatedCount > 0) {
-      yield {
-        type: "import-limit-warning",
-        deactivatedCount,
-        maxActiveFeeds,
-      } satisfies ImportProgressChunk;
-    }
 
     const publishOrganizationInvalidation = () =>
       publisher.publish(channel, {
@@ -692,9 +690,6 @@ export const streamingImport = protectedProcedure
     async function insertFeed(
       feedInput: (typeof feedsWithActivation)[0],
     ): Promise<ImportProgressChunk[]> {
-      // Once the timeout fires the feed is reported as an error, so the
-      // abandoned insert must not register the feed for the fetch phase or
-      // emit a second terminal chunk.
       let timedOut = false;
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -735,11 +730,13 @@ export const streamingImport = protectedProcedure
           ];
         }
 
+        if (!insertResult.reused && !insertResult.feed.isActive)
+          deactivatedCount++;
         insertedFeeds.push({
           inputFeedUrl: feedInput.feedUrl,
           feedId: insertResult.feedId,
           feed: insertResult.feed,
-          categoryPaths: feedInput.categoryPaths,
+          categoryPaths: insertResult.reused ? [] : feedInput.categoryPaths,
         });
 
         return [
@@ -752,57 +749,77 @@ export const streamingImport = protectedProcedure
         ];
       };
 
-      const insertPromise = (async () => {
-        const insertResult = await dbSemaphore.run(() =>
-          context.db.transaction(async (tx) => {
-            const result = await insertFeedWithCategories(
-              tx,
-              context.user.id,
-              feedInput,
-              feedInput.shouldBeActive,
-            );
-
-            const linkableFeedId = result.success
-              ? result.feedId
-              : result.existingFeed?.id;
-            if (linkableFeedId) {
-              const { viewFeedRows, feedCategoryRows } = collectViewLinkRows(
-                feedInput.categoryPaths,
-                linkableFeedId,
-              );
-
-              await runInChunks(viewFeedRows, (rowChunk) =>
-                tx.insert(viewFeeds).values(rowChunk).onConflictDoNothing(),
-              );
-              await runInChunks(feedCategoryRows, (rowChunk) =>
-                tx
-                  .insert(feedCategories)
-                  .values(rowChunk)
-                  .onConflictDoNothing(),
-              );
-              // A duplicate resolved during insert skipped the tag block in
-              // insertFeedWithCategories; apply its exported tags here.
-              if (!result.success && feedInput.categories.length > 0) {
-                await applyFeedCategories(tx, context.user.id, [
-                  {
-                    feedId: linkableFeedId,
-                    categories: feedInput.categories,
-                  },
-                ]);
-              }
-            }
-
-            return result;
-          }),
-        );
-
-        // The timer flips `timedOut` while the insert is in flight, so the
-        // check only means something once the transaction has settled.
-        return timedOut ? [] : reportInsertResult(insertResult);
-      })();
-
       try {
-        return await Promise.race([insertPromise, timeoutPromise]);
+        const preparationPromise = prepareRssFeedImport(
+          context.db,
+          context.user.id,
+          feedInput.feedUrl,
+        );
+        const prepared = await Promise.race([
+          preparationPromise,
+          timeoutPromise,
+        ]);
+        const insertResult = await Promise.race([
+          dbSemaphore.run(() => {
+            if (timedOut) throw new Error("Import timed out");
+            // Once the write starts, report its real result. Returning a timeout
+            // while this transaction commits would leave the import state ahead
+            // of the progress stream.
+            clearTimeout(timeoutTimer);
+            return runDatabaseWrite(context.db, () =>
+              context.db.transaction(
+                async (tx) => {
+                  const result = await insertFeedWithCategories(
+                    tx,
+                    context.user.id,
+                    feedInput,
+                    prepared,
+                    maxActiveFeeds,
+                  );
+
+                  const linkableFeedId = result.success
+                    ? result.feedId
+                    : result.existingFeed?.id;
+                  if (linkableFeedId && !(result.success && result.reused)) {
+                    const { viewFeedRows, feedCategoryRows } =
+                      collectViewLinkRows(
+                        feedInput.categoryPaths,
+                        linkableFeedId,
+                      );
+
+                    await runInChunks(viewFeedRows, (rowChunk) =>
+                      tx
+                        .insert(viewFeeds)
+                        .values(rowChunk)
+                        .onConflictDoNothing(),
+                    );
+                    await runInChunks(feedCategoryRows, (rowChunk) =>
+                      tx
+                        .insert(feedCategories)
+                        .values(rowChunk)
+                        .onConflictDoNothing(),
+                    );
+                    // A duplicate resolved during insert skipped the tag block in
+                    // insertFeedWithCategories; apply its exported tags here.
+                    if (!result.success && feedInput.categories.length > 0) {
+                      await applyFeedCategories(tx, context.user.id, [
+                        {
+                          feedId: linkableFeedId,
+                          categories: feedInput.categories,
+                        },
+                      ]);
+                    }
+                  }
+
+                  return result;
+                },
+                { behavior: "immediate" },
+              ),
+            );
+          }),
+          timeoutPromise,
+        ]);
+        return reportInsertResult(insertResult);
       } catch (error) {
         captureException(error);
         return [
@@ -833,6 +850,14 @@ export const streamingImport = protectedProcedure
         lastMembershipPublishAt = Date.now();
         await publishOrganizationInvalidation();
       }
+    }
+
+    if (deactivatedCount > 0) {
+      yield {
+        type: "import-limit-warning",
+        deactivatedCount,
+        maxActiveFeeds,
+      } satisfies ImportProgressChunk;
     }
 
     // Nested folders become ordered view sections. Feed-type sections need
@@ -885,13 +910,13 @@ export const streamingImport = protectedProcedure
           itemId: number;
         }> = [];
         const linkableFeedsByCanonicalUrl = new Map(
-          orderedLinkableFeeds.map((feed) => [feed.feed.url, feed]),
+          orderedLinkableFeeds.map((feed) => [getFeedRssUrl(feed.feed), feed]),
         );
         // First feed wins for a display name, matching the previous
         // first-match scan.
         const linkableFeedsByDisplayName = new Map<string, LinkableFeed>();
         for (const feed of orderedLinkableFeeds) {
-          const displayName = feed.feed.name || feed.feed.url;
+          const displayName = feed.feed.name || getFeedRssUrl(feed.feed);
           if (!linkableFeedsByDisplayName.has(displayName)) {
             linkableFeedsByDisplayName.set(displayName, feed);
           }
@@ -981,9 +1006,12 @@ export const streamingImport = protectedProcedure
       });
 
       const fetchPromise = (async () => {
-        for await (const feedResult of fetchAndInsertFeedData(context, [
-          insertedFeed.feed,
-        ])) {
+        for await (const feedResult of fetchAndInsertFeedData(
+          context,
+          fetchableOriginsOf(
+            await withOrigins(context.db, [insertedFeed.feed]),
+          ),
+        )) {
           chunks.push({
             type: "feed-status",
             feedId: feedResult.id,
@@ -1031,13 +1059,17 @@ export const requestFullTextForItems = protectedProcedure
       itemIds: z.array(z.string()).max(500),
     }),
   )
-  .handler(async ({ context, input }) => {
+  .handler(async ({ context, input }): Promise<FeedItemFulltextResponse> => {
     try {
-      const items = await context.db
+      const rows = await context.db
         .select({
           id: feedItems.id,
+          feedId: feedItems.feedId,
           content: feedItems.content,
+          contentHash: feedItems.contentHash,
           contentSnippet: feedItems.contentSnippet,
+          atprotoUri: feedItems.atprotoUri,
+          sourceCid: feedItems.sourceCid,
         })
         .from(feedItems)
         .innerJoin(feeds, eq(feedItems.feedId, feeds.id))
@@ -1047,8 +1079,18 @@ export const requestFullTextForItems = protectedProcedure
             eq(feeds.userId, context.user.id),
           ),
         );
-
-      return items;
+      // Request order decides which bodies fit under the response cap.
+      const position = new Map(input.itemIds.map((id, index) => [id, index]));
+      rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+      const { items, omitted } = await loadCappedReaderBodies(context.db, rows);
+      return {
+        items: items.map((entry) => ({
+          id: entry.row.id,
+          body: entry.body,
+          contentSnippet: entry.row.contentSnippet,
+        })),
+        omitted: omitted.map((row) => row.id),
+      };
     } catch (error) {
       captureException(error);
       throw error;

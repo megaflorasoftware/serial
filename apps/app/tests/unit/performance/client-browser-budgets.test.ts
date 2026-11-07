@@ -35,8 +35,10 @@ describe("client browser performance budgets", () => {
   it("reports each enforced measurement", () => {
     const violations = evaluateClientBrowserScenario("reader", {
       usableContentMs: null,
-      longTasks: [51],
-      commits: [{ actualDuration: 51 }],
+      longTasks: [CLIENT_BROWSER_BUDGETS.reader.longTaskMs + 1],
+      commits: [
+        { actualDuration: CLIENT_BROWSER_BUDGETS.reader.reactCommitMs + 1 },
+      ],
       indexedDb: {
         reads: Number.POSITIVE_INFINITY,
         writes: Number.POSITIVE_INFINITY,

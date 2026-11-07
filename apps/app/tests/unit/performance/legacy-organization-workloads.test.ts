@@ -64,7 +64,6 @@ describe("legacy server workload contracts", () => {
         id: 1,
         userId: "user-one",
         name: "Feed",
-        url: "https://example.com/feed.xml",
         platform: "website",
       });
       await session.database.insert(feedItems).values(
@@ -292,7 +291,6 @@ describe("legacy server workload contracts", () => {
           id,
           userId: "user-one",
           name: `Feed ${id}`,
-          url: `https://example.com/${id}.xml`,
           platform: "website" as const,
         })),
       );

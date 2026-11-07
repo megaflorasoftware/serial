@@ -9,7 +9,7 @@ import { feedsStore } from "./feeds/store";
 import { loadingActor, updateRefreshCooldown } from "./loading-machine";
 import { getMixedScopeKey, mixedContentStore } from "./mixed-content/store";
 import { navigationSnapshotStore } from "./navigation/store";
-import { rssSummaryAffectsTarget } from "./rssRepair";
+import { rssRepairTargets, rssSummaryAffectsTarget } from "./rssRepair";
 import { applyPublishedChunks } from "./subscriptionCoordinator";
 import { feedItemsStore } from "./store";
 import { viewFeedsStore } from "./view-feeds/store";
@@ -392,8 +392,15 @@ function liveEventTargets(
   }
 
   const rssSummary = rssSummaryFrom(payloads);
+  if (rssSummary) {
+    for (const target of rssRepairTargets(
+      rssSummary,
+      null,
+      rssRepairMemberships(),
+    ))
+      addTarget(target);
+  }
   if (rssSummary && rssSummary.affectedFeeds.length > 0) {
-    addTarget({ type: "navigation" });
     if (scopeTargetsHydrated) {
       for (const target of retainedScopeTargets(activeTarget)) {
         if (
@@ -513,16 +520,11 @@ const runtime = createReconciliationRuntime<PublishedChunk[]>({
     }
     if (summary) {
       performanceMark("serial:rss-complete");
-      const repairTargets: ReconciliationTarget[] = [];
-      if (summary.affectedFeeds.length > 0) {
-        repairTargets.push({ type: "navigation" });
-        if (
-          activeTarget &&
-          rssSummaryAffectsTarget(summary, activeTarget, rssRepairMemberships())
-        ) {
-          repairTargets.push(activeTarget);
-        }
-      }
+      const repairTargets = rssRepairTargets(
+        summary,
+        activeTarget,
+        rssRepairMemberships(),
+      );
       return {
         repairTargets,
         dirtyTargets: retainedRssTargets(summary, activeTarget),

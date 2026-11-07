@@ -2,14 +2,16 @@ import { resolveAutomaticRssOwner } from "./automaticOwnership";
 import { countDueFeeds, getDueFeedPage } from "./dueFeeds";
 import { refreshUserFeeds } from "./refreshUserFeeds";
 import { addRefreshStats, emptyRefreshStats, rssAttemptSummary } from "./stats";
+import type { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import type { RefreshStats } from "./stats";
+import type { FetchableOrigin } from "./types";
 import type { db as Database } from "~/server/db";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type {
   FetchDueSourcesResult,
   RssPublishedChunk,
   RssTrigger,
 } from "~/lib/rss";
+import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
 import { checkUserRefreshEligibility } from "~/server/subscriptions/helpers";
 
 type RefreshEligibility =
@@ -26,10 +28,12 @@ type FetchDueSourcesDependencies = {
   getDuePage?: typeof getDueFeedPage;
   refreshFeedPage?: (input: {
     db: typeof Database;
-    feedsList: DatabaseFeed[];
+    feedsList: FetchableOrigin[];
     channel?: string;
+    manual?: boolean;
   }) => Promise<RefreshStats>;
   now?: () => Date;
+  syncSubscriptions?: typeof syncPublicationSubscriptions;
 };
 
 export async function fetchDueSources(input: {
@@ -58,16 +62,29 @@ export async function fetchDueSources(input: {
     return { status: "cooldown", nextRefreshAt: eligibility.nextRefreshAt };
   }
 
+  const syncStarted = await syncBeforeFeedRefresh({
+    database: input.database,
+    userId: input.userId,
+    channel: input.channel,
+    nextRefreshAt: eligibility.nextRefreshAt,
+    publish: input.publish,
+    sync: dependencies.syncSubscriptions,
+  });
   const now = dependencies.now?.() ?? new Date();
   const countDue = dependencies.countDue ?? countDueFeeds;
   const getDuePage = dependencies.getDuePage ?? getDueFeedPage;
   const refreshFeedPage = dependencies.refreshFeedPage ?? refreshUserFeeds;
   const totalFeeds = await countDue(input.database, input.userId, now);
-  await input.publish(input.channel, {
-    type: "refresh-start",
-    totalFeeds,
-    nextRefreshAt: eligibility.nextRefreshAt,
-  });
+  await input.publish(
+    input.channel,
+    syncStarted
+      ? { type: "refresh-progress", total: totalFeeds, completed: 0 }
+      : {
+          type: "refresh-start",
+          totalFeeds,
+          nextRefreshAt: eligibility.nextRefreshAt,
+        },
+  );
 
   const stats = emptyRefreshStats();
   try {
@@ -81,13 +98,14 @@ export async function fetchDueSources(input: {
         now,
       });
       if (feedPage.length === 0) break;
-      afterFeedId = feedPage.at(-1)?.id;
+      afterFeedId = feedPage.at(-1)?.feed.id;
       // Each page must finish before its cursor advances.
       // oxlint-disable-next-line react-doctor/async-await-in-loop
       const pageStats = await refreshFeedPage({
         db: input.database,
         feedsList: feedPage,
         channel: input.channel,
+        manual: input.trigger === "manual",
       });
       addRefreshStats(stats, pageStats);
     }

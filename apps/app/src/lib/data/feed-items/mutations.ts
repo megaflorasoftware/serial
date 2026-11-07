@@ -26,7 +26,7 @@ export type OptimisticWatchedContext = {
   previousIsWatchedUpdatedAt: Date | null;
   previousRetainedBody?: Pick<
     ApplicationFeedItem,
-    "content" | "contentHash" | "contentSnippet"
+    "body" | "contentHash" | "contentSnippet"
   >;
 };
 
@@ -90,7 +90,7 @@ export function applyOptimisticWatchedValues(
       previousRetainedBody:
         store.retainedFeedItemBodyIds[id] === true
           ? {
-              content: feedItem.content,
+              body: feedItem.body,
               contentHash: feedItem.contentHash,
               contentSnippet: feedItem.contentSnippet,
             }

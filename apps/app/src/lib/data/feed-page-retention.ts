@@ -154,6 +154,56 @@ export function applyFeedItemPageRetention(
   };
 }
 
+export function removeRetainedFeedItems(
+  state: FeedPageRetentionState,
+  removed: ReadonlySet<string>,
+): FeedPageRetentionState {
+  const feedItemsDict = state.feedItemsDict;
+  for (const id of removed) delete feedItemsDict[id];
+  const retain = (ids: string[]) => ids.filter((id) => !removed.has(id));
+  const retainedFeedPages = Object.fromEntries(
+    Object.entries(state.retainedFeedPages).map(([scope, pages]) => [
+      scope,
+      pages.map((page) => {
+        if (!page.entityIds.some((id) => removed.has(id))) return page;
+        const itemIds = retain(page.value.itemIds);
+        return {
+          ...page,
+          entityIds: retain(page.entityIds),
+          value: { itemIds },
+          byteSize: estimateRetainedBytes(
+            itemIds.flatMap((id) =>
+              feedItemsDict[id] ? [feedItemsDict[id]] : [],
+            ),
+          ),
+        };
+      }),
+    ]),
+  );
+  return {
+    feedItemsDict,
+    feedItemsOrder: retain(state.feedItemsOrder),
+    scopeFeedItemIds: Object.fromEntries(
+      Object.entries(state.scopeFeedItemIds).map(([scope, ids]) => [
+        scope,
+        retain(ids),
+      ]),
+    ),
+    retainedFeedPages,
+    retainedFeedPageBytes: retainedPageBytes(retainedFeedPages),
+    pageOwnedFeedItemIds: Object.fromEntries(
+      Object.entries(state.pageOwnedFeedItemIds).filter(
+        ([id]) => !removed.has(id),
+      ),
+    ),
+    retainedFeedItemBodyIds: Object.fromEntries(
+      Object.entries(state.retainedFeedItemBodyIds).filter(
+        ([id]) => !removed.has(id),
+      ),
+    ),
+  };
+}
+
 export function getPersistedFeedItemRetentionState(
   state: FeedPageRetentionState,
 ): FeedPageRetentionState {

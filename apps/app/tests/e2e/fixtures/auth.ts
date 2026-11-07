@@ -3,10 +3,13 @@ import { expect } from "@playwright/test";
 import { createClient } from "@libsql/client";
 import { createId } from "@paralleldrive/cuid2";
 import { hashPassword, makeSignature } from "better-auth/crypto";
+import { savedOnboardingStep } from "../../../src/lib/onboarding/progress";
 import { getTestClientIp, TEST_CLIENT_IP_HEADER } from "./client-ip";
+import { clearQueryCache } from "./query-cache";
 import type { Locator, Page } from "@playwright/test";
 
 interface SignUpOptions {
+  onboarding?: boolean;
   page: Page;
   name: string;
   email: string;
@@ -14,6 +17,7 @@ interface SignUpOptions {
 }
 
 interface SignInOptions {
+  onboarding?: boolean;
   page: Page;
   email: string;
   password: string;
@@ -66,7 +70,13 @@ async function detectAuthPage(page: Page): Promise<"sign-in" | "sign-up"> {
  * sign-in instead of sign-up (e.g. if a user already exists and the app
  * redirects differently).
  */
-export async function signUp({ page, name, email, password }: SignUpOptions) {
+export async function signUp({
+  page,
+  name,
+  email,
+  password,
+  onboarding = false,
+}: SignUpOptions) {
   await page.setExtraHTTPHeaders({
     [TEST_CLIENT_IP_HEADER]: getTestClientIp(email),
   });
@@ -96,6 +106,7 @@ export async function signUp({ page, name, email, password }: SignUpOptions) {
 
   await createAccountButton.click();
   await expect(page).toHaveURL("/", { timeout: 30000 });
+  if (!onboarding) await completeTestOnboarding(page);
 }
 
 /**
@@ -199,11 +210,13 @@ export async function seedSession({
   tursoPort,
   userId,
   baseUrl,
+  onboarding = false,
 }: {
   page: Page;
   tursoPort: number;
   userId: string;
   baseUrl: string;
+  onboarding?: boolean;
 }) {
   const client = createClient({ url: `http://127.0.0.1:${tursoPort}` });
   const now = Math.floor(Date.now() / 1000);
@@ -213,6 +226,12 @@ export async function seedSession({
           VALUES (?, ?, ?, ?, ?, ?)`,
     args: [createId(), token, userId, now + 7 * 24 * 60 * 60, now, now],
   });
+  if (!onboarding) {
+    await client.execute({
+      sql: "UPDATE serial_user SET onboarding_complete = 1, onboarding_step = ? WHERE id = ?",
+      args: [savedOnboardingStep("next-steps"), userId],
+    });
+  }
   client.close();
   await page.context().addCookies([
     {
@@ -245,7 +264,15 @@ export async function signOut(page: Page) {
  * sign-up instead of sign-in (e.g. if no users exist yet and the app
  * redirects to the first-user sign-up flow).
  */
-export async function signIn({ page, email, password }: SignInOptions) {
+export async function signIn({
+  page,
+  email,
+  password,
+  onboarding = false,
+}: SignInOptions) {
+  // Do this before loading the auth document so its QueryClient cannot
+  // restore data persisted by the account that just signed out.
+  await clearQueryCache(page);
   await page.setExtraHTTPHeaders({
     [TEST_CLIENT_IP_HEADER]: getTestClientIp(email),
   });
@@ -271,4 +298,37 @@ export async function signIn({ page, email, password }: SignInOptions) {
     page.waitForURL("/", { timeout: 30000 }),
     loginButton.click(),
   ]);
+  if (!onboarding) await completeTestOnboarding(page);
+}
+
+/** Most feature tests begin after onboarding. Onboarding tests opt into the real journey. */
+export async function completeTestOnboarding(page: Page) {
+  const progressResponse = await page.request.post(
+    "/api/rpc/onboarding/getProgress",
+    { data: { json: {} } },
+  );
+  expect(progressResponse.ok()).toBe(true);
+  const progressEnvelope = (await progressResponse.json()) as {
+    json?: { complete?: boolean };
+    complete?: boolean;
+  };
+  const progress = progressEnvelope.json ?? progressEnvelope;
+  if (progress.complete) return;
+
+  const skip = page.getByRole("button", {
+    name: "Skip Tutorial",
+    exact: true,
+  });
+  await expect(skip).toBeVisible({ timeout: 10000 });
+  await skip.click();
+  const saveProgress = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/rpc/onboarding/saveProgress") &&
+      response.request().method() === "POST",
+  );
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Skip Tutorial", exact: true })
+    .click();
+  expect((await saveProgress).ok()).toBe(true);
 }

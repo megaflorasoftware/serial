@@ -39,7 +39,6 @@ async function seedFeed(
     id,
     userId,
     name: `Feed ${id}`,
-    url: `https://feeds.example/${id}.xml`,
     platform: "website",
     isActive,
   });

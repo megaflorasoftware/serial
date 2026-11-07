@@ -3,10 +3,19 @@ import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createBookmarkTestDatabase } from "../bookmarks/database";
+import { makeFetchableOrigin } from "./fetchable-origin";
+import type { FetchableOriginOverrides } from "./fetchable-origin";
 import type { Server } from "node:http";
 
-import type { DatabaseFeed } from "~/server/db/schema";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
+import {
+  feedItems,
+  feedOriginRss,
+  feedOrigins,
+  feeds as feedTable,
+  user,
+} from "~/server/db/schema";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
 vi.mock("~/server/rss/feedHttp", async (importOriginal) => {
@@ -125,24 +134,11 @@ afterAll(() => {
   server?.close();
 });
 
-function makeFeed(overrides?: Partial<DatabaseFeed>): DatabaseFeed {
-  return {
-    id: 1,
-    userId: "user-1",
-    name: "Fireship",
-    url: `${baseUrl}/feed`,
-    imageUrl: "",
-    platform: "youtube",
-    openLocation: "serial",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    isActive: true,
-    etag: null,
-    lastModifiedHeader: null,
-    ...overrides,
-  };
+function makeFeed(overrides: FetchableOriginOverrides = {}) {
+  return makeFetchableOrigin(
+    { name: "Fireship", platform: "youtube", url: `${baseUrl}/feed` },
+    overrides,
+  );
 }
 
 function createMockDb(existingItems: unknown[] = []) {
@@ -172,12 +168,16 @@ function createMockDb(existingItems: unknown[] = []) {
     all: vi.fn(() => existingItems),
   };
 
+  const db = {
+    update: vi.fn(() => updateChain),
+    insert: vi.fn(() => insertChain),
+    select: vi.fn(() => selectChain),
+    transaction: vi.fn(
+      async (fn: (tx: unknown) => Promise<unknown>): Promise<unknown> => fn(db),
+    ),
+  };
   return {
-    db: {
-      update: vi.fn(() => updateChain),
-      insert: vi.fn(() => insertChain),
-      select: vi.fn(() => selectChain),
-    },
+    db,
     updateSetCalls,
     insertValuesCalls,
   };
@@ -201,7 +201,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
     expect(db.insert).toHaveBeenCalled();
     expect(insertValuesCalls.length).toBeGreaterThan(0);
 
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate.etag).toBe(ETAG_V1);
     expect(feedUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V1);
   });
@@ -223,7 +225,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
     expect(db.insert).not.toHaveBeenCalled();
     expect(insertValuesCalls).toHaveLength(0);
 
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "lastFetchedAt" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate).toHaveProperty("lastFetchedAt");
     expect(feedUpdate).toHaveProperty("nextFetchAt");
     expect(feedUpdate).not.toHaveProperty("etag");
@@ -249,7 +253,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
 
     // Mirror the etag-version assertions: update should bump fetch
     // bookkeeping but NOT overwrite the cached header fields.
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "lastFetchedAt" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate).toHaveProperty("lastFetchedAt");
     expect(feedUpdate).toHaveProperty("nextFetchAt");
     expect(feedUpdate).not.toHaveProperty("etag");
@@ -267,7 +273,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
       expect(result.status).toBe("success");
     }
 
-    const firstUpdate = updates1[0] as Record<string, unknown>;
+    const firstUpdate = updates1.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(firstUpdate.etag).toBe(ETAG_V1);
 
     // Second fetch with cached etag → 304
@@ -303,7 +311,9 @@ describe("fetchAndInsertFeedData with real RSS server", () => {
     expect((insertValuesCalls[0] as unknown[]).length).toBe(14);
 
     // The feed update should overwrite the stale etag with the fresh one
-    const feedUpdate = updateSetCalls[0] as Record<string, unknown>;
+    const feedUpdate = updateSetCalls.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(feedUpdate.etag).toBe(ETAG_V1);
     expect(feedUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V1);
   });
@@ -329,7 +339,9 @@ describe("fetchAndInsertFeedData with content update", () => {
     // Should have inserted 14 items (old content)
     expect(inserts1).toHaveLength(1);
     expect((inserts1[0] as unknown[]).length).toBe(14);
-    const firstUpdate = updates1[0] as Record<string, unknown>;
+    const firstUpdate = updates1.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(firstUpdate.etag).toBe(ETAG_V1);
 
     // Capture the 14 items as "existing" DB state (only url + contentHash needed)
@@ -367,7 +379,9 @@ describe("fetchAndInsertFeedData with content update", () => {
     expect(newItem.url).toBe("https://www.youtube.com/watch?v=JSuS-zXMVwE");
 
     // Should store updated etag
-    const secondUpdate = updates2[0] as Record<string, unknown>;
+    const secondUpdate = updates2.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(secondUpdate.etag).toBe(ETAG_V2);
     expect(secondUpdate.lastModifiedHeader).toBe(LAST_MODIFIED_V2);
   });
@@ -393,7 +407,9 @@ describe("fetchAndInsertFeedData with content update", () => {
     ])) {
       expect(result.status).toBe("success");
     }
-    const update = updates2[0] as Record<string, unknown>;
+    const update = updates2.find(
+      (value) => "etag" in (value as object),
+    ) as Record<string, unknown>;
     expect(update.etag).toBe(ETAG_V2);
 
     // Now cache with new etag → 304
@@ -408,6 +424,63 @@ describe("fetchAndInsertFeedData with content update", () => {
 });
 
 describe("fetchAndInsertFeedData content diffing", () => {
+  it("ingests undated JSON items once and preserves first-seen time when content changes", async () => {
+    const jsonFeed = (title: string) =>
+      JSON.stringify({
+        version: "https://jsonfeed.org/version/1.1",
+        title: "Example",
+        items: [
+          {
+            id: "undated",
+            url: `${baseUrl}/post`,
+            title,
+            content_text: "Body",
+            image: `${baseUrl}/image.png`,
+          },
+        ],
+      });
+    currentContent = jsonFeed("Original");
+    const feed = makeFeed({ platform: "website" });
+    const fixture = await createBookmarkTestDatabase();
+    try {
+      await fixture.database.insert(user).values({
+        id: feed.feed.userId,
+        name: "Reader",
+        email: "undated@example.com",
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await fixture.database.insert(feedTable).values(feed.feed);
+      await fixture.database.insert(feedOrigins).values(feed.origin);
+      await fixture.database.insert(feedOriginRss).values(feed.origin.rss!);
+      const startedAt = Math.floor(Date.now() / 1000) * 1000;
+      const refresh = async () => {
+        const items = [];
+        for await (const result of fetchAndInsertFeedData(
+          { db: fixture.database },
+          [feed],
+        )) {
+          expect(result.status).toBe("success");
+          if (result.status === "success") items.push(...result.feedItems);
+        }
+        return items;
+      };
+      const inserted = await refresh();
+      expect(inserted).toHaveLength(1);
+      expect(inserted[0]!.postedAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+      expect(inserted[0]!.postedAt.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(await refresh()).toHaveLength(0);
+      currentContent = jsonFeed("Edited");
+      expect(await refresh()).toMatchObject([
+        { title: "Edited", postedAt: inserted[0]!.postedAt },
+      ]);
+      expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+    } finally {
+      fixture.cleanup();
+    }
+    setServerContent("v1");
+  });
   it("skips insert for unchanged items when server returns 200", async () => {
     setServerContent("v1");
 
@@ -528,7 +601,7 @@ describe("fetchAndInsertFeedData resource bounds", () => {
     const feeds = Array.from({ length: 10 }, (_, index) =>
       makeFeed({
         id: index + 1,
-        url: `${baseUrl}/slow/${index + 1}`,
+        locator: `${baseUrl}/slow/${index + 1}`,
       }),
     );
 

@@ -88,7 +88,6 @@ describe("Bookmark server performance bounds", () => {
       id: 30,
       userId: "bounds-user",
       name: "Feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
     });
     await session.database.insert(viewFeeds).values({ viewId: 10, feedId: 30 });
@@ -266,7 +265,6 @@ describe("Bookmark server performance bounds", () => {
       id: 30,
       userId: "bounds-user",
       name: "Feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
     });
     await session.database.insert(viewSections).values({

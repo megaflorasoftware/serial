@@ -50,6 +50,10 @@ const now = new Date("2026-08-18T12:00:00.000Z");
 
 function feedItem(): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: "feed-item-one",
     feedId: 1,
     contentId: "content-one",
@@ -57,7 +61,8 @@ function feedItem(): ApplicationFeedItem {
     author: "Author",
     url: "https://example.com/article",
     thumbnail: "",
-    content: "",
+    sourceCid: null,
+    body: null,
     contentSnippet: "preview",
     contentType: "text",
     isWatched: false,
@@ -207,13 +212,20 @@ describe("direct request transport", () => {
     try {
       feedItemsStore.getState().setFeedItems([feedItem()]);
       feedItemsStore.setState({ pendingFulltextItems: ["feed-item-one"] });
-      mocks.requestFullTextForItems.mockResolvedValue([
-        {
-          id: "feed-item-one",
-          content: "Complete article body",
-          contentSnippet: "Complete preview",
-        },
-      ]);
+      mocks.requestFullTextForItems.mockResolvedValue({
+        items: [
+          {
+            id: "feed-item-one",
+            body: {
+              form: "html",
+              html: "Complete article body",
+              revision: "content-hash",
+            },
+            contentSnippet: "Complete preview",
+          },
+        ],
+        omitted: [],
+      });
 
       feedItemsStore.getState().scheduleFulltextFetch();
       await vi.advanceTimersByTimeAsync(300);
@@ -221,7 +233,11 @@ describe("direct request transport", () => {
       expect(
         feedItemsStore.getState().feedItemsDict["feed-item-one"],
       ).toMatchObject({
-        content: "Complete article body",
+        body: {
+          form: "html",
+          html: "Complete article body",
+          revision: "content-hash",
+        },
         contentSnippet: "Complete preview",
       });
     } finally {
@@ -252,13 +268,20 @@ describe("direct request transport", () => {
       cursor: null,
       hasMore: false,
     });
-    mocks.requestFullTextForItems.mockResolvedValue([
-      {
-        id: savedFeedItem.id,
-        content: "Saved Feed body",
-        contentSnippet: "Saved Feed preview",
-      },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [
+        {
+          id: savedFeedItem.id,
+          body: {
+            form: "html",
+            html: "Saved Feed body",
+            revision: "content-hash",
+          },
+          contentSnippet: "Saved Feed preview",
+        },
+      ],
+      omitted: [],
+    });
     mocks.getCaptures.mockResolvedValue([capture]);
 
     await dataRequestActions.requestMixedContentPage(scope, {
@@ -276,8 +299,8 @@ describe("direct request transport", () => {
         expect.anything(),
       );
       expect(
-        feedItemsStore.getState().feedItemsDict[savedFeedItem.id]?.content,
-      ).toBe("Saved Feed body");
+        feedItemsStore.getState().feedItemsDict[savedFeedItem.id]?.body,
+      ).toMatchObject({ form: "html", html: "Saved Feed body" });
       expect(
         bookmarkCapturesStore.getState().capturesDict[savedBookmark.id],
       ).toEqual(capture);

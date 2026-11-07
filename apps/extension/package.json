@@ -30,7 +30,8 @@
     "@serial/ui": "workspace:*",
     "lucide-react": "^1.23.0",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "@serial/feed-discovery": "workspace:*"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

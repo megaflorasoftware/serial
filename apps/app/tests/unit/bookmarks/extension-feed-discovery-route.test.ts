@@ -57,6 +57,13 @@ describe("extension Bookmark Feed-discovery HTTP contract", () => {
     );
     await expect(response.json()).resolves.toEqual({
       feeds: [{ url: "https://example.com/feed.xml", title: "Example Feed" }],
+      publications: [
+        {
+          url: "https://example.com/feed.xml",
+          title: "Example Feed",
+          format: "rss",
+        },
+      ],
     });
   });
 
@@ -67,7 +74,10 @@ describe("extension Bookmark Feed-discovery HTTP contract", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ feeds: [] });
+    await expect(response.json()).resolves.toEqual({
+      feeds: [],
+      publications: [],
+    });
   });
 
   it("reports discovery failure without changing the saved Bookmark contract", async () => {

@@ -9,7 +9,6 @@ import { useDialogStore } from "~/components/feed/dialogStore";
 import { FeedListItem } from "~/components/feed/FeedListItem";
 import { FeedManagementTabs } from "~/components/feed/FeedManagementTabs";
 import { useFeedManagementShortcuts } from "~/components/feed/useManagementShortcuts";
-import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
 import { ActiveFeedLimitStatus } from "~/components/feed/manage/ActiveFeedLimitStatus";
 import {
   FeedActiveSwitch,
@@ -176,7 +175,6 @@ function ManageFeedsPageContent() {
             </Button>
           </div>
         </div>
-        <FeedEmptyState />
       </div>
     );
   }

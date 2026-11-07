@@ -30,17 +30,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const surface = {
+  externalContent: "show",
+  noticeHref: "https://example.com/post",
+  originActionLabel: "Open in Website",
+} as const;
+
 async function render(content: string, kind = "full") {
   const container = document.createElement("div");
   const root = createRoot(container);
   roots.push(root);
   const element =
     kind === "bookmark"
-      ? createElement(BookmarkArticleContent, { content })
-      : createElement(ArticleContent, {
-          content,
-          simplified: kind === "simplified",
-        });
+      ? createElement(BookmarkArticleContent, { content, ...surface })
+      : createElement(ArticleContent, { content, ...surface });
   await act(async () => {
     root.render(element);
   });
@@ -48,7 +51,7 @@ async function render(content: string, kind = "full") {
 }
 
 describe("article code blocks", () => {
-  it.each(["full", "simplified", "bookmark"])(
+  it.each(["full", "bookmark"])(
     "excludes surrounding controls and formatting from %s code",
     async (kind) => {
       const { container } = await render(
@@ -71,7 +74,7 @@ describe("article code blocks", () => {
       "Example",
     );
   });
-  it.each(["full", "simplified", "bookmark"])(
+  it.each(["full", "bookmark"])(
     "highlights %s code without changing text or inline code",
     async (kind) => {
       const { container } = await render(
@@ -125,6 +128,7 @@ describe("article code blocks", () => {
       root.render(
         createElement(ArticleContent, {
           content: '<pre class="language-text">second</pre>',
+          ...surface,
         }),
       );
     });

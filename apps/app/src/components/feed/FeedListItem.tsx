@@ -1,4 +1,4 @@
-import { GlobeIcon, PlayCircleIcon } from "lucide-react";
+import { GlobeIcon, OrbitIcon, PlayCircleIcon } from "lucide-react";
 import {
   Item,
   ItemActions,
@@ -20,6 +20,10 @@ function PlatformIcon({ platform }: { platform: ContentPlatform }) {
       return <YoutubeIcon size={16} />;
     case "peertube":
       return <PlayCircleIcon size={16} />;
+    case "leaflet":
+    case "pckt":
+    case "offprint":
+      return <OrbitIcon size={16} />;
     case "website":
     default:
       return <GlobeIcon size={16} />;

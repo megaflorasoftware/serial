@@ -6,7 +6,6 @@ import {
   CreditCardIcon,
   EllipsisVerticalIcon,
   Loader2Icon,
-  PlugIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useDialogStore } from "./dialogStore";
@@ -95,21 +94,6 @@ function AccountMenuItems({ billingEnabled }: { billingEnabled: boolean }) {
 
   return (
     <>
-      {!IS_DEMO_INSTANCE && (
-        <ResponsiveDropdownMenuItem asChild>
-          <Button
-            variant="outline"
-            className="mb-2 w-full"
-            disabled={!canMutate}
-            onClick={() => {
-              launchDialog("connections");
-            }}
-          >
-            <PlugIcon size={16} />
-            <span className="pl-1.5">Connections</span>
-          </Button>
-        </ResponsiveDropdownMenuItem>
-      )}
       {billingEnabled && (
         <ResponsiveDropdownMenuItem asChild>
           <Button
@@ -123,7 +107,7 @@ function AccountMenuItems({ billingEnabled }: { billingEnabled: boolean }) {
           </Button>
         </ResponsiveDropdownMenuItem>
       )}
-      {!IS_DEMO_INSTANCE && (
+      {billingEnabled && (
         <div className="my-4">
           <DropdownMenuSeparator />
         </div>

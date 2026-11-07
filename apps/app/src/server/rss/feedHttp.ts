@@ -21,6 +21,7 @@ export type FeedHttpReadOptions = {
   maxHeaderBytes?: number;
   maxRedirects?: number;
   totalDurationMs?: number;
+  signal?: AbortSignal;
 };
 
 export type FeedHttpResponse = {
@@ -98,12 +99,17 @@ export async function readFeedHttp(
     options.totalDurationMs ?? FEED_HTTP_REQUEST_TIMEOUT_MS;
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), totalDurationMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, abortController.signal])
+    : abortController.signal;
   let requestUrl = url;
 
   try {
     for (let redirectCount = 0; ; redirectCount += 1) {
+      signal.throwIfAborted();
       const target = dependencies.validateTarget(requestUrl);
       const addresses = await dependencies.resolveAddresses(target.hostname);
+      signal.throwIfAborted();
       const pinned = addresses[0]!;
       const dispatcher = dependencies.createDispatcher({
         address: pinned.address,
@@ -120,7 +126,7 @@ export async function readFeedHttp(
           headers: requestHeaders,
           method: options.method ?? "GET",
           redirect: "manual",
-          signal: abortController.signal,
+          signal,
         });
         const responseHeaders = new Headers(
           Array.from(response.headers.entries()),

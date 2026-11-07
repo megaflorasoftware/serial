@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
 
-// Covers four production `pnpm start` app servers plus the fixture
+// Covers five production `pnpm start` app servers plus the fixture
 // servers booting in parallel per probe run.
 const STARTUP_TIMEOUT_MS = 240_000;
 const CLEANUP_TIMEOUT_MS = 15_000;
@@ -19,6 +19,9 @@ const expectedPortVariables = [
   "SERIAL_TEST_SELF_HOSTED_UNCONFIGURED_TURSO_PORT",
   "SERIAL_TEST_SELF_HOSTED_EMAIL_PORT",
   "SERIAL_TEST_SELF_HOSTED_APPVIEW_PORT",
+  "SERIAL_TEST_PUBLICATIONS_APP_PORT",
+  "SERIAL_TEST_PUBLICATIONS_TURSO_PORT",
+  "SERIAL_TEST_PUBLICATIONS_PDS_PORT",
 ] as const;
 
 type ProcessRow = {
@@ -170,6 +173,9 @@ function assertExpectedServices(processes: ProcessRow[], ports: number[]) {
     unconfiguredTursoPort,
     emailPort,
     appviewPort,
+    publicationsAppPort,
+    publicationsTursoPort,
+    publicationsPdsPort,
   ] = ports;
   const expectedFragments = [
     `NODE_ENV=production PORT=${appPort} pnpm start`,
@@ -183,6 +189,9 @@ function assertExpectedServices(processes: ProcessRow[], ports: number[]) {
     `turso dev --db-file serial-test-self-hosted-unconfigured.db --port ${unconfiguredTursoPort}`,
     `email-server.ts ${emailPort}`,
     `appview-server.ts ${appviewPort}`,
+    `NODE_ENV=production PORT=${publicationsAppPort} pnpm start`,
+    `turso dev --db-file serial-test-publications.db --port ${publicationsTursoPort}`,
+    `pds-server.ts ${publicationsPdsPort}`,
   ];
   const missingFragments = expectedFragments.filter(
     (fragment) => !processCommands.includes(fragment),

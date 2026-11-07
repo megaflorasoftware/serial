@@ -1,6 +1,6 @@
 import { env } from "~/env";
 
-type CaptureSurface = "app" | "extension" | "discovery";
+type CaptureSurface = "app" | "extension" | "discovery" | "revalidation";
 
 type SurfacePolicy = {
   attempts: number;
@@ -11,7 +11,8 @@ type SurfacePolicy = {
 const SURFACE_POLICIES: Record<CaptureSurface, SurfacePolicy> = {
   app: { attempts: 10, windowMs: 10 * 60 * 1_000, activePerUser: 1 },
   extension: { attempts: 30, windowMs: 10 * 60 * 1_000, activePerUser: 2 },
-  discovery: { attempts: 30, windowMs: 10 * 60 * 1_000, activePerUser: 2 },
+  revalidation: { attempts: 10, windowMs: 10 * 60 * 1_000, activePerUser: 1 },
+  discovery: { attempts: 180, windowMs: 60 * 1_000, activePerUser: 2 },
 };
 
 export type CaptureLease =
@@ -43,7 +44,7 @@ export class CaptureLimiter {
     }
 
     const activeForUser = this.active.get(key) ?? 0;
-    const usesServerCapacity = surface === "app" || surface === "discovery";
+    const usesServerCapacity = surface !== "extension";
     const serverCapacityReached =
       usesServerCapacity && this.activeServerFetches >= this.maxServerFetches;
     if (activeForUser >= policy.activePerUser || serverCapacityReached) {

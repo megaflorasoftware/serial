@@ -1,12 +1,11 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { LaptopIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
-import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
+import { ColorModeToggleGroup } from "./ColorModeToggleGroup";
 import { ShowShortcutsToggle } from "./ShowShortcutsToggle";
 import { authClient } from "~/lib/auth-client";
 import { useCanMutate } from "~/lib/data/offline-mutations";
@@ -232,40 +231,6 @@ function EditColorsForm() {
         />
       </div>
     </div>
-  );
-}
-
-function ColorModeToggleGroup() {
-  const { theme, setTheme } = useTheme();
-
-  return (
-    <ToggleGroup
-      type="single"
-      value={theme ?? "light"}
-      onValueChange={setTheme}
-    >
-      <ToggleGroupItem
-        className="w-full"
-        value="light"
-        aria-label="Toggle light mode"
-      >
-        <SunIcon className="h-4 w-4" />
-      </ToggleGroupItem>
-      <ToggleGroupItem
-        className="w-full"
-        value="dark"
-        aria-label="Toggle dark mode"
-      >
-        <MoonIcon className="h-4 w-4" />
-      </ToggleGroupItem>
-      <ToggleGroupItem
-        className="w-full"
-        value="system"
-        aria-label="Toggle system color theme"
-      >
-        <LaptopIcon className="h-4 w-4" />
-      </ToggleGroupItem>
-    </ToggleGroup>
   );
 }
 

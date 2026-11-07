@@ -120,13 +120,13 @@ test.describe("authoritative sidebar navigation", () => {
             ?.viewSections,
       )
       .toHaveLength(2);
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(1);
-    await expect(tagButton.locator(".bg-sidebar-accent")).toHaveCount(1);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(1);
+    await expect(tagButton.locator(".bg-current")).toHaveCount(1);
     await expect(
       views
         .locator('[data-sidebar="menu-button"]')
         .filter({ hasText: fixture.emptyViewName })
-        .locator(".bg-sidebar-accent"),
+        .locator(".bg-current"),
     ).toHaveCount(0);
 
     await expect
@@ -147,11 +147,11 @@ test.describe("authoritative sidebar navigation", () => {
     await bookmark.getByRole("link").hover();
     await page.keyboard.press("s");
 
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(0);
-    await expect(tagButton.locator(".bg-sidebar-accent")).toHaveCount(0);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(0);
+    await expect(tagButton.locator(".bg-current")).toHaveCount(0);
     await page.getByRole("tab", { name: /Saved/ }).click();
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(1);
-    await expect(tagButton.locator(".bg-sidebar-accent")).toHaveCount(1);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(1);
+    await expect(tagButton.locator(".bg-current")).toHaveCount(1);
   });
 
   test("revalidates Saved View availability across feed-item empty boundaries", async ({
@@ -193,13 +193,13 @@ test.describe("authoritative sidebar navigation", () => {
     await page.keyboard.press("s");
 
     await page.getByRole("tab", { name: /Saved/ }).click();
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(1);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(1);
     await expect(item).toBeVisible();
 
     await item.getByRole("link").hover();
     await page.keyboard.press("e");
     await expect(item).toHaveCSS("opacity", "0.75");
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(0);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(0);
 
     await page
       .getByRole("tab", {
@@ -211,14 +211,14 @@ test.describe("authoritative sidebar navigation", () => {
     await item.getByRole("link").hover();
     await page.keyboard.press("e");
 
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(0);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(0);
     await page
       .getByRole("tab", {
         name: "Switch to unread content",
         exact: true,
       })
       .click();
-    await expect(viewButton.locator(".bg-sidebar-accent")).toHaveCount(1);
+    await expect(viewButton.locator(".bg-current")).toHaveCount(1);
   });
 
   test("keeps globally populated Feeds below the current View buckets on initial load", async ({
@@ -321,9 +321,7 @@ test.describe("authoritative sidebar navigation", () => {
       .filter({ hasText: fixture.overflowFeedName });
 
     await expect(overflowFeedButton).toBeVisible({ timeout: 30_000 });
-    await expect(overflowFeedButton.locator(".bg-sidebar-accent")).toHaveCount(
-      1,
-    );
+    await expect(overflowFeedButton.locator(".bg-current")).toHaveCount(1);
 
     const tags = page.locator('[data-sidebar="group"]').filter({
       has: page.locator('[data-sidebar="group-label"]', { hasText: "Tags" }),
@@ -332,7 +330,7 @@ test.describe("authoritative sidebar navigation", () => {
       tags
         .locator('[data-sidebar="menu-button"]')
         .filter({ hasText: /^All$/ })
-        .locator(".bg-sidebar-accent"),
+        .locator(".bg-current"),
     ).toHaveCount(1);
   });
 });

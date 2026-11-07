@@ -6,7 +6,14 @@ import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
 import { prepareArrayChunks } from "~/lib/iterators";
 import { feedItems, feeds } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
+import { fetchableOriginsOf, withOrigins } from "~/server/feeds/origins";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
+import {
+  loadReaderBodies,
+  ownedBodyRow,
+  refreshDocumentReferences,
+  toApplicationFeedItem,
+} from "~/server/feeds/reader-bodies";
 import {
   deduplicateByLastValue,
   MAX_BULK_MUTATION_ITEMS,
@@ -311,10 +318,17 @@ export const getById = protectedProcedure
       return null;
     }
 
-    return {
-      ...item,
-      platform: feed.platform,
-    } as ApplicationFeedItem;
+    // Direct open is one of the two paths that carry a Reader body.
+    const bodies = await loadReaderBodies(context.db, [item]);
+    return toApplicationFeedItem(item, feed.platform, bodies.get(item.id));
+  });
+
+export const refreshReferences = protectedProcedure
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ context, input }) => {
+    const row = await ownedBodyRow(context.db, context.user.id, input.id);
+    if (!row) return null;
+    return refreshDocumentReferences(context.db, row);
   });
 
 export const getByFeedId = protectedProcedure
@@ -349,19 +363,20 @@ export const getByFeedId = protectedProcedure
           ),
         )
       : undefined;
+    // Bodies never ride list queries; they travel through the body endpoint.
     const itemsData = await context.db.query.feedItems.findMany({
       where: and(eq(feedItems.feedId, input.feedId), cursorFilter),
       orderBy: [desc(feedItems.postedAt), desc(feedItems.id)],
       limit: limit + 1,
+      columns: { content: false },
     });
     const hasMore = itemsData.length > limit;
     const itemsToReturn = itemsData.slice(0, limit);
     const lastItem = itemsToReturn.at(-1);
 
-    const existingApplicationFeedItems = itemsToReturn.map((item) => ({
-      ...item,
-      platform: feed.platform,
-    })) as ApplicationFeedItem[];
+    const existingApplicationFeedItems = itemsToReturn.map((item) =>
+      toApplicationFeedItem({ ...item, content: "" }, feed.platform),
+    );
 
     for (const chunk of prepareArrayChunks(existingApplicationFeedItems, 50)) {
       yield {
@@ -379,7 +394,11 @@ export const getByFeedId = protectedProcedure
       return;
     }
 
-    for await (const feedResult of fetchAndInsertFeedData(context, [feed])) {
+    // The user watches this fetch from the Feed they just added; finish every staged document.
+    for await (const feedResult of fetchAndInsertFeedData(
+      { ...context, drain: true },
+      fetchableOriginsOf(await withOrigins(context.db, [feed])),
+    )) {
       yield {
         type: "feed-status",
         status: feedResult.status,

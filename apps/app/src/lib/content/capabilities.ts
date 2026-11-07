@@ -1,11 +1,8 @@
 import {
   CONTENT_CAPABILITIES,
   getContentCapability as getSharedContentCapability,
-} from "@serial/bookmark-capture";
-import type {
-  ContentCapability,
-  NativeOpeningBehavior,
-} from "@serial/bookmark-capture";
+} from "@serial/content";
+import type { ContentCapability, NativeOpeningBehavior } from "@serial/content";
 import type { ContentDescriptor } from "./descriptor";
 
 export { CONTENT_CAPABILITIES };

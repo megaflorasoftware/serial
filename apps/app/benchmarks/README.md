@@ -253,3 +253,14 @@ It runs `tests/e2e/self-hosted/client-performance-audit.spec.ts`, which is
 skipped unless `SERIAL_RUN_CLIENT_PERFORMANCE=1`, and evaluates each scenario
 against the budgets in `scripts/performance/client-browser-budgets.ts`. Its
 generated JSON is written under the ignored `benchmarks/results/` directory.
+
+## Reader bodies
+
+`pnpm benchmark:reader-body` loads the real standard.site fixture documents
+through the body endpoint path and reports, per document, the serialized
+Reader body size against the 128 KiB reader transfer budget and the 4 MiB
+offline budget, the derived Reader document size and block count, plus body
+load, browser derivation and static React render timings. It exits nonzero
+when any fixture exceeds a budget. Import cost for the same documents
+is covered by `pnpm benchmark:ingest`, which stages and processes them through
+the Jetstream workload.

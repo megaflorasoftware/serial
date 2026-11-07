@@ -1,0 +1,662 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Mark Boas ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@maboa.bsky.social",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:wyr3q7n3wte7vhf5bnn4vazj",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": "  saw our ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "2025 AtmosphereConf talk archive",
+          "marks": {},
+          "link": {
+            "href": "https://atprotocommunity.leaflet.pub/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ", and suggested that his Hyperaudio transcript tool could be used as part of hosting that archive.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Time passed, and Mark ended up getting involved with the ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "archives of AtmosphereConf 2026",
+          "marks": {},
+          "link": {
+            "href": "https://atmosphereconf.org/talks",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ", and wrote this blog post about his experience in learning about atproto, and more generally about digital archival: ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Keeping Archives Alive: Resilience and Discovery on ATProto",
+          "marks": {},
+          "link": {
+            "href": "https://maboa.it/resilient-archives-on-the-at-protocol/",
+            "record": null
+          }
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Thanks to Mark's contributions, AtmosphereConf 2026 now has fully interactive transcripts, Here's an example of Blaine's talk, ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "This Title Intentionally Left Blank",
+          "marks": {},
+          "link": {
+            "href": "https://atmosphereconf.org/event/rj8Xv62",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ":",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": "center",
+      "kind": "image",
+      "image": {
+        "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:lehcqqkwzcwvjvw66uthu5oq/bafkreib6ay2xgns26uc7arqx72ehis5pp5qxphx5ofxjr74dj63eiuuzym@jpeg",
+        "alt": "Screenshot of Blaine's talk at https://atmosphereconf.org/event/rj8Xv62 - the video is playing with sub-titles, and the current phrase is underlined in the transcript below.",
+        "title": null,
+        "aspectRatio": {
+          "width": 2000,
+          "height": 1661
+        },
+        "width": null,
+        "fullBleed": false
+      },
+      "caption": null
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "As it turned out, Mark worked with Blaine's ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "ionosphere",
+          "marks": {},
+          "link": {
+            "href": "https://github.com/blaine/ionosphere",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " project to get everything on protocol and converted:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "I have to say, it was a fairly steep learning curve! But the ATProto community took the time to explain the architecture to me (I had never used Astro or ATProto) and I managed to put a Proof of Concept together. That's when ",
+              "marks": {},
+              "link": null
+            },
+            {
+              "kind": "text",
+              "text": "blaine.bsky.social",
+              "marks": {},
+              "link": {
+                "href": "https://bsky.app/profile/blaine.bsky.social",
+                "record": null
+              }
+            },
+            {
+              "kind": "text",
+              "text": " entered the conversation. I know Blaine from the days when we used to have ",
+              "marks": {},
+              "link": null
+            },
+            {
+              "kind": "text",
+              "text": "Text AV meet-ups",
+              "marks": {},
+              "link": {
+                "href": "https://textav.hyperaud.io/",
+                "record": null
+              }
+            },
+            {
+              "kind": "text",
+              "text": ", so I knew he had an interest in transcripts.",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Mark used the Hyperaudio Lite Editor, running the Parakeet speech-to-text engine locally, to transcribe all the talks in batch — pulling the audio from the videos on protocol with ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Streamplace",
+          "marks": {},
+          "link": {
+            "href": "https://stream.place/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ", then doing a global correction pass with an LLM (atproto spelling and similar) and lighter manual fixes in the editor itself where mistranscriptions were obvious. Anyone can use the same tools on their own archives. He describes more of where this might go:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "We already see glimpses of ATProto's social discovery potential with Blaine's ",
+              "marks": {},
+              "link": null
+            },
+            {
+              "kind": "text",
+              "text": "ionosphere",
+              "marks": {},
+              "link": {
+                "href": "https://ionosphere.tv/",
+                "record": null
+              }
+            },
+            {
+              "kind": "text",
+              "text": " work. It's so much more than machine-generated transcripts – there are indexes of all significant terms within the talks – concepts named, entities extracted and cross-linked. There are even Bluesky posts about each talk time-aligned to the moment they reference. The discovery side is already being built.",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "And when we say \"on protocol with Streamplace\", that's what makes all of this possible. Streamplace powered all the video live-streaming for the conference across three rooms, and then used their new video-on-demand service to publish everything.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Some of the shorter term things that Mark is thinking about:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "list",
+      "ordered": false,
+      "start": null,
+      "items": [
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "community translation tests using open models (NLLB, Opus-MT, TranslateGemma and friends) as a proof of concept",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "building the ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "ionosphere",
+                  "marks": {},
+                  "link": {
+                    "href": "https://ionosphere.tv/talks",
+                    "record": null
+                  }
+                },
+                {
+                  "kind": "text",
+                  "text": " round-trip writer so corrected transcripts flow back on-protocol as canonical records",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "And longer term:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The thing the blog post closes on",
+          "marks": {},
+          "link": {
+            "href": "https://maboa.it/resilient-archives-on-the-at-protocol/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " - a ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "social layer for archival content, where clips and remixes are referential and non-destructive",
+          "marks": {
+            "highlight": {
+              "color": "rgb(250 204 21 / 0.5)"
+            }
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", so archives get discovered, shared and reused rather than just stored.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Code and Libraries",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "list",
+      "ordered": false,
+      "start": null,
+      "items": [
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Hyperaudio Lite – the interactive-transcript library: ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "https://github.com/hyperaudio/hyperaudio-lite",
+                  "marks": {},
+                  "link": {
+                    "href": "https://github.com/hyperaudio/hyperaudio-lite",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Hyperaudio Lite Editor – transcript editing with local Parakeet transcription, and the engine behind the conference transcripts: ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "https://github.com/hyperaudio/hyperaudio-lite-editor",
+                  "marks": {},
+                  "link": {
+                    "href": "https://github.com/hyperaudio/hyperaudio-lite-editor",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "The full pipeline write-up: ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "https://gist.github.com/maboa/bd3f742b1a622d87ad2d7f7bf602aa1e",
+                  "marks": {},
+                  "link": {
+                    "href": "https://gist.github.com/maboa/bd3f742b1a622d87ad2d7f7bf602aa1e",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "The scripts: ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "https://gist.github.com/maboa/0f76e4a992ebfcd2cb0c53c2f67c2626",
+                  "marks": {},
+                  "link": {
+                    "href": "https://gist.github.com/maboa/0f76e4a992ebfcd2cb0c53c2f67c2626",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "The PR itself: ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "https://github.com/ATProtocol-Community/atmosphereconf/pull/120",
+                  "marks": {},
+                  "link": {
+                    "href": "https://github.com/ATProtocol-Community/atmosphereconf/pull/120",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "callout",
+      "emoji": "🪿",
+      "color": "rgb(59 130 246 / 0.2)",
+      "tint": "rgb(59 130 246 / 0.2)",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The AtmosphereConf website is open source and community maintained, see the source ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "on Github",
+          "marks": {},
+          "link": {
+            "href": "https://github.com/ATProtocol-Community/atmosphereconf/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ". Led by Ms. Boba's ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@essentialrandom.bsky.social",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:r2vpg2iszskbkegoldmqa322",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": "  web mistress work from last year, and many community theming contributions, we'll be adding to it for the 2027 edition, with even more atmospheric features. In the meantime, if you're interested in getting involved in transcript translations, get in touch!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "About Mark",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": "center",
+      "kind": "image",
+      "image": {
+        "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:lehcqqkwzcwvjvw66uthu5oq/bafkreifqczfh25syz3yywxr5tbcp4amtwmnqr4lnplmcshkp7w2mdu25wq@jpeg",
+        "alt": "",
+        "title": null,
+        "aspectRatio": {
+          "width": 1000,
+          "height": 1000
+        },
+        "width": {
+          "value": 40,
+          "unit": "%"
+        },
+        "fullBleed": false
+      },
+      "caption": null
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Mark Boas has spent 15 years building interactive-transcript technology through The Hyperaudio Project. He co-created jPlayer (a JS-based media library back in the day), cofounded Trint, consulted for BBC News Labs, and was a Knight-Mozilla OpenNews Fellow at Al Jazeera, where he returned to build Palestine Remix. Until May 2026 he was CTO of oral history platform TheirStory. He’s now an independent consultant, helping organisations make their audio and video content usable through transcription, translation and discovery – working on The Hyperaudio Project with Bad Idea Factory, focussed on open source, decentralised systems and the judicious application of AI. Find him at ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "maboa.it",
+          "marks": {},
+          "link": {
+            "href": "https://maboa.it/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " and ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@maboa.bsky.social",
+          "marks": {},
+          "link": {
+            "href": "https://discourse.atmosphere.community/u/maboa.bsky.social",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ".",
+          "marks": {},
+          "link": null
+        }
+      ]
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

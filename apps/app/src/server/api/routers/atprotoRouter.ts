@@ -1,12 +1,28 @@
 import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import type { DatabaseAtprotoConnection } from "~/server/db/schema";
+import type { ORPCContext } from "~/server/orpc/base";
+import {
+  getPublicationSyncJob,
+  wakePublicationSyncJobs,
+} from "~/server/publication-sync/jobs";
 import {
   ATPROTO_PROVIDER_ID,
   getAdminSigninMethods,
   getEnabledAuthProviders,
 } from "~/lib/constants";
+import {
+  ATPROTO_FULL_SCOPE,
+  hasAtprotoWriteScope,
+} from "~/server/auth/atproto/config";
 import { didSchema, identifierSchema } from "~/server/auth/atproto/schemas";
+import {
+  atprotoSyncPreferencesSchema,
+  DEFAULT_ATPROTO_SYNC_SETTINGS,
+  syncMethodNeedsWriteScope,
+  syncPreferencesFromSettings,
+} from "~/lib/auth/atproto-sync-settings";
 import { getKV } from "~/server/kv";
 import {
   isAtprotoConfigured,
@@ -20,32 +36,55 @@ import { env } from "~/env";
 
 /**
  * The ConnectionsDialog surface for the AT Protocol connection: status,
- * link start, and unlink. The OAuth round trip itself lives on the Better
- * Auth plugin (server/auth/atproto/plugin.ts); linking starts here because
- * it requires the caller's session, and the callback lands on the plugin's
- * dedicated link-callback endpoint.
+ * link start, unlink, and the Atmosphere subscription sync settings. The
+ * OAuth round trips themselves live on the Better Auth plugin
+ * (server/auth/atproto/plugin.ts); linking and Consent upgrades start here
+ * because they require the caller's session, and their callbacks land on
+ * the plugin's dedicated endpoints.
  */
+
+type AtprotoDatabase = ORPCContext["db"];
+
+/**
+ * A user's Atmosphere attachment: the connection row (credentials and
+ * settings) and the sign-in account row. Either can exist without the
+ * other for a while (a bound row whose blob was destroyed, a connection
+ * lost mid-unlink), so every surface reads both.
+ */
+async function findAtprotoAttachment(db: AtprotoDatabase, userId: string) {
+  const [connection, accountRow] = await Promise.all([
+    db.query.atprotoConnections.findFirst({
+      where: eq(atprotoConnections.userId, userId),
+    }),
+    db
+      .select({ accountId: account.accountId, scope: account.scope })
+      .from(account)
+      .where(
+        and(
+          eq(account.userId, userId),
+          eq(account.providerId, ATPROTO_PROVIDER_ID),
+        ),
+      )
+      .get(),
+  ]);
+  return { connection, accountRow };
+}
+
+/** Whether a connection row holds working credentials. */
+function isConnectionActive(
+  connection: DatabaseAtprotoConnection | undefined,
+): boolean {
+  return !!connection && connection.status === "active" && !!connection.session;
+}
 
 export const getConnectionStatus = protectedProcedure.handler(
   async ({ context }) => {
-    const [connection, accountRow] = await Promise.all([
-      context.db.query.atprotoConnections.findFirst({
-        where: eq(atprotoConnections.userId, context.user.id),
-      }),
-      context.db
-        .select({ accountId: account.accountId })
-        .from(account)
-        .where(
-          and(
-            eq(account.userId, context.user.id),
-            eq(account.providerId, ATPROTO_PROVIDER_ID),
-          ),
-        )
-        .get(),
-    ]);
+    const { connection, accountRow } = await findAtprotoAttachment(
+      context.db,
+      context.user.id,
+    );
 
-    const isConnected =
-      !!connection && connection.status === "active" && !!connection.session;
+    const isConnected = isConnectionActive(connection);
     // The sign-in method (the account row) can outlive its working
     // credentials: a bound row whose blob was destroyed (failed refresh,
     // grant revoked at the PDS, rotated store key) or a connection lost
@@ -59,9 +98,77 @@ export const getConnectionStatus = protectedProcedure.handler(
       handle:
         connection?.handle ?? connection?.did ?? accountRow?.accountId ?? null,
       isConfigured: isAtprotoConfigured(),
+      /** Whether the stored grant lets a write method save without consent. */
+      hasWriteScope: isConnected && hasAtprotoWriteScope(connection?.scopes),
+      syncPreferences: syncPreferencesFromSettings(
+        connection ?? DEFAULT_ATPROTO_SYNC_SETTINGS,
+      ),
     };
   },
 );
+
+/**
+ * Save the Atmosphere subscription sync settings. A write method the
+ * stored grant does not cover saves nothing: the caller gets a consent URL
+ * instead, the pending preferences ride in the OAuth state, and the
+ * plugin's upgrade callback saves them once consent succeeds.
+ */
+export const saveSyncSettings = protectedProcedure
+  .input(atprotoSyncPreferencesSchema)
+  .handler(async ({ context, input }) => {
+    const connection = await context.db.query.atprotoConnections.findFirst({
+      where: eq(atprotoConnections.userId, context.user.id),
+    });
+    if (!connection || !isConnectionActive(connection)) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message:
+          "Connect your Atmosphere account before changing sync settings.",
+      });
+    }
+
+    const { saveAtprotoSyncSettings, upgradeAtprotoAuth } =
+      await import("~/server/auth/atproto/service");
+
+    if (
+      syncMethodNeedsWriteScope(input.method) &&
+      !hasAtprotoWriteScope(connection.scopes)
+    ) {
+      // A Consent upgrade starts an authorize round trip like a link, so
+      // it shares the link budget.
+      await enforceLinkRateLimit(context.user.id);
+      try {
+        const url = await upgradeAtprotoAuth({
+          did: connection.did,
+          scope: ATPROTO_FULL_SCOPE,
+          userId: context.user.id,
+          pendingSyncPreferences: input,
+          syncSettingsVersion: connection.syncSettingsVersion,
+        });
+        return { saved: false as const, consentUrl: url.toString() };
+      } catch (err) {
+        logError("[atproto] upgrade authorize failed:", err);
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "Could not request Atmosphere permissions. Please try again.",
+        });
+      }
+    }
+
+    const saved = await saveAtprotoSyncSettings({
+      userId: context.user.id,
+      did: connection.did,
+      preferences: input,
+    });
+    if (!saved) {
+      // The connection was unlinked between the read and the write.
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message:
+          "Connect your Atmosphere account before changing sync settings.",
+      });
+    }
+    wakePublicationSyncJobs(context.db);
+    return { saved: true as const, consentUrl: null };
+  });
 
 /**
  * Each link start fans out to identity resolution and writes an auth-state
@@ -108,10 +215,11 @@ export const linkAccount = protectedProcedure
     }
     await enforceLinkRateLimit(context.user.id);
 
-    const connection = await context.db.query.atprotoConnections.findFirst({
-      where: eq(atprotoConnections.userId, context.user.id),
-    });
-    if (connection && connection.status === "active" && !!connection.session) {
+    const { connection, accountRow } = await findAtprotoAttachment(
+      context.db,
+      context.user.id,
+    );
+    if (isConnectionActive(connection)) {
       throw new ORPCError("CONFLICT", {
         message:
           "You already have an Atmosphere account connected. Disconnect it first.",
@@ -123,21 +231,11 @@ export const linkAccount = protectedProcedure
     // real grant at the PDS. A typed handle can't be compared to the
     // stored DID before resolution, so this blocks only the clear case;
     // the callback stays the authoritative enforcement either way.
-    const existingAccount = await context.db
-      .select({ accountId: account.accountId })
-      .from(account)
-      .where(
-        and(
-          eq(account.userId, context.user.id),
-          eq(account.providerId, ATPROTO_PROVIDER_ID),
-        ),
-      )
-      .get();
     const resolutionTarget = input.did ?? input.identifier;
     if (
-      existingAccount &&
+      accountRow &&
       resolutionTarget.startsWith("did:") &&
-      existingAccount.accountId !== resolutionTarget
+      accountRow.accountId !== resolutionTarget
     ) {
       throw new ORPCError("CONFLICT", {
         message:
@@ -163,6 +261,59 @@ export const linkAccount = protectedProcedure
       });
     }
   });
+
+/**
+ * Restore a connection whose credentials were lost: a link of the DID the
+ * account already holds, so no handle is asked for and the round trip
+ * lands on the same row. Re-requests the grant the connection held so a
+ * reconnect never narrows what the user consented to; when the connection
+ * row itself is gone, the account row remembers the grant it was created
+ * with.
+ */
+export const reconnectAccount = protectedProcedure.handler(
+  async ({ context }) => {
+    if (!isAtprotoConfigured()) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: "Atmosphere is not available on this instance.",
+      });
+    }
+
+    const { connection, accountRow } = await findAtprotoAttachment(
+      context.db,
+      context.user.id,
+    );
+    const did = connection?.did ?? accountRow?.accountId;
+    if (!did) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: "There is no Atmosphere account to reconnect.",
+      });
+    }
+    if (isConnectionActive(connection)) {
+      throw new ORPCError("CONFLICT", {
+        message: "Your Atmosphere account is already connected.",
+      });
+    }
+    // Budgeted only once the request can actually start a round trip.
+    await enforceLinkRateLimit(context.user.id);
+
+    try {
+      const { startAtprotoLink } =
+        await import("~/server/auth/atproto/service");
+      const url = await startAtprotoLink({
+        identifier: did,
+        userId: context.user.id,
+        previousScope: connection?.scopes ?? accountRow?.scope,
+      });
+      return { url: url.toString() };
+    } catch (err) {
+      logError("[atproto] reconnect authorize failed:", err);
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Could not reconnect your Atmosphere account. Please try again.",
+      });
+    }
+  },
+);
 
 export const unlinkAccount = protectedProcedure.handler(async ({ context }) => {
   const accountRows = await context.db
@@ -236,3 +387,8 @@ export const unlinkAccount = protectedProcedure.handler(async ({ context }) => {
 
   return { success: true };
 });
+
+/** Read persisted progress without starting or owning server work. */
+export const getSyncStatus = protectedProcedure.handler(({ context }) =>
+  getPublicationSyncJob(context.db, context.user.id),
+);

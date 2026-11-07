@@ -1,5 +1,7 @@
 import { enablePublicSignups } from "./e2e/fixtures/enable-public-signups";
 import {
+  PUBLICATIONS_APP_PORT,
+  PUBLICATIONS_TURSO_PORT,
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_BOOTSTRAP_APP_PORT,
   SELF_HOSTED_BOOTSTRAP_TURSO_PORT,
@@ -30,6 +32,7 @@ async function waitForApp(url: string, timeoutMs = 60000) {
 export default async function globalSetup() {
   await Promise.all(
     [
+      PUBLICATIONS_APP_PORT,
       SELF_HOSTED_APP_PORT,
       SELF_HOSTED_BOOTSTRAP_APP_PORT,
       SELF_HOSTED_CONFIG_APP_PORT,
@@ -38,6 +41,7 @@ export default async function globalSetup() {
   );
   await Promise.all(
     [
+      PUBLICATIONS_TURSO_PORT,
       SELF_HOSTED_TURSO_PORT,
       SELF_HOSTED_BOOTSTRAP_TURSO_PORT,
       SELF_HOSTED_CONFIG_TURSO_PORT,
@@ -48,6 +52,7 @@ export default async function globalSetup() {
   // creation. The other three get an admin and public sign-ups.
   await Promise.all(
     [
+      PUBLICATIONS_TURSO_PORT,
       SELF_HOSTED_TURSO_PORT,
       SELF_HOSTED_CONFIG_TURSO_PORT,
       SELF_HOSTED_UNCONFIGURED_TURSO_PORT,

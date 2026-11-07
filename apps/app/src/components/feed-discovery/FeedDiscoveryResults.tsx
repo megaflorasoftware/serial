@@ -1,5 +1,1 @@
-export interface DiscoveredFeed {
-  url: string;
-  title?: string;
-  format?: string;
-}
+export type { DiscoveredFeed } from "@serial/feed-discovery";

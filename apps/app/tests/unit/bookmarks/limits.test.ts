@@ -65,3 +65,28 @@ describe("capture limits", () => {
     if (discovery.ok) discovery.release();
   });
 });
+
+it("allows a minute of discovery typing while bounding requests and concurrent work", () => {
+  let now = 0;
+  const limiter = new CaptureLimiter(8, () => now);
+  for (let attempt = 0; attempt < 180; attempt++) {
+    const lease = limiter.acquire("typing", "discovery");
+    expect(lease.ok).toBe(true);
+    if (lease.ok) lease.release();
+  }
+  expect(limiter.acquire("typing", "discovery")).toEqual({
+    ok: false,
+    reason: "rate_limited",
+  });
+  now = 60_000;
+  const first = limiter.acquire("typing", "discovery");
+  const second = limiter.acquire("typing", "discovery");
+  expect(first.ok).toBe(true);
+  expect(second.ok).toBe(true);
+  expect(limiter.acquire("typing", "discovery")).toEqual({
+    ok: false,
+    reason: "capacity_limited",
+  });
+  if (first.ok) first.release();
+  if (second.ok) second.release();
+});

@@ -163,7 +163,6 @@ describe("server reconciliation", () => {
       id: 20,
       userId: "reconciliation-user",
       name: "Reading feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
     });
     await database.insert(viewFeeds).values({ viewId: 10, feedId: 20 });
@@ -243,7 +242,6 @@ describe("server reconciliation", () => {
       id: 20,
       userId: "reconciliation-user",
       name: "Reading feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
     });
     await database.insert(viewFeeds).values({ viewId: 10, feedId: 20 });

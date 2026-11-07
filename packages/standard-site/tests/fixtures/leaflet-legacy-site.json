@@ -1,0 +1,193 @@
+{
+  "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.document/3mdellpvwvk2s",
+  "cid": "bafyreiebcip746j24jzvstqe7huck2tcbiw6znykthlvisxlies4ypwdy4",
+  "value": {
+    "$type": "site.standard.document",
+    "content": {
+      "$type": "pub.leaflet.content",
+      "pages": [
+        {
+          "$type": "pub.leaflet.pages.linearDocument",
+          "blocks": [
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "What is ATmosphereConf?"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "ATmosphereConf is a community organized global conference for and by the ATProto community, the open social protocol that powers Bluesky and many other apps."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We have many people already volunteering their time as organizers, speakers & discussion leads, and local activity leads, plus a small crew of paid conference producers."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "For the on-site workshops and main conference days, we need additional people to volunteer for a shift or two."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Who can Volunteer?"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Anyone who is locally available in Vancouver during the conference timeframe, Wednesday, March 26th through Sunday, March 29th."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We're especially eager to invite students from local Vancouver educational institutions. Spend some time volunteering and get a no charge ticket to attend the whole conference. This conference will be a fantastic place to network with builders, creators, academics, and more, all working in the distributed open web scene. "
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "What does Volunteering look like?"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#bold"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 52,
+                      "byteStart": 28
+                    }
+                  }
+                ],
+                "plaintext": "Volunteers will be asked to sign up for a few shifts, and in return receive a no-charge ticket to the full conference."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "You'll also get an ATmosphereConf \"Volunteer\" exclusive T-Shirt to wear while on duty and to keep as a souvenir. While you're not on shift, you will have time to attend workshops, talks, and other activities."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#bold"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 40,
+                      "byteStart": 27
+                    }
+                  }
+                ],
+                "plaintext": "Right now, we are planning 4 hour shifts for tasks like registration desk, info booth, room monitor, etc."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://tally.so/r/zxNLd1"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 56,
+                      "byteStart": 31
+                    }
+                  }
+                ],
+                "plaintext": "Sign up form at this link 👉 https://tally.so/r/zxNLd1"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "or fill out in the embedded form below 👇"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 1,
+                "plaintext": "Volunteer Sign Up Form"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.iframe",
+                "height": 868,
+                "url": "https://tally.so/embed/zxNLd1?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Event organizers will reach out to you via e-mail after reviewing your form and onboard you. "
+              }
+            }
+          ],
+          "id": "019bc478-fcee-777f-8450-5144fcf6de1f"
+        }
+      ]
+    },
+    "description": "Apply to be a Volunteer for ATmosphereConf 2026 in Vancouver",
+    "path": "/3mdellpvwvk2s",
+    "publishedAt": "2026-01-27T01:17:31.644Z",
+    "site": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/pub.leaflet.publication/3m367bemk3c2i",
+    "tags": ["atmosphereconf-2026", "volunteer", "atmosphereconf"],
+    "title": "ATmosphereConf 2026 Call for In-Person Volunteers"
+  }
+}

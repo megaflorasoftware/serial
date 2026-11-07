@@ -8,14 +8,15 @@ import {
   BASE_FEED_CUSTOM_FIELDS,
   baseFeedSchema,
   extractRssMetadata,
+  newRssFeedDetails,
 } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
   FeedFetchResult,
+  FetchableOrigin,
   NewFeedDetails,
   RSSContent,
 } from "../types";
@@ -74,11 +75,13 @@ export async function getPeerTubeFeedIfMatches(
   } = peerTubeSchema.safeParse(rssData);
 
   if (peerTubeSuccess) {
-    return {
+    return newRssFeedDetails({
       name: peerTubeData.title,
       url: peerTubeData.feedUrl,
       platform: "peertube",
-    };
+      siteUrl: peerTubeData.link,
+      description: peerTubeData.description,
+    });
   } else {
     logError(error);
   }
@@ -87,11 +90,11 @@ export async function getPeerTubeFeedIfMatches(
 }
 
 export async function fetchPeerTubeFeedData(
-  feed: DatabaseFeed,
+  { origin, feed }: FetchableOrigin,
   cached?: ConditionalHeaders,
 ): Promise<FeedFetchResult | null> {
   try {
-    const feedResponse = await readFeedHttp(feed.url, {
+    const feedResponse = await readFeedHttp(origin.locator, {
       headers: cached ? buildConditionalHeaders(cached) : undefined,
     });
 
@@ -148,9 +151,9 @@ export async function fetchPeerTubeFeedData(
     captureException(e, {
       context: "peertube-feed-fetch",
       feedId: feed.id,
-      url: feed.url,
+      url: origin.locator,
     });
-    logError("Error fetching PeerTube feed data for URL =", feed.url);
+    logError("Error fetching PeerTube feed data for URL =", origin.locator);
     logError(e);
     return null;
   }

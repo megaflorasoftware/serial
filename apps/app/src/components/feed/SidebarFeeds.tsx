@@ -2,16 +2,20 @@ import { Link } from "@tanstack/react-router";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   AlertCircleIcon,
-  CircleSmall,
   Edit2Icon,
-  MinusIcon,
+  OrbitIcon,
   PauseIcon,
   PlusIcon,
+  RssIcon,
   SettingsIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import { useDialogStore } from "./dialogStore";
+import {
+  SidebarContentIndicator,
+  sidebarIndicatorClassName,
+} from "./SidebarContentIndicator";
 import type { ApplicationFeed } from "~/server/db/schema";
 import type { NavigationSnapshot } from "~/server/navigation/snapshot";
 import { EditFeedDialog } from "~/components/AddFeedDialog";
@@ -46,6 +50,8 @@ import {
 import { isContentStatusAvailable } from "~/lib/content-status";
 import { useCanMutate } from "~/lib/data/offline-mutations";
 
+import { getFeedPublicationName, getRssOrigin } from "~/lib/feeds/origins";
+
 function useDebouncedState(defaultValue: string, delay: number) {
   const [searchQuery, setSearchQuery] = useState(defaultValue);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,6 +80,38 @@ function sortFeedOptions(a: ApplicationFeed, b: ApplicationFeed) {
   return a.name.localeCompare(b.name);
 }
 
+function FeedOriginGlyphs({
+  publicationName,
+  hasRss,
+}: {
+  publicationName?: string;
+  hasRss: boolean;
+}) {
+  if (publicationName === undefined && !hasRss) return null;
+  return (
+    <span
+      className={`${sidebarIndicatorClassName} ml-auto flex items-center gap-2`}
+    >
+      {publicationName !== undefined && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <OrbitIcon size={16} aria-label="Atmosphere" />
+          </TooltipTrigger>
+          <TooltipContent>Atmosphere</TooltipContent>
+        </Tooltip>
+      )}
+      {hasRss && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <RssIcon size={16} aria-label="RSS" />
+          </TooltipTrigger>
+          <TooltipContent>RSS</TooltipContent>
+        </Tooltip>
+      )}
+    </span>
+  );
+}
+
 const EMPTY_FEED_AVAILABILITY: NavigationSnapshot["feeds"] = {};
 
 type FeedOption = ApplicationFeed & {
@@ -87,6 +125,8 @@ type FeedOption = ApplicationFeed & {
 const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
   feedId,
   name,
+  publicationName,
+  hasRss,
   hasEntries,
   isSelected,
   onSelect,
@@ -94,24 +134,30 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
 }: {
   feedId: number;
   name: string;
+  publicationName?: string;
+  hasRss: boolean;
   hasEntries: boolean;
   isSelected: boolean;
   onSelect: (feedId: number) => void;
   onEdit: (feedId: number) => void;
 }) {
   const feedStatus = useFeedStatus(feedId);
-  const isSuccess = feedStatus === "success" || feedStatus === "skipped";
+  const hasFetchError = feedStatus === "error";
 
   return (
-    <SidebarMenuItem className="group flex gap-1">
+    <SidebarMenuItem data-onboarding-feed={feedId} className="group flex gap-1">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
+        className="group/sidebar-row"
         onClick={() => onSelect(feedId)}
       >
-        {feedStatus === "error" && (
+        {hasFetchError && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <AlertCircleIcon size={16} className="text-sidebar-accent" />
+              <AlertCircleIcon
+                size={16}
+                className={sidebarIndicatorClassName}
+              />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-center">
               Something went wrong fetching content for this feed. If this
@@ -120,25 +166,9 @@ const ActiveFeedSidebarItem = memo(function ActiveFeedSidebarItemContent({
             </TooltipContent>
           </Tooltip>
         )}
-        {feedStatus === "empty" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <MinusIcon size={16} className="text-sidebar-accent" />
-            </TooltipTrigger>
-            <TooltipContent>
-              This feed has no new content within the last 30 days.
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {isSuccess && !hasEntries && (
-          <CircleSmall size={16} className="text-sidebar-accent" />
-        )}
-        {isSuccess && hasEntries && (
-          <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent size-2.5 rounded-full" />
-          </div>
-        )}
-        <div className="line-clamp-1">{name}</div>
+        {!hasFetchError && <SidebarContentIndicator hasContent={hasEntries} />}
+        <div className="min-w-0 truncate">{name}</div>
+        <FeedOriginGlyphs publicationName={publicationName} hasRss={hasRss} />
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -168,25 +198,23 @@ const InactiveFeedSidebarItem = memo(function InactiveFeedSidebarItemContent({
     <SidebarMenuItem className="group flex gap-1 opacity-50">
       <SidebarMenuButton
         variant={isSelected ? "outline" : "default"}
+        className="group/sidebar-row"
         onClick={() => onSelect(feedId)}
       >
-        {!hasEntries && (
-          <CircleSmall size={16} className="text-sidebar-accent" />
-        )}
-        {hasEntries && (
-          <div className="grid size-4 place-items-center">
-            <div className="bg-sidebar-accent size-2.5 rounded-full" />
-          </div>
-        )}
+        <SidebarContentIndicator hasContent={hasEntries} />
+        <div className="text-muted-foreground min-w-0 truncate">{name}</div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <PauseIcon size={16} className="text-muted-foreground" />
+            <PauseIcon
+              size={16}
+              className="text-muted-foreground ml-auto shrink-0"
+              aria-label="Paused"
+            />
           </TooltipTrigger>
           <TooltipContent>
             This feed is inactive and won&apos;t receive new content.
           </TooltipContent>
         </Tooltip>
-        <div className="text-muted-foreground line-clamp-1">{name}</div>
       </SidebarMenuButton>
       <div className="group/button flex w-fit items-center justify-end">
         <SidebarMenuButton onClick={() => onEdit(feedId)}>
@@ -388,6 +416,7 @@ export function SidebarFeeds() {
           <SidebarMenuItem>
             <SidebarMenuButton
               variant={feedFilter === -1 ? "outline" : "default"}
+              className="group/sidebar-row"
               onClick={() => {
                 setFeedFilter(-1);
                 if (!viewFilter && categoryFilter < 0) {
@@ -395,14 +424,7 @@ export function SidebarFeeds() {
                 }
               }}
             >
-              {!hasAnyItems && (
-                <CircleSmall size={16} className="text-sidebar-accent" />
-              )}
-              {hasAnyItems && (
-                <div className="grid size-4 place-items-center">
-                  <div className="bg-sidebar-accent size-2.5 rounded-full" />
-                </div>
-              )}
+              <SidebarContentIndicator hasContent={hasAnyItems} />
               All
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -411,6 +433,8 @@ export function SidebarFeeds() {
               key={feed.id}
               feedId={feed.id}
               name={feed.name}
+              publicationName={getFeedPublicationName(feed)}
+              hasRss={getRssOrigin(feed) !== undefined}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}
@@ -425,6 +449,8 @@ export function SidebarFeeds() {
               key={feed.id}
               feedId={feed.id}
               name={feed.name}
+              publicationName={getFeedPublicationName(feed)}
+              hasRss={getRssOrigin(feed) !== undefined}
               hasEntries={feed.hasEntries}
               isSelected={feed.id === feedFilter}
               onSelect={selectFeed}

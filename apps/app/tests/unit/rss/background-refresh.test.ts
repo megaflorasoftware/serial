@@ -1,12 +1,61 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { RefreshStats } from "~/server/rss/refreshUserFeeds";
+import { feedOriginRss, feedOrigins, feeds, user } from "~/server/db/schema";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
-import { feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 
 let testDatabase: TestDatabase;
+
+type SeedFeedRow = Omit<typeof feeds.$inferInsert, "id"> & {
+  url: string;
+  nextFetchAt?: Date | null;
+};
+
+/**
+ * Insert Feeds each with one RSS origin carrying the URL and schedule.
+ * Feeds are batched; origins pair with them by the returned ids, which a
+ * single VALUES insert returns in input order.
+ */
+async function seedFeedsWithRssOrigins(
+  database: TestDatabase["database"],
+  rows: SeedFeedRow[],
+) {
+  for (let index = 0; index < rows.length; index += 200) {
+    const chunk = rows.slice(index, index + 200);
+    const inserted = await database
+      .insert(feeds)
+      .values(
+        chunk.map(({ url, nextFetchAt, ...feed }) => {
+          void url;
+          void nextFetchAt;
+          return feed;
+        }),
+      )
+      .returning({ id: feeds.id, userId: feeds.userId });
+    if (inserted.length !== chunk.length) {
+      throw new Error("Feed insert returned an unexpected row count");
+    }
+    const originRows = await database
+      .insert(feedOrigins)
+      .values(
+        inserted.map((feed, position) => ({
+          feedId: feed.id,
+          userId: feed.userId,
+          kind: "rss",
+          locator: chunk[position]!.url,
+          nextFetchAt: chunk[position]!.nextFetchAt ?? null,
+          createdAt: chunk[position]!.createdAt ?? new Date(),
+          updatedAt: chunk[position]!.updatedAt ?? new Date(),
+        })),
+      )
+      .returning({ id: feedOrigins.id });
+    await database
+      .insert(feedOriginRss)
+      .values(originRows.map((origin) => ({ originId: origin.id })));
+  }
+}
 
 beforeEach(async () => {
   testDatabase = await createBookmarkTestDatabase();
@@ -52,11 +101,7 @@ describe("runBackgroundFeedRefresh", () => {
         isActive: true,
       })),
     );
-    for (let index = 0; index < dueFeeds.length; index += 200) {
-      await testDatabase.database
-        .insert(feeds)
-        .values(dueFeeds.slice(index, index + 200));
-    }
+    await seedFeedsWithRssOrigins(testDatabase.database, dueFeeds);
 
     const feedPageSizes: number[] = [];
     const publishedChunkTypes: string[] = [];
@@ -112,7 +157,8 @@ describe("runBackgroundFeedRefresh", () => {
       })),
     );
 
-    await testDatabase.database.insert(feeds).values(
+    await seedFeedsWithRssOrigins(
+      testDatabase.database,
       Array.from({ length: 10 }, (_, index) => ({
         userId: `paid-${index.toString().padStart(2, "0")}`,
         name: "Feed",
@@ -165,7 +211,8 @@ describe("runBackgroundFeedRefresh", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await testDatabase.database.insert(feeds).values(
+    await seedFeedsWithRssOrigins(
+      testDatabase.database,
       Array.from({ length: 3 }, (_, index) => ({
         userId: "away-user",
         name: `Feed ${index}`,
@@ -220,18 +267,20 @@ describe("runBackgroundFeedRefresh", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await testDatabase.database.insert(feeds).values({
-      userId: "idle-user",
-      name: "Fresh feed",
-      url: "https://example.com/idle/fresh.xml",
-      imageUrl: "",
-      platform: "website",
-      openLocation: "serial",
-      createdAt: now,
-      updatedAt: now,
-      isActive: true,
-      nextFetchAt: new Date(now.getTime() + 10 * 60_000),
-    });
+    await seedFeedsWithRssOrigins(testDatabase.database, [
+      {
+        userId: "idle-user",
+        name: "Fresh feed",
+        url: "https://example.com/idle/fresh.xml",
+        imageUrl: "",
+        platform: "website",
+        openLocation: "serial",
+        createdAt: now,
+        updatedAt: now,
+        isActive: true,
+        nextFetchAt: new Date(now.getTime() + 10 * 60_000),
+      },
+    ]);
 
     const claimUser = vi.fn(() =>
       Promise.resolve({
@@ -256,4 +305,58 @@ describe("runBackgroundFeedRefresh", () => {
     expect(publish).not.toHaveBeenCalled();
     expect(refreshFeedPage).not.toHaveBeenCalled();
   });
+});
+
+it("syncs an enabled connection with no due Feeds, then refreshes its new imports", async () => {
+  const { atprotoConnections } = await import("~/server/db/schema");
+  const { emptyPublicationSyncCounts } =
+    await import("~/lib/auth/publication-sync");
+  const now = new Date();
+  await testDatabase.database.insert(user).values({
+    id: "sync-only",
+    name: "Sync",
+    email: "sync@example.com",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await testDatabase.database.insert(atprotoConnections).values({
+    userId: "sync-only",
+    did: "did:plc:abcdefghijklmnopqrstuvwx",
+    session: "test",
+    importSubscriptions: true,
+  });
+  const claimUser = vi.fn(() =>
+    Promise.resolve({
+      eligible: true as const,
+      nextRefreshAt: new Date(now.getTime() + 60_000),
+    }),
+  );
+  const refreshFeedPage = vi.fn(() => Promise.resolve(EMPTY_REFRESH_STATS));
+  const syncSubscriptions = vi.fn(async () => {
+    expect(claimUser).toHaveBeenCalledTimes(1);
+    await seedFeedsWithRssOrigins(testDatabase.database, [
+      {
+        userId: "sync-only",
+        name: "Imported",
+        url: "https://example.com/rss",
+        platform: "website",
+        openLocation: "serial",
+        isActive: true,
+      },
+    ]);
+    return { ...emptyPublicationSyncCounts(), status: "completed" as const };
+  });
+  await runBackgroundFeedRefresh({
+    db: testDatabase.database,
+    now,
+    billingEnabled: false,
+    claimUser,
+    refreshFeedPage,
+    syncSubscriptions,
+    publish: () => Promise.resolve(),
+  });
+  expect(syncSubscriptions).toHaveBeenCalledTimes(1);
+  expect(refreshFeedPage).toHaveBeenCalledTimes(1);
+  expect(refreshFeedPage.mock.calls[0]).toBeDefined();
 });

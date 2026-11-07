@@ -1,0 +1,152 @@
+{
+  "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.document/3m4eb5htqvs2z",
+  "cid": "bafyreifzpmx4qbmjscir226lj464orln653jy7nrt7fqubamewn32ntmvm",
+  "value": {
+    "path": "/3m4eb5htqvs2z",
+    "site": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.publication/3lppk75kw7k26",
+    "$type": "site.standard.document",
+    "title": "Polls in publications — what block should we add next?",
+    "content": {
+      "$type": "pub.leaflet.content",
+      "pages": [
+        {
+          "$type": "pub.leaflet.pages.linearDocument",
+          "blocks": [
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 45,
+                      "byteStart": 40
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#bold"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "Another new block type in publications: polls! Try it here — this will actually be helpful for us in deciding what blocks to add next!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "⁂ ⁂ ⁂"
+              },
+              "alignment": "lex:pub.leaflet.pages.linearDocument#textAlignCenter"
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "level": 2,
+                "facets": [],
+                "plaintext": "What block type should we add next in Leaflet?"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 60,
+                      "byteStart": 0
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#italic"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "(pick one; comment if you want multiple / others not listed)"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.poll",
+                "pollRef": {
+                  "cid": "bafyreiepn64uf4xo3rgwbzh2wiaatjnrz5m4kg2ngmjan764sg4lbqluvm",
+                  "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/pub.leaflet.poll.definition/019a3175-1770-7997-a30d-5bf73b0ca3c0"
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "⁂ ⁂ ⁂"
+              },
+              "alignment": "lex:pub.leaflet.pages.linearDocument#textAlignCenter"
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We rebuilt this from our earlier polls block in standalone documents. It's now fully atproto-ified, and works a little differently, e.g. you can't edit a poll after it's been published."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Right now published polls are also limited to a single response. We'd like to add some options, like a way to give a poll a limited duration, or allow multiple responses."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Pretty soon we'll make it possible to publish standalone docs to atproto as well, which will make it easier to do quick one-off polls for anything!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "index": {
+                      "byteEnd": 34,
+                      "byteStart": 18
+                    },
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#code"
+                      }
+                    ]
+                  }
+                ],
+                "plaintext": "The lexicon is at pub.leaflet.poll — we decided to stick to something scoped under the pub.leaflet namespace for simplicity, but polls definitely could be a shared lexicon that different apps use. We hope that others experiment with them, both with their own lexicons and building off the records we're publishing. One of the cool things about ATProto is that we can coordinate gradually over time, and all the data is still out there, in a simple format, for us to build on!"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "bskyPostRef": {
+      "cid": "bafyreiga6pd4dewnunryqbh345bsckeolfctnsze5bazd5dupw7z6oaaqa",
+      "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/app.bsky.feed.post/3m4eb5n3wqk2z",
+      "commit": {
+        "cid": "bafyreidsnhzvf2bt4kk2xhxqe52m5lgfvung7knzhb5kr6qr3xp5mtlmiu",
+        "rev": "3m4eb5n6kso2p"
+      },
+      "validationStatus": "valid"
+    },
+    "description": "Lab Notes 014: help us test our newest block type…by voting on what block to add next in Leaflet!",
+    "publishedAt": "2025-10-29T20:14:16.411Z"
+  }
+}

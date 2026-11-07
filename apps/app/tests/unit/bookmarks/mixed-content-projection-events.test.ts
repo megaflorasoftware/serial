@@ -33,7 +33,9 @@ const orpcMocks = vi.hoisted(() => ({
   setFeedBulkWatchedValue: vi.fn(),
   requestPage: vi.fn(),
   getCaptures: vi.fn().mockResolvedValue([]),
-  requestFullTextForItems: vi.fn().mockResolvedValue([]),
+  requestFullTextForItems: vi
+    .fn()
+    .mockResolvedValue({ items: [], omitted: [] }),
 }));
 
 vi.mock("~/lib/orpc", () => ({
@@ -91,6 +93,10 @@ function bookmark(
 
 function feedItem(id: string, url: string): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id,
     feedId: 1,
     contentId: id,
@@ -98,7 +104,8 @@ function feedItem(id: string, url: string): ApplicationFeedItem {
     author: "Author",
     url,
     thumbnail: "",
-    content: "",
+    sourceCid: null,
+    body: null,
     contentSnippet: "",
     contentType: "text",
     isWatched: false,
@@ -603,6 +610,36 @@ describe("Bookmark projection events and direct mixed pages", () => {
     expect(
       mixedContentStore.getState().scopes["view:11:inbox:unread"]?.references,
     ).toEqual([reference("feed-item", vertical.id)]);
+  });
+
+  it("removes a merged RSS duplicate from loaded mixed Views", () => {
+    const kept = feedItem("kept", "https://example.com/post");
+    const removed = feedItem("removed", "https://example.com/new");
+    feedItemsStore.getState().setFeedItems([kept, removed]);
+    mixedContentStore.getState().applyPage({
+      scope: { type: "view", viewId: 10 },
+      contentStatus: { saveStatus: "inbox", archiveStatus: "unread" },
+      page: page([
+        reference("feed-item", kept.id),
+        reference("feed-item", removed.id),
+      ]),
+      replacesScope: true,
+    });
+    processPublishedChunks([
+      {
+        source: "rss",
+        chunk: {
+          type: "feed-items",
+          feedId: kept.feedId,
+          feedItems: [{ ...kept, url: removed.url, contentHash: "merged" }],
+          removedItemIds: [removed.id],
+        },
+      },
+    ]);
+    expect(feedItemsStore.getState().feedItemsDict[removed.id]).toBeUndefined();
+    expect(
+      mixedContentStore.getState().scopes["view:10:inbox:unread"]?.references,
+    ).toEqual([reference("feed-item", kept.id)]);
   });
 
   it("keeps a reprojected Feed item when it matches a cached Bookmark", () => {

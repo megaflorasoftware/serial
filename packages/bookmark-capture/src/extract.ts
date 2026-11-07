@@ -1,4 +1,6 @@
 import { Readability } from "@mozilla/readability";
+import { CONTENT_TYPE, getContentCapability } from "@serial/content";
+import type { ContentPlatform, ContentType } from "@serial/content";
 import {
   BOOKMARK_CAPTURE_LIMITS,
   READABILITY_EXTRACTOR_VERSION,
@@ -13,8 +15,8 @@ import { extractPagePreview } from "./preview";
 import { sanitizeCaptureHtml } from "./sanitize";
 
 export type ExtensionContentDescriptor = {
-  platform: "website" | "youtube" | "peertube" | "nebula";
-  contentType: "text" | "video";
+  platform: ContentPlatform;
+  contentType: ContentType;
   orientation: "horizontal" | "vertical" | null;
   contentId: string | null;
   classifierVersion: 1;
@@ -217,6 +219,11 @@ function discoveredFeeds(document: Document, effectiveUrl: string) {
   return [...feeds.values()].slice(0, BOOKMARK_CAPTURE_LIMITS.discoveredFeeds);
 }
 
+/** Only a text page on a plain website is read through Readability and captured. */
+function capturablePage(descriptor: ExtensionContentDescriptor) {
+  return getContentCapability(descriptor).pageCapture === "allowed";
+}
+
 export function extractPageObservation(
   document: Document,
 ): ExtensionPageObservation {
@@ -238,10 +245,7 @@ export function extractPageObservation(
     document.querySelector<HTMLLinkElement>('link[rel~="canonical"]')?.href,
     effectiveUrl,
   );
-  const shouldExtractArticle =
-    descriptor.platform === "website" &&
-    descriptor.contentType === "text" &&
-    !tooLarge;
+  const shouldExtractArticle = capturablePage(descriptor) && !tooLarge;
   const clone = shouldExtractArticle
     ? (document.cloneNode(true) as Document)
     : null;
@@ -263,7 +267,7 @@ export function extractPageObservation(
     descriptor,
   };
 
-  if (descriptor.platform !== "website" || descriptor.contentType !== "text") {
+  if (!capturablePage(descriptor)) {
     return {
       sourceUrl,
       capture,

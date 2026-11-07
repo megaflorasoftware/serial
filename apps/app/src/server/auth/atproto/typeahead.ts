@@ -82,6 +82,7 @@ export function getAppviewUrl(): string {
 export async function searchAtprotoActorsTypeahead(
   term: string,
   fetch: TypeaheadFetch = getDefaultFetch(),
+  signal?: AbortSignal,
 ): Promise<AtprotoActorSuggestion[]> {
   const url = new URL(
     `${getAppviewUrl()}/xrpc/app.bsky.actor.searchActorsTypeahead`,
@@ -90,9 +91,12 @@ export async function searchAtprotoActorsTypeahead(
   url.searchParams.set("limit", String(TYPEAHEAD_LIMIT));
 
   try {
+    signal?.throwIfAborted();
     const response = await fetch(url.toString(), {
       headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(TYPEAHEAD_TIMEOUT_MS),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(TYPEAHEAD_TIMEOUT_MS)])
+        : AbortSignal.timeout(TYPEAHEAD_TIMEOUT_MS),
     });
     if (!response.ok) {
       logError("[atproto] typeahead upstream returned", response.status);

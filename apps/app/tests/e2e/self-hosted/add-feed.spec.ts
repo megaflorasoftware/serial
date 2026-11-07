@@ -82,12 +82,26 @@ test.describe("add feed manually", () => {
     });
     await expect(manageHeaderButton).toBeVisible();
 
+    // The header Add Feed button opens the dialog; closing it leaves the
+    // "a" shortcut path below untouched.
+    const addFeedHeaderButton = page.getByRole("button", {
+      name: "Add Feed",
+      exact: true,
+    });
+    await expect(addFeedHeaderButton).toBeVisible();
+    await addFeedHeaderButton.click();
+    const dialog = page.locator('[role="dialog"]');
+    await expect(
+      dialog.getByPlaceholder("Paste a URL or search for a feed..."),
+    ).toBeVisible({ timeout: 5000 });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+
     // Open the Add Feed dialog with the "a" keyboard shortcut
     await page.keyboard.press("a");
     await page.waitForTimeout(300);
 
     // Discovery opens as a standalone command palette.
-    const dialog = page.locator('[role="dialog"]');
     await expect(
       dialog.getByPlaceholder("Paste a URL or search for a feed..."),
     ).toBeVisible({ timeout: 5000 });
@@ -131,6 +145,40 @@ test.describe("add feed manually", () => {
     });
     await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
 
+    // Safari can show page pixels behind its floating keyboard controls,
+    // outside the smaller visual viewport. The fullscreen backdrop must cover
+    // that area while the form remains inside the visible viewport.
+    await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport, "height", {
+        configurable: true,
+        value: 300,
+      });
+      Object.defineProperty(window.visualViewport, "offsetTop", {
+        configurable: true,
+        value: 20,
+      });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    await expect(dialog).toHaveCSS("height", "300px");
+    await expect(dialog).toHaveCSS("top", "20px");
+    const backdrop = page.locator('[data-slot="dialog-overlay"]');
+    await expect(backdrop).toHaveCSS(
+      "background-color",
+      await dialog.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    );
+    const backdropBox = (await backdrop.boundingBox())!;
+    expect(backdropBox.y + backdropBox.height).toBe(500);
+    await expectVerticalPosition(commandList, emptyState, 1 / 3);
+    await page.evaluate(() => {
+      Reflect.deleteProperty(window.visualViewport!, "height");
+      Reflect.deleteProperty(window.visualViewport!, "offsetTop");
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    await expect(dialog).toHaveCSS("height", "500px");
+    await expect(dialog).toHaveCSS("top", "0px");
+
     // Exercise the reduced visual height produced by a mobile keyboard. The
     // palette follows it, and the empty state remains centered and visible.
     await page.setViewportSize({ width: 390, height: 300 });
@@ -167,7 +215,7 @@ test.describe("add feed manually", () => {
       name: /Retry finding feeds/,
     });
     await expect(retryFeedDiscovery).toBeVisible();
-    await expect(retryFeedDiscovery).toContainText("No feeds found for URL.");
+    await expect(retryFeedDiscovery).toContainText("No feeds found.");
     await expect(dialog.getByRole("option").first()).toContainText(
       "Retry finding feeds",
     );
@@ -205,14 +253,20 @@ test.describe("add feed manually", () => {
     await expect(feedSearch).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(loadingState).toContainText("Adding feed…");
+    await expect(page.getByText("Adding feed...", { exact: true })).toHaveCount(
+      0,
+    );
 
-    // Selecting a result creates it, then opens its Edit Feed modal.
+    // Selecting a result creates it, then opens its Edit Feed modal. The
+    // first item import continues behind a toast that clears on its own; a
+    // fast local import may finish before the toast can be observed.
     await expect(
       dialog.getByRole("heading", { name: "Edit Feed" }),
     ).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Feed added!")).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(
+      page.getByText("Importing items from CGP Grey…", { exact: true }),
+    ).toHaveCount(0, { timeout: 15000 });
+    await expect(page.getByText("Feed added!", { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("heading", { name: "Add Feed" })).toHaveCount(
       0,
     );

@@ -16,7 +16,9 @@ export async function fetchUnknownRssFeed(
     }
     const text = feed.text;
 
-    const peerTubeFeed = await getPeerTubeFeedIfMatches(text);
+    const peerTubeFeed = text.trimStart().startsWith("{")
+      ? null
+      : await getPeerTubeFeedIfMatches(text);
     if (peerTubeFeed) return peerTubeFeed;
 
     const websiteFeed = await getWebsiteFeedIfMatches(text, url);

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readerComponentAsset } from "../../../scripts/reader-component-asset";
 import { signIn } from "../fixtures/auth";
 import {
   SELF_HOSTED_APP_PORT,
@@ -119,13 +120,15 @@ async function getFeedBodyPersistence(page: Page, itemId: string) {
         transaction.oncomplete = () => {
           const item = itemRequest.result as
             | {
-                content?: string;
+                body?: { form: string; html?: string } | null;
                 isWatchLater?: boolean;
                 isWatched?: boolean;
               }
             | undefined;
           resolve({
-            hasBody: item?.content?.includes("Paragraph 1:") === true,
+            hasBody:
+              item?.body?.form === "html" &&
+              item.body.html?.includes("Paragraph 1:") === true,
             isWatchLater: item?.isWatchLater,
             isWatched: item?.isWatched,
             retained: retainedBodyRequest.result === true,
@@ -474,12 +477,10 @@ test("opens pre-saved content offline after passive hydration alone", async ({
   }
 });
 
-// The production build under e2e fault controls leaves the reader route
+// The production build under e2e fault controls leaves the lazy reader
 // chunk out of the precache manifest, reproducing a deploy where the
 // controlling service worker predates the chunk. Only the runtime script
 // cache can then serve it offline.
-const READER_CHUNK_PATTERN = "/assets/_app.read";
-
 async function getReaderChunkCacheNames(page: Page) {
   return page.evaluate(async (pattern) => {
     const names: string[] = [];
@@ -491,7 +492,7 @@ async function getReaderChunkCacheNames(page: Page) {
       }
     }
     return names.sort();
-  }, READER_CHUNK_PATTERN);
+  }, `/${readerComponentAsset()}`);
 }
 
 // The preloader runs once per page lifetime, and on the very first load it
@@ -529,7 +530,7 @@ async function evictReaderChunk(page: Page) {
         if (request.url.includes(pattern)) await cache.delete(request);
       }
     }
-  }, READER_CHUNK_PATTERN);
+  }, `/${readerComponentAsset()}`);
   // The browser HTTP cache would otherwise mask a missing service-worker
   // cache entry while offline.
   const session = await page.context().newCDPSession(page);

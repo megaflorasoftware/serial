@@ -125,7 +125,8 @@ type MixedContentStore = {
     scope: MixedContentScope;
     contentStatus: ContentStatusFilter;
     page: MixedContentPage;
-  }) => { firstPageChanged: boolean };
+    retainCursorPages?: boolean;
+  }) => { replacedScope: boolean };
   reprojectUpsert: (input: {
     bookmark: ApplicationBookmark;
     previousBookmark: ApplicationBookmark | undefined;
@@ -247,7 +248,12 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
         });
         pruneBookmarkBodies(scopes, previousBookmarkIds);
       },
-      reconcileFirstPage: ({ scope, contentStatus, page }) => {
+      reconcileFirstPage: ({
+        scope,
+        contentStatus,
+        page,
+        retainCursorPages = true,
+      }) => {
         const key = getMixedScopeKey(scope, contentStatus);
         const current = get();
         const existing = current.scopes[key];
@@ -270,7 +276,12 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
           !retainedFirstPage ||
           !referencesEqual(retainedFirstPage, page.references);
 
-        if (firstPageChanged || !existing || existing.pages.length <= 1) {
+        const replacedScope =
+          firstPageChanged ||
+          !retainCursorPages ||
+          !existing ||
+          existing.pages.length <= 1;
+        if (replacedScope) {
           get().applyPage({
             scope,
             contentStatus,
@@ -291,7 +302,7 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
           pruneBookmarkBodies(scopes, []);
         }
 
-        return { firstPageChanged };
+        return { replacedScope };
       },
       reprojectUpsert: ({ bookmark, previousBookmark, views }) => {
         if (!isBookmarkProjectionChange(previousBookmark, bookmark)) return [];
@@ -439,10 +450,9 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
       }) => {
         const changedItemIds = [...new Set(itemIds)].filter((itemId) => {
           const item = feedItems[itemId];
-          return (
-            item !== undefined &&
-            hasFeedItemListProjectionChanged(previousFeedItems[itemId], item)
-          );
+          return item === undefined
+            ? previousFeedItems[itemId] !== undefined
+            : hasFeedItemListProjectionChanged(previousFeedItems[itemId], item);
         });
         if (changedItemIds.length === 0) return [];
 
@@ -473,7 +483,7 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
           let pages = scopeState.pages;
 
           for (const itemId of changedItemIds) {
-            const item = feedItems[itemId];
+            const item = feedItems[itemId] ?? previousFeedItems[itemId];
             if (!item) continue;
             const nextReference = feedItemReference({
               item,
@@ -481,7 +491,8 @@ const vanillaMixedContentStore = createStore<MixedContentStore>()(
               view,
               filterIndex,
             });
-            const belongs = doesItemBelongToScope(item);
+            const belongs =
+              feedItems[itemId] !== undefined && doesItemBelongToScope(item);
 
             references = references.filter(
               (reference) =>

@@ -13,7 +13,10 @@ import {
 import { signIn } from "../fixtures/auth";
 
 test.describe("Bookmark Serial-app flow", () => {
-  test.use({ viewport: { width: 1280, height: 900 } });
+  test.use({
+    viewport: { width: 1280, height: 900 },
+    serviceWorkers: "block",
+  });
 
   let testEmail: string;
 
@@ -68,10 +71,10 @@ test.describe("Bookmark Serial-app flow", () => {
     await expect(externalLink).toHaveAttribute("target", "_blank");
     await expect(externalLink).toHaveAttribute("rel", "noopener noreferrer");
     const remoteImageTrigger = page.getByRole("button", {
-      name: "Open image preview: Reader image",
+      name: "Image unavailable: Reader image",
     });
     await expect(
-      remoteImageTrigger.locator("[data-image-fallback]"),
+      remoteImageTrigger.locator("[data-image-frame='failed']"),
     ).toBeVisible();
     await expect(remoteImageTrigger).toHaveAttribute("aria-disabled", "true");
     await expect(

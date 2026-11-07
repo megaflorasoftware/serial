@@ -1,8 +1,38 @@
-import { and, asc, count, eq, gt, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  countDistinct,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+} from "drizzle-orm";
 import type { db as Database } from "~/server/db";
-import { feeds } from "~/server/db/schema";
+import type { FetchableOrigin } from "./types";
+import { hydrateOrigin, originSelection } from "~/server/feeds/origins";
+import {
+  feedOriginAtproto,
+  feedOriginRss,
+  feedOrigins,
+  feeds,
+} from "~/server/db/schema";
 
 export const RSS_FEED_PAGE_SIZE = 50;
+
+/**
+ * Due origins: scheduled at or before `now` (or never scheduled) on an active
+ * Feed. Origins are paged directly so each keeps its own clock; the Feed join
+ * supplies the active flag, which lives only on the Feed.
+ */
+function dueOriginCondition(userId: string, now: Date) {
+  return and(
+    eq(feedOrigins.userId, userId),
+    eq(feeds.isActive, true),
+    or(lte(feedOrigins.nextFetchAt, now), isNull(feedOrigins.nextFetchAt)),
+  );
+}
 
 export async function countDueFeeds(
   database: typeof Database,
@@ -10,15 +40,10 @@ export async function countDueFeeds(
   now: Date,
 ) {
   const result = await database
-    .select({ value: count() })
-    .from(feeds)
-    .where(
-      and(
-        eq(feeds.userId, userId),
-        eq(feeds.isActive, true),
-        or(lte(feeds.nextFetchAt, now), isNull(feeds.nextFetchAt)),
-      ),
-    )
+    .select({ value: countDistinct(feedOrigins.feedId) })
+    .from(feedOrigins)
+    .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+    .where(dueOriginCondition(userId, now))
     .get();
   return result?.value ?? 0;
 }
@@ -26,19 +51,35 @@ export async function countDueFeeds(
 export async function getDueFeedPage(
   database: typeof Database,
   input: { userId: string; afterFeedId?: number; now: Date },
-) {
-  return database
-    .select()
-    .from(feeds)
+): Promise<FetchableOrigin[]> {
+  const feedPage = database
+    .select({ id: feedOrigins.feedId })
+    .from(feedOrigins)
+    .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
     .where(
       and(
-        eq(feeds.userId, input.userId),
-        eq(feeds.isActive, true),
-        or(lte(feeds.nextFetchAt, input.now), isNull(feeds.nextFetchAt)),
-        input.afterFeedId ? gt(feeds.id, input.afterFeedId) : undefined,
+        dueOriginCondition(input.userId, input.now),
+        input.afterFeedId
+          ? gt(feedOrigins.feedId, input.afterFeedId)
+          : undefined,
       ),
     )
-    .orderBy(asc(feeds.id))
-    .limit(RSS_FEED_PAGE_SIZE)
+    .groupBy(feedOrigins.feedId)
+    .orderBy(asc(feedOrigins.feedId))
+    .limit(RSS_FEED_PAGE_SIZE);
+  const rows = await database
+    .select({ ...originSelection, feed: feeds })
+    .from(feedOrigins)
+    .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+    .leftJoin(feedOriginRss, eq(feedOriginRss.originId, feedOrigins.id))
+    .leftJoin(feedOriginAtproto, eq(feedOriginAtproto.originId, feedOrigins.id))
+    .where(
+      and(
+        dueOriginCondition(input.userId, input.now),
+        inArray(feedOrigins.feedId, feedPage),
+      ),
+    )
+    .orderBy(asc(feedOrigins.feedId), asc(feedOrigins.id))
     .all();
+  return rows.map((row) => ({ feed: row.feed, origin: hydrateOrigin(row) }));
 }

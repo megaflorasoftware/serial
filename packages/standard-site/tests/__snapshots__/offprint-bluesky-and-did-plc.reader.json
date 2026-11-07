@@ -1,0 +1,280 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Bryan Newbold, protocol engineer for ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Bluesky",
+          "marks": {
+            "underline": true
+          },
+          "link": {
+            "href": "https://bsky.social/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ", joined us to discuss DID PLC, a self-authenticating decentralized identifier that is key to account portability on the Bluesky social network.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": "center",
+      "kind": "embed",
+      "href": "https://youtu.be/m9AVUAUDC2A?si=3mTSSesLabttUvdY",
+      "embedUrl": "https://www.youtube.com/embed/m9AVUAUDC2A?feature=oembed",
+      "youtube": {
+        "videoId": "m9AVUAUDC2A",
+        "start": null
+      },
+      "height": 450,
+      "aspectRatio": null
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Bryan takes the Fission community through Bluesky's principles, especially ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "owning your own data",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " and ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "credible exit",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", describing how these influenced the design of DID PLC. Further, he gives us a peek behind the scenes at Bluesky, detailing how well PLC has worked as they hit 5 million accounts just last week.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The second half of the presentation covers ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Governance and Trust",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ". Bluesky has been working hard to make sure ATProto is \"locked open\", making it secure for other developers to build on top of. Bryan runs through some potential models towards gaining adoption beyond Bluesky.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "callout",
+      "emoji": "💡",
+      "color": null,
+      "tint": null,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Figure out how to upload / link a PDF",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Follow Bryan ",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "🦋 ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@bnewbold.net",
+          "marks": {
+            "underline": true
+          },
+          "link": {
+            "href": "https://bsky.app/profile/bnewbold.net?ref=atprotocol.dev",
+            "record": null
+          }
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Explore more:",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "list",
+      "ordered": false,
+      "start": null,
+      "items": [
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "https://web.plc.directory/",
+                  "marks": {
+                    "underline": true
+                  },
+                  "link": {
+                    "href": "https://web.plc.directory/?ref=atprotocol.dev",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/bluesky-social/proposals/tree/main/0004-oauth",
+                  "marks": {
+                    "underline": true
+                  },
+                  "link": {
+                    "href": "https://github.com/bluesky-social/proposals/tree/main/0004-oauth?ref=atprotocol.dev",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "https://atproto.com/specs/did",
+                  "marks": {
+                    "underline": true
+                  },
+                  "link": {
+                    "href": "https://atproto.com/specs/did?ref=atprotocol.dev",
+                    "record": null
+                  }
+                }
+              ]
+            }
+          ],
+          "checked": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "divider"
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "This was originally posted to ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Fission",
+          "marks": {
+            "underline": true
+          },
+          "link": {
+            "href": "https://bsky.app/profile/fission.codes",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " in February of 2024",
+          "marks": {},
+          "link": null
+        }
+      ]
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

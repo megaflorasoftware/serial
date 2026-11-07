@@ -31,7 +31,12 @@ describe("reader content images", () => {
     '<figure><picture><source srcset="/garden-wide.jpg 2x"><img src="/garden.jpg" alt="Garden path"></picture></figure>',
   ])("preserves alt text when replacing an image wrapper: %s", (content) => {
     const markup = renderToStaticMarkup(
-      createElement(ArticleContent, { content }),
+      createElement(ArticleContent, {
+        content,
+        externalContent: "show",
+        noticeHref: "https://example.com/post",
+        originActionLabel: "Open in Website",
+      }),
     );
     expect(markup).toContain('alt="Garden path"');
     expect(markup).toContain('aria-label="Open image preview: Garden path"');
