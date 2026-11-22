@@ -135,15 +135,25 @@ export async function claimStream(
 
 const currentStreamGeneration = sql`(select ${atprotoStreamState.generation} from ${atprotoStreamState} where ${atprotoStreamState.id} = 'primary')`;
 
+/** Origins in live mode: the only ones a covered schedule trusted the stream for. */
+const originInLiveMode = and(
+  eq(feedOrigins.kind, "atproto"),
+  sql`exists (select 1 from ${feedOriginAtproto} where ${and(
+    eq(feedOriginAtproto.originId, feedOrigins.id),
+    eq(feedOriginAtproto.streamMode, "live"),
+  )})`,
+);
+
 /**
- * The stream stopped vouching for its origins, so each recovers at its next
- * refresh instead of waiting out a covered schedule.
+ * The stream stopped vouching for the origins it applied live, so each
+ * recovers at its next refresh instead of waiting out a covered schedule.
+ * Polled origins and origins in a recovery backoff keep their own schedule.
  */
 export function makeStreamOriginsDue(
   database: Pick<FeedDatabase, "update">,
   now: Date,
 ) {
-  return makeOriginsDue(database, eq(feedOrigins.kind, "atproto"), now);
+  return makeOriginsDue(database, originInLiveMode, now);
 }
 
 /**

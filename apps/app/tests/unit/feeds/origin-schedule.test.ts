@@ -9,6 +9,7 @@ import {
   insertFeedWithOrigins,
 } from "~/server/feeds/origins";
 import { makeOriginsDue } from "~/server/feeds/schedule";
+import { applySubscriptionSideEffects } from "~/server/subscriptions/kv";
 
 const PUBLICATION = "at://did:plc:alice/site.standard.publication/site";
 let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
@@ -172,5 +173,38 @@ describe("makeOriginsDue", () => {
     expect(await schedules(waiting.id)).toEqual([now]);
     expect(await schedules(overdue.id)).toEqual([past]);
     expect(await schedules(inactive.id)).toEqual([null]);
+  });
+});
+
+describe("applySubscriptionSideEffects", () => {
+  it("staggers scheduled origins when a plan starts and leaves an unscheduled one alone", async () => {
+    const first = await addFeed("reader", "first", true);
+    const second = await addFeed("reader", "second", true);
+    const deactivating = await addFeed("reader", "deactivating", true);
+    const past = new Date("2026-01-01T00:00:00.000Z");
+    await schedule(first.id, past);
+    await schedule(second.id, past);
+    // A deactivation that lands after the stagger read its Feeds as active.
+    await schedule(deactivating.id, null);
+    const before = Math.floor(Date.now() / 1000) * 1000;
+
+    await applySubscriptionSideEffects(fixture.database, "reader", {
+      planId: "pro",
+      status: "active",
+      subscriptionId: null,
+      productId: null,
+      recurringInterval: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      amount: null,
+      currency: null,
+      syncedAt: new Date().toISOString(),
+    });
+    const [firstAt] = await schedules(first.id);
+    const [secondAt] = await schedules(second.id);
+    expect(firstAt!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(secondAt!.getTime()).toBeGreaterThan(firstAt!.getTime());
+    expect(await schedules(deactivating.id)).toEqual([null]);
   });
 });

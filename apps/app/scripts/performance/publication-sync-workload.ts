@@ -6,6 +6,7 @@ import {
   feeds,
   user,
 } from "../../src/server/db/schema";
+import { FIXTURE_NEXT_FETCH_AT } from "./fixtures";
 import type { db as Database } from "../../src/server/db";
 import { feedOriginAtproto } from "~/server/db/schema";
 
@@ -57,8 +58,7 @@ export async function createPublicationSyncWorkload(
           feedId: row.id,
           kind: "atproto",
           locator: publicationUri(row.id),
-          // Active Feeds are scheduled; these wait so nothing refreshes them.
-          nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
+          nextFetchAt: FIXTURE_NEXT_FETCH_AT,
         })),
       )
       .returning({ id: feedOrigins.id });

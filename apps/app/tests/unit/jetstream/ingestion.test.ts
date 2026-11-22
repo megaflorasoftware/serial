@@ -1590,8 +1590,13 @@ describe("fetch schedule", () => {
     expect(await nextFetchAt()).toEqual(LATER);
   });
 
-  it("makes covered origins due when an interruption ends a connected period", async () => {
+  it("makes live origins due when an interruption ends a connected period, and leaves polled and unscheduled origins alone", async () => {
     await connect();
+    const polled = await addReader("polled");
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ streamMode: "catchup" })
+      .where(eq(feedOriginAtproto.originId, polled.originId));
     const rss = await insertFeedWithOrigins(fixture.database, {
       userId: "reader",
       isActive: true,
@@ -1605,6 +1610,7 @@ describe("fetch schedule", () => {
     const inactive = await addReader("inactive");
     const far = new Date(Date.now() + 6 * 60 * 60 * 1000);
     await scheduleOrigin(originId, far);
+    await scheduleOrigin(polled.originId, far);
     await scheduleOrigin(rss.origins[0]!.id, far);
     await scheduleOrigin(inactive.originId, null);
     const before = Date.now();
@@ -1614,9 +1620,11 @@ describe("fetch schedule", () => {
     expect((await nextFetchAt())!.getTime()).toBeGreaterThanOrEqual(
       Math.floor(before / 1000) * 1000,
     );
-    expect((await nextFetchAt(rss.origins[0]!.id))!.getTime()).toBe(
-      Math.floor(far.getTime() / 1000) * 1000,
-    );
+    // The stream never vouched for a polled origin, so its schedule stands.
+    for (const id of [polled.originId, rss.origins[0]!.id])
+      expect((await nextFetchAt(id))!.getTime()).toBe(
+        Math.floor(far.getTime() / 1000) * 1000,
+      );
     expect(await nextFetchAt(inactive.originId)).toBeNull();
   });
 

@@ -8,6 +8,7 @@ import {
   publicationBackfillProbes,
   user,
 } from "../../src/server/db/schema";
+import { FIXTURE_NEXT_FETCH_AT } from "./fixtures";
 import type { db } from "../../src/server/db";
 import { feedOriginRss } from "~/server/db/schema";
 
@@ -54,8 +55,7 @@ export async function createPublicationBackfillWorkload(
           feedId: id,
           kind: "rss",
           locator: `https://example.com/feed/${id}`,
-          // Active Feeds are scheduled; these wait so nothing refreshes them.
-          nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
+          nextFetchAt: FIXTURE_NEXT_FETCH_AT,
         })),
       )
       .returning({ id: feedOrigins.id });
