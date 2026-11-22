@@ -1,20 +1,18 @@
-import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { and, asc, gt, isNull, lte, or } from "drizzle-orm";
 import { refreshUserFeeds } from "./refreshUserFeeds";
 import { addRefreshStats, emptyRefreshStats, rssAttemptSummary } from "./stats";
 import { countDueFeeds, getDueFeedPage, RSS_FEED_PAGE_SIZE } from "./dueFeeds";
 import { automaticRssOwnerForPlan } from "./automaticOwnership";
-import type { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import type { PlanId } from "~/server/subscriptions/plans";
 import type { db as Database } from "~/server/db";
 import type { RefreshStats } from "./stats";
 import type { FetchableOrigin } from "./types";
 import type { RssAttemptOutcome, RssPublishedChunk } from "~/lib/rss";
-import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
 import {
   checkUserRefreshEligibilityForPlan,
   getUserPlanId,
 } from "~/server/subscriptions/helpers";
-import { atprotoConnections, user } from "~/server/db/schema";
+import { user } from "~/server/db/schema";
 import { workerPool } from "~/lib/workerPool";
 
 export const BACKGROUND_USER_PAGE_SIZE = 25;
@@ -47,7 +45,6 @@ type BackgroundRefreshDependencies = {
     feedsList: FetchableOrigin[];
     channel: string;
   }) => Promise<RefreshStats>;
-  syncSubscriptions?: typeof syncPublicationSubscriptions;
   onUserError?: (error: unknown, userId: string) => void;
 };
 
@@ -167,30 +164,14 @@ export async function runBackgroundFeedRefresh(
       let outcome: RssAttemptOutcome = "completed";
       const userStats = emptyRefreshStats();
       try {
-        let dueFeedCount = await countDueFeeds(
+        const dueFeedCount = await countDueFeeds(
           dependencies.db,
           candidate.id,
           dependencies.now,
         );
         // Nothing due: do not consume the user's refresh window or emit an
-        // empty lifecycle for a no-op.
-        if (dueFeedCount === 0) {
-          const connection = await dependencies.db
-            .select({ id: atprotoConnections.id })
-            .from(atprotoConnections)
-            .where(
-              and(
-                eq(atprotoConnections.userId, candidate.id),
-                eq(atprotoConnections.status, "active"),
-                or(
-                  eq(atprotoConnections.importSubscriptions, true),
-                  eq(atprotoConnections.exportSubscriptions, true),
-                ),
-              ),
-            )
-            .get();
-          if (!connection) continue;
-        }
+        // empty lifecycle for a no-op. Subscription sync has its own schedule.
+        if (dueFeedCount === 0) continue;
 
         const eligibility = await claimUser({
           db: dependencies.db,
@@ -200,32 +181,13 @@ export async function runBackgroundFeedRefresh(
         });
         if (!eligibility.eligible) continue;
         metrics.usersClaimed++;
-        const syncStarted = await syncBeforeFeedRefresh({
-          database: dependencies.db,
-          userId: candidate.id,
-          channel,
-          nextRefreshAt: eligibility.nextRefreshAt,
-          publish: dependencies.publish,
-          sync: dependencies.syncSubscriptions,
-        });
-        refreshStarted = syncStarted;
-        dueFeedCount = await countDueFeeds(
-          dependencies.db,
-          candidate.id,
-          dependencies.now,
-        );
 
         metrics.totalDueFeeds += dueFeedCount;
-        await dependencies.publish(
-          channel,
-          syncStarted
-            ? { type: "refresh-progress", total: dueFeedCount, completed: 0 }
-            : {
-                type: "refresh-start",
-                totalFeeds: dueFeedCount,
-                nextRefreshAt: eligibility.nextRefreshAt,
-              },
-        );
+        await dependencies.publish(channel, {
+          type: "refresh-start",
+          totalFeeds: dueFeedCount,
+          nextRefreshAt: eligibility.nextRefreshAt,
+        });
         refreshStarted = true;
 
         let afterFeedId: number | undefined;

@@ -9,6 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { parsePublicationUri } from "@serial/standard-site";
+import { backfillSchedule } from "./check";
 import {
   assertSubscriptionSyncCurrent,
   renewSubscriptionSync,
@@ -37,7 +38,6 @@ import { readFeedHttp } from "~/server/rss/feedHttp";
 import { applyOriginMetadata } from "~/server/rss/originMetadata";
 import { workerPool } from "~/lib/workerPool";
 import { runDatabaseWrite } from "~/server/db/retry-write";
-import { hasAtprotoWriteScope } from "~/server/auth/atproto/config";
 import { logError } from "~/server/logger";
 import { TEXT_PLATFORMS } from "~/lib/content/descriptor";
 
@@ -73,16 +73,12 @@ export async function backfillPublicationOrigins(
   dependencies = { readOriginEvidence, readBackfillPublication },
 ): Promise<{ attached: number; retryAt?: Date }> {
   const userId = connection.userId!;
-  if (
-    !connection.exportSubscriptions ||
-    !hasAtprotoWriteScope(connection.scopes)
-  )
-    return { attached: 0 };
-  if (connection.subscriptionBackfillStarted) {
-    const next = connection.subscriptionBackfillNextAttemptAt;
-    if (!next || next.getTime() > Date.now())
-      return { attached: 0, ...(next ? { retryAt: next } : {}) };
-  }
+  const schedule = backfillSchedule(connection, new Date());
+  if (!schedule.due)
+    return {
+      attached: 0,
+      ...(schedule.retryAt ? { retryAt: schedule.retryAt } : {}),
+    };
   await assertSubscriptionSyncCurrent(database, connection, true);
   if (!connection.subscriptionBackfillStarted) {
     await runDatabaseWrite(database, () =>

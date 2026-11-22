@@ -8,6 +8,10 @@ import type { PreparedFeedImport } from "~/server/feeds/imports";
 import * as schema from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import { commitFeedImport } from "~/server/feeds/imports";
+import {
+  atmosphereFeedIds,
+  requestSyncForFeedChange,
+} from "~/server/publication-sync/requests";
 import { getActiveFeedCount } from "~/server/subscriptions/helpers";
 
 type SerialSchema = typeof schema;
@@ -221,6 +225,7 @@ export async function insertFeedWithCategories(
       existingFeed: schema.feedsSchema.parse(newFeedRow),
     };
   }
+  await requestSyncForFeedChange(db, userId, atmosphereFeedIds([newFeedRow]));
   if (created.created) {
     await applyFeedCategories(db, userId, [
       { feedId: newFeedRow.id, categories: feedInput.categories },

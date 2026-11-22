@@ -20,7 +20,9 @@ it.each([1000, 10000, 50000])(
       session.instrumentation.reset();
       expect((await workload.run()).origins).toHaveLength(2);
       const evidence = session.instrumentation.snapshot();
-      expect(evidence.statementCount).toBeLessThanOrEqual(20);
+      // Includes the one statement that tells subscription sync about the
+      // attached publication.
+      expect(evidence.statementCount).toBeLessThanOrEqual(21);
       expect(evidence.materializedRows).toBeLessThanOrEqual(20);
       expect(workload.reads).toBe(3);
       expect(

@@ -32,7 +32,7 @@ try {
     const ms = performance.now() - start;
     const evidence = session.instrumentation.snapshot();
     if (
-      evidence.statementCount > 20 ||
+      evidence.statementCount > 21 ||
       evidence.materializedRows > 20 ||
       workload.reads > 3
     )

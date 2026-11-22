@@ -39,3 +39,16 @@ export async function resolveAutomaticRssOwner(input: {
     backgroundRefreshIntervalMs: limits.backgroundRefreshIntervalMs,
   });
 }
+
+/** The owner for an account whose role is already loaded, with no database read. */
+export async function automaticRssOwnerForAccount(account: {
+  id: string;
+  role: string | null;
+}) {
+  const { getUserPlanId } = await import("~/server/subscriptions/helpers");
+  return automaticRssOwnerForPlan({
+    backgroundRefreshEnabled: env.BACKGROUND_REFRESH_ENABLED,
+    planId: await getUserPlanId(account.id),
+    isAdmin: account.role === "admin",
+  });
+}

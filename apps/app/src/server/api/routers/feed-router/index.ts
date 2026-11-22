@@ -9,7 +9,7 @@ import {
 } from "./utils";
 import { revalidateFeed } from "~/server/feeds/revalidate";
 import { captureLimiter } from "~/server/bookmarks/limits";
-import { deleteUserFeeds } from "~/server/feeds/delete";
+import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 import { setFeedsActive } from "~/server/feeds/activation";
 import { loadUserFeedsWithOrigins, withOrigins } from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
@@ -186,7 +186,7 @@ const deleteFeed = protectedProcedure
   .input(z.number())
   .handler(async ({ context, input }) => {
     await context.db.transaction((tx) =>
-      deleteUserFeeds(tx, context.user.id, [input]),
+      deleteFeedsAtUserRequest(tx, context.user.id, [input]),
     );
     await publishReconciliationInvalidation(
       context.user.id,
@@ -324,7 +324,7 @@ export const bulkDelete = protectedProcedure
     if (input.feedIds.length === 0) return;
 
     await context.db.transaction((tx) =>
-      deleteUserFeeds(tx, context.user.id, input.feedIds),
+      deleteFeedsAtUserRequest(tx, context.user.id, input.feedIds),
     );
     await publishReconciliationInvalidation(
       context.user.id,

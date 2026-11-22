@@ -9,6 +9,10 @@ import { feedCategories, feedsSchema, viewFeeds } from "~/server/db/schema";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 import { createOrReuseFeed } from "~/server/feeds/origins";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
+import {
+  atmosphereFeedIds,
+  requestSyncForFeedChange,
+} from "~/server/publication-sync/requests";
 
 export async function createFeedsForUser(input: {
   database: typeof defaultDatabase;
@@ -54,6 +58,7 @@ export async function createFeedsForUser(input: {
 
     let newFeedCount = 0;
     const results = [];
+    const changedFeeds = [];
     for (const newFeed of newFeedDetails) {
       // Each lookup must see earlier inserts, and reused Feeds must not consume slots.
       // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -62,6 +67,7 @@ export async function createFeedsForUser(input: {
         details: newFeed,
         isActive: newFeedCount < remainingSlots,
       });
+      if (result.created || result.attached) changedFeeds.push(result.feed);
       if (!result.created) {
         results.push(
           result.attached || input.returnExisting
@@ -90,6 +96,11 @@ export async function createFeedsForUser(input: {
       newFeedCount++;
       results.push({ feed: insertedFeed, created: true as const });
     }
+    await requestSyncForFeedChange(
+      transaction,
+      input.userId,
+      atmosphereFeedIds(changedFeeds),
+    );
     return results;
   });
 

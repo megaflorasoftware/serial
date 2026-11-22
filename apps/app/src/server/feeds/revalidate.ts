@@ -17,6 +17,10 @@ import type { db } from "~/server/db";
 import { feeds, feedsSchema } from "~/server/db/schema";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { applyOriginMetadata } from "~/server/rss/originMetadata";
+import {
+  atmosphereFeedIds,
+  requestSyncForFeedChange,
+} from "~/server/publication-sync/requests";
 
 async function ownedFeed(
   database: FeedDatabase,
@@ -92,6 +96,11 @@ export async function revalidateFeed(
           current = await attachMissingFeedOrigins(tx, current, [
             addition.origin,
           ]);
+          await requestSyncForFeedChange(
+            tx,
+            userId,
+            atmosphereFeedIds([current]),
+          );
         }
         for (const observed of [...evidence, ...additions]) {
           const origin = current.origins.find(

@@ -7,78 +7,107 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "./database";
-import { createPublicationSyncWorkload } from "./publication-sync-workload";
+import {
+  createPublicationSyncWorkload,
+  PUBLICATION_SYNC_OPERATIONS,
+} from "./publication-sync-workload";
+import { publicationSyncBudget } from "./publication-sync-budgets";
+import type { PublicationSyncOperation } from "./publication-sync-workload";
 
 const profiles = { small: 100, representative: 1_000, stress: 10_000 };
 const { values } = parseArgs({
   options: {
     profile: { type: "string", default: "representative" },
+    // `sync` measures every sync operation in turn.
     operation: { type: "string", default: "sync" },
   },
 });
 if (!(values.profile in profiles))
   throw new Error("Unknown publication sync profile");
-if (!["sync", "backfill"].includes(values.operation))
-  throw new Error("Unknown operation");
-const backfill = values.operation === "backfill";
+const isSyncOperation = (value: string): value is PublicationSyncOperation =>
+  (PUBLICATION_SYNC_OPERATIONS as readonly string[]).includes(value);
+const operations: Array<PublicationSyncOperation | "backfill"> =
+  values.operation === "sync"
+    ? [...PUBLICATION_SYNC_OPERATIONS]
+    : values.operation === "backfill" || isSyncOperation(values.operation)
+      ? [values.operation]
+      : [];
+if (!operations.length) throw new Error("Unknown operation");
 const count = profiles[values.profile as keyof typeof profiles];
-const target = createLocalBenchmarkTarget();
-const session = openBenchmarkDatabase({ url: target.url });
-try {
-  await applyMigrations(session.baseClient);
-  const workload = backfill
-    ? await createPublicationBackfillWorkload(session.database, count)
-    : await createPublicationSyncWorkload(session.database, count);
-  await workload.run();
-  const samples = [];
-  for (let index = 0; index < 15; index++) {
-    // Reset this sample before measuring it; samples cannot overlap.
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+
+/** Each operation gets its own database, so one cannot warm or dirty another. */
+async function measure(operation: PublicationSyncOperation | "backfill") {
+  const target = createLocalBenchmarkTarget();
+  const session = openBenchmarkDatabase({ url: target.url });
+  try {
+    await applyMigrations(session.baseClient);
+    const workload =
+      operation === "backfill"
+        ? await createPublicationBackfillWorkload(session.database, count)
+        : await createPublicationSyncWorkload(
+            session.database,
+            count,
+            operation,
+          );
+    const budget =
+      operation === "backfill"
+        ? { requests: BACKFILL_BATCH_SIZE * 2, statements: 75, rows: 75 }
+        : publicationSyncBudget(operation, count);
     if ("prepare" in workload) await workload.prepare();
-    session.instrumentation.reset();
-    const started = performance.now();
-    // Samples must run separately; overlapping runs measure lease contention.
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    const result = await workload.run();
-    const elapsedMs = performance.now() - started;
-    const evidence = session.instrumentation.snapshot();
-    if (backfill) {
+    await workload.run();
+    const samples = [];
+    for (let index = 0; index < 15; index++) {
+      // Reset this sample before measuring it; samples cannot overlap.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      if ("prepare" in workload) await workload.prepare();
+      session.instrumentation.reset();
+      const started = performance.now();
+      // Samples must run separately; overlapping runs measure lease contention.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      const result = await workload.run();
+      const elapsedMs = performance.now() - started;
+      const evidence = session.instrumentation.snapshot();
       if (
-        workload.requests !== BACKFILL_BATCH_SIZE * 2 ||
-        evidence.statementCount > 75 ||
-        evidence.materializedRows > 75
+        ("status" in result &&
+          !["completed", "checked"].includes(result.status)) ||
+        workload.requests !== budget.requests ||
+        evidence.statementCount > budget.statements ||
+        evidence.materializedRows > budget.rows
       )
-        throw new Error("Backfill exceeded its structural budget");
-    } else if (
-      !("status" in result) ||
-      result.status !== "completed" ||
-      workload.requests !== 1 ||
-      evidence.statementCount > 8 ||
-      evidence.materializedRows > count * 2 + 5
-    )
-      throw new Error("Publication sync exceeded its structural budget");
-    samples.push({
-      elapsedMs,
-      statements: evidence.statementCount,
-      rows: evidence.materializedRows,
-    });
+        throw new Error(
+          `Publication ${operation} exceeded its structural budget`,
+        );
+      samples.push({
+        elapsedMs,
+        statements: evidence.statementCount,
+        rows: evidence.materializedRows,
+      });
+    }
+    const times = samples
+      .map((sample) => sample.elapsedMs)
+      .sort((a, b) => a - b);
+    const report = {
+      profile: values.profile,
+      operation,
+      publications: count,
+      medianMs: times[7],
+      p95Ms: times[14],
+      samples,
+    };
+    await mkdir("benchmarks/results", { recursive: true });
+    await writeFile(
+      `benchmarks/results/publication-${operation}-${values.profile}.json`,
+      JSON.stringify(report, null, 2),
+    );
+    console.log(JSON.stringify(report));
+  } finally {
+    session.close();
+    target.cleanup();
   }
-  const times = samples.map((sample) => sample.elapsedMs).sort((a, b) => a - b);
-  const report = {
-    profile: values.profile,
-    operation: values.operation,
-    publications: count,
-    medianMs: times[7],
-    p95Ms: times[14],
-    samples,
-  };
-  await mkdir("benchmarks/results", { recursive: true });
-  await writeFile(
-    `benchmarks/results/publication-${values.operation}-${values.profile}.json`,
-    JSON.stringify(report, null, 2),
-  );
-  console.log(JSON.stringify(report));
-} finally {
-  session.close();
-  target.cleanup();
+}
+
+for (const operation of operations) {
+  // One operation at a time: concurrent runs would measure each other's load.
+  // react-doctor-disable-next-line react-doctor/async-await-in-loop
+  await measure(operation);
 }

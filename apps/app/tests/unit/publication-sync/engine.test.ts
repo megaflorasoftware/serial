@@ -19,6 +19,8 @@ import {
 } from "~/server/feeds/importErrors";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { persistAtprotoSyncSettings } from "~/server/auth/atproto/sync-settings";
+import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
+import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 
 let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
@@ -61,6 +63,11 @@ const run = () =>
         maxActiveFeeds,
       }),
     },
+  });
+/** Jobs for an account whose refresh the client owns, so no recurring check follows. */
+const runJobs = (sync: typeof syncPublicationSubscriptions) =>
+  runPublicationSyncJobs(fixture.database, sync, {
+    refreshesInBackground: async () => false,
   });
 const addLocal = (name: string) =>
   insertFeedWithOrigins(fixture.database, {
@@ -428,9 +435,15 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
   resolveFeed
     .mockClear()
     .mockImplementation(async (_user, uri) => details(uri));
+  // Deferred work clears the stored revision, so the unchanged repository
+  // does not end the retry early; each pass reads the listing again.
+  expect(
+    (await fixture.database.select().from(atprotoConnections).get())
+      ?.subscriptionRepoRev,
+  ).toBeNull();
   expect(await run()).toMatchObject({ imported: 0, deferred: 1, retryAt });
   expect(resolveFeed).not.toHaveBeenCalled();
-  expect(store.list).toHaveBeenCalledTimes(1);
+  expect(store.list).toHaveBeenCalledTimes(2);
   await fixture.database
     .update(atprotoSubscriptionMirror)
     .set({ importRetryAt: new Date(0) });
@@ -443,7 +456,7 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
     "owner",
     publication("limited"),
   );
-  expect(store.list).toHaveBeenCalledTimes(1);
+  expect(store.list).toHaveBeenCalledTimes(3);
   expect(
     (await fixture.database.select().from(atprotoSubscriptionMirror)).every(
       (row) => row.importState === null,
@@ -458,12 +471,12 @@ it("schedules queued import retries at their backoff deadline", async () => {
     new FeedImportDeferredError(undefined, retryAt),
   );
   const sync = vi.fn(() => run());
-  await runPublicationSyncJobs(fixture.database, sync);
+  await runJobs(sync);
   expect(
     (await fixture.database.select().from(atprotoConnections).get())
       ?.subscriptionNextAttemptAt,
   ).toEqual(retryAt);
-  await runPublicationSyncJobs(fixture.database, sync);
+  await runJobs(sync);
   expect(sync).toHaveBeenCalledTimes(1);
 });
 it("reports ambiguous imports once without automatically retrying or exporting them", async () => {
@@ -478,11 +491,12 @@ it("reports ambiguous imports once without automatically retrying or exporting t
     status: "partial",
   });
   expect(await fixture.database.select().from(feeds)).toHaveLength(0);
+  // Nothing changed, so the next run stops before looking at the publication.
   expect(await run()).toMatchObject({
-    skipped: 1,
+    skipped: 0,
     imported: 0,
     exported: 0,
-    status: "partial",
+    status: "completed",
   });
   expect(resolveFeed).toHaveBeenCalledTimes(1);
   expect(store.create).not.toHaveBeenCalled();
@@ -493,7 +507,7 @@ it("reports ambiguous imports once without automatically retrying or exporting t
   expect(
     await fixture.database.select().from(atprotoSubscriptionMirror),
   ).toMatchObject([{ importState: "skipped", recordCid: "updated-cid" }]);
-  expect(await run()).toMatchObject({ skipped: 1, status: "partial" });
+  expect(await run()).toMatchObject({ skipped: 0, status: "completed" });
   expect(resolveFeed).toHaveBeenCalledTimes(1);
 });
 it("drops a pending import when its upstream subscription disappears", async () => {
@@ -593,10 +607,151 @@ it("persists continuation when a legacy enabled connection starts backfill durin
   await fixture.database
     .update(atprotoConnections)
     .set({ subscriptionNextAttemptAt: new Date(0) });
-  await runPublicationSyncJobs(fixture.database, sync);
+  await runJobs(sync);
   expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE + 1);
   expect(
     (await fixture.database.select().from(atprotoConnections).get())
       ?.subscriptionNextAttemptAt,
   ).toBeNull();
+});
+
+describe("deciding before a run", () => {
+  const writes = () => {
+    const spies = (["update", "insert", "delete", "transaction"] as const).map(
+      (method) => vi.spyOn(fixture.database, method),
+    );
+    return () => spies.reduce((total, spy) => total + spy.mock.calls.length, 0);
+  };
+  const stored = async () =>
+    (await fixture.database.select().from(atprotoConnections).get())!;
+
+  it("claims nothing and writes nothing when neither side changed", async () => {
+    records = [record("one")];
+    await method("import");
+    await run();
+    expect((await stored()).subscriptionRepoRev).toBe("1");
+    const written = writes();
+    vi.mocked(store.latestRev).mockClear();
+    expect(await run()).toMatchObject({ status: "completed", imported: 0 });
+    expect(written()).toBe(0);
+    expect(store.latestRev).toHaveBeenCalledTimes(1);
+    expect(store.list).toHaveBeenCalledTimes(1);
+  });
+  it("runs in full when the repository revision moved", async () => {
+    records = [record("one")];
+    await method("import");
+    await run();
+    records.push(record("two"));
+    rev++;
+    expect(await run()).toMatchObject({ imported: 1 });
+    expect((await stored()).subscriptionRepoRev).toBe("2");
+  });
+  it("leaves the cursor and revision alone when a full pass changes neither", async () => {
+    records = [record("one")];
+    await method("import");
+    await run();
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionBackfillStarted: false, exportSubscriptions: true });
+    const before = await stored();
+    const update = vi.spyOn(fixture.database, "update");
+    await syncPublicationSubscriptions({
+      database: fixture.database,
+      userId: "owner",
+      dependencies: {
+        store,
+        invalidate,
+        backfill: async () => ({ attached: 0 }),
+      },
+    });
+    // The claim and its release are the only connection writes.
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(await stored()).toEqual(before);
+  });
+  it("reconciles a publication Feed the user added, and ignores one sync never heard about", async () => {
+    await method("export");
+    await run();
+    const local = await addLocal("one");
+    expect(await run()).toMatchObject({ exported: 0 });
+    const before = await stored();
+    await requestSyncForFeedChange(fixture.database, "owner", [local.id]);
+    expect(await stored()).toMatchObject({
+      subscriptionRepoRev: null,
+      subscriptionRequestId: before.subscriptionRequestId,
+      subscriptionJobResult: before.subscriptionJobResult,
+    });
+    expect((await stored()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    expect(await run()).toMatchObject({ exported: 1 });
+  });
+  it("hears of a deletion the user asked for before the origins go", async () => {
+    const local = await addLocal("one");
+    await method("bidirectional");
+    await run();
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: null });
+    await fixture.database.transaction((tx) =>
+      deleteFeedsAtUserRequest(tx, "owner", [local.id]),
+    );
+    expect(await stored()).toMatchObject({ subscriptionRepoRev: null });
+    expect((await stored()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    expect(await run()).toMatchObject({ removed: 1 });
+    expect(records).toHaveLength(0);
+  });
+  it("does not request a run for Feeds without an Atmosphere origin or with sync off", async () => {
+    const rss = await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details: {
+        name: "Plain",
+        platform: "website",
+        origins: [{ kind: "rss", locator: "https://example.com/rss" }],
+      },
+      isActive: true,
+    });
+    const local = await addLocal("one");
+    await method("export");
+    await run();
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: null });
+    const clean = await stored();
+    await requestSyncForFeedChange(fixture.database, "owner", [rss.id]);
+    expect(await stored()).toEqual(clean);
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ exportSubscriptions: false });
+    const disabled = await stored();
+    await requestSyncForFeedChange(fixture.database, "owner", [local.id]);
+    expect(await stored()).toEqual(disabled);
+  });
+  it("does not request another run for Feeds its own run imports or removes", async () => {
+    records = [record("one")];
+    await method("bidirectional");
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: null });
+    expect(await run()).toMatchObject({ imported: 1 });
+    expect(await stored()).toMatchObject({
+      subscriptionNextAttemptAt: null,
+      subscriptionRepoRev: "1",
+    });
+    records = [];
+    rev++;
+    expect(await run()).toMatchObject({ removed: 1 });
+    expect(await stored()).toMatchObject({
+      subscriptionNextAttemptAt: null,
+      subscriptionRepoRev: "2",
+    });
+  });
+  it("leaves a local-only publication alone when only import is on", async () => {
+    await addLocal("one");
+    await method("import");
+    const transaction = vi.spyOn(fixture.database, "transaction");
+    expect(await run()).toMatchObject({ status: "completed", exported: 0 });
+    expect(transaction).not.toHaveBeenCalled();
+    expect(
+      await fixture.database.select().from(atprotoSubscriptionMirror),
+    ).toHaveLength(0);
+    expect((await stored()).subscriptionRepoRev).toBe("1");
+  });
 });

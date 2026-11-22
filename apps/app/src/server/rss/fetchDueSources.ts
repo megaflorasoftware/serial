@@ -12,6 +12,8 @@ import type {
   RssTrigger,
 } from "~/lib/rss";
 import { syncBeforeFeedRefresh } from "~/server/publication-sync/refresh";
+import { scheduleMissingSyncCheck } from "~/server/publication-sync/requests";
+import { logError } from "~/server/logger";
 import { checkUserRefreshEligibility } from "~/server/subscriptions/helpers";
 
 type RefreshEligibility =
@@ -34,6 +36,7 @@ type FetchDueSourcesDependencies = {
   }) => Promise<RefreshStats>;
   now?: () => Date;
   syncSubscriptions?: typeof syncPublicationSubscriptions;
+  scheduleSyncCheck?: typeof scheduleMissingSyncCheck;
 };
 
 export async function fetchDueSources(input: {
@@ -53,6 +56,13 @@ export async function fetchDueSources(input: {
       userId: input.userId,
     })) === "background-task"
   ) {
+    // The background owns this user's recurring sync check as well as their refresh.
+    await (dependencies.scheduleSyncCheck ?? scheduleMissingSyncCheck)(
+      input.database,
+      input.userId,
+    ).catch((error: unknown) =>
+      logError("[publication-sync] scheduling a check failed", error),
+    );
     return { status: "background-managed" };
   }
 
