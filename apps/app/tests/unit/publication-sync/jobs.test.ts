@@ -40,7 +40,9 @@ const runJobs = (
   runPublicationSyncJobs(fixture.database, sync, {
     refreshesInBackground: async () => options.background ?? false,
     latestRev: options.latestRev,
+    announce,
   });
+const announce = vi.fn<(userId: string) => Promise<void>>(async () => {});
 const connection = async () =>
   (await fixture.database
     .select()
@@ -62,6 +64,7 @@ const dueWithCleanRun = async (rev = "rev-1") => {
   return connection();
 };
 beforeEach(async () => {
+  announce.mockClear();
   fixture = await createBookmarkTestDatabase();
   await fixture.database.insert(user).values({
     id: "owner",
@@ -102,10 +105,11 @@ it("persists work atomically with settings and runs without a browser", async ()
   );
   await runJobs(sync);
   expect(sync).toHaveBeenCalledTimes(1);
+  // A settled request gives up its progress and keeps its result.
   expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
     pending: false,
     running: false,
-    progress: { completed: 1, total: 1 },
+    progress: null,
     result: { exported: 1 },
   });
   expect(
@@ -153,19 +157,25 @@ it("keeps a later save when an older worker finishes", async () => {
     result: { exported: 1 },
   });
 });
-it("persists backfill continuation with accumulated successful writes", async () => {
+it("keeps a request in flight across an immediate continuation and totals its runs", async () => {
   await save();
-  await runJobs(async () => ({
-    ...completed(),
-    retryAt: new Date(Date.now() + 60_000),
-  }));
-  // A retry scheduled further out keeps its result and stops the interface polling.
-  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
-    pending: false,
-    running: false,
-    result: { exported: 1 },
+  // A run that stops at its deadline leaves work for a continuation due now.
+  const continued = await runJobs(async ({ onProgress, runId }) => {
+    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    return {
+      ...completed(),
+      status: "partial",
+      deferred: 1,
+      retryAt: new Date(),
+    };
   });
-  expect((await connection()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+  expect(continued).toBe(true);
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: true,
+    running: false,
+    progress: { completed: 1, total: 2 },
+    result: { exported: 1, deferred: 1 },
+  });
   await fixture.database
     .update(atprotoConnections)
     .set({ subscriptionNextAttemptAt: new Date(0) })
@@ -173,7 +183,138 @@ it("persists backfill continuation with accumulated successful writes", async ()
   await runJobs(async () => completed());
   expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
     pending: false,
-    result: { exported: 2 },
+    progress: null,
+    result: { exported: 2, deferred: 0 },
+  });
+});
+it("keeps the failures an earlier run of the same request saw, without counting them twice", async () => {
+  await save();
+  const due = () =>
+    fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: new Date(0) })
+      .where(eq(atprotoConnections.id, "connection"));
+  const stoppedAtDeadline = {
+    ...completed(),
+    status: "partial" as const,
+    failed: 2,
+    deferred: 1,
+    retryAt: new Date(),
+  };
+  await runJobs(async () => stoppedAtDeadline);
+  await due();
+  // A continuation that lists the repository meets the same failures again.
+  await runJobs(async () => stoppedAtDeadline);
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: true,
+    result: { exported: 2, failed: 2 },
+  });
+  await due();
+  // One that reads the cached snapshot cannot see them and reports none.
+  await runJobs(async () => completed());
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    result: { exported: 3, failed: 2, deferred: 0, status: "partial" },
+  });
+});
+it("keeps what an in-flight request already did when a check finds nothing left", async () => {
+  await save();
+  await runJobs(async () => ({
+    ...completed(),
+    status: "partial",
+    deferred: 1,
+    retryAt: new Date(),
+  }));
+  // An inline run finished the rest before the continuation started.
+  await fixture.database.update(atprotoConnections).set({
+    subscriptionRepoRev: "rev-1",
+    subscriptionBackfillStarted: true,
+    subscriptionNextAttemptAt: new Date(0),
+  });
+  const sync = vi.fn<typeof syncPublicationSubscriptions>();
+  await runJobs(sync, { latestRev: async () => "rev-1" });
+  expect(sync).not.toHaveBeenCalled();
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    progress: null,
+    result: { status: "completed", exported: 1, deferred: 0 },
+  });
+});
+it("runs a retry in the background once its request has settled", async () => {
+  await save();
+  await runJobs(async () => ({
+    ...completed(),
+    status: "partial",
+    deferred: 1,
+    retryAt: new Date(Date.now() + 60_000),
+  }));
+  // A retry scheduled further out ends the request: its result shows once.
+  const settled = await getPublicationSyncJob(fixture.database, "owner");
+  expect(settled).toMatchObject({
+    pending: false,
+    running: false,
+    progress: null,
+    result: { exported: 1, deferred: 1 },
+  });
+  expect((await connection()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+  announce.mockClear();
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionNextAttemptAt: new Date(0) })
+    .where(eq(atprotoConnections.id, "connection"));
+  await runJobs(async ({ onProgress, runId }) => {
+    await onProgress?.({ runId: runId!, completed: 1, total: 1 });
+    // While it runs, the interface has nothing to watch.
+    expect(
+      await getPublicationSyncJob(fixture.database, "owner"),
+    ).toMatchObject({ pending: false, running: true, progress: null });
+    return completed();
+  });
+  // The retry wrote no job state, added nothing to the totals and said nothing.
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toEqual(
+    settled,
+  );
+  expect(announce).not.toHaveBeenCalled();
+});
+it("announces a run the user started while it progresses and when it settles", async () => {
+  await save();
+  await runJobs(async ({ onProgress, runId }) => {
+    await onProgress?.({ runId: runId!, completed: 0, total: 2 });
+    // A second change inside the announcement interval waits for the next one.
+    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    expect(announce).toHaveBeenCalledExactlyOnceWith("owner");
+    return completed();
+  });
+  expect(announce).toHaveBeenCalledTimes(2);
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    result: { exported: 1 },
+  });
+});
+it("announces a change held back by the interval once the interval ends", async () => {
+  await save();
+  await runJobs(async ({ onProgress, runId }) => {
+    await onProgress?.({ runId: runId!, completed: 0, total: 2 });
+    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    expect(announce).toHaveBeenCalledTimes(1);
+    // The run goes quiet, as during a slow import, and the held change still goes out.
+    await vi.waitFor(() => expect(announce).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    return completed();
+  });
+  expect(announce).toHaveBeenCalledTimes(3);
+});
+it("keeps watching a request whose first run found sync busy", async () => {
+  await save();
+  await runJobs(async () => ({
+    ...emptyPublicationSyncCounts(),
+    status: "busy",
+  }));
+  // The run did nothing, so the request has no result and waits for the next one.
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: true,
+    result: null,
   });
 });
 it("turning sync off cancels queued work", async () => {
@@ -292,37 +433,38 @@ it("clears the schedule of a due connection that no longer syncs, without runnin
   expect(sync).not.toHaveBeenCalled();
   expect((await connection()).subscriptionNextAttemptAt).toBeNull();
 });
-it("reports pending only for a run in flight or a request about to start", async () => {
+it("reports pending only for a request the user started and has not seen finish", async () => {
   const status = async () =>
     (await getPublicationSyncJob(fixture.database, "owner"))?.pending;
   const set = (values: Partial<typeof atprotoConnections.$inferInsert>) =>
     fixture.database.update(atprotoConnections).set(values);
   await save();
   expect(await status()).toBe(true);
-  // A new request scheduled further out is not worth polling for yet.
+  // A request still waiting for its first result is watched, however long.
   await set({ subscriptionNextAttemptAt: new Date(Date.now() + 60_000) });
-  expect(await status()).toBe(false);
-  // A due recurring check or retry already has its result.
+  expect(await status()).toBe(true);
+  // A settled request has its result. A due recurring check or retry, and a
+  // retry scheduled further out, give the interface nothing to watch.
   await set({
     subscriptionNextAttemptAt: new Date(0),
-    subscriptionJobResult: completed(),
+    subscriptionJobResult: { ...completed(), status: "partial", deferred: 2 },
   });
   expect(await status()).toBe(false);
+  await set({ subscriptionNextAttemptAt: new Date(Date.now() + 86_400_000) });
+  expect(await status()).toBe(false);
+  // Nor does a background run that holds the lease.
   await set({
     subscriptionNextAttemptAt: new Date(Date.now() + 15 * 60_000),
     subscriptionJobExpiresAt: new Date(Date.now() + 60_000),
   });
-  expect(await status()).toBe(true);
-  // A continuation due within seconds still has deferred work to pick up.
+  expect(await status()).toBe(false);
+  // A continuation keeps the request's progress, and so its place in view.
   await set({
     subscriptionNextAttemptAt: new Date(Date.now() + 1000),
     subscriptionJobExpiresAt: null,
-    subscriptionJobResult: { ...completed(), status: "partial", deferred: 2 },
+    subscriptionJobProgress: { completed: 1, total: 3 },
   });
   expect(await status()).toBe(true);
-  // The same deferred work scheduled further out is not worth polling for.
-  await set({ subscriptionNextAttemptAt: new Date(Date.now() + 60_000) });
-  expect(await status()).toBe(false);
 });
 it("stops reporting pending when sync is turned off while an earlier worker holds its lease", async () => {
   await save();
@@ -411,4 +553,60 @@ it("runs when backfill has work, and waits for a backfill retry that is not due"
   await runJobs(sync, { background: true, latestRev: async () => "rev-1" });
   expect(sync).toHaveBeenCalledTimes(1);
   expect((await connection()).subscriptionNextAttemptAt).toEqual(backfillRetry);
+});
+it("stays idle while an import retry waits, with one write, and runs once it is due", async () => {
+  await dueWithCleanRun();
+  const importRetry = new Date(Date.now() + 86_400_000);
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionRetryAt: importRetry });
+  const sync = vi
+    .fn<typeof syncPublicationSubscriptions>()
+    .mockResolvedValue(completed());
+  const update = vi.spyOn(fixture.database, "update");
+  // The account's refresh is client-owned, so the retry is all that is scheduled.
+  await runJobs(sync, { latestRev: async () => "rev-1" });
+  expect(sync).not.toHaveBeenCalled();
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(await connection()).toMatchObject({
+    subscriptionNextAttemptAt: importRetry,
+    subscriptionRepoRev: "rev-1",
+    subscriptionJobToken: null,
+  });
+  // A recurring check falls before the retry and stays idle too.
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionNextAttemptAt: new Date(0) });
+  await runJobs(sync, { background: true, latestRev: async () => "rev-1" });
+  expect(sync).not.toHaveBeenCalled();
+  expect(
+    (await connection()).subscriptionNextAttemptAt!.getTime(),
+  ).toBeLessThan(importRetry.getTime());
+  // Once the retry is due the run happens, without asking the PDS first.
+  await fixture.database.update(atprotoConnections).set({
+    subscriptionRetryAt: new Date(0),
+    subscriptionNextAttemptAt: new Date(0),
+  });
+  const latestRev = vi.fn(async () => "rev-1");
+  await runJobs(sync, { latestRev });
+  expect(latestRev).not.toHaveBeenCalled();
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(sync.mock.calls[0]![0].check).toEqual({ state: "due" });
+});
+it("ends a request the user started when a check finds nothing left to do", async () => {
+  await save();
+  // An inline run finished the work before the queued one started.
+  await fixture.database.update(atprotoConnections).set({
+    subscriptionRepoRev: "rev-1",
+    subscriptionBackfillStarted: true,
+  });
+  const sync = vi.fn<typeof syncPublicationSubscriptions>();
+  await runJobs(sync, { latestRev: async () => "rev-1" });
+  expect(sync).not.toHaveBeenCalled();
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    progress: null,
+    result: { status: "completed", exported: 0 },
+  });
+  expect(announce).toHaveBeenCalledExactlyOnceWith("owner");
 });

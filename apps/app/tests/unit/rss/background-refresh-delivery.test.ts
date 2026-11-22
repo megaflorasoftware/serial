@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
-import type { PublishedChunk } from "~/server/api/publisher";
+import type { ChannelMessage } from "~/server/api/publisher";
 import { feedOriginRss, feedOrigins, feeds, user } from "~/server/db/schema";
 import { publisher } from "~/server/api/publisher";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
@@ -57,7 +57,7 @@ describe("background refresh delivery", () => {
       .values({ originId: origin!.id });
 
     const controller = new AbortController();
-    const received: PublishedChunk[] = [];
+    const received: ChannelMessage[] = [];
     const subscription = publisher.subscribe("user:watching-user", {
       signal: controller.signal,
     });

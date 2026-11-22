@@ -3,7 +3,13 @@ import {
   MissingPublicRecordError,
   PublicRecordVersionUnavailableError,
 } from "@serial/standard-site";
+import { DidError } from "@atproto-labs/did-resolver";
 import { createPublicationClient } from "~/server/rss/atprotoClient";
+import {
+  FeedImportDeferredError,
+  PublicationGoneError,
+  publicationIsGone,
+} from "~/server/feeds/importErrors";
 import { discoverFeeds, streamDiscoverFeeds } from "~/server/feeds/discovery";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import {
@@ -372,4 +378,48 @@ it("preserves a streamed RSS result and uses the remaining overall budget for Sl
   });
   expect(mocks.fetch).toHaveBeenCalledTimes(2);
   expect(mocks.resolve).toHaveBeenCalledTimes(1);
+});
+
+describe("a publication that is gone", () => {
+  const cacheMiss = () =>
+    mocks.fetch.mockImplementation(
+      async () => new Response(null, { status: 503 }),
+    );
+  it.each([404, 410])(
+    "reports a repository whose DID answers %s as unavailable",
+    async (status) => {
+      cacheMiss();
+      mocks.resolve.mockRejectedValue(
+        new DidError(did, "DID not found", "did-fetch-error", status),
+      );
+      await expect(resolvePublication(uri)).rejects.toBeInstanceOf(
+        PublicationUnavailableError,
+      );
+    },
+  );
+  it("keeps a DID lookup that failed in transit retryable", async () => {
+    cacheMiss();
+    // The resolver reports a transport failure with status 400.
+    const failure = new DidError(did, "fetch failed", "did-fetch-error", 400);
+    mocks.resolve.mockRejectedValue(failure);
+    await expect(resolvePublication(uri)).rejects.toBe(failure);
+  });
+  it("reports a record that is not a valid publication as unavailable", async () => {
+    mocks.fetch.mockImplementation(async () =>
+      Response.json({ ...record, value: {} }),
+    );
+    await expect(resolvePublication(uri)).rejects.toBeInstanceOf(
+      PublicationUnavailableError,
+    );
+  });
+  it("counts every such failure as gone for good, and an outage as not", async () => {
+    expect(publicationIsGone(new PublicationUnavailableError("Deleted"))).toBe(
+      true,
+    );
+    expect(publicationIsGone(new PublicationGoneError("Uncombinable"))).toBe(
+      true,
+    );
+    expect(publicationIsGone(new FeedImportDeferredError())).toBe(false);
+    expect(publicationIsGone(new Error("Network timed out"))).toBe(false);
+  });
 });

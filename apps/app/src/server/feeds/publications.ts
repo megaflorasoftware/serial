@@ -1,5 +1,6 @@
 import {
   buildBlueskyCdnImageUrl,
+  InvalidPublicRecordError,
   MissingPublicRecordError,
   normalizePublicationUrl,
   parsePublicationRecord,
@@ -8,6 +9,8 @@ import {
   STANDARD_SITE_COLLECTIONS,
 } from "@serial/standard-site";
 import { extractPdsUrl } from "@atproto/oauth-client-node";
+import { DidError } from "@atproto-labs/did-resolver";
+import { PublicationGoneError } from "./importErrors";
 import type { NewFeedOriginDetails } from "~/server/rss/types";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import { createPublicRecordReader } from "~/server/auth/atproto/public-record";
@@ -27,7 +30,8 @@ const cache = new Map<
 >();
 const fetch = createHardenedFetch();
 
-export class PublicationUnavailableError extends Error {}
+/** The publication was deleted, its repository is gone, or its record is invalid. */
+export class PublicationUnavailableError extends PublicationGoneError {}
 
 export type ResolvedPublication = {
   uri: string;
@@ -65,11 +69,33 @@ function parseResolvedPublication(
   };
 }
 
+/**
+ * The DID's own method answered that it does not exist: an unregistered or
+ * retired identity, or a method nobody resolves. A transport failure reports a
+ * different status and stays retryable.
+ */
+function didNoLongerResolves(error: unknown) {
+  return (
+    error instanceof DidError &&
+    (error.code === "did-method-invalid" ||
+      (error.code === "did-fetch-error" &&
+        (error.status === 404 || error.status === 410)))
+  );
+}
+
 async function publicIdentity(identifier: string, signal: AbortSignal) {
   signal.throwIfAborted();
-  const identity = await getAtprotoIdentityResolver().resolve(identifier, {
-    signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
-  });
+  const identity = await getAtprotoIdentityResolver()
+    .resolve(identifier, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+    })
+    .catch((error: unknown) => {
+      if (didNoLongerResolves(error))
+        throw new PublicationUnavailableError(
+          "Publication repository no longer resolves",
+        );
+      throw error;
+    });
   return {
     did: identity.did,
     pdsUrl: extractPdsUrl(identity.didDoc).toString(),
@@ -118,6 +144,7 @@ export async function resolvePublication(
     (error: unknown) => {
       if (
         error instanceof MissingPublicRecordError ||
+        error instanceof InvalidPublicRecordError ||
         (error instanceof PublicRecordHttpError &&
           [400, 401, 403, 404, 410].includes(error.status))
       )

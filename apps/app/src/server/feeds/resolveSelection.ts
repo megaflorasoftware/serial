@@ -2,6 +2,7 @@ import { discoveredFeedSchema } from "@serial/feed-discovery/validation";
 import { combinePublicationRows } from "@serial/feed-discovery";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import { discoverFeedOriginsForImport, discoverFeeds } from "./discovery";
+import { PublicationGoneError } from "./importErrors";
 import {
   publicationOrigin,
   publicationRow,
@@ -73,7 +74,9 @@ export async function resolvePublicationFeed(
   publicationUri: string,
 ) {
   const publication = await resolvePublication(publicationUri);
-  if (!publication) throw new Error("Unable to read the selected publication");
+  // A record that does not describe this publication stays that way until it changes.
+  if (!publication)
+    throw new PublicationGoneError("Unable to read the selected publication");
   return resolveSelectedFeed(
     userId,
     publicationRow(publication),
@@ -137,7 +140,9 @@ async function resolveSelectedFeed(
   }
   if (!publication) return rssDetails ? [rssDetails] : [];
   if (rssDetails && !isCombinedSelection(rssDetails, publication))
-    throw new Error("The RSS Feed and publication cannot be combined");
+    throw new PublicationGoneError(
+      "The RSS Feed and publication cannot be combined",
+    );
   return [
     {
       ...(rssDetails ?? {}),

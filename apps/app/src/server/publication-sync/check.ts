@@ -38,6 +38,7 @@ export const syncCheckColumns = {
   exportSubscriptions: connections.exportSubscriptions,
   scopes: connections.scopes,
   subscriptionRepoRev: connections.subscriptionRepoRev,
+  subscriptionRetryAt: connections.subscriptionRetryAt,
   subscriptionBackfillStarted: connections.subscriptionBackfillStarted,
   subscriptionBackfillNextAttemptAt:
     connections.subscriptionBackfillNextAttemptAt,
@@ -52,14 +53,18 @@ export type SyncCheckRow = Pick<
   | "exportSubscriptions"
   | "scopes"
   | "subscriptionRepoRev"
+  | "subscriptionRetryAt"
   | "subscriptionBackfillStarted"
   | "subscriptionBackfillNextAttemptAt"
 > & { hasSession: boolean };
 
 export type SyncCheck =
   | { state: "disabled" }
-  /** The repository and the local Feeds both match the last clean run. */
-  | { state: "current"; backfillRetryAt?: Date }
+  /**
+   * The repository and the local Feeds both match the last finished run.
+   * `retryAt` is the earliest retry still waiting for its time.
+   */
+  | { state: "current"; retryAt?: Date }
   /** `rev` is present when the check already asked the PDS for it. */
   | { state: "due"; rev?: string | null };
 
@@ -81,10 +86,16 @@ function syncsSubscriptions(
   );
 }
 
+export function earliest(...times: Array<Date | null | undefined>) {
+  const known = times.flatMap((time) => (time ? [time.getTime()] : []));
+  return known.length ? new Date(Math.min(...known)) : null;
+}
+
 /**
  * Decide whether a run has work before anything is claimed. A stored revision
- * is the last one a run finished cleanly against; local changes, retries and
- * settings saves clear it, so a match means nothing changed on either side.
+ * is the last one a run finished against with nothing left but retries waiting
+ * for their time. Local changes, failures and settings saves clear it, so a
+ * match with no retry due means nothing needs doing on either side.
  */
 export async function checkPublicationSync(
   row: SyncCheckRow | undefined,
@@ -93,11 +104,13 @@ export async function checkPublicationSync(
 ): Promise<SyncCheck> {
   if (!syncsSubscriptions(row)) return { state: "disabled" };
   const backfill = backfillSchedule(row, now);
-  if (row.subscriptionRepoRev === null || backfill.due) return { state: "due" };
+  const retryDue =
+    row.subscriptionRetryAt !== null &&
+    row.subscriptionRetryAt.getTime() <= now.getTime();
+  if (row.subscriptionRepoRev === null || backfill.due || retryDue)
+    return { state: "due" };
   const rev = await latestRev(row.did);
   if (rev !== row.subscriptionRepoRev) return { state: "due", rev };
-  return {
-    state: "current",
-    ...(backfill.retryAt ? { backfillRetryAt: backfill.retryAt } : {}),
-  };
+  const retryAt = earliest(backfill.retryAt, row.subscriptionRetryAt);
+  return { state: "current", ...(retryAt ? { retryAt } : {}) };
 }

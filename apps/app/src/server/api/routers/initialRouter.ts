@@ -8,7 +8,7 @@ import {
   runInChunks,
 } from "./feed-router/utils";
 import type { ReaderBody } from "@serial/standard-site";
-import type { PublishedChunk } from "../publisher";
+import type { ChannelMessage } from "../publisher";
 import type { InsertFeedWithCategoriesResult } from "./feed-router/utils";
 import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
@@ -161,7 +161,7 @@ export type ImportProgressChunk =
   | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
   | { type: "import-views-updated"; views: ApplicationView[] };
 
-type RouterPublishedChunk = PublishedChunk;
+type RouterPublishedChunk = ChannelMessage;
 
 type ChannelSubscription = {
   channel: string;

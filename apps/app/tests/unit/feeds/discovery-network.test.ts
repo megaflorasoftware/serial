@@ -7,7 +7,10 @@ import {
   discoverFeeds,
 } from "~/server/feeds/discovery";
 import { captureLimiter } from "~/server/bookmarks/limits";
-import { FeedImportDeferredError } from "~/server/feeds/importErrors";
+import {
+  FeedImportDeferredError,
+  PublicationGoneError,
+} from "~/server/feeds/importErrors";
 import { readFeedHttp } from "~/server/rss/feedHttp";
 import {
   resolvePublication,
@@ -446,6 +449,25 @@ describe("import discovery completeness", () => {
       ),
     ).toEqual([]);
   });
+  it("reports a site that answers 410 as gone, apart from incomplete discovery", async () => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+      statusResponse(url, 410),
+    );
+    await expect(
+      discoverFeedOriginsForImport("gone-410", "https://example.com"),
+    ).rejects.toBeInstanceOf(PublicationGoneError);
+  });
+  it.each([403, 404, 500, 503])(
+    "keeps a site that answers %s worth another attempt",
+    async (status) => {
+      vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+        statusResponse(url, status),
+      );
+      await expect(
+        discoverFeedOriginsForImport(`down-${status}`, "https://example.com"),
+      ).rejects.toBeInstanceOf(FeedImportDeferredError);
+    },
+  );
   it("does not convert a blocked or unavailable site into empty discovery", async () => {
     vi.mocked(readFeedHttp).mockRejectedValue(new Error("Network timed out"));
     await expect(

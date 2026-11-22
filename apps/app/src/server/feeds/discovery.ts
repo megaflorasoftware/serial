@@ -12,7 +12,7 @@ import {
   STANDARD_SITE_WELL_KNOWN_PATH,
 } from "@serial/standard-site";
 import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
-import { FeedImportDeferredError } from "./importErrors";
+import { FeedImportDeferredError, PublicationGoneError } from "./importErrors";
 import { discoverRssFeeds } from "./discoverRss";
 import {
   DISCOVERY_PRIMARY_REQUEST_MS,
@@ -521,7 +521,11 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
   return discoverWebsite(url, read, signal, true, undefined, deadline);
 }
 
-/** Imports require completed discovery; an unavailable source is never evidence of absence. */
+/**
+ * Imports require completed discovery; an unavailable source is never evidence
+ * of absence. A site that answers 410 is reported as gone, apart from
+ * discovery that could not finish and is worth another attempt.
+ */
 export async function discoverFeedOriginsForImport(
   userId: string,
   url: string,
@@ -572,6 +576,10 @@ export async function discoverFeedOriginsForImport(
     const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
     const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
     const page = await read(url);
+    // Only 410 says the site is gone for good. A 404 can be a bad deploy or a
+    // parked host, so it waits with every outage and refusal.
+    if (page.status === 410)
+      throw new PublicationGoneError("The publication's website is gone");
     if (!page.ok) throw incomplete ?? new FeedImportDeferredError();
     const rows = await discoverWebsite(
       url,
@@ -587,7 +595,11 @@ export async function discoverFeedOriginsForImport(
       throw incomplete ?? new FeedImportDeferredError();
     return rows;
   } catch (error) {
-    if (error instanceof FeedImportDeferredError) throw error;
+    if (
+      error instanceof FeedImportDeferredError ||
+      error instanceof PublicationGoneError
+    )
+      throw error;
     throw new FeedImportDeferredError();
   } finally {
     lease.release();

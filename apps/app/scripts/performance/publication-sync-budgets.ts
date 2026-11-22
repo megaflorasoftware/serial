@@ -13,6 +13,8 @@ export function publicationSyncBudget(
     unchanged: { requests: 1, statements: 1, rows: 1 },
     // The due-job page and one guarded reschedule.
     check: { requests: 1, statements: 2, rows: 1 },
+    // The same, however many imports wait for their retry time.
+    waiting: { requests: 1, statements: 2, rows: 1 },
     // Claim, mirror, local origins, cursor and release.
     requested: { requests: 2, statements: 8, rows: publications * 2 + 5 },
   }[operation];

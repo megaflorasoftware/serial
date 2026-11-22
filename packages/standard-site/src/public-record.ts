@@ -15,6 +15,8 @@ export type PublicRecordRequest = {
 };
 
 export class MissingPublicRecordError extends Error {}
+/** The record exists but is not a valid record of its collection or identity. */
+export class InvalidPublicRecordError extends Error {}
 export class PublicRecordVersionUnavailableError extends Error {}
 export class PublicRecordHttpError extends Error {
   constructor(readonly status: number) {
@@ -45,7 +47,8 @@ export function validatePublicRecord(
   if (!parts || (request.cid !== undefined && !isRecordCid(request.cid)))
     throw new Error("Invalid record identity");
   const record = listedRecordSchema.parse(input);
-  if (record.uri !== request.uri) throw new Error("Record URI mismatch");
+  if (record.uri !== request.uri)
+    throw new InvalidPublicRecordError("Record URI mismatch");
   if (
     !isRecordCid(record.cid) ||
     (request.cid !== undefined && record.cid !== request.cid)
@@ -58,14 +61,15 @@ export function validatePublicRecord(
   };
   const parser = parsers[parts.collection as keyof typeof parsers];
   if (parser) {
-    if (!parser(record)) throw new Error("Invalid record value");
+    if (!parser(record))
+      throw new InvalidPublicRecordError("Invalid record value");
   } else if (
     !record.value ||
     typeof record.value !== "object" ||
     !("$type" in record.value) ||
     record.value.$type !== parts.collection
   )
-    throw new Error("Invalid record value");
+    throw new InvalidPublicRecordError("Invalid record value");
   return record;
 }
 

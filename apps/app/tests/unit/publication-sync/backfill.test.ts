@@ -210,3 +210,67 @@ it("completes a declaration pointing to an unavailable Publication", async () =>
     await fixture.database.select().from(publicationBackfillProbes).get(),
   ).toMatchObject({ nextAttemptAt: null });
 });
+
+it("backs off a dead RSS feed to once a day and ends the probe after 14 days", async () => {
+  await addFeed(1);
+  const readOriginEvidence = vi.fn(() =>
+    Promise.reject(new Error("Unable to read the RSS Feed")),
+  );
+  const probe = async () =>
+    (await fixture.database.select().from(publicationBackfillProbes).get())!;
+  const delays: number[] = [];
+  let waited = 0;
+  await claimSubscriptionSync(fixture.database, "owner");
+  for (;;) {
+    const before = Date.now();
+    // Each pass is the next retry of the same probe.
+    // oxlint-disable-next-line react-doctor/async-await-in-loop
+    const result = await backfillPublicationOrigins(
+      fixture.database,
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      await connection(),
+      { readOriginEvidence, readBackfillPublication: async () => evidence() },
+    );
+    if (!result.retryAt) break;
+    const delay = result.retryAt.getTime() - before;
+    delays.push(Math.round(delay / 60_000));
+    waited += delay;
+    // Time passes until the probe is due again.
+    // oxlint-disable-next-line react-doctor/async-await-in-loop
+    await fixture.database
+      .update(publicationBackfillProbes)
+      .set({ nextAttemptAt: new Date(0) });
+    // oxlint-disable-next-line react-doctor/async-await-in-loop
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionBackfillNextAttemptAt: new Date(0) });
+  }
+  expect(delays.slice(0, 5)).toEqual([1, 2, 4, 8, 16]);
+  expect(Math.max(...delays)).toBe(24 * 60);
+  const day = 86_400_000;
+  expect(waited - delays.at(-1)! * 60_000).toBeLessThan(14 * day);
+  expect(waited).toBeGreaterThanOrEqual(14 * day);
+  // The probe counts as done and never runs again.
+  expect(await probe()).toMatchObject({ nextAttemptAt: null });
+  const attempts = readOriginEvidence.mock.calls.length;
+  await backfillPublicationOrigins(fixture.database, await connection(), {
+    readOriginEvidence,
+    readBackfillPublication: async () => evidence(),
+  });
+  expect(readOriginEvidence).toHaveBeenCalledTimes(attempts);
+});
+it("ends a probe at once for a publication whose record is invalid", async () => {
+  const { PublicationGoneError } = await import("~/server/feeds/importErrors");
+  await addFeed(1);
+  const claimed = (await claimSubscriptionSync(fixture.database, "owner"))!;
+  expect(
+    await backfillPublicationOrigins(fixture.database, claimed, {
+      readOriginEvidence: rssEvidence,
+      readBackfillPublication: () =>
+        Promise.reject(new PublicationGoneError("Record is invalid")),
+    }),
+  ).toMatchObject({ attached: 0, retryAt: undefined });
+  expect(
+    await fixture.database.select().from(publicationBackfillProbes).get(),
+  ).toMatchObject({ attempts: 1, nextAttemptAt: null });
+});
