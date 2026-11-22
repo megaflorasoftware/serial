@@ -310,10 +310,8 @@ describe("runBackgroundFeedRefresh", () => {
   });
 });
 
-it("syncs an enabled connection with no due Feeds, then refreshes its new imports", async () => {
+it("skips a user with nothing due even when subscription sync is on", async () => {
   const { atprotoConnections } = await import("~/server/db/schema");
-  const { emptyPublicationSyncCounts } =
-    await import("~/lib/auth/publication-sync");
   const now = new Date();
   await testDatabase.database.insert(user).values({
     id: "sync-only",
@@ -328,6 +326,7 @@ it("syncs an enabled connection with no due Feeds, then refreshes its new import
     did: "did:plc:abcdefghijklmnopqrstuvwx",
     session: "test",
     importSubscriptions: true,
+    exportSubscriptions: true,
   });
   const claimUser = vi.fn(() =>
     Promise.resolve({
@@ -335,31 +334,19 @@ it("syncs an enabled connection with no due Feeds, then refreshes its new import
       nextRefreshAt: new Date(now.getTime() + 60_000),
     }),
   );
+  const publish = vi.fn(() => Promise.resolve());
   const refreshFeedPage = vi.fn(() => Promise.resolve(EMPTY_REFRESH_STATS));
-  const syncSubscriptions = vi.fn(async () => {
-    expect(claimUser).toHaveBeenCalledTimes(1);
-    await seedFeedsWithRssOrigins(testDatabase.database, [
-      {
-        userId: "sync-only",
-        name: "Imported",
-        url: "https://example.com/rss",
-        platform: "website",
-        openLocation: "serial",
-        isActive: true,
-      },
-    ]);
-    return { ...emptyPublicationSyncCounts(), status: "completed" as const };
-  });
-  await runBackgroundFeedRefresh({
+  const metrics = await runBackgroundFeedRefresh({
     db: testDatabase.database,
     now,
     billingEnabled: false,
     claimUser,
     refreshFeedPage,
-    syncSubscriptions,
-    publish: () => Promise.resolve(),
+    publish,
   });
-  expect(syncSubscriptions).toHaveBeenCalledTimes(1);
-  expect(refreshFeedPage).toHaveBeenCalledTimes(1);
-  expect(refreshFeedPage.mock.calls[0]).toBeDefined();
+  // Sync has its own schedule: no claim, no lifecycle, no fetch.
+  expect(metrics.usersClaimed).toBe(0);
+  expect(claimUser).not.toHaveBeenCalled();
+  expect(publish).not.toHaveBeenCalled();
+  expect(refreshFeedPage).not.toHaveBeenCalled();
 });

@@ -5,9 +5,20 @@ import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
 import type { NewFeedOriginDetails } from "~/server/rss/types";
 import { revalidateFeed } from "~/server/feeds/revalidate";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
-import { feedItems, feedOrigins, feeds, user } from "~/server/db/schema";
+import {
+  atprotoConnections,
+  feedItems,
+  feedOrigins,
+  feeds,
+  user,
+} from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
+// The real wake would start a sync run against the PDS.
+vi.mock("~/server/publication-sync/wake", () => ({
+  wakeRequestedSync: vi.fn(),
+}));
 const rss: OriginEvidence = {
   origin: newRssFeedDetails({
     url: "https://example.com/rss",
@@ -263,4 +274,47 @@ it("protects uncertain legacy names even when migration copied them into source 
     { ...rss.origin, locator: "https://example.com/future" },
   ]);
   expect(future.nameEditedAt).toBeNull();
+});
+
+describe("telling subscription sync about an attached publication", () => {
+  const cleanConnection = () =>
+    fixture.database.insert(atprotoConnections).values({
+      id: "connection",
+      userId: "owner",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
+      session: "encrypted",
+      exportSubscriptions: true,
+      subscriptionRepoRev: "clean",
+    });
+  const connection = async () =>
+    (await fixture.database.select().from(atprotoConnections).get())!;
+
+  it("requests a full run when revalidation attaches an Atmosphere origin", async () => {
+    const feed = await seed();
+    await cleanConnection();
+    expect((await run(feed.id)).origins).toHaveLength(2);
+    expect((await connection()).subscriptionRepoRev).toBeNull();
+    expect((await connection()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, true);
+  });
+  it("leaves sync alone when revalidation attaches an RSS origin to a publication Feed", async () => {
+    const feed = await seed([publication.origin]);
+    await cleanConnection();
+    expect((await run(feed.id)).origins).toHaveLength(2);
+    // The subscription already existed; only its RSS source is new.
+    expect(await connection()).toMatchObject({
+      subscriptionRepoRev: "clean",
+      subscriptionNextAttemptAt: null,
+    });
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
+  });
+  it("leaves sync alone when revalidation attaches nothing", async () => {
+    const feed = await seed([rss.origin, publication.origin]);
+    await cleanConnection();
+    await run(feed.id);
+    expect(await connection()).toMatchObject({
+      subscriptionRepoRev: "clean",
+      subscriptionNextAttemptAt: null,
+    });
+  });
 });

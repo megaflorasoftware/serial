@@ -4,9 +4,19 @@ import { createFeedsForUser } from "~/server/feeds/create";
 import { resolveFeedSelection } from "~/server/feeds/resolveSelection";
 import { getFeedsActivationBudget } from "~/server/subscriptions/helpers";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
-import { feedOrigins, feeds, user } from "~/server/db/schema";
+import {
+  atprotoConnections,
+  feedOrigins,
+  feeds,
+  user,
+} from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
+// The real wake would start a sync run against the PDS.
+vi.mock("~/server/publication-sync/wake", () => ({
+  wakeRequestedSync: vi.fn(),
+}));
 vi.mock("~/server/feeds/resolveSelection", () => ({
   resolveFeedSelection: vi.fn(),
 }));
@@ -98,5 +108,56 @@ describe("creating combined Feeds", () => {
     const result = await add();
     expect(result).toMatchObject({ createdCount: 1, deactivatedCount: 0 });
     expect(result.feeds[1]?.isActive).toBe(true);
+  });
+});
+
+describe("telling subscription sync about a user's new Feed", () => {
+  const cleanConnection = () =>
+    fixture.database.insert(atprotoConnections).values({
+      id: "connection",
+      userId: "owner",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
+      session: "encrypted",
+      exportSubscriptions: true,
+      subscriptionRequestId: "last-request",
+      subscriptionRepoRev: "clean",
+    });
+  const connection = async () =>
+    (await fixture.database.select().from(atprotoConnections).get())!;
+
+  it("requests a silent full run when the Feed has an Atmosphere origin", async () => {
+    await cleanConnection();
+    await add();
+    expect(await connection()).toMatchObject({
+      subscriptionRepoRev: null,
+      subscriptionRequestId: "last-request",
+    });
+    expect((await connection()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    // The run starts once the Feed has committed, not at the next scheduled task.
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, true);
+  });
+  it("does not wake sync for a user who has it off", async () => {
+    await add();
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
+  });
+  it("requests a run when an Atmosphere origin is attached to an existing Feed", async () => {
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details: rss,
+      isActive: true,
+    });
+    await cleanConnection();
+    await add();
+    expect((await connection()).subscriptionRepoRev).toBeNull();
+  });
+  it("leaves sync alone for a Feed with only an RSS origin", async () => {
+    await cleanConnection();
+    vi.mocked(resolveFeedSelection).mockResolvedValue([rss]);
+    await add();
+    expect(await connection()).toMatchObject({
+      subscriptionRepoRev: "clean",
+      subscriptionNextAttemptAt: null,
+    });
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
   });
 });

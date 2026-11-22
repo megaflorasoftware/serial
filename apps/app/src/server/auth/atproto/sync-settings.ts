@@ -1,7 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { db } from "~/server/db";
 import type { AtprotoSyncPreferences } from "~/lib/auth/atproto-sync-settings";
-import { newPublicationSyncRequest } from "~/server/publication-sync/requests";
+import {
+  FULL_RECONCILE,
+  newPublicationSyncRequest,
+} from "~/server/publication-sync/requests";
 import { syncSettingsFromPreferences } from "~/lib/auth/atproto-sync-settings";
 import { atprotoConnections } from "~/server/db/schema";
 
@@ -22,6 +25,7 @@ export async function persistAtprotoSyncSettings(
       ...newPublicationSyncRequest(
         preferences.importSubscriptions || preferences.exportSubscriptions,
       ),
+      ...FULL_RECONCILE,
       subscriptionImportGeneration: preferences.importSubscriptions
         ? sql`case when ${atprotoConnections.importSubscriptions} = 0 then ${atprotoConnections.subscriptionImportGeneration} + 1 else ${atprotoConnections.subscriptionImportGeneration} end`
         : atprotoConnections.subscriptionImportGeneration,

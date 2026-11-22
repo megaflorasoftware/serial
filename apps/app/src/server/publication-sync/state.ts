@@ -8,6 +8,30 @@ import { hasAtprotoWriteScope } from "~/server/auth/atproto/config";
 
 const LEASE_MS = 180_000;
 export class SubscriptionSyncChangedError extends Error {}
+
+/** The user's connection is linked and syncs in at least one direction. */
+export function syncEnabledFor(userId: string) {
+  return and(
+    eq(atprotoConnections.userId, userId),
+    eq(atprotoConnections.status, "active"),
+    or(
+      eq(atprotoConnections.importSubscriptions, true),
+      eq(atprotoConnections.exportSubscriptions, true),
+    ),
+  );
+}
+
+/**
+ * No request has moved the schedule since `claimedAt` was read. A Feed the user
+ * adds or deletes mid-run moves it, so a write guarded by this cannot mark that
+ * change as synced.
+ */
+export function scheduleUnchangedSince(claimedAt: Date | null) {
+  return claimedAt === null
+    ? isNull(atprotoConnections.subscriptionNextAttemptAt)
+    : eq(atprotoConnections.subscriptionNextAttemptAt, claimedAt);
+}
+
 export async function claimSubscriptionSync(
   database: typeof Database,
   userId: string,
@@ -21,12 +45,7 @@ export async function claimSubscriptionSync(
     })
     .where(
       and(
-        eq(atprotoConnections.userId, userId),
-        eq(atprotoConnections.status, "active"),
-        or(
-          eq(atprotoConnections.importSubscriptions, true),
-          eq(atprotoConnections.exportSubscriptions, true),
-        ),
+        syncEnabledFor(userId),
         or(
           isNull(atprotoConnections.subscriptionSyncExpiresAt),
           lt(atprotoConnections.subscriptionSyncExpiresAt, new Date()),

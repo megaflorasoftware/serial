@@ -17,6 +17,8 @@ import type { db } from "~/server/db";
 import { feeds, feedsSchema } from "~/server/db/schema";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { applyOriginMetadata } from "~/server/rss/originMetadata";
+import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
 async function ownedFeed(
   database: FeedDatabase,
@@ -77,9 +79,10 @@ export async function revalidateFeed(
     }
   }
   // All network work finishes before the write lock. Re-read to preserve concurrent edits.
-  return await runDatabaseWrite(database, () =>
+  const revalidated = await runDatabaseWrite(database, () =>
     database.transaction(
       async (tx) => {
+        let syncRequested = false;
         let current = await ownedFeed(tx, userId, feedId);
         for (const addition of additions) {
           const existing = current.origins.find(
@@ -92,6 +95,11 @@ export async function revalidateFeed(
           current = await attachMissingFeedOrigins(tx, current, [
             addition.origin,
           ]);
+          // Only a publication joining the Feed changes a subscription.
+          if (addition.origin.kind === "atproto")
+            syncRequested = await requestSyncForFeedChange(tx, userId, [
+              current.id,
+            ]);
         }
         for (const observed of [...evidence, ...additions]) {
           const origin = current.origins.find(
@@ -113,9 +121,14 @@ export async function revalidateFeed(
             },
           );
         }
-        return feedsSchema.parse(await ownedFeed(tx, userId, feedId));
+        return {
+          feed: feedsSchema.parse(await ownedFeed(tx, userId, feedId)),
+          syncRequested,
+        };
       },
       { behavior: "immediate" },
     ),
   );
+  wakeRequestedSync(database, revalidated.syncRequested);
+  return revalidated.feed;
 }

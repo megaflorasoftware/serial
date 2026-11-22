@@ -4,6 +4,7 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "./database";
+import { feedRevalidationBudget } from "./feed-revalidation-budgets";
 import { createFeedRevalidationWorkload } from "./feed-revalidation-workload";
 
 const profiles = { small: 1000, representative: 10000, stress: 50000 };
@@ -32,9 +33,9 @@ try {
     const ms = performance.now() - start;
     const evidence = session.instrumentation.snapshot();
     if (
-      evidence.statementCount > 20 ||
-      evidence.materializedRows > 20 ||
-      workload.reads > 3
+      evidence.statementCount > feedRevalidationBudget.statements ||
+      evidence.materializedRows > feedRevalidationBudget.rows ||
+      workload.reads > feedRevalidationBudget.sourceReads
     )
       throw new Error("Feed revalidation exceeded its work bounds");
     if (i >= 3)

@@ -4,6 +4,7 @@ import {
   nextPublicationSyncAttempt,
 } from "./requests";
 import { backfillPublicationOrigins } from "./backfill";
+import { checkPublicationSync, syncCheckColumns } from "./check";
 import { planPublicationSync } from "./plan";
 import { saveSubscriptionObservation } from "./observation";
 import {
@@ -14,9 +15,11 @@ import {
   assertSubscriptionSyncCurrent,
   claimSubscriptionSync,
   renewSubscriptionSync,
+  scheduleUnchangedSince,
   SubscriptionSyncChangedError,
   syncClaimCondition,
 } from "./state";
+import type { SyncCheck } from "./check";
 import type {
   SubscriptionRecord,
   SubscriptionRecordStore,
@@ -109,6 +112,8 @@ export async function syncPublicationSubscriptions(input: {
   database: typeof Database;
   userId: string;
   runId?: string;
+  /** A caller that already checked, to decide before claiming its own work. */
+  check?: SyncCheck;
   onProgress?: (progress: PublicationSyncProgress) => Promise<void>;
   dependencies?: {
     backfill?: typeof backfillPublicationOrigins;
@@ -121,23 +126,20 @@ export async function syncPublicationSubscriptions(input: {
 }): Promise<PublicationSyncResult> {
   const { database, userId } = input;
   const counts = emptyPublicationSyncCounts();
-  const attached = await database
-    .select({
-      id: atprotoConnections.id,
-      status: atprotoConnections.status,
-      session: atprotoConnections.session,
-      importSubscriptions: atprotoConnections.importSubscriptions,
-      exportSubscriptions: atprotoConnections.exportSubscriptions,
-    })
-    .from(atprotoConnections)
-    .where(eq(atprotoConnections.userId, userId))
-    .get();
-  if (
-    !attached?.session ||
-    attached.status !== "active" ||
-    (!attached.importSubscriptions && !attached.exportSubscriptions)
-  )
-    return { ...counts, status: "skipped" };
+  const injectedStore = input.dependencies?.store;
+  const check =
+    input.check ??
+    (await checkPublicationSync(
+      await database
+        .select(syncCheckColumns)
+        .from(atprotoConnections)
+        .where(eq(atprotoConnections.userId, userId))
+        .get(),
+      injectedStore && (() => injectedStore.latestRev()),
+    ));
+  if (check.state === "disabled") return { ...counts, status: "skipped" };
+  // Nothing changed on either side: no claim, no reads, no writes.
+  if (check.state === "current") return { ...counts, status: "completed" };
   const connection = await claimSubscriptionSync(database, userId);
   if (!connection) return { ...counts, status: "busy" };
   const store =
@@ -222,7 +224,7 @@ export async function syncPublicationSubscriptions(input: {
         )
         .orderBy(asc(feedOrigins.feedId))
         .limit(MAX_SUBSCRIPTION_RECORDS + 1),
-      store.latestRev(),
+      check.rev === undefined ? store.latestRev() : check.rev,
     ]);
     if (
       previous.length > MAX_SUBSCRIPTION_RECORDS ||
@@ -527,16 +529,31 @@ export async function syncPublicationSubscriptions(input: {
       }
       await progress(index + 1, publications.length);
     }
-    await database
-      .update(atprotoConnections)
-      .set({
-        subscriptionSyncCursor: cursor,
-        subscriptionRepoRev:
-          counts.failed || !observedCompleteSnapshot || wroteRecords
-            ? null
-            : rev,
-      })
-      .where(syncClaimCondition(connection));
+    // A stored revision promises a clean, finished pass; unfinished work clears it.
+    const finishedRev =
+      counts.failed ||
+      counts.deferred ||
+      !observedCompleteSnapshot ||
+      wroteRecords
+        ? null
+        : rev;
+    if (
+      cursor !== connection.subscriptionSyncCursor ||
+      finishedRev !== connection.subscriptionRepoRev
+    )
+      await database
+        .update(atprotoConnections)
+        .set({
+          subscriptionSyncCursor: cursor,
+          subscriptionRepoRev: finishedRev,
+        })
+        .where(
+          and(
+            syncClaimCondition(connection),
+            // A Feed changed after this run read the local origins.
+            scheduleUnchangedSince(connection.subscriptionNextAttemptAt),
+          ),
+        );
   } catch (error) {
     counts.failed++;
     logError("[publication-sync] sync failed", error);
@@ -593,7 +610,8 @@ function observationUnchanged(
   importGeneration: number,
   exportGeneration: number,
 ) {
-  if (!old.length) return records.length === 0 && feedId === null;
+  // Never observed and nothing upstream: there is no mirror row to write.
+  if (!old.length) return records.length === 0;
   const byUri = new Map(records.map((record) => [record.uri, record]));
   if (records.length !== old.filter((row) => row.remotePresent).length)
     return false;
