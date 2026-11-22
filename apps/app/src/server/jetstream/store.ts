@@ -13,6 +13,7 @@ import {
   user,
 } from "../db/schema";
 import { hydrateOrigin } from "../feeds/origins";
+import { makeOriginsDue } from "../feeds/schedule";
 import { runDatabaseWrite } from "../db/retry-write";
 import { getEffectivePlanConfig } from "../subscriptions/plans";
 import {
@@ -132,27 +133,70 @@ export async function claimStream(
   });
 }
 
-/** One durable interruption marker, independent of the number of subscribed Feeds. */
+const currentStreamGeneration = sql`(select ${atprotoStreamState.generation} from ${atprotoStreamState} where ${atprotoStreamState.id} = 'primary')`;
+
+/** Origins in live mode: the only ones a covered schedule trusted the stream for. */
+const originInLiveMode = and(
+  eq(feedOrigins.kind, "atproto"),
+  sql`exists (select 1 from ${feedOriginAtproto} where ${and(
+    eq(feedOriginAtproto.originId, feedOrigins.id),
+    eq(feedOriginAtproto.streamMode, "live"),
+  )})`,
+);
+
+/**
+ * The stream stopped vouching for the origins it applied live, so each
+ * recovers at its next refresh instead of waiting out a covered schedule.
+ * Polled origins and origins in a recovery backoff keep their own schedule.
+ */
+export function makeStreamOriginsDue(
+  database: Pick<FeedDatabase, "update">,
+  now: Date,
+) {
+  return makeOriginsDue(database, originInLiveMode, now);
+}
+
+/**
+ * One durable interruption marker. Origins scheduled as covered trusted the
+ * connection it ends, so they become due and recover at their next refresh.
+ * Attempts that never connected covered nothing and leave schedules alone.
+ */
 export async function interruptStream(
   database: StreamDatabase,
   owner: string,
   starting = false,
 ) {
   return runDatabaseWrite(database, () =>
-    database
-      .update(atprotoStreamState)
-      .set({
-        generation: sql`${atprotoStreamState.generation} + 1`,
-        connected: false,
-      })
-      .where(
-        and(
+    database.transaction(
+      async (tx) => {
+        const owned = and(
           eq(atprotoStreamState.id, "primary"),
           eq(atprotoStreamState.leaseOwner, owner),
-          starting ? undefined : eq(atprotoStreamState.connected, true),
-        ),
-      )
-      .returning({ generation: atprotoStreamState.generation }),
+        );
+        const before = await tx
+          .select({ connected: atprotoStreamState.connected })
+          .from(atprotoStreamState)
+          .where(owned)
+          .get();
+        const interrupted = await tx
+          .update(atprotoStreamState)
+          .set({
+            generation: sql`${atprotoStreamState.generation} + 1`,
+            connected: false,
+          })
+          .where(
+            and(
+              owned,
+              starting ? undefined : eq(atprotoStreamState.connected, true),
+            ),
+          )
+          .returning({ generation: atprotoStreamState.generation });
+        if (before?.connected && interrupted.length)
+          await makeStreamOriginsDue(tx, new Date());
+        return interrupted;
+      },
+      { behavior: "immediate" },
+    ),
   );
 }
 
@@ -161,6 +205,30 @@ export function streamIsConnected(
   now: Date,
 ) {
   return state.connected && state.leaseUntil !== null && state.leaseUntil > now;
+}
+
+type StreamState = typeof atprotoStreamState.$inferSelect;
+
+/** A connected worker applies this origin's events as they arrive. */
+export function originAppliesLive(
+  row: Pick<StreamOrigin, "atproto">,
+  state: StreamState,
+  now: Date,
+) {
+  return (
+    row.atproto.initialized &&
+    row.atproto.streamMode === "live" &&
+    row.atproto.streamGeneration === state.generation &&
+    streamIsConnected(state, now)
+  );
+}
+
+/**
+ * Holds in SQL while the origin still applies live events at the stream's
+ * current generation; a pause or a new generation since makes it false.
+ */
+export function originStillAppliesLive(originId: number) {
+  return sql`exists (select 1 from ${feedOriginAtproto} where ${feedOriginAtproto.originId} = ${originId} and ${feedOriginAtproto.streamMode} = 'live' and ${feedOriginAtproto.streamGeneration} = ${currentStreamGeneration})`;
 }
 
 export type StagedDocumentInput = {
@@ -503,11 +571,18 @@ async function acceptOriginEvent(
           if (
             row.atproto.streamMode !== "paused" &&
             row.atproto.streamMode !== "direct"
-          )
+          ) {
             await tx
               .update(feedOriginAtproto)
               .set({ streamMode: "paused" })
               .where(eq(feedOriginAtproto.originId, originId));
+            // The stream no longer covers this origin; its next refresh catches up.
+            await makeOriginsDue(
+              tx,
+              eq(feedOrigins.id, originId),
+              nowFor(settings),
+            );
+          }
           return;
         }
         // Newly created origins first establish their bootstrap boundary.
@@ -523,7 +598,7 @@ async function acceptOriginEvent(
               and(
                 eq(feedOriginAtproto.originId, originId),
                 // Keep the pre-gap cursor even while newer live events are applied.
-                sql`${feedOriginAtproto.streamGeneration} = (select ${atprotoStreamState.generation} from ${atprotoStreamState} where ${atprotoStreamState.id} = 'primary')`,
+                sql`${feedOriginAtproto.streamGeneration} = ${currentStreamGeneration}`,
               ),
             );
       },

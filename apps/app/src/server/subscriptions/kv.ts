@@ -5,6 +5,7 @@ import { deactivateExcessFeeds, isAdminUser } from "./helpers";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
 import { feedOrigins, feeds, user } from "~/server/db/schema";
+import { makeOriginsDue, originIsScheduled } from "~/server/feeds/schedule";
 import { getKV } from "~/server/kv";
 import { logError, logWarning } from "~/server/logger";
 
@@ -202,20 +203,22 @@ export async function applySubscriptionSideEffects(
           .set({
             nextFetchAt: sql`(CASE ${feedOrigins.id} ${sql.join(cases, sql` `)} END)`,
           })
+          // A Feed deactivated since the read is unscheduled and stays so.
           .where(
-            inArray(
-              feedOrigins.id,
-              activeOrigins.map((origin) => origin.id),
+            and(
+              inArray(
+                feedOrigins.id,
+                activeOrigins.map((origin) => origin.id),
+              ),
+              originIsScheduled,
             ),
           );
       }
     }
   } else {
-    // Subscription ended — deactivate excess feeds, clear nextFetchAt
+    // Subscription ended — deactivate excess feeds, then make the origins
+    // still scheduled due so the client's next refresh fetches them.
     await deactivateExcessFeeds(db, userId, PLANS.free.maxActiveFeeds);
-    await db
-      .update(feedOrigins)
-      .set({ nextFetchAt: null })
-      .where(eq(feedOrigins.userId, userId));
+    await makeOriginsDue(db, eq(feedOrigins.userId, userId), new Date());
   }
 }

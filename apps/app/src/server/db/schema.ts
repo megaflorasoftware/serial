@@ -305,6 +305,8 @@ export const feedOrigins = sqliteTable(
     kind: text("kind", { length: 16 }).notNull(),
     locator: text("locator", { length: 1024 }).notNull(),
     lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
+    // NULL means unscheduled: the origin's Feed is inactive. An origin is due
+    // once this time has passed.
     nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
     // Metadata as observed from the source on the last successful read.
     sourceName: text("source_name", { length: 256 }),
@@ -325,10 +327,10 @@ export const feedOrigins = sqliteTable(
       table.kind,
       table.locator,
     ),
-    index("feed_origin_user_id_next_fetch_at_idx").on(
-      table.userId,
-      table.nextFetchAt,
-    ),
+    // Covers the due check: only scheduled origins, with the Feed id it counts.
+    index("feed_origin_due_idx")
+      .on(table.userId, table.nextFetchAt, table.feedId)
+      .where(sql`${table.nextFetchAt} is not null`),
   ],
 );
 export const feedOriginSchema = createSelectSchema(feedOrigins).merge(

@@ -10,6 +10,7 @@ import {
 import { revalidateFeed } from "~/server/feeds/revalidate";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { deleteUserFeeds } from "~/server/feeds/delete";
+import { setFeedsActive } from "~/server/feeds/activation";
 import { loadUserFeedsWithOrigins, withOrigins } from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
@@ -353,17 +354,15 @@ export const setActive = protectedProcedure
       }
     }
 
-    const updatedFeeds = await context.db
-      .update(feeds)
-      .set({ isActive: input.isActive })
-      .where(and(eq(feeds.id, input.feedId), eq(feeds.userId, context.user.id)))
-      .returning();
-
-    const updatedFeed = updatedFeeds[0];
-    if (!updatedFeed) return null;
+    const changed = await setFeedsActive(context.db, {
+      userId: context.user.id,
+      feedIds: [input.feedId],
+      isActive: input.isActive,
+    });
+    if (!changed) return null;
 
     const [updatedFeedWithOrigins] = await withOrigins(context.db, [
-      updatedFeed,
+      { ...feed, isActive: input.isActive },
     ]);
     const parsed = feedsSchema.parse(updatedFeedWithOrigins);
     await publishReconciliationInvalidation(
@@ -419,15 +418,11 @@ export const bulkSetActive = protectedProcedure
         }
       }
 
-      await tx
-        .update(feeds)
-        .set({ isActive: input.isActive })
-        .where(
-          and(
-            inArray(feeds.id, input.feedIds),
-            eq(feeds.userId, context.user.id),
-          ),
-        );
+      await setFeedsActive(tx, {
+        userId: context.user.id,
+        feedIds: input.feedIds,
+        isActive: input.isActive,
+      });
     });
     await publishReconciliationInvalidation(
       context.user.id,

@@ -18,7 +18,7 @@ CREATE TABLE `serial_feed_origin` (
 CREATE INDEX `feed_origin_kind_locator_idx` ON `serial_feed_origin` (`kind`,`locator`);
 --> statement-breakpoint
 CREATE INDEX `feed_origin_user_id_kind_locator_idx` ON `serial_feed_origin` (`user_id`,`kind`,`locator`);--> statement-breakpoint
-CREATE INDEX `feed_origin_user_id_next_fetch_at_idx` ON `serial_feed_origin` (`user_id`,`next_fetch_at`);--> statement-breakpoint
+CREATE INDEX `feed_origin_due_idx` ON `serial_feed_origin` (`user_id`,`next_fetch_at`,`feed_id`) WHERE "serial_feed_origin"."next_fetch_at" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `feed_origin_feed_id_kind_unique` ON `serial_feed_origin` (`feed_id`,`kind`);--> statement-breakpoint
 CREATE TABLE `serial_feed_origin_rss` (
   `origin_id` integer PRIMARY KEY NOT NULL,
@@ -112,6 +112,8 @@ ALTER TABLE `serial_feed` ADD `site_url` text(512);--> statement-breakpoint
 ALTER TABLE `serial_feed` ADD `name_edited_at` integer;
 --> statement-breakpoint
 -- Legacy cache headers are intentionally cleared so origins fetch fresh data.
+-- A NULL next_fetch_at now means unscheduled: active Feeds keep their time or
+-- become due at once, and inactive Feeds stay unscheduled.
 INSERT INTO serial_feed_origin (
   feed_id,
   user_id,
@@ -130,7 +132,7 @@ SELECT
   'rss',
   url,
   last_fetched_at,
-  next_fetch_at,
+  CASE WHEN is_active THEN coalesce(next_fetch_at, unixepoch()) END,
   name,
   image_url,
   created_at,

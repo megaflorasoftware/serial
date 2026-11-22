@@ -1,5 +1,6 @@
 import { parsePublicationUri } from "@serial/standard-site";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { initialOriginSchedule } from "./schedule";
 import type { db as defaultDatabase } from "~/server/db";
 import type {
   DatabaseFeed,
@@ -49,12 +50,17 @@ export function hydrateOrigin(row: {
   return { ...row.origin, rss: row.rss, atproto: row.atproto };
 }
 
-/** The caller's transaction owns the common row and its matching detail row. */
+/**
+ * The caller's transaction owns the common row and its matching detail row.
+ * Every origin is created here, so each starts on its Feed's schedule: due at
+ * once when the Feed is active, unscheduled when it is not.
+ */
 async function insertOrigins(
   database: FeedDatabase,
-  feed: { id: number; userId: string },
+  feed: { id: number; userId: string; isActive: boolean },
   origins: NewFeedDetails["origins"],
 ) {
+  const nextFetchAt = initialOriginSchedule(feed.isActive, new Date());
   const inserted = await database
     .insert(feedOrigins)
     .values(
@@ -62,6 +68,7 @@ async function insertOrigins(
         ...origin,
         feedId: feed.id,
         userId: feed.userId,
+        nextFetchAt,
       })),
     )
     .returning();

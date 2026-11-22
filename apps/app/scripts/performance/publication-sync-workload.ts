@@ -6,6 +6,7 @@ import {
   feeds,
   user,
 } from "../../src/server/db/schema";
+import { FIXTURE_NEXT_FETCH_AT } from "./fixtures";
 import type { db as Database } from "../../src/server/db";
 import { feedOriginAtproto } from "~/server/db/schema";
 
@@ -57,6 +58,7 @@ export async function createPublicationSyncWorkload(
           feedId: row.id,
           kind: "atproto",
           locator: publicationUri(row.id),
+          nextFetchAt: FIXTURE_NEXT_FETCH_AT,
         })),
       )
       .returning({ id: feedOrigins.id });

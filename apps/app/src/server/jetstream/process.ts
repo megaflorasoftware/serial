@@ -374,7 +374,7 @@ export async function drainOriginDocuments(
   }
 }
 
-async function pendingDocumentCount(
+export async function pendingDocumentCount(
   database: StreamDatabase,
   originId: number,
   settings: StreamSettings,

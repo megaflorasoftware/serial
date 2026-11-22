@@ -72,7 +72,9 @@ async function seedFeedsWithRssOrigins(
         kind: "rss",
         locator: rows[index]!.url,
         lastFetchedAt: rows[index]!.lastFetchedAt ?? null,
-        nextFetchAt: rows[index]!.nextFetchAt ?? null,
+        // An active Feed's origin is scheduled; with no time given it is due.
+        nextFetchAt:
+          rows[index]!.nextFetchAt ?? (feed.isActive ? new Date(0) : null),
         createdAt: feed.createdAt,
         updatedAt: feed.updatedAt,
       })),

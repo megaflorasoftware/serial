@@ -28,6 +28,7 @@ import {
   feedOriginAtproto,
   feedOriginAtprotoDocuments,
   feedOriginAtprotoDocumentSources,
+  feedOrigins,
   feeds,
   user,
 } from "~/server/db/schema";
@@ -1482,4 +1483,163 @@ it("resumes a failed no-key handoff without fetching an already completed snapsh
   );
   expect(list).toHaveBeenCalledTimes(1);
   expect((await state()).streamMode).toBe("live");
+});
+
+describe("fetch schedule", () => {
+  const LATER = new Date(NOW.getTime() + 6 * 60 * 60 * 1000);
+  async function connect() {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "1",
+      connected: true,
+      leaseOwner: "worker",
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+  }
+  async function scheduleOrigin(id: number, nextFetchAt: Date | null) {
+    await fixture.database
+      .update(feedOrigins)
+      .set({ nextFetchAt })
+      .where(eq(feedOrigins.id, id));
+  }
+  async function nextFetchAt(id = originId) {
+    const row = await fixture.database
+      .select({ nextFetchAt: feedOrigins.nextFetchAt })
+      .from(feedOrigins)
+      .where(eq(feedOrigins.id, id))
+      .get();
+    return row!.nextFetchAt;
+  }
+  function refresh(id = originId) {
+    return recoverOrigin(
+      fixture.database,
+      id,
+      settings,
+      replay([], 1),
+      new AbortController().signal,
+      { manual: true, client, readPage },
+    );
+  }
+
+  it("reports an origin a connected worker applies live as covered", async () => {
+    await connect();
+    expect(await refresh()).toEqual({ status: "covered" });
+  });
+
+  it("reports an origin as polled when its reader gets no unprompted stream work", async () => {
+    await connect();
+    const dormant = await addReader("dormant", null);
+    expect(await refresh(dormant.originId)).toEqual({ status: "polled" });
+  });
+
+  it("reports an origin as polled when recovery completes without a connected worker", async () => {
+    await fixture.database.update(atprotoStreamState).set({ seq: "1" });
+    expect(await refresh()).toEqual({ status: "polled" });
+    expect((await state()).streamMode).toBe("live");
+  });
+
+  it("reports unfinished work when uncovered documents still wait", async () => {
+    await connect();
+    const dormant = await addReader("dormant", null);
+    const staged = event(1);
+    if (staged.kind !== "commit") throw new Error();
+    for (let index = 0; index < 26; index++)
+      await stageDocument(fixture.database, {
+        originId: dormant.originId,
+        uri: uri(`post-${index}`),
+        cid: `cid-${index}`,
+        record: captureRecordValue(staged.commit.record),
+        seq: 1,
+      });
+    expect(await refresh(dormant.originId)).toEqual({ status: "unfinished" });
+  });
+
+  it("reports unfinished work while another attempt holds the origin", async () => {
+    await fixture.database.update(atprotoStreamState).set({ seq: "1" });
+    await fixture.database.update(feedOriginAtproto).set({
+      workOwner: "other",
+      workUntil: new Date(NOW.getTime() + 60_000),
+    });
+    expect(await refresh()).toEqual({ status: "unfinished" });
+  });
+
+  it("reports the backoff an earlier failure left", async () => {
+    const retryAt = new Date(NOW.getTime() + 40_000);
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ recoveryRetryAt: retryAt });
+    expect(await refresh()).toEqual({ status: "deferred", retryAt });
+  });
+
+  it("makes an origin due when the stream pauses it, and leaves an inactive Feed unscheduled", async () => {
+    const dormant = await addReader("dormant", null);
+    const inactive = await addReader("inactive");
+    await fixture.database
+      .update(feeds)
+      .set({ isActive: false })
+      .where(eq(feeds.id, inactive.feedId));
+    await scheduleOrigin(originId, LATER);
+    await scheduleOrigin(dormant.originId, LATER);
+    await scheduleOrigin(inactive.originId, null);
+
+    await accept(event(10));
+    expect((await state(dormant.originId)).streamMode).toBe("paused");
+    expect(await nextFetchAt(dormant.originId)).toEqual(NOW);
+    expect((await state(inactive.originId)).streamMode).toBe("paused");
+    expect(await nextFetchAt(inactive.originId)).toBeNull();
+    // The eligible reader's origin stays covered.
+    expect(await nextFetchAt()).toEqual(LATER);
+  });
+
+  it("makes live origins due when an interruption ends a connected period, and leaves polled and unscheduled origins alone", async () => {
+    await connect();
+    const polled = await addReader("polled");
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ streamMode: "catchup" })
+      .where(eq(feedOriginAtproto.originId, polled.originId));
+    const rss = await insertFeedWithOrigins(fixture.database, {
+      userId: "reader",
+      isActive: true,
+      details: {
+        name: "Syndication",
+        platform: "website",
+        imageUrl: "",
+        origins: [{ kind: "rss", locator: "https://example.com/feed.xml" }],
+      },
+    });
+    const inactive = await addReader("inactive");
+    const far = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    await scheduleOrigin(originId, far);
+    await scheduleOrigin(polled.originId, far);
+    await scheduleOrigin(rss.origins[0]!.id, far);
+    await scheduleOrigin(inactive.originId, null);
+    const before = Date.now();
+
+    await interruptStream(fixture.database, "worker");
+    expect((await nextFetchAt())!.getTime()).toBeLessThanOrEqual(Date.now());
+    expect((await nextFetchAt())!.getTime()).toBeGreaterThanOrEqual(
+      Math.floor(before / 1000) * 1000,
+    );
+    // The stream never vouched for a polled origin, so its schedule stands.
+    for (const id of [polled.originId, rss.origins[0]!.id])
+      expect((await nextFetchAt(id))!.getTime()).toBe(
+        Math.floor(far.getTime() / 1000) * 1000,
+      );
+    expect(await nextFetchAt(inactive.originId)).toBeNull();
+  });
+
+  it("leaves schedules alone when an attempt that never connected starts over", async () => {
+    await fixture.database
+      .update(atprotoStreamState)
+      .set({ seq: "1", connected: false, leaseOwner: "worker" });
+    await scheduleOrigin(originId, LATER);
+
+    const [interrupted] = await interruptStream(
+      fixture.database,
+      "worker",
+      true,
+    );
+    expect(interrupted?.generation).toBe(1);
+    expect(await nextFetchAt()).toEqual(LATER);
+  });
 });

@@ -55,7 +55,8 @@ export function makeFetchableOrigin(
       atproto: null,
       locator: defaults.url,
       lastFetchedAt: null,
-      nextFetchAt: null,
+      // An active Feed's origin is scheduled, here already due.
+      nextFetchAt: isActive ? new Date(0) : null,
       sourceName: null,
       sourceImageUrl: null,
       sourceDescription: null,

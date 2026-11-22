@@ -137,8 +137,20 @@ describe("publication subscriptions migration", () => {
           (3, 'legacy-user', 'Duplicate', 'https://example.com/a.xml', '',
            'website', 'serial', ?, ?, NULL, NULL, 1, NULL, NULL),
           (4, 'legacy-user', '', '', '',
-           'website', 'serial', ?, ?, NULL, NULL, 0, NULL, NULL)`,
-        args: [now, now, now - 60, now + 3600, now, now, now, now, now, now],
+           'website', 'serial', ?, ?, NULL, ?, 0, NULL, NULL)`,
+        args: [
+          now,
+          now,
+          now - 60,
+          now + 3600,
+          now,
+          now,
+          now,
+          now,
+          now,
+          now,
+          now + 3600,
+        ],
       });
 
       await client.execute(`INSERT INTO serial_atproto_connections
@@ -220,11 +232,20 @@ describe("publication subscriptions migration", () => {
         feed_id: 3,
         locator: "https://example.com/a.xml",
       });
+      // An active Feed with no legacy schedule becomes due at once.
+      expect(Number(origins[2]!.next_fetch_at)).toBeGreaterThanOrEqual(
+        beforeMigration,
+      );
+      expect(Number(origins[2]!.next_fetch_at)).toBeLessThanOrEqual(
+        Math.floor(Date.now() / 1000),
+      );
 
+      // An inactive Feed is unscheduled even when it carried a legacy time.
       expect(origins[3]).toMatchObject({
         feed_id: 4,
         locator: "",
         source_name: "",
+        next_fetch_at: null,
       });
       const legacyFeeds = (
         await client.execute(
@@ -448,8 +469,15 @@ describe("publication subscriptions migration", () => {
         expect.arrayContaining([
           "feed_origin_feed_id_kind_unique",
           "feed_origin_user_id_kind_locator_idx",
-          "feed_origin_user_id_next_fetch_at_idx",
+          "feed_origin_due_idx",
         ]),
+      );
+      // The due index holds scheduled origins only.
+      const dueIndex = await client.execute(
+        "SELECT sql FROM sqlite_master WHERE name = 'feed_origin_due_idx'",
+      );
+      expect(String(dueIndex.rows[0]?.sql)).toMatch(
+        /\(`user_id`,`next_fetch_at`,`feed_id`\) WHERE .*next_fetch_at.* is not null/i,
       );
     } finally {
       client.close();

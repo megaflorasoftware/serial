@@ -29,6 +29,8 @@ import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { readFeedHttp } from "./feedHttp";
 import { isAuthorizedTestRssUrl } from "./testRssOrigin";
+import type { SQL } from "drizzle-orm";
+import type { RecoveryOutcome } from "../jetstream/recovery";
 import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
 import type { db as Database } from "../db";
 import type {
@@ -40,6 +42,7 @@ import type {
   RSSContent,
   RSSFeedWithMetadata,
 } from "./types";
+import { originIsScheduled } from "~/server/feeds/schedule";
 import { normalizedBookmarkUrlOverride } from "~/server/bookmarks/url";
 import {
   CONTENT_TYPE,
@@ -52,6 +55,11 @@ import { workerPool } from "~/lib/workerPool";
 
 /** How long to back off a feed after a fetch error, to avoid cascading retries. */
 const ERROR_BACKOFF_MS = 60 * 60 * 1000; // 1 hour
+/**
+ * The stream delivers a covered origin's documents as they are published, so
+ * polling it would repeat that work. This recheck is only a backstop.
+ */
+export const STREAM_BACKSTOP_RECHECK_MS = 6 * 60 * 60 * 1000;
 export { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 
 export type FetchFeedsStatus = "success" | "empty" | "error" | "skipped";
@@ -185,11 +193,16 @@ type FetchStateUpdate = Pick<
 > &
   Pick<typeof feedOriginRss.$inferInsert, "etag" | "lastModifiedHeader">;
 
-/** Every fetch-state write lands on the origin row, never on the Feed. */
+/**
+ * Every fetch-state write lands on the origin row, never on the Feed. It moves
+ * an existing schedule only: an origin unscheduled since the fetch began
+ * belongs to a Feed that was deactivated meanwhile.
+ */
 async function writeOriginFetchState(
   context: { db: typeof Database },
   originId: number,
   update: FetchStateUpdate,
+  stillHolds?: SQL,
 ) {
   const { etag, lastModifiedHeader, ...schedule } = update;
   await runDatabaseWrite(context.db, () =>
@@ -198,7 +211,9 @@ async function writeOriginFetchState(
         await tx
           .update(feedOrigins)
           .set(schedule)
-          .where(eq(feedOrigins.id, originId));
+          .where(
+            and(eq(feedOrigins.id, originId), originIsScheduled, stillHolds),
+          );
         if (etag !== undefined || lastModifiedHeader !== undefined)
           await tx
             .update(feedOriginRss)
@@ -219,6 +234,20 @@ function fetchedState(
     etag: fetchMetadata.etag ?? null,
     lastModifiedHeader: fetchMetadata.lastModified ?? null,
   };
+}
+
+/** When the fetch schedule visits a stream origin next, given what its refresh left behind. */
+function nextStreamFetch(outcome: RecoveryOutcome, now: Date) {
+  switch (outcome.status) {
+    case "covered":
+      return new Date(now.getTime() + STREAM_BACKSTOP_RECHECK_MS);
+    case "polled":
+      return calculateNextFetch({}, now);
+    case "unfinished":
+      return now;
+    case "deferred":
+      return outcome.retryAt ?? new Date(now.getTime() + ERROR_BACKOFF_MS);
+  }
 }
 
 /** Distinct Feed rows behind a page of origins, in first-seen order. */
@@ -380,10 +409,23 @@ export async function* fetchAndInsertFeedData(
       }
 
       if (origin.kind === "atproto") {
-        const { refreshStreamOrigin } = await import("../jetstream/service");
-        return await refreshStreamOrigin(context.db, fetchable, {
-          drain: context.drain,
-        });
+        const { refreshStreamOrigin, originStillAppliesLive } =
+          await import("../jetstream/service");
+        const { result, outcome } = await refreshStreamOrigin(
+          context.db,
+          fetchable,
+          { drain: context.drain },
+        );
+        await writeOriginFetchState(
+          context,
+          origin.id,
+          { nextFetchAt: nextStreamFetch(outcome, now) },
+          // A pause or a stream gap since the refresh keeps the origin due.
+          outcome.status === "covered"
+            ? originStillAppliesLive(origin.id)
+            : undefined,
+        );
+        return result;
       }
 
       const writeItems = async (data: RSSFeedWithMetadata) => {

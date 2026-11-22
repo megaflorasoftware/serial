@@ -8,6 +8,7 @@ import {
   publicationBackfillProbes,
   user,
 } from "../../src/server/db/schema";
+import { FIXTURE_NEXT_FETCH_AT } from "./fixtures";
 import type { db } from "../../src/server/db";
 import { feedOriginRss } from "~/server/db/schema";
 
@@ -54,6 +55,7 @@ export async function createPublicationBackfillWorkload(
           feedId: id,
           kind: "rss",
           locator: `https://example.com/feed/${id}`,
+          nextFetchAt: FIXTURE_NEXT_FETCH_AT,
         })),
       )
       .returning({ id: feedOrigins.id });

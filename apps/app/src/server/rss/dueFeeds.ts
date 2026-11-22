@@ -1,17 +1,8 @@
-import {
-  and,
-  asc,
-  countDistinct,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  lte,
-  or,
-} from "drizzle-orm";
+import { and, asc, countDistinct, eq, gt, inArray } from "drizzle-orm";
 import type { db as Database } from "~/server/db";
 import type { FetchableOrigin } from "./types";
 import { hydrateOrigin, originSelection } from "~/server/feeds/origins";
+import { originIsDue } from "~/server/feeds/schedule";
 import {
   feedOriginAtproto,
   feedOriginRss,
@@ -22,15 +13,16 @@ import {
 export const RSS_FEED_PAGE_SIZE = 50;
 
 /**
- * Due origins: scheduled at or before `now` (or never scheduled) on an active
- * Feed. Origins are paged directly so each keeps its own clock; the Feed join
- * supplies the active flag, which lives only on the Feed.
+ * Due origins: scheduled at or before `now` on an active Feed. Origins are
+ * paged directly so each keeps its own clock. The schedule alone selects them,
+ * since an inactive Feed's origins are unscheduled; the Feed join only guards
+ * the due rows against a schedule that outlived its Feed's active flag.
  */
 function dueOriginCondition(userId: string, now: Date) {
   return and(
     eq(feedOrigins.userId, userId),
+    originIsDue(now),
     eq(feeds.isActive, true),
-    or(lte(feedOrigins.nextFetchAt, now), isNull(feedOrigins.nextFetchAt)),
   );
 }
 

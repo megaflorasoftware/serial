@@ -24,6 +24,8 @@ type Database = typeof applicationDatabase;
 
 const FIXTURE_BATCH_SIZE = 400;
 const BASE_TIME = new Date("2026-01-15T12:00:00.000Z");
+/** Active Feeds are scheduled; fixture origins wait so nothing refreshes them. */
+export const FIXTURE_NEXT_FETCH_AT = new Date("2099-01-01T00:00:00.000Z");
 
 async function insertInChunks<T>(
   values: T[],
@@ -87,7 +89,7 @@ export async function seedBenchmarkFixture(input: {
       createdAt: BASE_TIME,
       updatedAt: BASE_TIME,
       lastFetchedAt: BASE_TIME,
-      nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
+      nextFetchAt: FIXTURE_NEXT_FETCH_AT,
     })),
     async (chunk) => {
       const origins = await database

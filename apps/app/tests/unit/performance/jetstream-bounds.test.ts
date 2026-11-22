@@ -69,13 +69,15 @@ it.each([1000, 10000, 50000])(
       session.instrumentation.reset();
       await interruptStream(session.database, "benchmark", true);
       const interruption = session.instrumentation.snapshot();
-      expect(interruption.statementCount).toBe(1);
-      expect(interruption.materializedRows).toBe(1);
+      // The same three statements whatever the Feed count: the marker's read
+      // and write, then one statement that makes the covered origins due.
+      expect(interruption.statementCount).toBe(3);
+      expect(interruption.materializedRows).toBe(2);
       expect(
-        interruption.statements.some((entry) =>
+        interruption.statements.filter((entry) =>
           /update "serial_feed_origin/.test(entry.sql),
         ),
-      ).toBe(false);
+      ).toHaveLength(1);
       const activityTime = new Date(Date.now() + 10 * 60 * 1000);
       for (const changedRows of [1, 0]) {
         session.instrumentation.reset();

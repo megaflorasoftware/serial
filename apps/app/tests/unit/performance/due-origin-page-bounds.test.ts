@@ -1,3 +1,4 @@
+import { isNotNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   applyMigrations,
@@ -98,7 +99,94 @@ async function seedFeeds(input: {
   return inserted;
 }
 
+/** The query plan of each statement the last operation ran, joined per statement. */
+async function queryPlans() {
+  const plans: string[] = [];
+  for (const { sql } of session.instrumentation.snapshot().statements) {
+    const plan = await session.baseClient.execute({
+      sql: `EXPLAIN QUERY PLAN ${sql}`,
+      args: Array.from(sql.matchAll(/\?/g), () => 0),
+    });
+    plans.push(plan.rows.map((row) => String(row.detail)).join("\n"));
+  }
+  return plans;
+}
+
 describe("due origin page bounds", () => {
+  it("answers an idle due check from the schedule alone, whatever the user's Feed count", async () => {
+    // Nothing is due: 40 active Feeds wait for their time, 2,000 inactive
+    // Feeds are unscheduled, and 30 stream-covered origins wait out their
+    // backstop. An origin with no time used to count as due, so this check
+    // read every origin the user owns.
+    await seedFeeds({
+      userId: "due-user",
+      count: 40,
+      isActive: () => true,
+      nextFetchAt: () => FUTURE,
+    });
+    await seedFeeds({
+      userId: "due-user",
+      count: 2_000,
+      isActive: () => false,
+      nextFetchAt: () => null,
+    });
+    const covered = await seedFeeds({
+      userId: "due-user",
+      count: 30,
+      isActive: () => true,
+      nextFetchAt: () => FUTURE,
+    });
+    await session.database.insert(feedOrigins).values(
+      covered.map(({ id }) => ({
+        feedId: id,
+        userId: "due-user",
+        kind: "atproto",
+        locator: `at://did:plc:alice/site.standard.publication/${id}`,
+        nextFetchAt: new Date(NOW.getTime() + 6 * 60 * 60 * 1000),
+      })),
+    );
+
+    session.instrumentation.reset();
+    expect(await countDueFeeds(session.database, "due-user", NOW)).toBe(0);
+    expect(session.instrumentation.snapshot().statementCount).toBe(1);
+    const [countPlan] = await queryPlans();
+    // A range over scheduled origins only; no walk of the user's origins.
+    expect(countPlan).toMatch(
+      /USING COVERING INDEX feed_origin_due_idx \(user_id=\? AND next_fetch_at<\?\)/,
+    );
+    expect(countPlan).not.toMatch(/SCAN/);
+
+    session.instrumentation.reset();
+    expect(
+      await getDueFeedPage(session.database, { userId: "due-user", now: NOW }),
+    ).toHaveLength(0);
+    const evidence = session.instrumentation.snapshot();
+    expect(evidence.statementCount).toBe(1);
+    expect(evidence.materializedRows).toBe(0);
+    const [pagePlan] = await queryPlans();
+    expect(pagePlan).toContain("feed_origin_due_idx");
+    expect(pagePlan).not.toMatch(/SCAN serial_feed/);
+  });
+
+  it("never treats an unscheduled origin or an inactive Feed as due", async () => {
+    const [unscheduled, inactive, due] = await seedFeeds({
+      userId: "due-user",
+      count: 3,
+      // The second Feed is inactive yet still carries a past time: the guard
+      // for a schedule that outlived its Feed's active flag.
+      isActive: (index) => index !== 1,
+      nextFetchAt: (index) => (index === 0 ? null : PAST),
+    });
+    expect(await countDueFeeds(session.database, "due-user", NOW)).toBe(1);
+    const page = await getDueFeedPage(session.database, {
+      userId: "due-user",
+      now: NOW,
+    });
+    expect(page.map(({ feed }) => feed.id)).toEqual([due!.id]);
+    expect(page.map(({ feed }) => feed.id)).not.toContain(unscheduled!.id);
+    expect(page.map(({ feed }) => feed.id)).not.toContain(inactive!.id);
+  });
+
   it("keeps both due origins together and counts each Feed once", async () => {
     const seeded = await seedFeeds({
       userId: "due-user",
@@ -150,7 +238,7 @@ describe("due origin page bounds", () => {
       userId: "other-user",
       count: 200,
       isActive: () => true,
-      nextFetchAt: () => null,
+      nextFetchAt: () => PAST,
     });
 
     session.instrumentation.reset();
@@ -173,9 +261,8 @@ describe("due origin page bounds", () => {
       expect(origin.feedId).toBe(feed.id);
       expect(feed.isActive).toBe(true);
       expect(feed.userId).toBe("due-user");
-      expect(origin.nextFetchAt === null || origin.nextFetchAt <= NOW).toBe(
-        true,
-      );
+      expect(origin.nextFetchAt).not.toBeNull();
+      expect(origin.nextFetchAt! <= NOW).toBe(true);
     }
 
     // Walking every page by origin id cursor visits each due origin once.
@@ -200,12 +287,12 @@ describe("due origin page bounds", () => {
     expect(pages).toBe(Math.ceil(dueCount / RSS_FEED_PAGE_SIZE));
   });
 
-  it("keeps never-fetched and least recently fetched feeds active in two statements", async () => {
+  it("keeps never-fetched and least recently fetched feeds active in three statements", async () => {
     const inserted = await seedFeeds({
       userId: "due-user",
       count: 6,
       isActive: () => true,
-      nextFetchAt: () => null,
+      nextFetchAt: () => PAST,
       // Feeds 0 and 3 never fetched; 1 and 4 oldest; 2 and 5 newest.
       lastFetchedAt: (index) =>
         index % 3 === 0
@@ -216,7 +303,8 @@ describe("due origin page bounds", () => {
     session.instrumentation.reset();
     await deactivateExcessFeeds(session.database, "due-user", 2);
     const evidence = session.instrumentation.snapshot();
-    expect(evidence.statementCount).toBe(2);
+    // One read, then the active flags and their origins' schedules together.
+    expect(evidence.statementCount).toBe(3);
 
     const remaining = await session.database
       .select({ id: feeds.id, isActive: feeds.isActive })
@@ -228,5 +316,12 @@ describe("due origin page bounds", () => {
     // Same order the Feed-level column produced: ascending by earliest fetch
     // with never-fetched first, so the most recently fetched are deactivated.
     expect(activeIds).toEqual([inserted[0]!.id, inserted[3]!.id]);
+    // Deactivated Feeds leave the schedule; the kept ones stay on it.
+    const scheduled = await session.database
+      .select({ feedId: feedOrigins.feedId })
+      .from(feedOrigins)
+      .where(isNotNull(feedOrigins.nextFetchAt))
+      .orderBy(feedOrigins.feedId);
+    expect(scheduled.map((origin) => origin.feedId)).toEqual(activeIds);
   });
 });

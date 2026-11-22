@@ -106,8 +106,9 @@ try {
   const interruptionStarted = performance.now();
   await interruptStream(session.database, "benchmark", true);
   const interruption = session.instrumentation.snapshot();
-  if (interruption.statementCount !== 1 || interruption.materializedRows !== 1)
-    throw new Error("Interruption work must not scale with Feed count");
+  // The marker's read and write, then one statement for the covered origins.
+  if (interruption.statementCount !== 3 || interruption.materializedRows !== 2)
+    throw new Error("Interruption statements must not scale with Feed count");
   results.interruption = {
     ms: performance.now() - interruptionStarted,
     statements: interruption.statementCount,

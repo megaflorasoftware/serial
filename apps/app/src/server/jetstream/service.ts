@@ -10,6 +10,7 @@ import {
   claimStream,
   ensureStream,
   interruptStream,
+  makeStreamOriginsDue,
   ORIGIN_PAGE_SIZE,
 } from "./store";
 import { recoverOrigin } from "./recovery";
@@ -104,17 +105,31 @@ async function establishBoundary(
   }
 }
 
+export { originStillAppliesLive } from "./store";
+
+/** A failed recovery left its backoff on the origin; an earlier failure left none. */
+async function recoveryRetryAt(database: StreamDatabase, originId: number) {
+  const row = await database
+    .select({ retryAt: feedOriginAtproto.recoveryRetryAt })
+    .from(feedOriginAtproto)
+    .where(eq(feedOriginAtproto.originId, originId))
+    .get();
+  return row?.retryAt ?? null;
+}
+
+export type StreamRefresh = { result: FeedResult; outcome: RecoveryOutcome };
+
 /**
  * Called by existing import/refresh entry points; the saved Feed survives
- * failure. Recovery keeps its own backoff on the origin, so a failure stays an
- * error until a later recovery succeeds. The generic fetch schedule is
- * untouched: origins remain due and recovery decides whether to run.
+ * failure. A failure stays an error until a later recovery succeeds. The
+ * outcome tells the caller when the fetch schedule should visit the origin
+ * next, so the recovery backoff and the stream's coverage share that one clock.
  */
 export async function refreshStreamOrigin(
   database: StreamDatabase,
   fetchable: FetchableOrigin,
   options: { drain?: boolean } = {},
-): Promise<FeedResult> {
+): Promise<StreamRefresh> {
   const config = await configuration();
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
@@ -139,16 +154,28 @@ export async function refreshStreamOrigin(
     );
   } catch (error) {
     config.transport.report(error, "feed-recovery");
-    return { status: "error", ...ids, error };
+    return {
+      result: { status: "error", ...ids, error },
+      outcome: {
+        status: "deferred",
+        retryAt: await recoveryRetryAt(database, fetchable.origin.id),
+      },
+    };
   }
-  if (outcome === "deferred")
-    return { status: "error", ...ids, error: new RecoveryDeferredError() };
+  if (outcome.status === "deferred")
+    return {
+      result: { status: "error", ...ids, error: new RecoveryDeferredError() },
+      outcome,
+    };
   return {
-    status: updates.length ? "success" : "empty",
-    ...ids,
-    feedItems: updates.flatMap((update) => update.items),
-    removedItemIds: updates.flatMap((update) => update.removedItemIds),
-    metadataChanged: updates.some((update) => update.metadataChanged),
+    result: {
+      status: updates.length ? "success" : "empty",
+      ...ids,
+      feedItems: updates.flatMap((update) => update.items),
+      removedItemIds: updates.flatMap((update) => update.removedItemIds),
+      metadataChanged: updates.some((update) => update.metadataChanged),
+    },
+    outcome,
   };
 }
 
@@ -282,6 +309,10 @@ export async function startStreamWorker(
                   eq(atprotoStreamState.leaseOwner, owner),
                 ),
               ),
+          );
+          // The rejected cursor left a gap that only each origin's refresh fills.
+          await runDatabaseWrite(database, () =>
+            makeStreamOriginsDue(database, new Date()),
           );
         }
         await interruptStream(database, owner);
