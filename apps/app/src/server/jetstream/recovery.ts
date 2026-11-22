@@ -24,12 +24,16 @@ import type { StreamDatabase, StreamSettings } from "./store";
 import type { ProcessingOptions } from "./process";
 
 /**
- * A connected worker already applies live events to this origin, so its
- * checkpoint bounds the interval no one covers. Otherwise the checkpoint may
- * be frozen, and the transport's tip is the only truthful boundary, at the
- * cost of one connection per read.
+ * Where a bootstrap hands over to the stream. A connected worker already
+ * applies live events to this origin, so its checkpoint bounds the interval
+ * no one covers. The checkpoint is saved on the worker's heartbeat and trails
+ * its position, which only widens that interval: it is a lower bound, replayed
+ * events apply once, and the scan that follows sees anything the worker passed
+ * before the origin could receive it. Otherwise the checkpoint may be frozen,
+ * and the transport's tip is the only truthful boundary, at the cost of one
+ * connection per read.
  */
-async function currentBoundary(
+async function bootstrapBoundary(
   state: typeof atprotoStreamState.$inferSelect,
   transport: StreamTransport,
   settings: StreamSettings,
@@ -193,7 +197,7 @@ export async function recoverOrigin(
       const boundary = bootstrap
         ? transport.hasReplay
           ? sequence(state.seq)
-          : await currentBoundary(state, transport, settings, combined)
+          : await bootstrapBoundary(state, transport, settings, combined)
         : sequence(row.atproto.streamSeq ?? state.seq);
       await runDatabaseWrite(database, () =>
         database
@@ -279,11 +283,15 @@ export async function recoverOrigin(
           .where(owned),
       );
       state = await ensureStream(database, settings.service);
+      // No scan follows the catch-up of an initialized origin. The worker's
+      // checkpoint trails its position, so an event the worker passed while
+      // the origin could not receive it may lie beyond that checkpoint. Only
+      // the transport's tip is past every such event.
       const through = Math.max(
         sequence(row.atproto.streamSeq!),
-        bootstrap || options.manual
-          ? await currentBoundary(state, transport, settings, combined)
-          : sequence(state.seq!),
+        bootstrap
+          ? await bootstrapBoundary(state, transport, settings, combined)
+          : await transport.tip(combined),
       );
       {
         for await (const batch of transport.recover(

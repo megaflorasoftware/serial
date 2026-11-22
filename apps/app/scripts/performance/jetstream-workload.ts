@@ -13,7 +13,11 @@ import {
 } from "~/server/db/schema";
 import { acceptBatch, ensureStream } from "~/server/jetstream/store";
 import { recoverOrigin } from "~/server/jetstream/recovery";
-import { processOriginDocuments } from "~/server/jetstream/process";
+import {
+  drainDueOrigins,
+  processOriginDocuments,
+} from "~/server/jetstream/process";
+import { startStreamIntake } from "~/server/jetstream/intake";
 
 export async function createJetstreamWorkload(
   database: BenchmarkDatabase,
@@ -230,6 +234,45 @@ export async function createJetstreamWorkload(
       await database
         .update(feedOriginAtprotoDocuments)
         .set({ status: "ready" });
+      await database.update(feedOriginAtproto).set({ publicationDirty: false });
+    },
+    /** The worker's intake over this fixture, loaded before anything is measured. */
+    async intake() {
+      let applied = 0;
+      const intake = await startStreamIntake({
+        database,
+        apply: async (events) => {
+          applied += events.length;
+        },
+        distrust: async () => {
+          throw new Error("A healthy intake distrusted an origin");
+        },
+      });
+      return {
+        /** One network event whose publisher nobody follows. */
+        async skip() {
+          seq++;
+          await intake.accept({
+            events: [{ ...event(), did: "did:plc:stranger" }],
+            lastCursor: seq,
+          });
+          return { applied };
+        },
+        /** The heartbeat's look for origins created since the last one. */
+        refresh: () => intake.refresh(),
+      };
+    },
+    /** One retry sweep, as the instance holding the stream lease runs it. */
+    async sweep() {
+      let publications = 0;
+      await drainDueOrigins(database, settings, {
+        holdsLease: () => true,
+        signal: new AbortController().signal,
+        publish: async () => {
+          publications++;
+        },
+      });
+      return { publications };
     },
     async check() {
       const unexpected = () => {
@@ -269,7 +312,7 @@ export async function createJetstreamWorkload(
         if (mode !== "duplicate") seq++;
         await acceptBatch(
           database,
-          { events: [event()], lastCursor: seq },
+          { events: [event()] },
           { ...settings, backgroundEnabled: mode !== "ineligible" },
         );
       }

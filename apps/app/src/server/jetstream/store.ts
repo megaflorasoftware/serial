@@ -43,13 +43,29 @@ export type StreamSettings = {
 export const nowFor = (settings: StreamSettings) =>
   settings.now?.() ?? new Date();
 
+/** What stream work reads from the owning account: eligibility and plan. */
+const streamAccount = {
+  id: user.id,
+  role: user.role,
+  banned: user.banned,
+  banExpires: user.banExpires,
+  lastActiveAt: user.lastActiveAt,
+};
+/** What stream work reads from the Feed: activity, item writes and metadata. */
+const streamFeed = {
+  id: feeds.id,
+  name: feeds.name,
+  platform: feeds.platform,
+  siteUrl: feeds.siteUrl,
+  isActive: feeds.isActive,
+};
 export function originQuery(database: FeedDatabase) {
   return database
     .select({
       origin: feedOrigins,
       atproto: feedOriginAtproto,
-      feed: feeds,
-      account: user,
+      feed: streamFeed,
+      account: streamAccount,
     })
     .from(feedOriginAtproto)
     .innerJoin(feedOrigins, eq(feedOrigins.id, feedOriginAtproto.originId))
@@ -107,17 +123,31 @@ export async function ensureStream(database: StreamDatabase, service: string) {
   if (state.service !== normalized) throw new CheckpointHostError();
   return state;
 }
-export async function claimStream(
+/** The stored checkpoint moved forward to `checkpoint`; it never moves back. */
+function advancedCheckpoint(checkpoint: number) {
+  return sql`case when ${atprotoStreamState.seq} is null or cast(${atprotoStreamState.seq} as integer) <= ${checkpoint} then ${String(checkpoint)} else ${atprotoStreamState.seq} end`;
+}
+
+/**
+ * Takes or renews the lease. The worker's checkpoint rides along, so saving
+ * progress costs no statement of its own.
+ */
+export async function holdStream(
   database: StreamDatabase,
-  service: string,
   owner: string,
   now: Date,
+  checkpoint?: number,
 ) {
-  await ensureStream(database, service);
   return runDatabaseWrite(database, async () => {
     const rows = await database
       .update(atprotoStreamState)
-      .set({ leaseOwner: owner, leaseUntil: new Date(now.getTime() + 60_000) })
+      .set({
+        leaseOwner: owner,
+        leaseUntil: new Date(now.getTime() + 60_000),
+        ...(checkpoint === undefined
+          ? {}
+          : { seq: advancedCheckpoint(checkpoint) }),
+      })
       .where(
         and(
           eq(atprotoStreamState.id, "primary"),
@@ -131,6 +161,15 @@ export async function claimStream(
       .returning({ id: atprotoStreamState.id });
     return rows.length > 0;
   });
+}
+export async function claimStream(
+  database: StreamDatabase,
+  service: string,
+  owner: string,
+  now: Date,
+) {
+  await ensureStream(database, service);
+  return holdStream(database, owner, now);
 }
 
 const currentStreamGeneration = sql`(select ${atprotoStreamState.generation} from ${atprotoStreamState} where ${atprotoStreamState.id} = 'primary')`;
@@ -156,48 +195,133 @@ export function makeStreamOriginsDue(
   return makeOriginsDue(database, originInLiveMode, now);
 }
 
-/**
- * One durable interruption marker. Origins scheduled as covered trusted the
- * connection it ends, so they become due and recover at their next refresh.
- * Attempts that never connected covered nothing and leave schedules alone.
- */
-export async function interruptStream(
+function streamOwnedBy(owner: string) {
+  return and(
+    eq(atprotoStreamState.id, "primary"),
+    eq(atprotoStreamState.leaseOwner, owner),
+  );
+}
+
+/** Saves the owner's progress without extending its lease, as a connection ends. */
+export async function saveCheckpoint(
   database: StreamDatabase,
   owner: string,
-  starting = false,
+  checkpoint: number,
+) {
+  await runDatabaseWrite(database, () =>
+    database
+      .update(atprotoStreamState)
+      .set({ seq: advancedCheckpoint(checkpoint) })
+      .where(streamOwnedBy(owner)),
+  );
+}
+
+/** Marks the owner's connection live; false when it lost the lease or its generation. */
+export async function connectStream(
+  database: StreamDatabase,
+  owner: string,
+  generation: number,
+  now: Date,
+) {
+  const rows = await runDatabaseWrite(database, () =>
+    database
+      .update(atprotoStreamState)
+      .set({ connected: true })
+      .where(
+        and(
+          streamOwnedBy(owner),
+          eq(atprotoStreamState.generation, generation),
+          gt(atprotoStreamState.leaseUntil, now),
+        ),
+      )
+      .returning({ id: atprotoStreamState.id }),
+  );
+  return rows.length > 0;
+}
+
+/**
+ * The connection ended. Nothing else changes: the next connection resumes
+ * from the checkpoint and replays what this one missed, so origins keep their
+ * generation and their schedule.
+ */
+export async function disconnectStream(
+  database: StreamDatabase,
+  owner: string,
+) {
+  await runDatabaseWrite(database, () =>
+    database
+      .update(atprotoStreamState)
+      .set({ connected: false })
+      .where(and(streamOwnedBy(owner), eq(atprotoStreamState.connected, true))),
+  );
+}
+
+/**
+ * Events were lost for good: the service rejected the resume cursor, or could
+ * not vouch for it. The new generation sends every origin through recovery,
+ * and the origins the stream covered become due so that happens at their next
+ * refresh. The checkpoint clears, so the next connection resumes at the tip.
+ */
+export async function declareStreamGap(
+  database: StreamDatabase,
+  owner: string,
+  now: Date,
 ) {
   return runDatabaseWrite(database, () =>
     database.transaction(
       async (tx) => {
-        const owned = and(
-          eq(atprotoStreamState.id, "primary"),
-          eq(atprotoStreamState.leaseOwner, owner),
-        );
-        const before = await tx
-          .select({ connected: atprotoStreamState.connected })
-          .from(atprotoStreamState)
-          .where(owned)
-          .get();
-        const interrupted = await tx
+        const marked = await tx
           .update(atprotoStreamState)
           .set({
             generation: sql`${atprotoStreamState.generation} + 1`,
             connected: false,
+            seq: null,
           })
-          .where(
-            and(
-              owned,
-              starting ? undefined : eq(atprotoStreamState.connected, true),
-            ),
-          )
+          .where(streamOwnedBy(owner))
           .returning({ generation: atprotoStreamState.generation });
-        if (before?.connected && interrupted.length)
-          await makeStreamOriginsDue(tx, new Date());
-        return interrupted;
+        if (marked.length) await makeStreamOriginsDue(tx, now);
+        return marked;
       },
       { behavior: "immediate" },
     ),
   );
+}
+
+/** A generation no stream ever has, so the origin recovers at its next refresh. */
+const DISTRUSTED_GENERATION = -1;
+const DISTRUST_PAGE_SIZE = 200;
+
+/**
+ * The stream followed these origins too late to vouch for what they missed.
+ * Outside the current generation an origin keeps its pre-gap cursor, and
+ * making it due sends it through catch-up from there.
+ */
+export async function distrustOriginCoverage(
+  database: StreamDatabase,
+  originIds: number[],
+  now: Date,
+) {
+  for (
+    let offset = 0;
+    offset < originIds.length;
+    offset += DISTRUST_PAGE_SIZE
+  ) {
+    const page = originIds.slice(offset, offset + DISTRUST_PAGE_SIZE);
+    // Bound each statement below SQLite's host-parameter limit.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await runDatabaseWrite(database, () =>
+      database.transaction(
+        async (tx) => {
+          await tx
+            .update(feedOriginAtproto)
+            .set({ streamGeneration: DISTRUSTED_GENERATION })
+            .where(inArray(feedOriginAtproto.originId, page));
+          await makeOriginsDue(tx, inArray(feedOrigins.id, page), now);
+        },
+        { behavior: "immediate" },
+      ),
+    );
+  }
 }
 
 export function streamIsConnected(
@@ -548,6 +672,28 @@ async function applyMarker(
   }
 }
 
+/**
+ * The stream stops applying an origin whose Feed or account no longer
+ * qualifies for it. The origin becomes due, so its next refresh catches up;
+ * an inactive Feed's origin is unscheduled and stays that way.
+ */
+export async function pauseOriginStream(
+  tx: FeedDatabase,
+  row: Pick<StreamOrigin, "origin" | "atproto">,
+  now: Date,
+) {
+  if (
+    row.atproto.streamMode === "paused" ||
+    row.atproto.streamMode === "direct"
+  )
+    return;
+  await tx
+    .update(feedOriginAtproto)
+    .set({ streamMode: "paused" })
+    .where(eq(feedOriginAtproto.originId, row.origin.id));
+  await makeOriginsDue(tx, eq(feedOrigins.id, row.origin.id), now);
+}
+
 async function acceptOriginEvent(
   database: StreamDatabase,
   originId: number,
@@ -568,21 +714,7 @@ async function acceptOriginEvent(
         )
           throw new CheckpointHostError();
         if (!eligible(row, plan, settings, manual)) {
-          if (
-            row.atproto.streamMode !== "paused" &&
-            row.atproto.streamMode !== "direct"
-          ) {
-            await tx
-              .update(feedOriginAtproto)
-              .set({ streamMode: "paused" })
-              .where(eq(feedOriginAtproto.originId, originId));
-            // The stream no longer covers this origin; its next refresh catches up.
-            await makeOriginsDue(
-              tx,
-              eq(feedOrigins.id, originId),
-              nowFor(settings),
-            );
-          }
+          await pauseOriginStream(tx, row, nowFor(settings));
           return;
         }
         // Newly created origins first establish their bootstrap boundary.
@@ -607,14 +739,17 @@ async function acceptOriginEvent(
   );
 }
 
+/**
+ * Applies events to the origins that follow their publisher. Saving stream
+ * progress is the worker's job, on its lease heartbeat.
+ */
 export async function acceptBatch(
   database: StreamDatabase,
-  batch: StreamBatch,
+  batch: Pick<StreamBatch, "events">,
   settings: StreamSettings,
   options: {
     originId?: number;
     manual?: boolean;
-    owner?: string;
     onOrigins?: (originIds: number[]) => Promise<void>;
   } = {},
 ) {
@@ -669,26 +804,4 @@ export async function acceptBatch(
       after = rows.at(-1)!.origin.id;
     }
   }
-  if (options.originId === undefined)
-    await runDatabaseWrite(database, async () => {
-      const result = await database
-        .update(atprotoStreamState)
-        .set({ seq: String(batch.lastCursor) })
-        .where(
-          and(
-            eq(atprotoStreamState.id, "primary"),
-            eq(atprotoStreamState.service, settings.service),
-            options.owner
-              ? eq(atprotoStreamState.leaseOwner, options.owner)
-              : undefined,
-            or(
-              isNull(atprotoStreamState.seq),
-              sql`cast(${atprotoStreamState.seq} as integer) <= ${batch.lastCursor}`,
-            ),
-          ),
-        )
-        .returning({ id: atprotoStreamState.id });
-      if (!result.length)
-        throw new Error("Jetstream checkpoint ownership changed");
-    });
 }

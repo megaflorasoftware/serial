@@ -4,6 +4,11 @@ export const COLLECTIONS = [
   "site.standard.document",
   "site.standard.publication",
 ] as const;
+/**
+ * Identity events change nothing Serial stores, so a service that can filter
+ * by kind is not asked for them. The collection filter covers commits only.
+ */
+export const STREAM_KINDS = ["commit", "account", "sync"] as const;
 export const sequenceSchema = z
   .number()
   .int()

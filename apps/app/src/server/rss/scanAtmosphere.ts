@@ -23,7 +23,10 @@ import { logWarning } from "~/server/logger";
 /** Stages bounded repository pages; Jetstream processing applies their content. */
 export async function scanAtmosphere(
   database: typeof db,
-  fetchable: FetchableOrigin,
+  fetchable: {
+    origin: FetchableOrigin["origin"];
+    feed: Pick<FetchableOrigin["feed"], "siteUrl">;
+  },
   client: PublicationClient,
   staging: {
     guard: SQL;

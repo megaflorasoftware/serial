@@ -36,7 +36,7 @@ function combineUserState(keep: DatabaseFeedItem, other: DatabaseFeedItem) {
 /** One write transaction owns identity, snapshots, aliases, and the visible composite. */
 export async function writeObservedItems(
   database: typeof db,
-  feed: DatabaseFeed,
+  feed: Pick<DatabaseFeed, "id" | "platform">,
   incoming: ItemObservation[],
   commit?: {
     canWrite: (transaction: FeedDatabase) => Promise<boolean>;

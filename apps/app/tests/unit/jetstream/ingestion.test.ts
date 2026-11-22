@@ -14,12 +14,19 @@ import {
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   acceptBatch,
+  connectStream,
+  declareStreamGap,
+  disconnectStream,
+  distrustOriginCoverage,
   ensureStream,
-  interruptStream,
+  holdStream,
+  saveCheckpoint,
   stageDocument,
 } from "~/server/jetstream/store";
 import {
+  drainDueOrigins,
   drainOriginDocuments,
+  originsWithDueWork,
   processOriginDocuments,
 } from "~/server/jetstream/process";
 import {
@@ -160,12 +167,10 @@ async function addReader(id: string, active: Date | null = NOW) {
     .where(eq(feedOriginAtproto.originId, origin.id));
   return { feedId: feed.id, originId: origin.id };
 }
+/** Applies events, then saves progress the way the worker's heartbeat does. */
 async function accept(...events: StreamEvent[]) {
-  await acceptBatch(
-    fixture.database,
-    { events, lastCursor: events.at(-1)!.seq },
-    settings,
-  );
+  await acceptBatch(fixture.database, { events }, settings);
+  await holdStream(fixture.database, "worker", NOW, events.at(-1)!.seq);
 }
 async function process(id = originId) {
   await processOriginDocuments(fixture.database, id, settings, {
@@ -256,7 +261,7 @@ describe("durable Jetstream application", () => {
     await accept(event(12, "post", "", "delete"));
     await acceptBatch(
       fixture.database,
-      { events: [event(11, "post", "stale")], lastCursor: 11 },
+      { events: [event(11, "post", "stale")] },
       settings,
       { originId },
     );
@@ -322,7 +327,7 @@ describe("durable Jetstream application", () => {
     expect((await state()).streamSeq).toBe("1");
     await acceptBatch(
       fixture.database,
-      { events: [event(10, "old", "Missed")], lastCursor: 10 },
+      { events: [event(10, "old", "Missed")] },
       settings,
       { originId },
     );
@@ -441,6 +446,19 @@ function replay(
       for (const event of events.filter((event) => event.seq > after))
         yield { events: [event], lastCursor: event.seq };
       if (failure) throw failure;
+      yield { events: [], lastCursor: through };
+    },
+  };
+}
+/** Replays only the interval asked for, as the real transport does, up to a live tip. */
+function replayWithin(events: StreamEvent[], tip: number): StreamTransport {
+  return {
+    ...replay([], tip),
+    async *recover(after, through) {
+      for (const missed of events.filter(
+        (candidate) => candidate.seq > after && candidate.seq <= through,
+      ))
+        yield { events: [missed], lastCursor: missed.seq };
       yield { events: [], lastCursor: through };
     },
   };
@@ -1006,12 +1024,9 @@ describe("marker ordering", () => {
     const deletion = event(20, "site", "", "delete");
     if (deletion.kind !== "commit") throw new Error();
     deletion.commit.collection = "site.standard.publication";
-    await acceptBatch(
-      fixture.database,
-      { events: [deletion], lastCursor: 20 },
-      settings,
-      { originId },
-    );
+    await acceptBatch(fixture.database, { events: [deletion] }, settings, {
+      originId,
+    });
     expect(
       (await fixture.database.select().from(feedOriginAtprotoDocuments))[0],
     ).toMatchObject({ eventSeq: "30", status: "retry" });
@@ -1020,7 +1035,7 @@ describe("marker ordering", () => {
     await accept(event(30));
     await acceptBatch(
       fixture.database,
-      { events: [marker(25, "sync"), marker(20, "account")], lastCursor: 25 },
+      { events: [marker(25, "sync"), marker(20, "account")] },
       settings,
       { originId },
     );
@@ -1042,12 +1057,9 @@ describe("marker ordering", () => {
       account: { active: false, status: "deleted" },
     };
     await accept(deletion);
-    await acceptBatch(
-      fixture.database,
-      { events: [event(10)], lastCursor: 10 },
-      settings,
-      { originId },
-    );
+    await acceptBatch(fixture.database, { events: [event(10)] }, settings, {
+      originId,
+    });
     expect(
       await fixture.database.select().from(feedOriginAtprotoDocuments),
     ).toHaveLength(0);
@@ -1344,7 +1356,7 @@ describe("normal fetch recovery after stream interruptions", () => {
     },
   );
 
-  it("records a restart without updating Feeds, and preserves the pre-gap archive cursor as live events arrive", async () => {
+  it("records a gap without updating Feeds, and preserves the pre-gap archive cursor as live events arrive", async () => {
     await fixture.database.update(atprotoStreamState).set({
       seq: "1",
       leaseOwner: "worker",
@@ -1352,7 +1364,7 @@ describe("normal fetch recovery after stream interruptions", () => {
       leaseUntil: new Date(NOW.getTime() + 60_000),
     });
     const before = await state();
-    await interruptStream(fixture.database, "worker", true);
+    await declareStreamGap(fixture.database, "worker", NOW);
     expect(await state()).toEqual(before);
     await accept(event(20, "live"));
     await process();
@@ -1386,7 +1398,7 @@ describe("normal fetch recovery after stream interruptions", () => {
     });
     const transport = { ...replay([], 30), hasReplay: false };
     const list = vi.fn(async () => {
-      await interruptStream(fixture.database, "worker");
+      await declareStreamGap(fixture.database, "worker", NOW);
       return {
         records: [],
         notModified: false as const,
@@ -1404,6 +1416,8 @@ describe("normal fetch recovery after stream interruptions", () => {
     );
     expect((await state()).streamGeneration).toBe(1);
     expect((await ensureStream(fixture.database, SERVICE)).generation).toBe(2);
+    // A gap clears the checkpoint; the worker re-establishes it at the tip.
+    await fixture.database.update(atprotoStreamState).set({ seq: "30" });
     await recoverOrigin(
       fixture.database,
       originId,
@@ -1414,6 +1428,70 @@ describe("normal fetch recovery after stream interruptions", () => {
     );
     expect(list).toHaveBeenCalledTimes(2);
     expect((await state()).streamGeneration).toBe(2);
+  });
+
+  /** A connected worker whose saved checkpoint trails the events it has passed. */
+  async function connectAtTrailingCheckpoint(checkpoint: number) {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: String(checkpoint),
+      connected: true,
+      leaseOwner: "worker",
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+  }
+  const recoverThrough = (transport: StreamTransport) =>
+    recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { manual: true, client, readPage },
+    );
+
+  it("catches up to the live tip, past an event the worker dropped ahead of its trailing checkpoint", async () => {
+    await connectAtTrailingCheckpoint(10);
+    await fixture.database
+      .update(user)
+      .set({ lastActiveAt: null })
+      .where(eq(user.id, "reader"));
+    // The worker passes the event without applying it, and its heartbeat has
+    // not saved that position yet.
+    await acceptBatch(
+      fixture.database,
+      { events: [event(15, "missed")] },
+      settings,
+    );
+    expect(await ledger(uri("missed"))).toBeUndefined();
+    expect((await state()).streamMode).toBe("paused");
+    // The reader returns and their refresh recovers before the next heartbeat.
+    await fixture.database
+      .update(user)
+      .set({ lastActiveAt: NOW })
+      .where(eq(user.id, "reader"));
+    const transport = replayWithin([event(15, "missed")], 15);
+    expect(await recoverThrough(transport)).toEqual({ status: "covered" });
+    expect(transport.tip).toHaveBeenCalledTimes(1);
+    expect(await state()).toMatchObject({
+      streamMode: "live",
+      streamSeq: "15",
+    });
+    expect(await ledger(uri("missed"))).toMatchObject({ eventSeq: "15" });
+  });
+
+  it("catches up a distrusted origin to the live tip when it recovers within one heartbeat", async () => {
+    await connectAtTrailingCheckpoint(10);
+    // The intake skipped event 15 before it followed the publisher and could
+    // not vouch for the interval. The saved checkpoint still trails it.
+    await distrustOriginCoverage(fixture.database, [originId], NOW);
+    const transport = replayWithin([event(15, "missed")], 15);
+    expect(await recoverThrough(transport)).toEqual({ status: "covered" });
+    expect(await state()).toMatchObject({
+      streamGeneration: 0,
+      streamMode: "live",
+      streamSeq: "15",
+    });
+    expect(await ledger(uri("missed"))).toMatchObject({ eventSeq: "15" });
   });
 
   it("preserves live updates that arrive while a no-key snapshot is being read", async () => {
@@ -1590,7 +1668,7 @@ describe("fetch schedule", () => {
     expect(await nextFetchAt()).toEqual(LATER);
   });
 
-  it("makes live origins due when an interruption ends a connected period, and leaves polled and unscheduled origins alone", async () => {
+  it("makes live origins due when the stream declares a gap, and leaves polled and unscheduled origins alone", async () => {
     await connect();
     const polled = await addReader("polled");
     await fixture.database
@@ -1615,7 +1693,15 @@ describe("fetch schedule", () => {
     await scheduleOrigin(inactive.originId, null);
     const before = Date.now();
 
-    await interruptStream(fixture.database, "worker");
+    const [gap] = await declareStreamGap(
+      fixture.database,
+      "worker",
+      new Date(),
+    );
+    expect(gap?.generation).toBe(1);
+    expect(
+      (await fixture.database.select().from(atprotoStreamState))[0],
+    ).toMatchObject({ seq: null, connected: false });
     expect((await nextFetchAt())!.getTime()).toBeLessThanOrEqual(Date.now());
     expect((await nextFetchAt())!.getTime()).toBeGreaterThanOrEqual(
       Math.floor(before / 1000) * 1000,
@@ -1628,18 +1714,196 @@ describe("fetch schedule", () => {
     expect(await nextFetchAt(inactive.originId)).toBeNull();
   });
 
-  it("leaves schedules alone when an attempt that never connected starts over", async () => {
-    await fixture.database
-      .update(atprotoStreamState)
-      .set({ seq: "1", connected: false, leaseOwner: "worker" });
+  it("leaves the generation, the checkpoint and schedules alone when a connection ends", async () => {
+    await connect();
     await scheduleOrigin(originId, LATER);
+    const before = await state();
 
-    const [interrupted] = await interruptStream(
-      fixture.database,
-      "worker",
-      true,
-    );
-    expect(interrupted?.generation).toBe(1);
+    await disconnectStream(fixture.database, "worker");
+    expect(
+      (await fixture.database.select().from(atprotoStreamState))[0],
+    ).toMatchObject({ connected: false, generation: 0, seq: "1" });
+    expect(await state()).toEqual(before);
     expect(await nextFetchAt()).toEqual(LATER);
+  });
+
+  it("sends an origin the stream could not vouch for back through catch-up at its next refresh", async () => {
+    await connect();
+    await scheduleOrigin(originId, LATER);
+    const inactive = await addReader("inactive");
+    await scheduleOrigin(inactive.originId, null);
+    await accept(event(10));
+    expect((await state()).streamSeq).toBe("10");
+
+    await distrustOriginCoverage(
+      fixture.database,
+      [originId, inactive.originId],
+      NOW,
+    );
+    expect(await nextFetchAt()).toEqual(NOW);
+    expect(await nextFetchAt(inactive.originId)).toBeNull();
+    // Outside the current generation the origin keeps its cursor as live
+    // events arrive, so catch-up replays everything after it.
+    await accept(event(12, "later"));
+    expect((await state()).streamSeq).toBe("10");
+    const transport = replay([event(11, "missed"), event(12, "later")], 12);
+    const recover = vi.spyOn(transport, "recover");
+    expect(
+      await recoverOrigin(
+        fixture.database,
+        originId,
+        settings,
+        transport,
+        new AbortController().signal,
+        { manual: true, client, readPage },
+      ),
+    ).toEqual({ status: "covered" });
+    expect(recover.mock.calls[0]?.[0]).toBe(10);
+    expect(await state()).toMatchObject({
+      streamGeneration: 0,
+      streamMode: "live",
+    });
+    expect(await ledger(uri("missed"))).toMatchObject({ eventSeq: "11" });
+  });
+});
+
+describe("stream lease and checkpoint", () => {
+  const stream = async () =>
+    (await fixture.database.select().from(atprotoStreamState))[0]!;
+
+  it("saves the checkpoint with the lease and never moves it back", async () => {
+    expect(await holdStream(fixture.database, "worker", NOW, 20)).toBe(true);
+    expect(await stream()).toMatchObject({
+      leaseOwner: "worker",
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+      seq: "20",
+    });
+    expect(await holdStream(fixture.database, "worker", NOW, 10)).toBe(true);
+    expect((await stream()).seq).toBe("20");
+    // Renewing without progress leaves the checkpoint alone.
+    expect(await holdStream(fixture.database, "worker", NOW)).toBe(true);
+    expect((await stream()).seq).toBe("20");
+  });
+
+  it("refuses another worker's lease and its checkpoint until the lease runs out", async () => {
+    await holdStream(fixture.database, "worker", NOW, 20);
+    expect(await holdStream(fixture.database, "other", NOW, 30)).toBe(false);
+    await saveCheckpoint(fixture.database, "other", 30);
+    expect(await stream()).toMatchObject({ leaseOwner: "worker", seq: "20" });
+    const later = new Date(NOW.getTime() + 61_000);
+    expect(await holdStream(fixture.database, "other", later, 30)).toBe(true);
+    expect(await stream()).toMatchObject({ leaseOwner: "other", seq: "30" });
+  });
+
+  it("saves a closing connection's progress without extending its lease", async () => {
+    await holdStream(fixture.database, "worker", NOW, 20);
+    await saveCheckpoint(fixture.database, "worker", 25);
+    expect(await stream()).toMatchObject({
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+      seq: "25",
+    });
+  });
+
+  it("applies events without saving stream progress", async () => {
+    await acceptBatch(fixture.database, { events: [event(10)] }, settings);
+    expect((await state()).streamSeq).toBe("10");
+    expect((await stream()).seq).toBeNull();
+  });
+
+  it("marks a connection live only for the lease holder at its generation", async () => {
+    await holdStream(fixture.database, "worker", NOW);
+    expect(await connectStream(fixture.database, "other", 0, NOW)).toBe(false);
+    expect(await connectStream(fixture.database, "worker", 1, NOW)).toBe(false);
+    expect((await stream()).connected).toBe(false);
+    expect(await connectStream(fixture.database, "worker", 0, NOW)).toBe(true);
+    expect((await stream()).connected).toBe(true);
+  });
+});
+
+describe("retry sweep", () => {
+  const due = (after = 0) =>
+    originsWithDueWork(fixture.database, { after, now: NOW, limit: 50 });
+  async function retryAt(retryAt: Date | null) {
+    await fixture.database.update(feedOriginAtprotoDocuments).set({ retryAt });
+  }
+  const sweep = (holdsLease: boolean) =>
+    drainDueOrigins(fixture.database, settings, {
+      holdsLease: () => holdsLease,
+      signal: new AbortController().signal,
+      client,
+      readPage,
+    });
+
+  it("finds nothing while no document is staged and no Publication changed", async () => {
+    expect(await due()).toEqual([]);
+    await accept(event(10));
+    await process();
+    expect(await due()).toEqual([]);
+  });
+
+  it("finds an origin with a staged document once its retry is due", async () => {
+    await accept(event(10));
+    expect(await due()).toEqual([{ originId }]);
+    await retryAt(new Date(NOW.getTime() + 1000));
+    expect(await due()).toEqual([]);
+    await retryAt(NOW);
+    expect(await due()).toEqual([{ originId }]);
+    // Paging continues after the last origin of the previous page.
+    expect(await due(originId)).toEqual([]);
+  });
+
+  it("finds an origin whose Publication record waits to be applied", async () => {
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ publicationDirty: true });
+    expect(await due()).toEqual([{ originId }]);
+  });
+
+  it("leaves origins the stream is not applying live to their own refresh", async () => {
+    await accept(event(10));
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ publicationDirty: true, streamMode: "catchup" });
+    expect(await due()).toEqual([]);
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ streamMode: "live", repositoryActive: false });
+    expect(await due()).toEqual([]);
+  });
+
+  it("leaves an inactive Feed's staged work for the Feed's return", async () => {
+    await accept(event(10));
+    await fixture.database
+      .update(feeds)
+      .set({ isActive: false })
+      .where(eq(feeds.id, feedId));
+    expect(await due()).toEqual([]);
+  });
+
+  it("selects an origin its reader no longer qualifies for at most once", async () => {
+    await accept(event(10));
+    await fixture.database
+      .update(user)
+      .set({ lastActiveAt: null })
+      .where(eq(user.id, "reader"));
+    expect(await due()).toEqual([{ originId }]);
+    await sweep(true);
+    // The sweep pauses it, the way an arriving event would, so its staged
+    // work stops asking for a sweep and waits for the origin's refresh.
+    expect((await state()).streamMode).toBe("paused");
+    expect(await ledger(uri("post"))).toMatchObject({ status: "retry" });
+    expect(await due()).toEqual([]);
+  });
+
+  it("drains staged work on the instance holding the lease, and none without it", async () => {
+    await accept(event(10));
+    const query = vi.spyOn(fixture.database, "all");
+    await sweep(false);
+    expect(query).not.toHaveBeenCalled();
+    expect(await ledger(uri("post"))).toMatchObject({ status: "retry" });
+    await sweep(true);
+    expect(await ledger(uri("post"))).toMatchObject({ status: "ready" });
+    // One page of work, then one empty page ends the sweep.
+    expect(query).toHaveBeenCalledTimes(2);
   });
 });

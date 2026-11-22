@@ -5,7 +5,7 @@ import {
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
 import { createJetstreamWorkload } from "../../../scripts/performance/jetstream-workload";
-import { interruptStream } from "~/server/jetstream/store";
+import { declareStreamGap, disconnectStream } from "~/server/jetstream/store";
 import { recordUserActivity } from "~/server/jetstream/activity";
 
 it.each([1000, 10000, 50000])(
@@ -66,15 +66,40 @@ it.each([1000, 10000, 50000])(
       expect(
         session.instrumentation.snapshot().materializedRows,
       ).toBeLessThanOrEqual(5);
+      // A network event for a publisher nobody follows costs no statement.
+      const intake = await workload.intake();
       session.instrumentation.reset();
-      await interruptStream(session.database, "benchmark", true);
-      const interruption = session.instrumentation.snapshot();
-      // The same three statements whatever the Feed count: the marker's read
-      // and write, then one statement that makes the covered origins due.
-      expect(interruption.statementCount).toBe(3);
-      expect(interruption.materializedRows).toBe(2);
+      expect(await intake.skip()).toEqual({ applied: 0 });
+      expect(session.instrumentation.snapshot().statementCount).toBe(0);
+      // The heartbeat's look for new origins is one statement returning nothing.
+      session.instrumentation.reset();
+      await intake.refresh();
+      expect(session.instrumentation.snapshot()).toMatchObject({
+        statementCount: 1,
+        materializedRows: 0,
+      });
+      // An idle retry sweep is one statement over the pending-work indexes.
+      session.instrumentation.reset();
+      expect(await workload.sweep()).toEqual({ publications: 0 });
+      const sweep = session.instrumentation.snapshot();
+      expect(sweep).toMatchObject({ statementCount: 1, materializedRows: 0 });
+      const sweepSql = sweep.statements[0]!.sql;
+      // Ending a connection is one marker write whatever the Feed count.
+      session.instrumentation.reset();
+      await disconnectStream(session.database, "benchmark");
+      expect(session.instrumentation.snapshot()).toMatchObject({
+        statementCount: 1,
+        materializedRows: 0,
+      });
+      // A gap is the marker's write, then one statement that makes the covered
+      // origins due.
+      session.instrumentation.reset();
+      await declareStreamGap(session.database, "benchmark", new Date());
+      const gap = session.instrumentation.snapshot();
+      expect(gap.statementCount).toBe(2);
+      expect(gap.materializedRows).toBe(1);
       expect(
-        interruption.statements.filter((entry) =>
+        gap.statements.filter((entry) =>
           /update "serial_feed_origin/.test(entry.sql),
         ),
       ).toHaveLength(1);
@@ -93,6 +118,18 @@ it.each([1000, 10000, 50000])(
         });
       }
       // Inspect plans after writes: local libSQL EXPLAIN can retain a read lock.
+      const sweepPlan = await session.baseClient.execute({
+        sql: `EXPLAIN QUERY PLAN ${sweepSql}`,
+        args: Array.from(sweepSql.matchAll(/\?/g), () => 0),
+      });
+      const sweepDetails = sweepPlan.rows
+        .map((row) => String(row.detail))
+        .join("\n");
+      expect(sweepDetails).toContain("feed_origin_atproto_document_retry_idx");
+      expect(sweepDetails).toContain("feed_origin_atproto_dirty_idx");
+      expect(sweepDetails).not.toMatch(
+        /SCAN serial_feed_origin_atproto(_document)?\b(?! USING)/,
+      );
       for (const lookup of lookups) {
         const plan = await session.baseClient.execute({
           sql: `EXPLAIN QUERY PLAN ${lookup}`,

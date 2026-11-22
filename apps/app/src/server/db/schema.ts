@@ -417,6 +417,10 @@ export const feedOriginAtproto = sqliteTable(
   },
   (table) => [
     index("feed_origin_atproto_publication_did_idx").on(table.publicationDid),
+    // Only origins with a Publication record waiting to be applied.
+    index("feed_origin_atproto_dirty_idx")
+      .on(table.originId)
+      .where(sql`${table.publicationDirty} = 1`),
   ],
 );
 
@@ -475,6 +479,10 @@ export const feedOriginAtprotoDocuments = sqliteTable(
       table.retryAt,
       sql`${table.uri} desc`,
     ),
+    // Only staged documents: the retry sweep finds origins with due work here.
+    index("feed_origin_atproto_document_retry_idx")
+      .on(table.originId, table.retryAt)
+      .where(sql`${table.status} = 'retry'`),
   ],
 );
 
