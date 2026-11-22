@@ -12,16 +12,19 @@ import { FIXTURE_NEXT_FETCH_AT } from "./fixtures";
 import type { db as Database } from "../../src/server/db";
 import type { SubscriptionRecord } from "../../src/server/publication-sync/record-store";
 import { feedOriginAtproto } from "~/server/db/schema";
+import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
 
 /**
  * `unchanged`: an inline run that finds neither side changed.
  * `check`: the recurring job check that finds neither side changed.
+ * `waiting`: the same check while an import waits for a retry that is not due.
  * `requested`: a full pass a local change asked for, over publications that
  * turn out to be unchanged.
  */
 export const PUBLICATION_SYNC_OPERATIONS = [
   "unchanged",
   "check",
+  "waiting",
   "requested",
 ] as const;
 export type PublicationSyncOperation =
@@ -51,6 +54,12 @@ export async function createPublicationSyncWorkload(
     importSubscriptions: true,
     exportSubscriptions: true,
     subscriptionRepoRev: "unchanged",
+    // The user's own request settled long ago; what runs now is background work.
+    subscriptionRequestId: "settled-request",
+    subscriptionJobResult: {
+      ...emptyPublicationSyncCounts(),
+      status: "completed",
+    },
   });
   const records: SubscriptionRecord[] = [];
   for (let offset = 0; offset < count; offset += 50) {
@@ -108,6 +117,26 @@ export async function createPublicationSyncWorkload(
       })),
     );
   }
+  if (operation === "waiting") {
+    // One subscription whose import failed and now waits out its backoff.
+    const retryAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await database.insert(atprotoSubscriptionMirror).values({
+      connectionId: userId,
+      publicationUri: `at://${did}/site.standard.publication/waiting`,
+      recordUri: `at://${did}/site.standard.graph.subscription/waiting`,
+      recordCid: "cid",
+      feedId: null,
+      provenance: "imported",
+      remotePresent: true,
+      importState: "pending",
+      importRetryAt: retryAt,
+      importFailures: 12,
+    });
+    await database
+      .update(atprotoConnections)
+      .set({ subscriptionRetryAt: retryAt })
+      .where(eq(atprotoConnections.id, userId));
+  }
   let requests = 0;
   const unexpected = async (): Promise<never> => {
     throw new Error("Unchanged sync attempted publication work");
@@ -142,18 +171,21 @@ export async function createPublicationSyncWorkload(
       .update(atprotoConnections)
       .set(values)
       .where(eq(atprotoConnections.id, userId));
+  const check = {
+    prepare: () => setConnection({ subscriptionNextAttemptAt: new Date(0) }),
+    run: async () => {
+      await runPublicationSyncJobs(database, unexpected, {
+        latestRev,
+        refreshesInBackground: () => Promise.resolve(true),
+        announce: unexpected,
+      });
+      return { status: "checked" as const };
+    },
+  };
   const operations = {
     unchanged: { prepare: () => Promise.resolve(), run: sync },
-    check: {
-      prepare: () => setConnection({ subscriptionNextAttemptAt: new Date(0) }),
-      run: async () => {
-        await runPublicationSyncJobs(database, unexpected, {
-          latestRev,
-          refreshesInBackground: () => Promise.resolve(true),
-        });
-        return { status: "checked" as const };
-      },
-    },
+    check,
+    waiting: check,
     requested: {
       prepare: () => setConnection({ subscriptionRepoRev: null }),
       run: sync,

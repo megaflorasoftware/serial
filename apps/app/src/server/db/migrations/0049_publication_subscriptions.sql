@@ -237,6 +237,7 @@ ALTER TABLE `serial_atproto_connections` ADD `subscription_backfill_started` int
 ALTER TABLE `serial_atproto_connections` ADD `subscription_backfill_next_attempt_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_request_id` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_next_attempt_at` integer;--> statement-breakpoint
+ALTER TABLE `serial_atproto_connections` ADD `subscription_retry_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_token` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_expires_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_progress` text;--> statement-breakpoint

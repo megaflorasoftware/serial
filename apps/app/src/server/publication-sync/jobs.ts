@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
-import { checkPublicationSync, syncCheckColumns } from "./check";
+import { checkPublicationSync, earliest, syncCheckColumns } from "./check";
 import { nextPublicationSyncAttempt } from "./requests";
 import { scheduleUnchangedSince } from "./state";
 import type { LatestRev, SyncCheckRow } from "./check";
@@ -25,8 +25,26 @@ const JOB_CONCURRENCY = 2;
  * it; they request a run themselves.
  */
 export const REMOTE_CHANGE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
-/** How soon a request must be due for the interface to keep watching for it. */
-const PENDING_WINDOW_MS = 5_000;
+/** How soon a follow-up run must be due to count as the same piece of work. */
+const CONTINUATION_WINDOW_MS = 1000;
+/** The least time between two progress announcements of one run. */
+const PROGRESS_ANNOUNCEMENT_INTERVAL_MS = 1000;
+
+type JobState = {
+  progress: { completed: number; total: number } | null;
+  result: PublicationSyncResult | null;
+};
+
+/**
+ * A request the user started, by saving settings or returning from consent,
+ * stays in flight until a run for it finishes with no immediate continuation.
+ * It has no result yet, or keeps its progress while a continuation is due.
+ * Every later run is background work: a recurring check, a retry, or a Feed
+ * the user added or deleted. Those write no job state and go unannounced.
+ */
+function requestInFlight(job: JobState) {
+  return job.result === null || job.progress !== null;
+}
 
 export async function getPublicationSyncJob(
   database: typeof db,
@@ -44,20 +62,14 @@ export async function getPublicationSyncJob(
     .where(eq(connections.userId, userId))
     .get();
   if (!row?.runId) return null;
-  const now = Date.now();
-  const running = row.leaseExpires !== null && row.leaseExpires.getTime() > now;
-  const due =
-    row.next !== null && row.next.getTime() <= now + PENDING_WINDOW_MS;
-  // A request is unfinished until it has a result, and again while that result
-  // reports deferred work for a continuation to pick up. A recurring check or
-  // a retry scheduled further out already has its result.
-  const unfinished = row.result === null || row.result.deferred > 0;
   return {
     runId: row.runId,
-    // A lease with nothing scheduled belongs to a request the user has since
-    // replaced, such as turning sync off while a worker was still running.
-    pending: (running && row.next !== null) || (due && unfinished),
-    running,
+    // The interface watches only a request the user started, and only while
+    // something is scheduled for it. Turning sync off leaves nothing
+    // scheduled, whatever lease an earlier run still holds.
+    pending: requestInFlight(row) && row.next !== null,
+    running:
+      row.leaseExpires !== null && row.leaseExpires.getTime() > Date.now(),
     progress: row.progress,
     result: row.result,
   };
@@ -68,11 +80,19 @@ type JobDependencies = {
   latestRev?: LatestRev;
   /** Whether the account's Feed refresh, and so its recurring check, runs in the background. */
   refreshesInBackground?: (account: Account) => Promise<boolean>;
+  /** Tells the user's open clients that the persisted status changed. */
+  announce?: (userId: string) => Promise<void>;
 };
-type DueJob = SyncCheckRow & { scheduledAt: Date | null; role: string | null };
+type DueJob = SyncCheckRow &
+  JobState & { scheduledAt: Date | null; role: string | null };
 
 async function refreshesInBackground(account: Account) {
   return (await automaticRssOwnerForAccount(account)) === "background-task";
+}
+
+async function announceSyncStatus(userId: string) {
+  const { announceSyncStatus: announce } = await import("./announce");
+  await announce(userId);
 }
 
 /** `next`, unless a request made during the run has already moved the schedule. */
@@ -80,9 +100,35 @@ function scheduleUnlessRequested(claimedAt: Date | null, next: Date | null) {
   return sql<Date | null>`case when ${scheduleUnchangedSince(claimedAt)} then ${next === null ? null : next.getTime()} else ${connections.subscriptionNextAttemptAt} end`;
 }
 
-function earliest(...times: Array<Date | null | undefined>) {
-  const known = times.flatMap((time) => (time ? [time.getTime()] : []));
-  return known.length ? new Date(Math.min(...known)) : null;
+/**
+ * What a visible run leaves in the progress column. The request keeps its
+ * progress, and so stays in flight, while another run is due at once: this
+ * run's own continuation, or a request made while it ran.
+ */
+function progressUnlessSettled(claimedAt: Date | null, continues: boolean) {
+  const kept = sql`coalesce(${connections.subscriptionJobProgress}, ${JSON.stringify({ completed: 0, total: 0 })})`;
+  return continues
+    ? kept
+    : sql`case when ${scheduleUnchangedSince(claimedAt)} then null else ${kept} end`;
+}
+
+/** A busy run did nothing and a deferred one resumes at once: neither ends the request. */
+function continuesAtOnce(result: PublicationSyncResult, retry: Date | null) {
+  return (
+    result.status === "busy" ||
+    (retry !== null && retry.getTime() <= Date.now() + CONTINUATION_WINDOW_MS)
+  );
+}
+
+/** One request's runs report a single total; background runs never add to it. */
+function accumulatedResult(
+  previous: PublicationSyncResult | null,
+  result: PublicationSyncResult,
+) {
+  const accumulated = { ...result };
+  for (const key of ["imported", "exported", "inactive", "removed"] as const)
+    accumulated[key] += previous?.[key] ?? 0;
+  return accumulated;
 }
 
 /** A database claim owns execution. Browser lifetimes and local process locks do not. */
@@ -107,6 +153,8 @@ export async function runPublicationSyncJobs(
     .select({
       ...syncCheckColumns,
       scheduledAt: connections.subscriptionNextAttemptAt,
+      progress: connections.subscriptionJobProgress,
+      result: connections.subscriptionJobResult,
       role: user.role,
     })
     .from(connections)
@@ -114,6 +162,7 @@ export async function runPublicationSyncJobs(
     .where(available)
     .orderBy(asc(connections.subscriptionNextAttemptAt))
     .limit(JOB_PAGE_SIZE);
+  const announce = dependencies.announce ?? announceSyncStatus;
   const nextRemoteChangeCheck = async (job: DueJob) =>
     job.userId &&
     (await (dependencies.refreshesInBackground ?? refreshesInBackground)({
@@ -122,11 +171,30 @@ export async function runPublicationSyncJobs(
     }))
       ? new Date(Date.now() + REMOTE_CHANGE_CHECK_INTERVAL_MS)
       : null;
-  /** A check that found nothing to do costs this one guarded write and no claim. */
-  const rescheduleUnclaimed = (job: DueJob, next: Date | null) =>
-    database
+  /**
+   * A check that found nothing to do costs this one guarded write and no
+   * claim. A request the user started ends here too, with `outcome` to show.
+   */
+  const settleUnclaimed = async (
+    job: DueJob,
+    next: Date | null,
+    outcome: PublicationSyncResult["status"],
+  ) => {
+    const visible = requestInFlight(job);
+    const settled = await database
       .update(connections)
-      .set({ subscriptionNextAttemptAt: next })
+      .set({
+        subscriptionNextAttemptAt: next,
+        ...(visible
+          ? {
+              subscriptionJobResult: {
+                ...emptyPublicationSyncCounts(),
+                status: outcome,
+              },
+              subscriptionJobProgress: null,
+            }
+          : {}),
+      })
       .where(
         and(
           eq(connections.id, job.id),
@@ -138,6 +206,9 @@ export async function runPublicationSyncJobs(
           unclaimed,
         ),
       );
+    if (visible && job.userId && settled.rowsAffected > 0)
+      await announce(job.userId);
+  };
   let continued = false;
   for await (const again of workerPool(rows, JOB_CONCURRENCY, async (row) => {
     // A check that cannot decide must not hold up the rest of the page.
@@ -148,13 +219,14 @@ export async function runPublicationSyncJobs(
       },
     );
     if (check.state === "disabled") {
-      await rescheduleUnclaimed(row, null);
+      await settleUnclaimed(row, null, "skipped");
       return false;
     }
     if (check.state === "current") {
-      await rescheduleUnclaimed(
+      await settleUnclaimed(
         row,
-        earliest(await nextRemoteChangeCheck(row), check.backfillRetryAt),
+        earliest(await nextRemoteChangeCheck(row), check.retryAt),
+        "completed",
       );
       return false;
     }
@@ -165,7 +237,6 @@ export async function runPublicationSyncJobs(
       .set({
         subscriptionJobToken: token,
         subscriptionJobExpiresAt: new Date(Date.now() + JOB_LEASE_MS),
-        subscriptionJobProgress: null,
       })
       .where(and(eq(connections.id, id), available))
       .returning();
@@ -173,27 +244,46 @@ export async function runPublicationSyncJobs(
     const claim = and(
       eq(connections.id, id),
       eq(connections.subscriptionJobToken, token),
-      eq(connections.subscriptionRequestId, job.subscriptionRequestId!),
+      job.subscriptionRequestId === null
+        ? isNull(connections.subscriptionRequestId)
+        : eq(connections.subscriptionRequestId, job.subscriptionRequestId),
     );
+    // Only a run for a request the user started shows its work.
+    const visible = requestInFlight({
+      progress: job.subscriptionJobProgress,
+      result: job.subscriptionJobResult,
+    });
+    const announceChange = async () => {
+      if (visible && job.userId) await announce(job.userId);
+    };
+    let announcedAt = 0;
     let result: PublicationSyncResult;
     try {
       result = job.userId
         ? await sync({
             database,
             userId: job.userId,
-            runId: job.subscriptionRequestId!,
+            runId: job.subscriptionRequestId ?? token,
             check,
             onProgress: async (progress) => {
               await database
                 .update(connections)
                 .set({
                   subscriptionJobExpiresAt: new Date(Date.now() + JOB_LEASE_MS),
-                  subscriptionJobProgress: {
-                    completed: progress.completed,
-                    total: progress.total,
-                  },
+                  ...(visible
+                    ? {
+                        subscriptionJobProgress: {
+                          completed: progress.completed,
+                          total: progress.total,
+                        },
+                      }
+                    : {}),
                 })
                 .where(claim);
+              if (Date.now() - announcedAt < PROGRESS_ANNOUNCEMENT_INTERVAL_MS)
+                return;
+              announcedAt = Date.now();
+              await announceChange();
             },
           })
         : { ...emptyPublicationSyncCounts(), status: "skipped" };
@@ -205,21 +295,31 @@ export async function runPublicationSyncJobs(
         failed: 1,
       };
     }
+    const retry = nextPublicationSyncAttempt(result);
     const next = earliest(
-      nextPublicationSyncAttempt(result),
+      retry,
       result.status === "skipped" ? null : await nextRemoteChangeCheck(row),
     );
-    const previous = job.subscriptionJobResult;
-    const accumulated = { ...result };
-    for (const key of ["imported", "exported", "inactive", "removed"] as const)
-      accumulated[key] += previous?.[key] ?? 0;
+    const continues = continuesAtOnce(result, retry);
     let scheduled = next;
     try {
-      // The result always lands; the schedule only when no Feed changed mid-run.
+      // The schedule lands only when no Feed changed mid-run. A visible run
+      // also records what it did, and gives up its progress once it settles.
       const [finished] = await database
         .update(connections)
         .set({
-          subscriptionJobResult: accumulated,
+          ...(visible && result.status !== "busy"
+            ? {
+                subscriptionJobResult: accumulatedResult(
+                  job.subscriptionJobResult,
+                  result,
+                ),
+                subscriptionJobProgress: progressUnlessSettled(
+                  job.subscriptionNextAttemptAt,
+                  continues,
+                ),
+              }
+            : {}),
           subscriptionNextAttemptAt: scheduleUnlessRequested(
             job.subscriptionNextAttemptAt,
             next,
@@ -239,8 +339,12 @@ export async function runPublicationSyncJobs(
             eq(connections.subscriptionJobToken, token),
           ),
         );
+      await announceChange();
     }
-    return scheduled !== null && scheduled.getTime() <= Date.now() + 1000;
+    return (
+      scheduled !== null &&
+      scheduled.getTime() <= Date.now() + CONTINUATION_WINDOW_MS
+    );
   }))
     continued ||= again;
   return continued || rows.length === JOB_PAGE_SIZE;

@@ -14,7 +14,8 @@ import {
   markDataSubscriptionPaused,
 } from "./subscriptionConnection";
 import { dataReconciliation } from "./reconciliation";
-import type { PublishedChunk } from "~/server/api/publisher";
+import { notifyPublicationSyncStatusChanged } from "./publication-sync";
+import type { ChannelMessage, PublishedChunk } from "~/server/api/publisher";
 
 // Retry quickly at first so a brief disconnect recovers within a second,
 // then back off so an extended offline session doesn't hot-spin on mobile.
@@ -109,7 +110,7 @@ export function useDataSubscription() {
           markDataSubscriptionConnected();
           dataReconciliation.sseConnectionChanged(true);
 
-          for await (const payload of iterator as AsyncIterable<PublishedChunk>) {
+          for await (const payload of iterator as AsyncIterable<ChannelMessage>) {
             if (connSignal.aborted) break;
 
             // Only a connection that actually delivers data clears the
@@ -117,6 +118,11 @@ export function useDataSubscription() {
             // flapping still escalates to the extended delay.
             failingSinceRef.current = null;
 
+            // A status notice carries no data for the stores.
+            if (payload.source === "publication-sync") {
+              notifyPublicationSyncStatusChanged();
+              continue;
+            }
             liveChunks.push(payload);
           }
           if (!connSignal.aborted && !signal.aborted) {

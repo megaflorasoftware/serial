@@ -317,6 +317,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "subscription_retry_at": {
+          "name": "subscription_retry_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "subscription_job_token": {
           "name": "subscription_job_token",
           "type": "text",

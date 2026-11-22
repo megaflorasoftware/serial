@@ -3,9 +3,13 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { orpc } from "~/lib/orpc";
 import {
+  onPublicationSyncStatusChanged,
   PUBLICATION_SYNC_TOAST,
   showPublicationSyncProgress,
 } from "~/lib/data/publication-sync";
+
+/** The server announces status changes; this only covers a missed announcement. */
+const MISSED_ANNOUNCEMENT_POLL_MS = 15_000;
 
 /** Mount with the signed-in layout so closing a dialog never loses progress. */
 export function PublicationSyncProgress() {
@@ -14,8 +18,14 @@ export function PublicationSyncProgress() {
     orpc.atproto.getSyncStatus.queryOptions({
       staleTime: 0,
       meta: { persist: false },
-      refetchInterval: (query) => (query.state.data?.pending ? 2000 : false),
+      refetchInterval: (query) =>
+        query.state.data?.pending ? MISSED_ANNOUNCEMENT_POLL_MS : false,
     }),
+  );
+  const { refetch } = status;
+  useEffect(
+    () => onPublicationSyncStatusChanged(() => void refetch()),
+    [refetch],
   );
   useEffect(() => {
     const job = status.data;

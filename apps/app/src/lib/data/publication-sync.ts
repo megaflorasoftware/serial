@@ -26,6 +26,21 @@ export async function refreshPublicationSyncProgress(queryClient: QueryClient) {
   }
 }
 
+const statusListeners = new Set<() => void>();
+
+/** The server announced that the persisted sync status changed. */
+export function notifyPublicationSyncStatusChanged() {
+  for (const listener of statusListeners) listener();
+}
+
+/** Subscribes to those announcements; returns the unsubscribe. */
+export function onPublicationSyncStatusChanged(listener: () => void) {
+  statusListeners.add(listener);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
 export const PUBLICATION_SYNC_TOAST = "publication-subscription-sync";
 export function publicationSyncMessage(result: PublicationSyncResult) {
   if (result.status === "skipped") return "Publication sync is turned off.";

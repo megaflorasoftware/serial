@@ -225,7 +225,8 @@ describe("mutation reconciliation", () => {
       const forwarding = (async () => {
         try {
           for await (const payload of subscription)
-            dataReconciliation.receivePublishedChunks([payload]);
+            if (payload.source !== "publication-sync")
+              dataReconciliation.receivePublishedChunks([payload]);
         } catch {
           // Subscription abort during cleanup.
         }
@@ -472,7 +473,8 @@ describe("Feed removal from a loaded View", () => {
       const forwarding = (async () => {
         try {
           for await (const payload of subscription)
-            dataReconciliation.receivePublishedChunks([payload]);
+            if (payload.source !== "publication-sync")
+              dataReconciliation.receivePublishedChunks([payload]);
         } catch {
           // Subscription abort during cleanup.
         }

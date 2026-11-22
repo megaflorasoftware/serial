@@ -10,6 +10,7 @@ import {
   discoverFeeds,
 } from "~/server/feeds/discovery";
 import { resolvePublication } from "~/server/feeds/publications";
+import { PublicationGoneError } from "~/server/feeds/importErrors";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { newRssFeedDetails } from "~/server/rss/types";
 
@@ -71,9 +72,16 @@ describe("resolving a selected publication", () => {
       }),
     ]);
 
-    await expect(
-      resolveFeedSelection("user", publication.siteUrl, selection(rssUrl)),
-    ).rejects.toThrow("The RSS Feed and publication cannot be combined");
+    const combining = resolveFeedSelection(
+      "user",
+      publication.siteUrl,
+      selection(rssUrl),
+    );
+    await expect(combining).rejects.toThrow(
+      "The RSS Feed and publication cannot be combined",
+    );
+    // Trying again cannot change the answer, so an import stops here.
+    await expect(combining).rejects.toBeInstanceOf(PublicationGoneError);
   });
 
   it("accepts a normal Feed matched to the publication site", async () => {
@@ -192,6 +200,13 @@ it("combines a known imported publication with RSS without requiring a website p
     "rss",
     "atproto",
   ]);
+});
+it("reports a record that does not describe the publication as gone", async () => {
+  vi.mocked(resolvePublication).mockResolvedValue(null);
+  await expect(
+    resolvePublicationFeed("user", publicationUri),
+  ).rejects.toBeInstanceOf(PublicationGoneError);
+  expect(discoverFeedOriginsForImport).not.toHaveBeenCalled();
 });
 it("leaves an import unresolved when discovery cannot finish", async () => {
   vi.mocked(discoverFeedOriginsForImport).mockRejectedValue(

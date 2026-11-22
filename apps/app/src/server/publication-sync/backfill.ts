@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm";
 import { parsePublicationUri } from "@serial/standard-site";
 import { backfillSchedule } from "./check";
+import { nextRetryAt } from "./retry";
 import {
   assertSubscriptionSyncCurrent,
   renewSubscriptionSync,
@@ -18,7 +19,7 @@ import {
 import type { db } from "~/server/db";
 import type { DatabaseAtprotoConnection } from "~/server/db/schema";
 import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
-import { PublicationUnavailableError } from "~/server/feeds/publications";
+import { publicationIsGone } from "~/server/feeds/importErrors";
 import {
   atprotoConnections,
   feedOrigins,
@@ -237,16 +238,11 @@ export async function backfillPublicationOrigins(
             .update(probes)
             .set({
               attempts: probe.attempts + 1,
-              nextAttemptAt:
-                error instanceof PublicationUnavailableError
-                  ? null
-                  : new Date(
-                      Date.now() +
-                        Math.min(
-                          3_600_000,
-                          60_000 * 2 ** Math.min(probe.attempts, 6),
-                        ),
-                    ),
+              // A publication that is gone is a completed check, and so is a
+              // probe whose backoff has run out.
+              nextAttemptAt: publicationIsGone(error)
+                ? null
+                : nextRetryAt(probe.attempts + 1),
             })
             .where(eq(probes.feedId, probe.feedId)),
         );

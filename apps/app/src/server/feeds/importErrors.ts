@@ -15,3 +15,15 @@ export class FeedImportSkippedError extends Error {
     );
   }
 }
+
+/**
+ * The publication will not come back as it stands: it was deleted, its
+ * repository no longer resolves, its record is invalid, or it cannot join the
+ * Feed it belongs to. Only a change to the publication makes a retry worthwhile.
+ */
+export class PublicationGoneError extends Error {}
+
+/** Retrying cannot succeed. Rate limits, timeouts and outages never count. */
+export function publicationIsGone(error: unknown) {
+  return error instanceof PublicationGoneError;
+}

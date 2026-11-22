@@ -1232,10 +1232,22 @@ export const atprotoConnections = sqliteTable(
     subscriptionNextAttemptAt: integer("subscription_next_attempt_at", {
       mode: "timestamp_ms",
     }),
+    /**
+     * When the earliest waiting import retry falls due. Until then a check
+     * stays idle even though that import is unfinished.
+     */
+    subscriptionRetryAt: integer("subscription_retry_at", {
+      mode: "timestamp_ms",
+    }),
     subscriptionJobToken: text("subscription_job_token"),
     subscriptionJobExpiresAt: integer("subscription_job_expires_at", {
       mode: "timestamp_ms",
     }),
+    /**
+     * Progress of the request the user started. It stays set between that
+     * request's runs and clears once the request settles, so background runs
+     * leave it and the result alone.
+     */
     subscriptionJobProgress: text("subscription_job_progress", {
       mode: "json",
     }).$type<{ completed: number; total: number }>(),

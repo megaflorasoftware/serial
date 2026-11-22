@@ -72,6 +72,22 @@ describe("publication subscription sync bounds", () => {
     30_000,
   );
   it.each([100, 1_000])(
+    "stays idle while an import retry waits, with one write and no mirror rows, for %s publications",
+    async (count) => {
+      const { requests, evidence } = await measure(count, "waiting");
+      const budget = publicationSyncBudget("waiting", count);
+      expect(requests).toBe(1);
+      expect(evidence.statementCount).toBeLessThanOrEqual(budget.statements);
+      expect(evidence.materializedRows).toBeLessThanOrEqual(budget.rows);
+      expect(writes(evidence.statements)).toHaveLength(1);
+      expect(
+        touches(evidence.statements, "serial_atproto_subscription_mirror"),
+      ).toBe(false);
+      expect(touches(evidence.statements, "serial_feed_origin")).toBe(false);
+    },
+    30_000,
+  );
+  it.each([100, 1_000])(
     "uses constant statements for a requested pass over %s unchanged publications",
     async (count) => {
       const { result, requests, evidence } = await measure(count, "requested");

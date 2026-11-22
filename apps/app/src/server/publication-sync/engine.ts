@@ -1,8 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import {
-  newPublicationSyncRequest,
-  nextPublicationSyncAttempt,
-} from "./requests";
+import { nextPublicationSyncAttempt } from "./requests";
+import { nextRetryAt } from "./retry";
 import { backfillPublicationOrigins } from "./backfill";
 import { checkPublicationSync, syncCheckColumns } from "./check";
 import { planPublicationSync } from "./plan";
@@ -44,6 +42,7 @@ import { commitFeedImport, prepareFeedImport } from "~/server/feeds/imports";
 import {
   FeedImportDeferredError,
   FeedImportSkippedError,
+  publicationIsGone,
 } from "~/server/feeds/importErrors";
 import { deleteUserFeeds } from "~/server/feeds/delete";
 import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
@@ -153,6 +152,14 @@ export async function syncPublicationSubscriptions(input: {
   const retryAfter = (next: Date) => {
     if (!retryAt || next < retryAt) retryAt = next;
   };
+  /** The earliest import waiting for its retry time, which the connection stores. */
+  let importRetryAt = null as Date | null;
+  const awaitImportRetry = (next: Date) => {
+    retryAfter(next);
+    if (!importRetryAt || next < importRetryAt) importRetryAt = next;
+  };
+  /** Failed work with no retry time of its own, for the next check to redo. */
+  let mustReconcile = false;
   let changedFeeds = false;
   /** Publishes every Feed change so far; later changes publish again at the end. */
   const publishFeedChanges = async () => {
@@ -314,7 +321,7 @@ export async function syncPublicationSubscriptions(input: {
         priorImport?.importRetryAt &&
         priorImport.importRetryAt > new Date()
       ) {
-        retryAfter(priorImport.importRetryAt);
+        awaitImportRetry(priorImport.importRetryAt);
         if (
           !observationUnchanged(
             old,
@@ -477,22 +484,24 @@ export async function syncPublicationSubscriptions(input: {
           action === "import" &&
           !(error instanceof SubscriptionSyncChangedError)
         ) {
-          const skipped = error instanceof FeedImportSkippedError;
           const attempts = (priorImport?.importFailures ?? 0) + 1;
-          const backoff = Math.min(
-            600_000,
-            60_000 * 2 ** Math.min(attempts - 1, 4),
-          );
-          const importRetryAt = skipped
-            ? null
-            : new Date(
-                Math.max(
-                  Date.now() + backoff,
-                  error instanceof FeedImportDeferredError
-                    ? error.retryAt.getTime()
-                    : 0,
-                ),
-              );
+          // A completed mismatch and a publication that is gone end here; any
+          // other failure may recover and retries until its backoff runs out.
+          const backoff =
+            error instanceof FeedImportSkippedError || publicationIsGone(error)
+              ? null
+              : nextRetryAt(attempts);
+          const retryImportAt =
+            backoff &&
+            new Date(
+              Math.max(
+                backoff.getTime(),
+                error instanceof FeedImportDeferredError
+                  ? error.retryAt.getTime()
+                  : 0,
+              ),
+            );
+          const skipped = retryImportAt === null;
           await database.transaction(async (tx) => {
             await assertSubscriptionSyncCurrent(tx, connection);
             await saveSubscriptionObservation(tx, {
@@ -505,20 +514,24 @@ export async function syncPublicationSubscriptions(input: {
               imported: true,
               failure: {
                 state: skipped ? "skipped" : "pending",
-                retryAt: importRetryAt,
+                retryAt: retryImportAt,
                 attempts,
               },
             });
           });
-          if (skipped) counts.skipped++;
+          if (retryImportAt === null) counts.skipped++;
           else {
             counts.deferred++;
-            retryAfter(importRetryAt!);
+            awaitImportRetry(retryImportAt);
           }
-        } else counts.failed++;
+        } else {
+          counts.failed++;
+          mustReconcile = true;
+        }
         if (
           !(error instanceof FeedImportSkippedError) &&
-          !(error instanceof FeedImportDeferredError)
+          !(error instanceof FeedImportDeferredError) &&
+          !publicationIsGone(error)
         )
           logError(
             "[publication-sync] publication failed",
@@ -529,23 +542,22 @@ export async function syncPublicationSubscriptions(input: {
       }
       await progress(index + 1, publications.length);
     }
-    // A stored revision promises a clean, finished pass; unfinished work clears it.
+    // A stored revision promises a finished pass over a complete snapshot, with
+    // nothing left but retries waiting for their time. An invalid record is
+    // part of that snapshot: the same revision yields it again.
     const finishedRev =
-      counts.failed ||
-      counts.deferred ||
-      !observedCompleteSnapshot ||
-      wroteRecords
-        ? null
-        : rev;
+      mustReconcile || !observedCompleteSnapshot || wroteRecords ? null : rev;
     if (
       cursor !== connection.subscriptionSyncCursor ||
-      finishedRev !== connection.subscriptionRepoRev
+      finishedRev !== connection.subscriptionRepoRev ||
+      importRetryAt?.getTime() !== connection.subscriptionRetryAt?.getTime()
     )
       await database
         .update(atprotoConnections)
         .set({
           subscriptionSyncCursor: cursor,
           subscriptionRepoRev: finishedRev,
+          subscriptionRetryAt: importRetryAt,
         })
         .where(
           and(
@@ -558,8 +570,9 @@ export async function syncPublicationSubscriptions(input: {
     counts.failed++;
     logError("[publication-sync] sync failed", error);
   } finally {
-    // Pre-refresh runs also own durable continuation, including users who enabled
-    // export before queued sync existed. Never replace a newer settings request.
+    // A run outside the job queue, such as one before a manual refresh, still
+    // owes its unfinished work a schedule. It never opens a request of its
+    // own: only the user starts one, so the follow-up runs unannounced.
     const nextAttemptAt = nextPublicationSyncAttempt({
       ...counts,
       status: "partial",
@@ -568,10 +581,7 @@ export async function syncPublicationSubscriptions(input: {
     if (nextAttemptAt) {
       await database
         .update(atprotoConnections)
-        .set({
-          ...newPublicationSyncRequest(true),
-          subscriptionNextAttemptAt: nextAttemptAt,
-        })
+        .set({ subscriptionNextAttemptAt: nextAttemptAt })
         .where(
           and(
             syncClaimCondition(connection),
