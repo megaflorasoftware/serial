@@ -7,8 +7,13 @@ import {
 } from "./database";
 import { createObservationImageWorkload } from "./observation-image-workload";
 import { createJetstreamWorkload } from "./jetstream-workload";
+import { textIngestBudget } from "./text-ingest-budgets";
+import { createTextIngestWorkload } from "./text-ingest-workload";
 
 const profiles = { small: 1_000, representative: 10_000, stress: 50_000 };
+/** A feed document at the parser's item bound. */
+const TEXT_FEED_ITEMS = 200;
+const TEXT_FEED_EDITS = 3;
 const profile = process.argv[
   process.argv.indexOf("--profile") + 1
 ] as keyof typeof profiles;
@@ -85,6 +90,43 @@ try {
     p95Ms: imageTimes[14],
     samples: imageSamples,
   };
+  const textFeed = await createTextIngestWorkload(
+    session.database,
+    TEXT_FEED_ITEMS,
+  );
+  for (const [name, operation, edits] of [
+    ["text-fetch-unchanged", "unchanged", 0],
+    ["text-fetch-changed", "changed", TEXT_FEED_EDITS],
+  ] as const) {
+    const budget = textIngestBudget(operation, TEXT_FEED_ITEMS, edits);
+    const samples = [];
+    for (let i = 0; i < 18; i++) {
+      globalThis.gc?.();
+      session.instrumentation.reset();
+      const started = performance.now();
+      // Each sample fetches the same document again, edited or not.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      const result = await textFeed.run(operation, edits);
+      const ms = performance.now() - started;
+      const evidence = session.instrumentation.snapshot();
+      if (
+        result.written !== edits ||
+        evidence.statementCount > budget.statements ||
+        evidence.materializedRows > budget.rows ||
+        textFeed.pages > 0
+      )
+        throw new Error(`${name} exceeded its structural budget`);
+      if (i >= 3)
+        samples.push({
+          ms,
+          statements: evidence.statementCount,
+          rows: evidence.materializedRows,
+          written: result.written,
+        });
+    }
+    const times = samples.map((sample) => sample.ms).sort((a, b) => a - b);
+    results[name] = { medianMs: times[7], p95Ms: times[14], samples };
+  }
   mkdirSync("benchmarks/results", { recursive: true });
   const output = `benchmarks/results/ingest-${profile}.json`;
   writeFileSync(

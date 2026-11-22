@@ -32,6 +32,23 @@ export function captureRecordValue(value: unknown): CapturedRecord {
   return { text, value: parseLosslessJson(text) };
 }
 
+/**
+ * The `$type` of a record's content, as the ledger keeps it beside a readable
+ * version. Empty when the content names none, which is not the same as having
+ * no readable version at all.
+ */
+export function recordContentType(record: unknown) {
+  const content =
+    typeof record === "object" && record !== null && "content" in record
+      ? record.content
+      : undefined;
+  const type =
+    typeof content === "object" && content !== null && "$type" in content
+      ? content.$type
+      : undefined;
+  return typeof type === "string" ? type : "";
+}
+
 export class OversizedDocumentSourceError extends Error {
   constructor() {
     super("Document source exceeds its retention budget");

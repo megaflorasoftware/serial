@@ -6,6 +6,7 @@ import { newRssFeedDetails } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
 import { parseSyndicationFeed } from "../syndication";
+import { withLegacyInputs } from "../legacyItemHash";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
@@ -57,7 +58,9 @@ export async function fetchWebsiteFeedData(
       ...parseHttpHeaders(feedResponse),
       ...data.fetchMetadata,
     };
-    const items = boundFeedItems(data.items);
+    const items = boundFeedItems(
+      await withLegacyInputs(feedResponse.text, data.items),
+    );
 
     return {
       id: feed.id,

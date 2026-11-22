@@ -57,6 +57,20 @@ export type FetchableOrigin = {
   feed: DatabaseFeed;
 };
 
+/**
+ * What the website parser before Feed origins read for an item, where it
+ * differs from the current reading. See `legacyItemHash.ts`.
+ */
+export type LegacyItemInputs = {
+  title: string;
+  author: string;
+  publishedDate: string;
+  /** Taken from the feed. Absent when the previous ingest looked the page image up instead. */
+  thumbnail?: string;
+  /** The previous body: the current content between two affixes, or the whole text. */
+  content: { lead: string; trail: string } | { text: string };
+};
+
 export type RSSContent = {
   id: string;
   // type: ContentType;
@@ -74,6 +88,7 @@ export type RSSContent = {
   tags?: string[];
   content?: string;
   contentSnippet?: string;
+  legacy?: LegacyItemInputs;
   source?: {
     title?: string;
     description?: string;

@@ -1343,6 +1343,21 @@
           "notNull": true,
           "autoincrement": false
         },
+        "digest": {
+          "name": "digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "image_pending": {
+          "name": "image_pending",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "value": {
           "name": "value",
           "type": "text",
@@ -3427,6 +3442,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "body_content_type": {
+          "name": "body_content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "reason": {
           "name": "reason",
           "type": "text",
@@ -3469,6 +3491,15 @@
           ],
           "isUnique": false,
           "where": "\"serial_feed_origin_atproto_document\".\"status\" = 'retry'"
+        },
+        "feed_origin_atproto_document_body_type_idx": {
+          "name": "feed_origin_atproto_document_body_type_idx",
+          "columns": [
+            "origin_id",
+            "body_content_type"
+          ],
+          "isUnique": false,
+          "where": "\"serial_feed_origin_atproto_document\".\"body_content_type\" is not null"
         }
       },
       "foreignKeys": {

@@ -20,6 +20,7 @@ it.each([1000, 10000, 50000])(
         3,
         history,
       );
+      const platformChecks: string[] = [];
       for (const mode of [
         "changed",
         "duplicate",
@@ -29,6 +30,17 @@ it.each([1000, 10000, 50000])(
         session.instrumentation.reset();
         const result = await workload.run(mode);
         const evidence = session.instrumentation.snapshot();
+        platformChecks.push(
+          ...evidence.statements
+            .map((entry) => entry.sql)
+            .filter((sql) => sql.includes('"body_content_type" asc')),
+        );
+        // The platform is never read back out of the retained sources.
+        expect(
+          evidence.statements.filter((entry) =>
+            entry.sql.includes("json_extract"),
+          ),
+        ).toEqual([]);
         expect(evidence.materializedRows).toBeLessThanOrEqual(185);
         expect(evidence.statementCount).toBeLessThanOrEqual(180);
         expect(result.publications).toBe(mode === "changed" ? 3 : 0);
@@ -130,6 +142,22 @@ it.each([1000, 10000, 50000])(
       expect(sweepDetails).not.toMatch(
         /SCAN serial_feed_origin_atproto(_document)?\b(?! USING)/,
       );
+      // A committed document rechecks the platform against the retained
+      // history with two index seeks, however long that history is.
+      expect(platformChecks).toHaveLength(3);
+      const platformPlan = await session.baseClient.execute({
+        sql: `EXPLAIN QUERY PLAN ${platformChecks[0]!}`,
+        args: Array.from(platformChecks[0]!.matchAll(/\?/g), () => 1),
+      });
+      const platformDetails = platformPlan.rows
+        .map((row) => String(row.detail))
+        .join("\n");
+      expect(
+        platformDetails.match(
+          /COVERING INDEX feed_origin_atproto_document_body_type_idx \(origin_id=\? AND body_content_type>\?\)/g,
+        ),
+      ).toHaveLength(2);
+      expect(platformDetails).not.toMatch(/TEMP B-TREE|document_source/);
       for (const lookup of lookups) {
         const plan = await session.baseClient.execute({
           sql: `EXPLAIN QUERY PLAN ${lookup}`,

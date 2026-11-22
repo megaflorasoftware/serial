@@ -251,6 +251,8 @@ describe("durable Jetstream application", () => {
     expect(await ledger(uri("post"))).toMatchObject({
       status: "ready",
       bodyCid: "cid10",
+      // The readable version's content type, which decides the Feed's platform.
+      bodyContentType: "pub.leaflet.content",
       reason: null,
     });
     expect(await sources(uri("post"))).toMatchObject([{ cid: "cid10" }]);
@@ -269,10 +271,14 @@ describe("durable Jetstream application", () => {
     expect((await fixture.database.select().from(feedItems))[0]?.title).toBe(
       "Title",
     );
+    // The deleted document keeps its readable version and that version's type.
     expect(
-      (await fixture.database.select().from(feedOriginAtprotoDocuments))[0]
-        ?.status,
-    ).toBe("deleted");
+      (await fixture.database.select().from(feedOriginAtprotoDocuments))[0],
+    ).toMatchObject({
+      status: "deleted",
+      bodyCid: "cid10",
+      bodyContentType: "pub.leaflet.content",
+    });
   });
   it("rejects a conversion overtaken by a delete", async () => {
     await accept(event(10));
@@ -848,6 +854,8 @@ describe("failure isolation", () => {
       status: "ready",
       reason: "adapter",
       bodyCid: "cid10",
+      // The failed version's type does not replace the readable one's.
+      bodyContentType: "pub.leaflet.content",
     });
     // The readable version and the body it produced both survive the failure.
     expect(await sources(uri("post"))).toMatchObject([{ cid: "cid10" }]);
@@ -864,6 +872,7 @@ describe("failure isolation", () => {
       status: "invalid",
       reason: "oversized",
       bodyCid: null,
+      bodyContentType: null,
     });
     expect(await sources(uri("post"))).toEqual([]);
     await process();

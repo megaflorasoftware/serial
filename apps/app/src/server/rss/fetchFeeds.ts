@@ -10,7 +10,6 @@ import { feedItems, feedOriginRss, feedOrigins } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { logMessage } from "../logger";
 import { toApplicationFeedItem } from "../feeds/reader-bodies";
-import { enrichObservationImages } from "./observationImages";
 import { calculateNextFetch } from "./calculateNextFetch";
 import { getCachedFeedResult, setCachedFeedResult } from "./feedCache";
 import { fetchNebulaFeedData, fetchNebulaFeedDetails } from "./parsers/nebula";
@@ -23,15 +22,18 @@ import {
 } from "./parsers/youtube";
 import { computeItemHash } from "./hash";
 import { resolveItemDate } from "./publishedDate";
-import { writeObservedItems } from "./writeItems";
-import { rssObservation } from "./itemObservation";
+import { ingestRssItems } from "./ingestRssItems";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
 import { readFeedHttp } from "./feedHttp";
 import { isAuthorizedTestRssUrl } from "./testRssOrigin";
 import type { SQL } from "drizzle-orm";
 import type { RecoveryOutcome } from "../jetstream/recovery";
-import type { ApplicationFeedItem, DatabaseFeed } from "../db/schema";
+import type {
+  ApplicationFeedItem,
+  DatabaseFeed,
+  HydratedFeedOrigin,
+} from "../db/schema";
 import type { db as Database } from "../db";
 import type {
   ConditionalHeaders,
@@ -193,35 +195,57 @@ type FetchStateUpdate = Pick<
 > &
   Pick<typeof feedOriginRss.$inferInsert, "etag" | "lastModifiedHeader">;
 
+/** The HTTP validators a fetch returned, when they differ from the ones it sent. */
+function changedValidators(
+  origin: Pick<HydratedFeedOrigin, "rss">,
+  { etag, lastModifiedHeader }: FetchStateUpdate,
+) {
+  if (etag === undefined && lastModifiedHeader === undefined) return null;
+  const next = {
+    etag: etag ?? null,
+    lastModifiedHeader: lastModifiedHeader ?? null,
+  };
+  return next.etag === (origin.rss?.etag ?? null) &&
+    next.lastModifiedHeader === (origin.rss?.lastModifiedHeader ?? null)
+    ? null
+    : next;
+}
+
 /**
- * Every fetch-state write lands on the origin row, never on the Feed. It moves
- * an existing schedule only: an origin unscheduled since the fetch began
- * belongs to a Feed that was deactivated meanwhile.
+ * Every fetch-state write lands on the origin, never on the Feed: one row for
+ * the schedule, and the RSS detail row only when a validator changed. The
+ * schedule moves only if it still exists: an origin unscheduled since the
+ * fetch began belongs to a Feed that was deactivated meanwhile.
  */
 async function writeOriginFetchState(
   context: { db: typeof Database },
-  originId: number,
+  origin: Pick<HydratedFeedOrigin, "id" | "rss">,
   update: FetchStateUpdate,
   stillHolds?: SQL,
 ) {
-  const { etag, lastModifiedHeader, ...schedule } = update;
   await runDatabaseWrite(context.db, () =>
     dbSemaphore.run(() =>
-      context.db.transaction(async (tx) => {
-        await tx
-          .update(feedOrigins)
-          .set(schedule)
-          .where(
-            and(eq(feedOrigins.id, originId), originIsScheduled, stillHolds),
-          );
-        if (etag !== undefined || lastModifiedHeader !== undefined)
-          await tx
-            .update(feedOriginRss)
-            .set({ etag, lastModifiedHeader })
-            .where(eq(feedOriginRss.originId, originId));
-      }),
+      context.db
+        .update(feedOrigins)
+        .set({
+          lastFetchedAt: update.lastFetchedAt,
+          nextFetchAt: update.nextFetchAt,
+        })
+        .where(
+          and(eq(feedOrigins.id, origin.id), originIsScheduled, stillHolds),
+        ),
     ),
   );
+  const validators = changedValidators(origin, update);
+  if (validators)
+    await runDatabaseWrite(context.db, () =>
+      dbSemaphore.run(() =>
+        context.db
+          .update(feedOriginRss)
+          .set(validators)
+          .where(eq(feedOriginRss.originId, origin.id)),
+      ),
+    );
 }
 
 function fetchedState(
@@ -418,7 +442,7 @@ export async function* fetchAndInsertFeedData(
         );
         await writeOriginFetchState(
           context,
-          origin.id,
+          origin,
           { nextFetchAt: nextStreamFetch(outcome, now) },
           // A pause or a stream gap since the refresh keeps the origin due.
           outcome.status === "covered"
@@ -440,17 +464,10 @@ export async function* fetchAndInsertFeedData(
               siteUrl: data.url,
             },
           );
-          const observations = boundFeedItems(data.items).flatMap((item) => {
-            try {
-              return [rssObservation(item)];
-            } catch {
-              return [];
-            }
-          });
-          const written = await writeObservedItems(
+          const written = await ingestRssItems(
             context.db,
             feed,
-            await enrichObservationImages(observations),
+            boundFeedItems(data.items),
           );
           return {
             feedItems: written.items,
@@ -473,7 +490,7 @@ export async function* fetchAndInsertFeedData(
 
       if (cachedResult) {
         if (cachedResult.status === "error") {
-          await writeOriginFetchState(context, origin.id, {
+          await writeOriginFetchState(context, origin, {
             nextFetchAt: new Date(now.getTime() + ERROR_BACKOFF_MS),
           });
           return {
@@ -493,7 +510,7 @@ export async function* fetchAndInsertFeedData(
           });
           await writeOriginFetchState(
             context,
-            origin.id,
+            origin,
             fetchedState(now, cachedResult.fetchMetadata),
           );
           return {
@@ -509,7 +526,7 @@ export async function* fetchAndInsertFeedData(
         const written = await writeItems({ ...cachedResult.data, id: feed.id });
         await writeOriginFetchState(
           context,
-          origin.id,
+          origin,
           fetchedState(now, cachedResult.data.fetchMetadata),
         );
 
@@ -541,7 +558,7 @@ export async function* fetchAndInsertFeedData(
       }
 
       if (!feedData) {
-        await writeOriginFetchState(context, origin.id, {
+        await writeOriginFetchState(context, origin, {
           nextFetchAt: new Date(now.getTime() + ERROR_BACKOFF_MS),
         });
         const error = new Error(
@@ -556,7 +573,7 @@ export async function* fetchAndInsertFeedData(
 
       // Handle 304 Not Modified — skip insert, just update timestamps
       if ("notModified" in feedData && feedData.notModified) {
-        await writeOriginFetchState(context, origin.id, {
+        await writeOriginFetchState(context, origin, {
           lastFetchedAt: now,
           nextFetchAt: calculateNextFetch(feedData.fetchMetadata, now),
         });
@@ -580,7 +597,7 @@ export async function* fetchAndInsertFeedData(
         });
         await writeOriginFetchState(
           context,
-          origin.id,
+          origin,
           fetchedState(now, completedFeed.fetchMetadata),
         );
         return {
@@ -606,14 +623,14 @@ export async function* fetchAndInsertFeedData(
       const written = await writeItems(completedFeed);
       await writeOriginFetchState(
         context,
-        origin.id,
+        origin,
         fetchedState(now, completedFeed.fetchMetadata),
       );
       return { status: "success", ...written, ...ids };
     } catch (e) {
       // Push back nextFetchAt so a broken origin isn't retried every minute
       try {
-        await writeOriginFetchState(context, origin.id, {
+        await writeOriginFetchState(context, origin, {
           nextFetchAt: new Date(now.getTime() + ERROR_BACKOFF_MS),
         });
       } catch {

@@ -30,13 +30,18 @@ async function fetchPageImage(url: string, readPage: typeof readFeedHttp) {
   }
 }
 
+/** Its source gave no thumbnail and its page can be read for one. */
+export function needsPageImage(item: ItemObservation) {
+  return !item.thumbnail && /^https?:\/\//.test(item.url);
+}
+
 /** Optional enrichment during content ingest. Failure never creates retry work. */
 export async function enrichObservationImages(
   observations: ItemObservation[],
   readPage: typeof readFeedHttp = readFeedHttp,
 ) {
   const candidates = observations
-    .filter((item) => !item.thumbnail && /^https?:\/\//.test(item.url))
+    .filter(needsPageImage)
     .slice(0, PAGE_IMAGE_BATCH_SIZE);
   const images = new Map<ItemObservation, string | undefined>();
   for await (const result of workerPool(

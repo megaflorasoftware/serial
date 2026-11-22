@@ -466,6 +466,11 @@ export const feedOriginAtprotoDocuments = sqliteTable(
     eventRev: text("event_rev"),
     /** The source version underlying the last readable body; never replaced by a failed import. */
     bodyCid: text("body_cid"),
+    /**
+     * The content `$type` of that readable version, written with `bodyCid`.
+     * NULL without a readable body; empty when the readable content has no type.
+     */
+    bodyContentType: text("body_content_type"),
     reason: text("reason", { enum: DOCUMENT_LEDGER_REASONS }),
     retryAt: integer("retry_at", { mode: "timestamp_ms" }),
     attempts: integer("attempts").notNull().default(0),
@@ -483,6 +488,11 @@ export const feedOriginAtprotoDocuments = sqliteTable(
     index("feed_origin_atproto_document_retry_idx")
       .on(table.originId, table.retryAt)
       .where(sql`${table.status} = 'retry'`),
+    // Readable versions by content type: the platform check probes this
+    // instead of reading the retained sources.
+    index("feed_origin_atproto_document_body_type_idx")
+      .on(table.originId, table.bodyContentType)
+      .where(sql`${table.bodyContentType} is not null`),
   ],
 );
 
@@ -659,6 +669,14 @@ export const feedItemObservations = sqliteTable(
       .notNull()
       .references(() => feedItems.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: ["rss", "atproto"] }).notNull(),
+    // The narrow columns sit ahead of the value so reading them never walks
+    // the value's overflow pages.
+    /** Hash of the observation as parsed from its source, before image enrichment. */
+    digest: text("digest"),
+    /** The observation still awaits its one page image lookup. */
+    imagePending: integer("image_pending", { mode: "boolean" })
+      .notNull()
+      .default(false),
     value: text("value", { mode: "json" }).$type<ItemObservation>().notNull(),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.kind] })],
@@ -684,6 +702,9 @@ export const feedItemAliases = sqliteTable(
 
 export const feedItemSchema = createSelectSchema(feedItems);
 export type DatabaseFeedItem = typeof feedItems.$inferSelect;
+export type DatabaseFeedItemObservation =
+  typeof feedItemObservations.$inferSelect;
+export type DatabaseFeedItemAlias = typeof feedItemAliases.$inferSelect;
 
 export const applicationFeedItemSchema = feedItemSchema
   .omit({ normalizedUrl: true, content: true })
