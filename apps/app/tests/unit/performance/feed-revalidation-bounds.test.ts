@@ -4,6 +4,7 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
+import { feedRevalidationBudget } from "../../../scripts/performance/feed-revalidation-budgets";
 import { createFeedRevalidationWorkload } from "../../../scripts/performance/feed-revalidation-workload";
 
 it.each([1000, 10000, 50000])(
@@ -20,11 +21,13 @@ it.each([1000, 10000, 50000])(
       session.instrumentation.reset();
       expect((await workload.run()).origins).toHaveLength(2);
       const evidence = session.instrumentation.snapshot();
-      // Includes the one statement that tells subscription sync about the
-      // attached publication.
-      expect(evidence.statementCount).toBeLessThanOrEqual(21);
-      expect(evidence.materializedRows).toBeLessThanOrEqual(20);
-      expect(workload.reads).toBe(3);
+      expect(evidence.statementCount).toBeLessThanOrEqual(
+        feedRevalidationBudget.statements,
+      );
+      expect(evidence.materializedRows).toBeLessThanOrEqual(
+        feedRevalidationBudget.rows,
+      );
+      expect(workload.reads).toBe(feedRevalidationBudget.sourceReads);
       expect(
         evidence.statements.some((statement) =>
           statement.sql.includes('"serial_feed_item"'),

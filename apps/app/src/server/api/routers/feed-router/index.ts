@@ -11,6 +11,7 @@ import { revalidateFeed } from "~/server/feeds/revalidate";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 import { setFeedsActive } from "~/server/feeds/activation";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 import { loadUserFeedsWithOrigins, withOrigins } from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
@@ -136,6 +137,7 @@ export const createFromSubscriptionImport = protectedProcedure
               ),
             ),
           );
+          wakeRequestedSync(context.db, result.success && result.syncRequested);
           return result.success
             ? {
                 feedUrl: feed.feedUrl,
@@ -185,9 +187,7 @@ export const createFromSubscriptionImport = protectedProcedure
 const deleteFeed = protectedProcedure
   .input(z.number())
   .handler(async ({ context, input }) => {
-    await context.db.transaction((tx) =>
-      deleteFeedsAtUserRequest(tx, context.user.id, [input]),
-    );
+    await deleteFeedsAtUserRequest(context.db, context.user.id, [input]);
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),
@@ -323,9 +323,7 @@ export const bulkDelete = protectedProcedure
   .handler(async ({ context, input }) => {
     if (input.feedIds.length === 0) return;
 
-    await context.db.transaction((tx) =>
-      deleteFeedsAtUserRequest(tx, context.user.id, input.feedIds),
-    );
+    await deleteFeedsAtUserRequest(context.db, context.user.id, input.feedIds);
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),

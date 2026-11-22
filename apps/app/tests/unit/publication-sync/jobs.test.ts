@@ -313,6 +313,59 @@ it("reports pending only for a run in flight or a request about to start", async
     subscriptionJobExpiresAt: new Date(Date.now() + 60_000),
   });
   expect(await status()).toBe(true);
+  // A continuation due within seconds still has deferred work to pick up.
+  await set({
+    subscriptionNextAttemptAt: new Date(Date.now() + 1000),
+    subscriptionJobExpiresAt: null,
+    subscriptionJobResult: { ...completed(), status: "partial", deferred: 2 },
+  });
+  expect(await status()).toBe(true);
+  // The same deferred work scheduled further out is not worth polling for.
+  await set({ subscriptionNextAttemptAt: new Date(Date.now() + 60_000) });
+  expect(await status()).toBe(false);
+});
+it("stops reporting pending when sync is turned off while an earlier worker holds its lease", async () => {
+  await save();
+  await fixture.database.update(atprotoConnections).set({
+    subscriptionJobToken: "earlier-worker",
+    subscriptionJobExpiresAt: new Date(Date.now() + 300_000),
+  });
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: true,
+    running: true,
+  });
+  await save("none");
+  // Nothing is scheduled for the new request; the lease belongs to the old one.
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    running: true,
+    result: null,
+  });
+});
+it("keeps a request made during a run and still records the run's result", async () => {
+  await save();
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionNextAttemptAt: new Date(0) });
+  const requestedAt = new Date();
+  const continued = await runJobs(
+    async () => {
+      // The user adds or deletes a publication Feed while the run is in flight.
+      await fixture.database.update(atprotoConnections).set({
+        subscriptionNextAttemptAt: requestedAt,
+        subscriptionRepoRev: null,
+      });
+      return completed();
+    },
+    { background: true },
+  );
+  expect(continued).toBe(true);
+  expect(await connection()).toMatchObject({
+    subscriptionNextAttemptAt: requestedAt,
+    subscriptionRepoRev: null,
+    subscriptionJobToken: null,
+    subscriptionJobResult: { exported: 1 },
+  });
 });
 it("schedules a missing check only for a connection that syncs and has none", async () => {
   const schedule = () => scheduleMissingSyncCheck(fixture.database, "owner");

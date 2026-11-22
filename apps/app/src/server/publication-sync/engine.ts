@@ -15,6 +15,7 @@ import {
   assertSubscriptionSyncCurrent,
   claimSubscriptionSync,
   renewSubscriptionSync,
+  scheduleUnchangedSince,
   SubscriptionSyncChangedError,
   syncClaimCondition,
 } from "./state";
@@ -546,7 +547,13 @@ export async function syncPublicationSubscriptions(input: {
           subscriptionSyncCursor: cursor,
           subscriptionRepoRev: finishedRev,
         })
-        .where(syncClaimCondition(connection));
+        .where(
+          and(
+            syncClaimCondition(connection),
+            // A Feed changed after this run read the local origins.
+            scheduleUnchangedSince(connection.subscriptionNextAttemptAt),
+          ),
+        );
   } catch (error) {
     counts.failed++;
     logError("[publication-sync] sync failed", error);

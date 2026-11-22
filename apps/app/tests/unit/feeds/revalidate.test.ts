@@ -13,7 +13,12 @@ import {
   user,
 } from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
+// The real wake would start a sync run against the PDS.
+vi.mock("~/server/publication-sync/wake", () => ({
+  wakeRequestedSync: vi.fn(),
+}));
 const rss: OriginEvidence = {
   origin: newRssFeedDetails({
     url: "https://example.com/rss",
@@ -290,6 +295,18 @@ describe("telling subscription sync about an attached publication", () => {
     expect((await run(feed.id)).origins).toHaveLength(2);
     expect((await connection()).subscriptionRepoRev).toBeNull();
     expect((await connection()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, true);
+  });
+  it("leaves sync alone when revalidation attaches an RSS origin to a publication Feed", async () => {
+    const feed = await seed([publication.origin]);
+    await cleanConnection();
+    expect((await run(feed.id)).origins).toHaveLength(2);
+    // The subscription already existed; only its RSS source is new.
+    expect(await connection()).toMatchObject({
+      subscriptionRepoRev: "clean",
+      subscriptionNextAttemptAt: null,
+    });
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
   });
   it("leaves sync alone when revalidation attaches nothing", async () => {
     const feed = await seed([rss.origin, publication.origin]);

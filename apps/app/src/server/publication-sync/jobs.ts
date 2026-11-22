@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { checkPublicationSync, syncCheckColumns } from "./check";
 import { nextPublicationSyncAttempt } from "./requests";
+import { scheduleUnchangedSince } from "./state";
 import type { LatestRev, SyncCheckRow } from "./check";
 import type { syncPublicationSubscriptions } from "./engine";
 import type { db } from "~/server/db";
@@ -45,15 +46,17 @@ export async function getPublicationSyncJob(
   if (!row?.runId) return null;
   const now = Date.now();
   const running = row.leaseExpires !== null && row.leaseExpires.getTime() > now;
-  // A request with no result yet is about to start. A recurring check or a
-  // retry scheduled further out already has its result and is not worth polling.
-  const starting =
-    row.result === null &&
-    row.next !== null &&
-    row.next.getTime() <= now + PENDING_WINDOW_MS;
+  const due =
+    row.next !== null && row.next.getTime() <= now + PENDING_WINDOW_MS;
+  // A request is unfinished until it has a result, and again while that result
+  // reports deferred work for a continuation to pick up. A recurring check or
+  // a retry scheduled further out already has its result.
+  const unfinished = row.result === null || row.result.deferred > 0;
   return {
     runId: row.runId,
-    pending: running || starting,
+    // A lease with nothing scheduled belongs to a request the user has since
+    // replaced, such as turning sync off while a worker was still running.
+    pending: (running && row.next !== null) || (due && unfinished),
     running,
     progress: row.progress,
     result: row.result,
@@ -70,6 +73,11 @@ type DueJob = SyncCheckRow & { scheduledAt: Date | null; role: string | null };
 
 async function refreshesInBackground(account: Account) {
   return (await automaticRssOwnerForAccount(account)) === "background-task";
+}
+
+/** `next`, unless a request made during the run has already moved the schedule. */
+function scheduleUnlessRequested(claimedAt: Date | null, next: Date | null) {
+  return sql<Date | null>`case when ${scheduleUnchangedSince(claimedAt)} then ${next === null ? null : next.getTime()} else ${connections.subscriptionNextAttemptAt} end`;
 }
 
 function earliest(...times: Array<Date | null | undefined>) {
@@ -123,7 +131,7 @@ export async function runPublicationSyncJobs(
         and(
           eq(connections.id, job.id),
           // A request made since the read moves the schedule and clears the revision.
-          eq(connections.subscriptionNextAttemptAt, job.scheduledAt!),
+          scheduleUnchangedSince(job.scheduledAt),
           job.subscriptionRepoRev === null
             ? isNull(connections.subscriptionRepoRev)
             : eq(connections.subscriptionRepoRev, job.subscriptionRepoRev),
@@ -205,14 +213,21 @@ export async function runPublicationSyncJobs(
     const accumulated = { ...result };
     for (const key of ["imported", "exported", "inactive", "removed"] as const)
       accumulated[key] += previous?.[key] ?? 0;
+    let scheduled = next;
     try {
-      await database
+      // The result always lands; the schedule only when no Feed changed mid-run.
+      const [finished] = await database
         .update(connections)
         .set({
           subscriptionJobResult: accumulated,
-          subscriptionNextAttemptAt: next,
+          subscriptionNextAttemptAt: scheduleUnlessRequested(
+            job.subscriptionNextAttemptAt,
+            next,
+          ),
         })
-        .where(claim);
+        .where(claim)
+        .returning({ next: connections.subscriptionNextAttemptAt });
+      if (finished) scheduled = finished.next;
     } finally {
       // A later settings save keeps its request, but the old worker releases its lease.
       await database
@@ -225,7 +240,7 @@ export async function runPublicationSyncJobs(
           ),
         );
     }
-    return next !== null && next.getTime() <= Date.now() + 1000;
+    return scheduled !== null && scheduled.getTime() <= Date.now() + 1000;
   }))
     continued ||= again;
   return continued || rows.length === JOB_PAGE_SIZE;

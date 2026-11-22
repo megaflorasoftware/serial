@@ -11,7 +11,12 @@ import {
   user,
 } from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
+// The real wake would start a sync run against the PDS.
+vi.mock("~/server/publication-sync/wake", () => ({
+  wakeRequestedSync: vi.fn(),
+}));
 vi.mock("~/server/feeds/resolveSelection", () => ({
   resolveFeedSelection: vi.fn(),
 }));
@@ -128,6 +133,12 @@ describe("telling subscription sync about a user's new Feed", () => {
       subscriptionRequestId: "last-request",
     });
     expect((await connection()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    // The run starts once the Feed has committed, not at the next scheduled task.
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, true);
+  });
+  it("does not wake sync for a user who has it off", async () => {
+    await add();
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
   });
   it("requests a run when an Atmosphere origin is attached to an existing Feed", async () => {
     await insertFeedWithOrigins(fixture.database, {
@@ -147,5 +158,6 @@ describe("telling subscription sync about a user's new Feed", () => {
       subscriptionRepoRev: "clean",
       subscriptionNextAttemptAt: null,
     });
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
   });
 });

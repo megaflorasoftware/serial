@@ -21,6 +21,12 @@ import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { persistAtprotoSyncSettings } from "~/server/auth/atproto/sync-settings";
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
 import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
+
+// The real wake would start a second run beside the one under test.
+vi.mock("~/server/publication-sync/wake", () => ({
+  wakeRequestedSync: vi.fn(),
+}));
 
 let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
@@ -690,11 +696,10 @@ describe("deciding before a run", () => {
     await fixture.database
       .update(atprotoConnections)
       .set({ subscriptionNextAttemptAt: null });
-    await fixture.database.transaction((tx) =>
-      deleteFeedsAtUserRequest(tx, "owner", [local.id]),
-    );
+    await deleteFeedsAtUserRequest(fixture.database, "owner", [local.id]);
     expect(await stored()).toMatchObject({ subscriptionRepoRev: null });
     expect((await stored()).subscriptionNextAttemptAt).toBeInstanceOf(Date);
+    expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, true);
     expect(await run()).toMatchObject({ removed: 1 });
     expect(records).toHaveLength(0);
   });
@@ -741,6 +746,55 @@ describe("deciding before a run", () => {
     expect(await stored()).toMatchObject({
       subscriptionNextAttemptAt: null,
       subscriptionRepoRev: "2",
+    });
+  });
+  /** The user adds a publication Feed after the run has read the local origins. */
+  const addFeedMidRun = (name: string) =>
+    vi.mocked(store.list).mockImplementationOnce(async () => {
+      const added = await addLocal(name);
+      await requestSyncForFeedChange(fixture.database, "owner", [added.id]);
+      return { records: [...records], invalidRecordUris: [] };
+    });
+  const expectStillRequested = async () => {
+    const after = await stored();
+    expect(after.subscriptionRepoRev).toBeNull();
+    expect(after.subscriptionNextAttemptAt!.getTime()).toBeGreaterThan(0);
+    expect(after.subscriptionNextAttemptAt!.getTime()).toBeLessThanOrEqual(
+      Date.now(),
+    );
+    return after;
+  };
+  it("keeps a Feed added during an inline run requested, and reconciles it next", async () => {
+    await method("export");
+    // Nothing is scheduled for an account whose refresh the client owns.
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: null });
+    addFeedMidRun("late");
+    expect(await run()).toMatchObject({ status: "completed", exported: 0 });
+    await expectStillRequested();
+    expect(await run()).toMatchObject({ exported: 1 });
+  });
+  it("keeps a Feed added during a job run requested, and still records that run's result", async () => {
+    await method("export");
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: new Date(0) });
+    addFeedMidRun("late");
+    const sync: typeof syncPublicationSubscriptions = (input) =>
+      syncPublicationSubscriptions({
+        ...input,
+        dependencies: { store, invalidate },
+      });
+    // The job reports more work, so the worker comes back without the timer.
+    expect(await runJobs(sync)).toBe(true);
+    expect(await expectStillRequested()).toMatchObject({
+      subscriptionJobToken: null,
+      subscriptionJobResult: { status: "completed", exported: 0 },
+    });
+    await runJobs(sync);
+    expect(await stored()).toMatchObject({
+      subscriptionJobResult: { exported: 1 },
     });
   });
   it("leaves a local-only publication alone when only import is on", async () => {

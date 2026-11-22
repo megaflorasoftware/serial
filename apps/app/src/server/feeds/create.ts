@@ -13,6 +13,7 @@ import {
   atmosphereFeedIds,
   requestSyncForFeedChange,
 } from "~/server/publication-sync/requests";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
 export async function createFeedsForUser(input: {
   database: typeof defaultDatabase;
@@ -34,6 +35,7 @@ export async function createFeedsForUser(input: {
     input.database,
     input.userId,
   );
+  let syncRequested = false;
   const results = await input.database.transaction(async (transaction) => {
     const [categoriesOwned, viewsOwned] = await Promise.all([
       verifyContentCategoriesOwnedByUser({
@@ -96,13 +98,14 @@ export async function createFeedsForUser(input: {
       newFeedCount++;
       results.push({ feed: insertedFeed, created: true as const });
     }
-    await requestSyncForFeedChange(
+    syncRequested = await requestSyncForFeedChange(
       transaction,
       input.userId,
       atmosphereFeedIds(changedFeeds),
     );
     return results;
   });
+  wakeRequestedSync(input.database, syncRequested);
 
   const errors = results.filter(
     (result): result is { error: string } => "error" in result,

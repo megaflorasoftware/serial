@@ -35,14 +35,15 @@ export function nextPublicationSyncAttempt(result: PublicationSyncResult) {
  * The user added or deleted these Feeds. When one of them has an Atmosphere
  * origin, sync reconciles now, without a new request for the interface to
  * announce. Call it while the origins exist: after an insert, before a delete.
+ * Resolves to whether a run was requested, for the caller to wake after commit.
  */
 export async function requestSyncForFeedChange(
   database: FeedDatabase,
   userId: string,
   feedIds: number[],
 ) {
-  if (!feedIds.length) return;
-  await database
+  if (!feedIds.length) return false;
+  const requested = await database
     .update(atprotoConnections)
     .set({ subscriptionNextAttemptAt: new Date(), ...FULL_RECONCILE })
     .where(
@@ -62,6 +63,7 @@ export async function requestSyncForFeedChange(
         ),
       ),
     );
+  return requested.rowsAffected > 0;
 }
 
 /** Feeds whose origins include the Atmosphere, when the caller already holds them. */

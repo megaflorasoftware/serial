@@ -1,21 +1,27 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { FeedDatabase } from "./origins";
+import type { db } from "~/server/db";
 import { feeds, views, viewSections } from "~/server/db/schema";
 import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
+import { wakeRequestedSync } from "~/server/publication-sync/wake";
 
 /**
  * A deletion the user asked for. Subscription sync hears of it first, while the
- * Feeds' origins still say whether a publication is going. Sync's own removals
- * call `deleteUserFeeds` directly.
+ * Feeds' origins still say whether a publication is going, and runs once the
+ * deletion has committed. Sync's own removals call `deleteUserFeeds` directly.
  */
 export async function deleteFeedsAtUserRequest(
-  database: FeedDatabase,
+  database: typeof db,
   userId: string,
   feedIds: number[],
 ) {
-  await requestSyncForFeedChange(database, userId, feedIds);
-  return deleteUserFeeds(database, userId, feedIds);
+  const { deleted, syncRequested } = await database.transaction(async (tx) => ({
+    syncRequested: await requestSyncForFeedChange(tx, userId, feedIds),
+    deleted: await deleteUserFeeds(tx, userId, feedIds),
+  }));
+  wakeRequestedSync(database, syncRequested);
+  return deleted;
 }
 
 /** Caller owns the transaction; Feed deletion and layout cleanup commit together. */

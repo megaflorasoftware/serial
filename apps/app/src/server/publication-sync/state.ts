@@ -21,6 +21,17 @@ export function syncEnabledFor(userId: string) {
   );
 }
 
+/**
+ * No request has moved the schedule since `claimedAt` was read. A Feed the user
+ * adds or deletes mid-run moves it, so a write guarded by this cannot mark that
+ * change as synced.
+ */
+export function scheduleUnchangedSince(claimedAt: Date | null) {
+  return claimedAt === null
+    ? isNull(atprotoConnections.subscriptionNextAttemptAt)
+    : eq(atprotoConnections.subscriptionNextAttemptAt, claimedAt);
+}
+
 export async function claimSubscriptionSync(
   database: typeof Database,
   userId: string,
