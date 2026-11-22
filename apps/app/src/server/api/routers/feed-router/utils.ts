@@ -188,8 +188,6 @@ export type InsertFeedWithCategoriesSuccess = {
   feedId: number;
   feed: ApplicationFeed;
   reused: boolean;
-  /** The insert asked subscription sync to run; wake it once this commits. */
-  syncRequested: boolean;
 };
 
 export type InsertFeedWithCategoriesError = {
@@ -227,11 +225,8 @@ export async function insertFeedWithCategories(
       existingFeed: schema.feedsSchema.parse(newFeedRow),
     };
   }
-  const syncRequested = await requestSyncForFeedChange(
-    db,
-    userId,
-    atmosphereFeedIds([newFeedRow]),
-  );
+  // Imports insert many Feeds; the per-minute task runs the requested sync once.
+  await requestSyncForFeedChange(db, userId, atmosphereFeedIds([newFeedRow]));
   if (created.created) {
     await applyFeedCategories(db, userId, [
       { feedId: newFeedRow.id, categories: feedInput.categories },
@@ -249,6 +244,5 @@ export async function insertFeedWithCategories(
     feedId: newFeedRow.id,
     feed: applicationFeed!,
     reused: !created.created,
-    syncRequested,
   };
 }

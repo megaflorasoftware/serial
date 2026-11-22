@@ -57,7 +57,6 @@ import { queryNavigationSnapshot } from "~/server/navigation/snapshot";
 import { reconciliationInputSchema } from "~/server/reconciliation/input";
 import { reconcileApplicationState as streamApplicationReconciliation } from "~/server/reconciliation";
 import { fetchDueSources as runFetchDueSources } from "~/server/rss/fetchDueSources";
-import { wakeRequestedSync } from "~/server/publication-sync/wake";
 import { env } from "~/env";
 import { getReconciliationTargetKey } from "~/lib/reconciliation";
 
@@ -820,10 +819,6 @@ export const streamingImport = protectedProcedure
           }),
           timeoutPromise,
         ]);
-        wakeRequestedSync(
-          context.db,
-          insertResult.success && insertResult.syncRequested,
-        );
         return reportInsertResult(insertResult);
       } catch (error) {
         captureException(error);

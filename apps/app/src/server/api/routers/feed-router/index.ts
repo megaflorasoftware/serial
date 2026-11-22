@@ -11,7 +11,6 @@ import { revalidateFeed } from "~/server/feeds/revalidate";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 import { setFeedsActive } from "~/server/feeds/activation";
-import { wakeRequestedSync } from "~/server/publication-sync/wake";
 import { loadUserFeedsWithOrigins, withOrigins } from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
@@ -137,7 +136,6 @@ export const createFromSubscriptionImport = protectedProcedure
               ),
             ),
           );
-          wakeRequestedSync(context.db, result.success && result.syncRequested);
           return result.success
             ? {
                 feedUrl: feed.feedUrl,
