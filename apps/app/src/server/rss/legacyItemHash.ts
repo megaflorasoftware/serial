@@ -1,6 +1,6 @@
 import Parser from "rss-parser";
 import { z } from "zod";
-import { MAX_ITEM_CONTENT_BYTES } from "./feedBounds";
+import { MAX_ITEM_CONTENT_BYTES, truncateUtf8 } from "./feedBounds";
 import { computeItemHash } from "./hash";
 import type { LegacyItemInputs, RSSContent } from "./types";
 
@@ -90,19 +90,27 @@ function previousFeedThumbnail(item: PreviousItem) {
   return html?.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
 }
 
-/** The previous body as affixes around the current one, or whole when short. */
+/**
+ * The previous body as affixes around the current one, or whole when short.
+ * Both ingests bound a body, and the previous one hashed what was left. Where
+ * the bound cuts inside the current body the trail was never hashed, so it is
+ * not carried: the bounded current body would otherwise end short of the cut
+ * and let the trail back in.
+ */
 function carriedBody(
   previous: string,
   current: string,
 ): LegacyItemInputs["content"] | undefined {
-  // Past the stored bound the previous ingest hashed a truncated body.
-  if (Buffer.byteLength(previous) > MAX_ITEM_CONTENT_BYTES) return undefined;
   const start = current ? previous.indexOf(current) : -1;
-  if (start >= 0 && previous.length - current.length <= MAX_AFFIX_CHARACTERS)
+  if (start >= 0 && previous.length - current.length <= MAX_AFFIX_CHARACTERS) {
+    const lead = previous.slice(0, start);
+    const cutInsideCurrent =
+      Buffer.byteLength(lead + current) >= MAX_ITEM_CONTENT_BYTES;
     return {
-      lead: previous.slice(0, start),
-      trail: previous.slice(start + current.length),
+      lead,
+      trail: cutInsideCurrent ? "" : previous.slice(start + current.length),
     };
+  }
   return previous.length <= MAX_CARRIED_BODY_CHARACTERS
     ? { text: previous }
     : undefined;
@@ -165,10 +173,13 @@ export function legacyItemHash(item: RSSContent, storedThumbnail: string) {
     contentId: item.id,
     title: legacy.title,
     author: legacy.author,
-    content:
+    // The previous ingest bounded the body before hashing it.
+    content: truncateUtf8(
       "text" in legacy.content
         ? legacy.content.text
         : legacy.content.lead + (item.content ?? "") + legacy.content.trail,
+      MAX_ITEM_CONTENT_BYTES,
+    ),
     thumbnail: legacy.thumbnail ?? storedThumbnail,
     postedAt: new Date(legacy.publishedDate),
   });

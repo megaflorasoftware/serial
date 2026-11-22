@@ -18,6 +18,7 @@ import {
   feedsSchema,
   PLATFORM_DEFAULT_OPEN_LOCATION,
 } from "~/server/db/schema";
+import { applyOriginMetadata } from "~/server/rss/originMetadata";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 /**
@@ -394,15 +395,23 @@ export async function createOrReuseFeed(
     input.details.origins,
   );
   if (existing) {
-    const attached = existing.origins.length < input.details.origins.length;
+    const feed = await attachMissingFeedOrigins(
+      database,
+      existing,
+      input.details.origins,
+    );
+    const joined = feed.origins.filter(
+      (origin) => !existing.origins.includes(origin),
+    );
     return {
-      feed: await attachMissingFeedOrigins(
+      feed: await presentedWithOrigins(
         database,
-        existing,
-        input.details.origins,
+        feed,
+        joined,
+        input.details.siteUrl,
       ),
       created: false,
-      attached,
+      attached: joined.length > 0,
     };
   }
   return {
@@ -410,4 +419,41 @@ export async function createOrReuseFeed(
     created: true,
     attached: false,
   };
+}
+
+/**
+ * A Feed's name, image and site URL derive from its origins. A fetch rewrites
+ * them only when a source says something new, so an origin that joins an
+ * existing Feed takes its place in them here. Only a Publication that joins
+ * can move the platform, which derives from its documents.
+ */
+async function presentedWithOrigins(
+  database: FeedDatabase,
+  feed: DatabaseFeedWithOrigins,
+  joined: HydratedFeedOrigin[],
+  siteUrl: string | null | undefined,
+) {
+  let changed = false;
+  for (const origin of joined) {
+    // Each derivation must see the preceding one in the caller's transaction.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const applied = await applyOriginMetadata(
+      database,
+      { origin, feed },
+      {
+        name: origin.sourceName ?? "",
+        imageUrl: origin.sourceImageUrl,
+        description: origin.sourceDescription,
+        siteUrl,
+      },
+      { platform: origin.kind === FEED_ORIGIN_KIND.ATPROTO },
+    );
+    changed ||= applied;
+  }
+  if (!changed) return feed;
+  const [presented] = await database
+    .select()
+    .from(feeds)
+    .where(eq(feeds.id, feed.id));
+  return presented ? { ...presented, origins: feed.origins } : feed;
 }

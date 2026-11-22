@@ -269,10 +269,11 @@ the Jetstream workload.
 
 `pnpm benchmark:ingest` also fetches one text feed document of 200 items
 again, once unchanged and once with three items edited. The unchanged fetch
-must cost the two identity statements and nothing else: no item body or
-observation value read, no page fetch and no write. The runner exits nonzero
-when either case exceeds the structural budget in
-`scripts/performance/text-ingest-budgets.ts`, which
+must cost the two narrow statements and nothing else: no item body or
+observation value read, no column stored behind an observed item's body read
+from its row, no page fetch and no write. The runner exits nonzero when either
+case exceeds the structural budget in
+`scripts/performance/text-ingest-budgets.ts`, whose checks
 `tests/unit/performance/text-ingest-bounds.test.ts` shares.
 `tests/unit/performance/text-fetch-bounds.test.ts` holds the same fetch at the
 pipeline level to one origin row written and no transaction.

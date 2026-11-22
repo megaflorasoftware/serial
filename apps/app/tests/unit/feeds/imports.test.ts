@@ -215,7 +215,8 @@ it("preserves a concurrent rename but rejects a changed origin", async () => {
   const prepared = await prepare();
   await fixture.database
     .update(feeds)
-    .set({ name: "Renamed", isActive: false })
+    // A rename records that the reader chose the name.
+    .set({ name: "Renamed", nameEditedAt: new Date(), isActive: false })
     .where(eq(feeds.id, original.id));
   expect(await commit(prepared)).toMatchObject({
     feed: { name: "Renamed", isActive: false },

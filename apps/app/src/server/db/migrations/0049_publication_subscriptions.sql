@@ -178,7 +178,6 @@ CREATE TABLE `serial_feed_item_observation` (
 	`item_id` text NOT NULL,
 	`kind` text NOT NULL,
 	`digest` text,
-	`image_pending` integer DEFAULT false NOT NULL,
 	`value` text NOT NULL,
 	PRIMARY KEY(`item_id`, `kind`),
 	FOREIGN KEY (`item_id`) REFERENCES `serial_feed_item`(`id`) ON UPDATE no action ON DELETE cascade

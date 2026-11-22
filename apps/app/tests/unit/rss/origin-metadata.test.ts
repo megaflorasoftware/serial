@@ -5,6 +5,7 @@ import type { HydratedFeedOrigin } from "~/server/db/schema";
 import { feedOrigins, feeds, user } from "~/server/db/schema";
 import {
   attachMissingFeedOrigins,
+  createOrReuseFeed,
   insertFeedWithOrigins,
 } from "~/server/feeds/origins";
 import { refreshOriginMetadata } from "~/server/rss/originMetadata";
@@ -124,6 +125,7 @@ it("leaves the site URL to the Publication with one read and no transaction", as
     },
   ]);
   const transaction = vi.spyOn(fixture.database, "transaction");
+  const reads = vi.spyOn(fixture.database, "select");
   expect(
     await refreshOriginMetadata(
       fixture.database,
@@ -132,5 +134,61 @@ it("leaves the site URL to the Publication with one read and no transaction", as
     ),
   ).toBe(false);
   expect(transaction).not.toHaveBeenCalled();
+  expect(reads).toHaveBeenCalledTimes(1);
+  reads.mockRestore();
   expect((await storedFeed()).siteUrl).toBe(SAID.siteUrl);
+});
+
+it("presents a Publication that joins an existing Feed without waiting for a fetch", async () => {
+  const before = await storedFeed();
+  const joined = await createOrReuseFeed(fixture.database, {
+    userId: "reader",
+    isActive: true,
+    details: {
+      name: "Publication",
+      platform: "website",
+      imageUrl: "https://pub.example.com/icon.png",
+      siteUrl: "https://pub.example.com",
+      origins: [
+        { kind: "rss", locator: FEED_URL },
+        {
+          kind: "atproto",
+          locator: "at://did:plc:alice/site.standard.publication/site",
+          sourceName: "Publication",
+          sourceImageUrl: "https://pub.example.com/icon.png",
+        },
+      ],
+    },
+  });
+  expect(joined).toMatchObject({ created: false, attached: true });
+  const presented = {
+    name: "Publication",
+    imageUrl: "https://pub.example.com/icon.png",
+    siteUrl: "https://pub.example.com",
+  };
+  // The Publication outranks the feed for the name, image and site URL.
+  expect(joined.feed).toMatchObject(presented);
+  const stored = await storedFeed();
+  expect(stored).toMatchObject(presented);
+  expect(stored.updatedAt.getTime()).toBeGreaterThan(
+    before.updatedAt.getTime(),
+  );
+});
+
+it("writes nothing more when the same origins are offered again", async () => {
+  const details = {
+    name: "Feed",
+    platform: "website" as const,
+    imageUrl: "",
+    origins: [{ kind: "rss" as const, locator: FEED_URL }],
+  };
+  const before = await storedFeed();
+  expect(
+    await createOrReuseFeed(fixture.database, {
+      userId: "reader",
+      isActive: true,
+      details,
+    }),
+  ).toMatchObject({ created: false, attached: false });
+  expect(await storedFeed()).toEqual(before);
 });

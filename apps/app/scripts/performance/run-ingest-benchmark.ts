@@ -7,7 +7,11 @@ import {
 } from "./database";
 import { createObservationImageWorkload } from "./observation-image-workload";
 import { createJetstreamWorkload } from "./jetstream-workload";
-import { textIngestBudget } from "./text-ingest-budgets";
+import {
+  readsBehindItemBody,
+  textIngestBudget,
+  textIngestOverruns,
+} from "./text-ingest-budgets";
 import { createTextIngestWorkload } from "./text-ingest-workload";
 
 const profiles = { small: 1_000, representative: 10_000, stress: 50_000 };
@@ -94,6 +98,7 @@ try {
     session.database,
     TEXT_FEED_ITEMS,
   );
+  let unchangedStatements: string[] = [];
   for (const [name, operation, edits] of [
     ["text-fetch-unchanged", "unchanged", 0],
     ["text-fetch-changed", "changed", TEXT_FEED_EDITS],
@@ -109,13 +114,17 @@ try {
       const result = await textFeed.run(operation, edits);
       const ms = performance.now() - started;
       const evidence = session.instrumentation.snapshot();
-      if (
-        result.written !== edits ||
-        evidence.statementCount > budget.statements ||
-        evidence.materializedRows > budget.rows ||
-        textFeed.pages > 0
-      )
-        throw new Error(`${name} exceeded its structural budget`);
+      const overruns = [
+        ...textIngestOverruns(budget, evidence),
+        ...(result.written === edits ? [] : ["written items"]),
+        ...(textFeed.pages > 0 ? ["page requests"] : []),
+      ];
+      if (overruns.length)
+        throw new Error(
+          `${name} exceeded its structural budget: ${overruns.join(", ")}`,
+        );
+      if (operation === "unchanged")
+        unchangedStatements = evidence.statements.map((entry) => entry.sql);
       if (i >= 3)
         samples.push({
           ms,
@@ -127,6 +136,18 @@ try {
     const times = samples.map((sample) => sample.ms).sort((a, b) => a - b);
     results[name] = { medianMs: times[7], p95Ms: times[14], samples };
   }
+  // Programs are inspected after the writes: local libSQL EXPLAIN can retain a read lock.
+  const behindBody = (
+    await Promise.all(
+      unchangedStatements.map((sql) =>
+        readsBehindItemBody(session.baseClient, sql),
+      ),
+    )
+  ).flat();
+  if (behindBody.length)
+    throw new Error(
+      `text-fetch-unchanged read behind an item's body: ${behindBody.join(", ")}`,
+    );
   mkdirSync("benchmarks/results", { recursive: true });
   const output = `benchmarks/results/ingest-${profile}.json`;
   writeFileSync(

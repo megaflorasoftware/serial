@@ -24,20 +24,16 @@ import type { db } from "../db";
 import type { DatabaseFeed, DatabaseFeedItem } from "../db/schema";
 import { dbSemaphore } from "~/lib/semaphore";
 
-/** An observation on its way in, with what is known of its page image lookup. */
+/** An observation on its way in. */
 export type IncomingObservation = {
   observation: ItemObservation;
   /** Identifies what its source stated; stored so the next fetch can tell without the value. */
   digest: string;
-  /** The lookup has not run yet. A page image stored for the same URL stands until it does. */
-  imagePending?: boolean;
+  /** No page lookup ran for it this time. A page image stored for the same URL stands. */
+  keepStoredPageImage?: boolean;
 };
 
-type StoredObservation = {
-  value: ItemObservation;
-  digest: string | null;
-  imagePending: boolean;
-};
+type StoredObservation = { value: ItemObservation; digest: string | null };
 type Sources = Partial<Record<ItemObservation["kind"], StoredObservation>>;
 
 type ItemWrites = {
@@ -56,8 +52,6 @@ type CommitGuards = {
 };
 
 const NOTHING_WRITTEN = { items: [], removedItemIds: [] as string[] };
-/** Reads repeated this many times against concurrent writers before one transaction reads and writes. */
-const OPTIMISTIC_ATTEMPTS = 2;
 
 function combineUserState(keep: DatabaseFeedItem, other: DatabaseFeedItem) {
   for (const [field, timestamp] of [
@@ -80,19 +74,12 @@ function combineUserState(keep: DatabaseFeedItem, other: DatabaseFeedItem) {
 /** Each stored item's observations; an item from before observations existed speaks for itself. */
 function storedSources({ items, observations }: MatchedItems) {
   const sources = new Map<string, Sources>();
-  for (const { itemId, kind, value, digest, imagePending } of observations)
-    sources.set(itemId, {
-      ...sources.get(itemId),
-      [kind]: { value, digest, imagePending },
-    });
+  for (const { itemId, kind, value, digest } of observations)
+    sources.set(itemId, { ...sources.get(itemId), [kind]: { value, digest } });
   for (const item of items)
     if (!sources.has(item.id))
       sources.set(item.id, {
-        rss: {
-          value: legacyObservation(item),
-          digest: null,
-          imagePending: false,
-        },
+        rss: { value: legacyObservation(item), digest: null },
       });
   return sources;
 }
@@ -121,12 +108,12 @@ function datedObservation(
   };
 }
 
-/** Until its own lookup runs, an observation keeps the page image stored for the same URL. */
+/** With no lookup of its own, an observation keeps the page image stored for the same URL. */
 function withStandingPageImage(
-  { observation, imagePending }: IncomingObservation,
+  { observation, keepStoredPageImage }: IncomingObservation,
   stored: StoredObservation | undefined,
 ): ItemObservation {
-  return imagePending &&
+  return keepStoredPageImage &&
     stored?.value.url === observation.url &&
     stored.value.pageImageUrl !== undefined
     ? { ...observation, pageImageUrl: stored.value.pageImageUrl }
@@ -140,7 +127,6 @@ function sameStoredObservation(
   return (
     previous !== undefined &&
     previous.digest === next.digest &&
-    previous.imagePending === next.imagePending &&
     JSON.stringify(previous.value) === JSON.stringify(next.value)
   );
 }
@@ -202,7 +188,6 @@ function planItemWrites(
         now,
       ),
       digest: entry.digest,
-      imagePending: Boolean(entry.imagePending),
     };
     sources.set(id, values);
     touched.add(id);
@@ -295,42 +280,42 @@ async function applyItemWrites(tx: FeedDatabase, writes: ItemWrites) {
       .where(inArray(feedItems.id, writes.deletedItemIds));
   const written: DatabaseFeedItem[] = [];
   // Keep each statement below SQLite's host-parameter limit.
-  for (const batch of slices(writes.items, 25))
+  for (const batch of slices(writes.items, 25)) {
     // Keep statement order inside the single writer transaction.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    written.push(
-      ...(await tx
-        .insert(feedItems)
-        .values(batch)
-        .onConflictDoUpdate({
-          target: feedItems.id,
-          set: buildConflictUpdateColumns(feedItems, [
-            "contentId",
-            "url",
-            "normalizedUrl",
-            "title",
-            "author",
-            "content",
-            "sourceCid",
-            "contentSnippet",
-            "thumbnail",
-            "postedAt",
-            "sourceKind",
-            "bodySource",
-            "atprotoUri",
-            "tags",
-            "contentHash",
-            "updatedAt",
-            "isWatched",
-            "isWatchLater",
-            "isWatchedUpdatedAt",
-            "isWatchLaterUpdatedAt",
-            "progress",
-            "createdAt",
-          ]),
-        })
-        .returning()),
-    );
+    const rows = await tx
+      .insert(feedItems)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: feedItems.id,
+        set: buildConflictUpdateColumns(feedItems, [
+          "contentId",
+          "url",
+          "normalizedUrl",
+          "title",
+          "author",
+          "content",
+          "sourceCid",
+          "contentSnippet",
+          "thumbnail",
+          "postedAt",
+          "sourceKind",
+          "bodySource",
+          "atprotoUri",
+          "tags",
+          "contentHash",
+          "updatedAt",
+          "isWatched",
+          "isWatchLater",
+          "isWatchedUpdatedAt",
+          "isWatchLaterUpdatedAt",
+          "progress",
+          "createdAt",
+        ]),
+      })
+      .returning();
+    written.push(...rows);
+  }
   for (const batch of slices(writes.observations, 100))
     // Bound each statement and preserve transaction order.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -342,7 +327,6 @@ async function applyItemWrites(tx: FeedDatabase, writes: ItemWrites) {
         set: {
           value: sql`excluded.value`,
           digest: sql`excluded.digest`,
-          imagePending: sql`excluded.image_pending`,
         },
       });
   for (const batch of slices(writes.aliases, 100))
@@ -372,7 +356,7 @@ function inWriteTransaction<T>(
 /**
  * Reads the matched items outside the transaction, where their bodies do not
  * hold the writer lock, then writes only if a narrow reread inside it finds
- * the same state. `stale` asks the caller to read again.
+ * the same state. `stale` tells the caller another writer got there first.
  */
 async function writeIfUnchanged(
   database: typeof db,
@@ -391,7 +375,7 @@ async function writeIfUnchanged(
   return written === "stale" ? written : writtenItems(feed, written, writes);
 }
 
-/** Reads and writes under one lock: for writers that guard their commit, and when rereads keep losing. */
+/** Reads and writes under one lock: for writers that guard their commit, and when the reread lost to another writer. */
 function writeInOneTransaction(
   database: typeof db,
   feed: Pick<DatabaseFeed, "id" | "platform">,
@@ -440,13 +424,10 @@ export async function writeIncomingObservations(
 ) {
   if (!incoming.length) return NOTHING_WRITTEN;
   if (commit) return writeInOneTransaction(database, feed, incoming, commit);
-  for (let attempt = 0; attempt < OPTIMISTIC_ATTEMPTS; attempt++) {
-    // Each attempt rereads what the previous one found changed.
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    const written = await writeIfUnchanged(database, feed, incoming);
-    if (written !== "stale") return written;
-  }
-  return writeInOneTransaction(database, feed, incoming);
+  const written = await writeIfUnchanged(database, feed, incoming);
+  return written === "stale"
+    ? writeInOneTransaction(database, feed, incoming)
+    : written;
 }
 
 export function writeObservedItems(

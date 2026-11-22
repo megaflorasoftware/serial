@@ -4,16 +4,15 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
-import { textIngestBudget } from "../../../scripts/performance/text-ingest-budgets";
+import {
+  readsBehindItemBody,
+  textIngestBudget,
+  textIngestOverruns,
+} from "../../../scripts/performance/text-ingest-budgets";
 import { createTextIngestWorkload } from "../../../scripts/performance/text-ingest-workload";
 
-const WRITE = /^(insert into|update|delete from) /i;
-// The item's body and the observation's value: neither may be read to find
-// that nothing changed.
-const BODY_COLUMN = /"serial_feed_item"\."content"|"content",|"value"/;
-
 it.each([30, 200])(
-  "reads no body and writes nothing for an unchanged feed of %s items",
+  "reads no body, nothing behind one, and writes nothing for an unchanged feed of %s items",
   async (size) => {
     const target = createLocalBenchmarkTarget();
     const session = openBenchmarkDatabase({ url: target.url });
@@ -25,30 +24,18 @@ it.each([30, 200])(
       const unchanged = session.instrumentation.snapshot();
       const budget = textIngestBudget("unchanged", size, 0);
       expect(unchanged.statementCount).toBe(budget.statements);
-      expect(unchanged.materializedRows).toBeLessThanOrEqual(budget.rows);
-      expect(
-        unchanged.statements.filter((entry) => WRITE.test(entry.sql)),
-      ).toHaveLength(budget.writes);
-      expect(
-        unchanged.statements.filter((entry) => BODY_COLUMN.test(entry.sql)),
-      ).toEqual([]);
+      // Neither the item's body nor the observation's value is read to find
+      // that nothing changed, and nothing is written.
+      expect(textIngestOverruns(budget, unchanged)).toEqual([]);
       expect(workload.pages).toBe(0);
 
       session.instrumentation.reset();
       expect(await workload.run("changed", 3)).toEqual({ written: 3 });
       const changed = session.instrumentation.snapshot();
-      const changedBudget = textIngestBudget("changed", size, 3);
-      expect(changed.statementCount).toBeLessThanOrEqual(
-        changedBudget.statements,
-      );
       // Only the three edited items are read in full.
-      expect(changed.materializedRows).toBeLessThanOrEqual(changedBudget.rows);
       expect(
-        changed.statements.some((entry) => BODY_COLUMN.test(entry.sql)),
-      ).toBe(true);
-      expect(
-        changed.statements.filter((entry) => WRITE.test(entry.sql)),
-      ).toHaveLength(changedBudget.writes);
+        textIngestOverruns(textIngestBudget("changed", size, 3), changed),
+      ).toEqual([]);
 
       // Inspect plans after writes: local libSQL EXPLAIN can retain a read lock.
       for (const { sql } of unchanged.statements) {
@@ -61,6 +48,9 @@ it.each([30, 200])(
         expect(details).not.toMatch(
           /serial_feed_item_alias USING INDEX \S+ \(feed_id=\?\)$/m,
         );
+        // Every item here is observed: its row gives up only what sits ahead
+        // of the body, so no overflow page is walked to tell it is unchanged.
+        expect(await readsBehindItemBody(session.baseClient, sql)).toEqual([]);
       }
     } finally {
       session.close();

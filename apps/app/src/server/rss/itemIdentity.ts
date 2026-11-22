@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { feedItemAliases, feedItemObservations, feedItems } from "../db/schema";
 import type { FeedDatabase } from "../feeds/origins";
 import type {
@@ -13,6 +13,26 @@ type ItemReader = Pick<FeedDatabase, "select">;
 export type ObservationLocator = Pick<ItemObservation, "kind" | "url" | "key">;
 
 /**
+ * How firmly an item holds a locator. Its current URL outranks its normalized
+ * URL, which outranks a URL it was once known under.
+ */
+const CLAIM = { alias: 0, normalizedUrl: 1, current: 2 } as const;
+type LocatorClaim = { locator: string; itemId: string; strength: number };
+
+/** Where each claimed locator points: to its strongest claim, and among equals the last. */
+function resolveLocators(claims: LocatorClaim[]) {
+  const held = new Map<string, LocatorClaim>();
+  for (const claim of claims) {
+    const holder = held.get(claim.locator);
+    if (!holder || claim.strength >= holder.strength)
+      held.set(claim.locator, claim);
+  }
+  return new Map(
+    [...held].map(([locator, claim]) => [locator, claim.itemId] as const),
+  );
+}
+
+/**
  * What a write decides on and what it carries over from a stored item, without
  * its body: where the item is found, the hash of what it shows, and the reader
  * state a merge may move.
@@ -23,7 +43,6 @@ const identityColumns = {
   normalizedUrl: feedItems.normalizedUrl,
   atprotoUri: feedItems.atprotoUri,
   contentHash: feedItems.contentHash,
-  thumbnail: feedItems.thumbnail,
   isWatched: feedItems.isWatched,
   isWatchLater: feedItems.isWatchLater,
   isWatchedUpdatedAt: feedItems.isWatchedUpdatedAt,
@@ -34,11 +53,11 @@ const identityColumns = {
 export type IdentityItem = Pick<DatabaseFeedItem, keyof typeof identityColumns>;
 export type IdentityObservation = Pick<
   DatabaseFeedItemObservation,
-  "itemId" | "kind" | "digest" | "imagePending"
+  "itemId" | "kind" | "digest"
 >;
 export type IdentityAlias = Pick<DatabaseFeedItemAlias, "locator" | "itemId">;
 
-/** The stored state an incoming batch can touch, narrow enough to read on every fetch. */
+/** The stored state a write decided on, without bodies: what its transaction rereads. */
 export type ItemIdentity = {
   items: IdentityItem[];
   observations: IdentityObservation[];
@@ -97,7 +116,139 @@ function matchedItemIds(
     : matched;
 }
 
-/** Two statements, no item body and no observation value. */
+/**
+ * What tells whether a feed still states what is stored under a URL. An item
+ * some origin observed is judged by the digest of what the feed last stated,
+ * which is absent when only another origin observed it. An item from before
+ * observations existed is judged by the hash and thumbnail the previous ingest
+ * left on it.
+ */
+export type StoredItemState =
+  | { itemId: string; observed: true; rssDigest?: string | null }
+  | {
+      itemId: string;
+      observed: false;
+      contentHash: string | null;
+      thumbnail: string;
+    };
+
+/** Every claim the Feed's items make on the stated URLs, one row per item and URL. */
+function locatorClaims(database: ItemReader, feedId: number, urls: string[]) {
+  const strength = (claim: number) =>
+    sql<number>`${sql.raw(String(claim))}`.as("strength");
+  // Each branch reads its locator from the index that finds it. Only an
+  // item's id comes from its row, and that sits ahead of the body.
+  const itemClaims = (
+    locator: typeof feedItems.url | typeof feedItems.normalizedUrl,
+    claim: number,
+  ) =>
+    database
+      .select({
+        itemId: feedItems.id,
+        locator: sql<string>`${locator}`,
+        strength: strength(claim),
+      })
+      .from(feedItems)
+      .where(and(eq(feedItems.feedId, feedId), inArray(locator, urls)));
+  const claims = database
+    .select({
+      itemId: feedItemAliases.itemId,
+      locator: feedItemAliases.locator,
+      strength: strength(CLAIM.alias),
+    })
+    .from(feedItemAliases)
+    .where(
+      and(
+        eq(feedItemAliases.feedId, feedId),
+        inArray(feedItemAliases.locator, urls),
+      ),
+    )
+    .unionAll(itemClaims(feedItems.normalizedUrl, CLAIM.normalizedUrl))
+    .unionAll(itemClaims(feedItems.url, CLAIM.current))
+    .as("claims");
+  // An item usually holds its URL both as its current one and as an alias.
+  return database
+    .select({
+      itemId: claims.itemId,
+      locator: claims.locator,
+      strength: sql<number>`max(${claims.strength})`,
+    })
+    .from(claims)
+    .groupBy(claims.itemId, claims.locator);
+}
+
+/**
+ * Each located item's state. An item's row gives up only what sits ahead of
+ * its body. The hash the previous ingest left sits behind the body, where
+ * SQLite reaches it by walking the body's overflow pages, so it is read only
+ * for an item no origin has observed.
+ */
+async function storedItemStates(database: ItemReader, itemIds: string[]) {
+  const rows = await database
+    .select({
+      id: feedItems.id,
+      thumbnail: feedItems.thumbnail,
+      kind: feedItemObservations.kind,
+      digest: feedItemObservations.digest,
+      unobservedHash: sql<
+        string | null
+      >`case when ${feedItemObservations.itemId} is null then ${feedItems.contentHash} end`,
+    })
+    .from(feedItems)
+    .leftJoin(
+      feedItemObservations,
+      eq(feedItemObservations.itemId, feedItems.id),
+    )
+    .where(inArray(feedItems.id, itemIds));
+  const states = new Map<string, StoredItemState>();
+  // One row per observation, or a single row without a kind for an unobserved item.
+  for (const { id, thumbnail, kind, digest, unobservedHash } of rows) {
+    if (kind === null)
+      states.set(id, {
+        itemId: id,
+        observed: false,
+        contentHash: unobservedHash,
+        thumbnail,
+      });
+    else
+      states.set(id, {
+        ...states.get(id),
+        itemId: id,
+        observed: true,
+        ...(kind === "rss" ? { rssDigest: digest } : {}),
+      });
+  }
+  return states;
+}
+
+/**
+ * The narrow read that settles an unchanged feed, in two statements: where
+ * each stated URL points, then the state of the items found. Neither reads an
+ * item's body or an observation's value.
+ */
+export async function readStoredStates(
+  database: ItemReader,
+  feedId: number,
+  urls: string[],
+) {
+  const located = resolveLocators(await locatorClaims(database, feedId, urls));
+  if (!located.size) return new Map<string, StoredItemState>();
+  const states = await storedItemStates(database, [
+    ...new Set(located.values()),
+  ]);
+  return new Map(
+    [...located].flatMap(([locator, itemId]) => {
+      const state = states.get(itemId);
+      return state ? [[locator, state] as const] : [];
+    }),
+  );
+}
+
+/**
+ * The matched items without their bodies, as a write's transaction rereads
+ * them to verify what it decided on. It reads reader state from behind the
+ * body, which only a write pays for.
+ */
 export async function readItemIdentity(
   database: ItemReader,
   feedId: number,
@@ -108,7 +259,6 @@ export async function readItemIdentity(
       ...identityColumns,
       kind: feedItemObservations.kind,
       digest: feedItemObservations.digest,
-      imagePending: feedItemObservations.imagePending,
     })
     .from(feedItems)
     .leftJoin(
@@ -116,32 +266,24 @@ export async function readItemIdentity(
       eq(feedItemObservations.itemId, feedItems.id),
     )
     .where(inArray(feedItems.id, matchedItemIds(database, feedId, incoming)));
+  const items = new Map<string, IdentityItem>();
+  const observations: IdentityObservation[] = [];
+  for (const { kind, digest, ...item } of rows) {
+    items.set(item.id, item);
+    if (kind !== null) observations.push({ itemId: item.id, kind, digest });
+  }
+  if (!rows.length) return { items: [], observations, aliases: [] };
+  // By item alone: the ids just read already belong to the Feed, and naming
+  // the Feed here would walk every alias it has.
   const aliases = await database
     .select({
       locator: feedItemAliases.locator,
       itemId: feedItemAliases.itemId,
     })
     .from(feedItemAliases)
-    // By item alone: the matched ids already belong to the Feed, and naming
-    // the Feed here would walk every alias it has.
     .where(
-      inArray(
-        feedItemAliases.itemId,
-        matchedItemIds(database, feedId, incoming),
-      ),
+      inArray(feedItemAliases.itemId, [...new Set(rows.map((row) => row.id))]),
     );
-  const items = new Map<string, IdentityItem>();
-  const observations: IdentityObservation[] = [];
-  for (const { kind, digest, imagePending, ...item } of rows) {
-    items.set(item.id, item);
-    if (kind !== null)
-      observations.push({
-        itemId: item.id,
-        kind,
-        digest,
-        imagePending: Boolean(imagePending),
-      });
-  }
   return { items: [...items.values()], observations, aliases };
 }
 
@@ -162,7 +304,9 @@ export async function loadMatchedItems(
     .from(feedItemObservations)
     .where(inArray(feedItemObservations.itemId, ids));
   // Every alias of a matched item, not only the incoming locators: a write
-  // then knows which aliases already stand and repeats none of them.
+  // then knows which aliases already stand and repeats none of them. This
+  // also runs on a transaction handle, whose statements go one at a time.
+  // react-doctor-disable-next-line react-doctor/server-sequential-independent-await
   const aliases = await database
     .select()
     .from(feedItemAliases)
@@ -170,23 +314,40 @@ export async function loadMatchedItems(
   return { items, observations, aliases };
 }
 
-/** Where each known locator points: aliases first, then each item's current locators. */
-export function itemLocators(
-  identity: Pick<ItemIdentity, "aliases"> & {
-    items: Array<
-      Pick<IdentityItem, "id" | "url" | "normalizedUrl" | "atprotoUri">
-    >;
-  },
-) {
-  const lookup = new Map(
-    identity.aliases.map((alias) => [alias.locator, alias.itemId]),
-  );
-  for (const item of identity.items) {
-    lookup.set(item.url, item.id);
-    if (item.normalizedUrl) lookup.set(item.normalizedUrl, item.id);
-    if (item.atprotoUri) lookup.set(`atproto:${item.atprotoUri}`, item.id);
-  }
-  return lookup;
+/** Where each known locator points, from the items and aliases a write loaded. */
+export function itemLocators(identity: {
+  aliases: IdentityAlias[];
+  items: Array<
+    Pick<IdentityItem, "id" | "url" | "normalizedUrl" | "atprotoUri">
+  >;
+}) {
+  return resolveLocators([
+    ...identity.aliases.map((alias) => ({
+      ...alias,
+      strength: CLAIM.alias,
+    })),
+    ...identity.items.flatMap((item) => [
+      ...(item.normalizedUrl
+        ? [
+            {
+              locator: item.normalizedUrl,
+              itemId: item.id,
+              strength: CLAIM.normalizedUrl,
+            },
+          ]
+        : []),
+      { locator: item.url, itemId: item.id, strength: CLAIM.current },
+      ...(item.atprotoUri
+        ? [
+            {
+              locator: `atproto:${item.atprotoUri}`,
+              itemId: item.id,
+              strength: CLAIM.current,
+            },
+          ]
+        : []),
+    ]),
+  ]);
 }
 
 function byText(a: string, b: string) {
@@ -211,11 +372,7 @@ function identityText({ items, observations, aliases }: ItemIdentity) {
       ])
       .sort((a, b) => byText(String(a[0]), String(b[0]))),
     observations
-      .map((entry) => [
-        `${entry.itemId}:${entry.kind}`,
-        entry.digest,
-        Boolean(entry.imagePending),
-      ])
+      .map((entry) => [`${entry.itemId}:${entry.kind}`, entry.digest])
       .sort((a, b) => byText(String(a[0]), String(b[0]))),
     aliases
       .map((alias) => [alias.locator, alias.itemId])

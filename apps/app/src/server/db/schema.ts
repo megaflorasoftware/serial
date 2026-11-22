@@ -673,10 +673,6 @@ export const feedItemObservations = sqliteTable(
     // the value's overflow pages.
     /** Hash of the observation as parsed from its source, before image enrichment. */
     digest: text("digest"),
-    /** The observation still awaits its one page image lookup. */
-    imagePending: integer("image_pending", { mode: "boolean" })
-      .notNull()
-      .default(false),
     value: text("value", { mode: "json" }).$type<ItemObservation>().notNull(),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.kind] })],

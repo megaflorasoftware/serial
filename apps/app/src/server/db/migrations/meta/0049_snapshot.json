@@ -1350,14 +1350,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "image_pending": {
-          "name": "image_pending",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "value": {
           "name": "value",
           "type": "text",

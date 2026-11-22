@@ -75,7 +75,8 @@ describe("creating combined Feeds", () => {
   it("attaches Atmosphere at the limit while preserving an inactive Feed", async () => {
     const original = await insertFeedWithOrigins(fixture.database, {
       userId: "owner",
-      details: { ...rss, name: "Custom" },
+      // A name its reader chose, which an origin that joins must not replace.
+      details: { ...rss, name: "Custom", nameEditedAt: new Date() },
       isActive: false,
     });
     vi.mocked(getFeedsActivationBudget).mockResolvedValue({

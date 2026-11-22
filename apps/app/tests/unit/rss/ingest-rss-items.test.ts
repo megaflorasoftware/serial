@@ -10,6 +10,11 @@ import {
   feeds,
   user,
 } from "~/server/db/schema";
+import {
+  boundFeedItems,
+  MAX_ITEM_CONTENT_BYTES,
+  truncateUtf8,
+} from "~/server/rss/feedBounds";
 import { computeItemHash } from "~/server/rss/hash";
 import { ingestRssItems } from "~/server/rss/ingestRssItems";
 import { rssItemDigest, rssObservation } from "~/server/rss/itemObservation";
@@ -172,7 +177,7 @@ it("uses the last entry when a feed repeats a URL, and settles on it", async () 
   expect(transaction).not.toHaveBeenCalled();
 });
 
-it("rereads when the stored item changes between its read and its write", async () => {
+it("falls back to one transaction when the stored item changes between its read and its write", async () => {
   await ingest([post("a")]);
   const transaction = fixture.database.transaction.bind(fixture.database);
   const opened = vi
@@ -184,11 +189,24 @@ it("rereads when the stored item changes between its read and its write", async 
         .set({ isWatched: true, isWatchedUpdatedAt: new Date() });
       return transaction(...args);
     });
+  // Reads on the database handle are the ones made outside a transaction.
+  const reads = vi.spyOn(fixture.database, "select");
   const written = await ingest([post("a", { content: "<p>edited</p>" })]);
+  // The verifying transaction wrote nothing; the second read and wrote under
+  // the lock, with no read outside a transaction in between.
   expect(opened).toHaveBeenCalledTimes(2);
+  const [verifying] = opened.mock.invocationCallOrder;
+  expect(
+    reads.mock.invocationCallOrder.filter((order) => order > verifying!),
+  ).toEqual([]);
+  reads.mockRestore();
   expect(written.items).toMatchObject([{ isWatched: true }]);
+  expect(written.removedItemIds).toEqual([]);
   expect(await storedItems()).toMatchObject([
     { isWatched: true, content: "<p>edited</p>" },
+  ]);
+  expect(await rssObservations()).toMatchObject([
+    { digest: rssItemDigest(post("a", { content: "<p>edited</p>" })) },
   ]);
 });
 
@@ -224,26 +242,29 @@ it("leaves a document's alias alone when its RSS side changes", async () => {
   ).toHaveLength(1);
 });
 
-it("looks up one batch of page images per fetch until none is owed, never twice for an item", async () => {
+it("looks up page images for new and changed items only, one batch per fetch", async () => {
   const posts = Array.from({ length: 10 }, (_, index) =>
     post(`post-${index}`, { thumbnail: undefined, mediaThumbnail: undefined }),
   );
   await ingest(posts);
   expect(readPage).toHaveBeenCalledTimes(8);
-  expect(
-    (await rssObservations()).filter((entry) => entry.imagePending),
-  ).toHaveLength(2);
+  const before = await storedItems();
+  expect(before.filter((item) => item.thumbnail === PAGE_IMAGE)).toHaveLength(
+    8,
+  );
+  // The same feed again: no item changed, so no page is read and nothing moves.
+  const transaction = vi.spyOn(fixture.database, "transaction");
   await ingest(posts);
-  expect(readPage).toHaveBeenCalledTimes(10);
-  expect(new Set(readPage.mock.calls.map(([url]) => url)).size).toBe(10);
+  expect(readPage).toHaveBeenCalledTimes(8);
+  expect(transaction).not.toHaveBeenCalled();
+  expect(await storedItems()).toEqual(before);
+  // An edited item is looked up with its change.
+  await ingest([...posts.slice(0, 9), { ...posts[9]!, title: "edited" }]);
+  expect(readPage).toHaveBeenCalledTimes(9);
+  expect(readPage.mock.calls.at(-1)?.[0]).toBe(posts[9]!.url);
   expect(
-    (await rssObservations()).filter((entry) => entry.imagePending),
-  ).toHaveLength(0);
-  expect(
-    (await storedItems()).every((item) => item.thumbnail === PAGE_IMAGE),
-  ).toBe(true);
-  await ingest(posts);
-  expect(readPage).toHaveBeenCalledTimes(10);
+    (await storedItems()).find((item) => item.title === "edited")?.thumbnail,
+  ).toBe(PAGE_IMAGE);
 });
 
 it("keeps a page image through an edit that the batch could not look up again", async () => {
@@ -277,22 +298,26 @@ const LEGACY_FEED = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>
 ]]></content:encoded></item>
 </channel></rss>`;
 
+/** The items as the website parser hands them on: read both ways, then bounded. */
 async function parsedWithLegacy(body: string) {
   const text = LEGACY_FEED(body);
-  return withLegacyInputs(
-    text,
-    parseSyndicationFeed(text, "https://example.com/feed").items,
+  return boundFeedItems(
+    await withLegacyInputs(
+      text,
+      parseSyndicationFeed(text, "https://example.com/feed").items,
+    ),
   );
 }
 
 /** A row as the ingest before Feed origins stored it: the previous parser's reading and its hash. */
-async function storeLegacyItem(thumbnail: string) {
+async function storeLegacyItem(thumbnail: string, body = "Body") {
   const previous = {
     contentId: "guid-post",
     title: "Post",
     author: "Ada",
-    // The previous parser kept the whitespace around the body.
-    content: "\n<p>Body</p>\n",
+    // The previous parser kept the whitespace around the body, and the
+    // previous ingest bounded what it stored and hashed.
+    content: truncateUtf8(`\n<p>${body}</p>\n`, MAX_ITEM_CONTENT_BYTES)!,
     thumbnail,
     postedAt: new Date("Tue, 15 Sep 2026 12:00:00 GMT"),
   };
@@ -314,6 +339,25 @@ it.each(["", "https://example.com/looked-up.png"])(
     expect((await ingest(await parsedWithLegacy("Body"))).items).toEqual([]);
     expect(transaction).not.toHaveBeenCalled();
     expect(await storedItems()).toEqual([before]);
+    expect(await rssObservations()).toEqual([]);
+  },
+);
+
+it.each([
+  ["ASCII", "x".repeat(MAX_ITEM_CONTENT_BYTES)],
+  // Three-byte characters, offset so the bound falls inside one.
+  ["multi-byte", `a${"\u20ac".repeat(MAX_ITEM_CONTENT_BYTES / 3)}`],
+])(
+  "leaves an item from before observations alone when its %s body was bounded",
+  async (_, body) => {
+    await storeLegacyItem("", body);
+    const [before] = await storedItems();
+    expect(Buffer.byteLength(before!.content)).toBeLessThanOrEqual(
+      MAX_ITEM_CONTENT_BYTES,
+    );
+    const transaction = vi.spyOn(fixture.database, "transaction");
+    expect((await ingest(await parsedWithLegacy(body))).items).toEqual([]);
+    expect(transaction).not.toHaveBeenCalled();
     expect(await rssObservations()).toEqual([]);
   },
 );
