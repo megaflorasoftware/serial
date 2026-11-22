@@ -5,7 +5,7 @@ import {
   openBenchmarkDatabase,
 } from "./database";
 import { createJetstreamWorkload } from "./jetstream-workload";
-import { interruptStream } from "~/server/jetstream/store";
+import { declareStreamGap, disconnectStream } from "~/server/jetstream/store";
 
 const profiles = {
   small: { fanout: 5, history: 1000 },
@@ -102,18 +102,39 @@ try {
     p95Ms: times[6],
     samples: healthy,
   };
-  session.instrumentation.reset();
-  const interruptionStarted = performance.now();
-  await interruptStream(session.database, "benchmark", true);
-  const interruption = session.instrumentation.snapshot();
-  // The marker's read and write, then one statement for the covered origins.
-  if (interruption.statementCount !== 3 || interruption.materializedRows !== 2)
-    throw new Error("Interruption statements must not scale with Feed count");
-  results.interruption = {
-    ms: performance.now() - interruptionStarted,
-    statements: interruption.statementCount,
-    rows: interruption.materializedRows,
-  };
+  /** One fixed-cost operation: its statements must not grow with the fixture. */
+  async function fixedCost(
+    name: string,
+    budget: { statements: number; rows: number },
+    operation: () => Promise<unknown>,
+  ) {
+    session.instrumentation.reset();
+    const started = performance.now();
+    await operation();
+    const evidence = session.instrumentation.snapshot();
+    if (
+      evidence.statementCount !== budget.statements ||
+      evidence.materializedRows !== budget.rows
+    )
+      throw new Error(`${name} statements must not scale with Feed count`);
+    results[name] = {
+      ms: performance.now() - started,
+      statements: evidence.statementCount,
+      rows: evidence.materializedRows,
+    };
+  }
+  const intake = await workload.intake();
+  // Network-wide traffic for publishers nobody follows never reaches the database.
+  await fixedCost("skipped-event", { statements: 0, rows: 0 }, intake.skip);
+  await fixedCost("intake-refresh", { statements: 1, rows: 0 }, intake.refresh);
+  await fixedCost("idle-sweep", { statements: 1, rows: 0 }, workload.sweep);
+  await fixedCost("disconnect", { statements: 1, rows: 0 }, () =>
+    disconnectStream(session.database, "benchmark"),
+  );
+  // The marker's write, then one statement for the covered origins.
+  await fixedCost("gap", { statements: 2, rows: 1 }, () =>
+    declareStreamGap(session.database, "benchmark", new Date()),
+  );
   mkdirSync("benchmarks/results", { recursive: true });
   writeFileSync(
     `benchmarks/results/jetstream-${profile}.json`,

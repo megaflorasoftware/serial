@@ -14,7 +14,10 @@ import type { DatabaseFeed, DatabaseFeedOrigin } from "../db/schema";
 import { CONTENT_PLATFORM, isVideoPlatform } from "~/lib/content/descriptor";
 import { dbSemaphore } from "~/lib/semaphore";
 
-type MetadataOrigin = { feed: DatabaseFeed; origin: DatabaseFeedOrigin };
+type MetadataOrigin = {
+  feed: Pick<DatabaseFeed, "id" | "name" | "siteUrl" | "platform">;
+  origin: DatabaseFeedOrigin;
+};
 
 export async function refreshOriginMetadata(
   database: typeof db,

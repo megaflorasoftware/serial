@@ -3287,6 +3287,14 @@
             "publication_did"
           ],
           "isUnique": false
+        },
+        "feed_origin_atproto_dirty_idx": {
+          "name": "feed_origin_atproto_dirty_idx",
+          "columns": [
+            "origin_id"
+          ],
+          "isUnique": false,
+          "where": "\"serial_feed_origin_atproto\".\"publication_dirty\" = 1"
         }
       },
       "foreignKeys": {
@@ -3445,6 +3453,15 @@
             "\"uri\" desc"
           ],
           "isUnique": false
+        },
+        "feed_origin_atproto_document_retry_idx": {
+          "name": "feed_origin_atproto_document_retry_idx",
+          "columns": [
+            "origin_id",
+            "retry_at"
+          ],
+          "isUnique": false,
+          "where": "\"serial_feed_origin_atproto_document\".\"status\" = 'retry'"
         }
       },
       "foreignKeys": {

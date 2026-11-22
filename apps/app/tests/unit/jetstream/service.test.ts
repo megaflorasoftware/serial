@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { StreamTransport } from "~/server/jetstream/transport";
+import type { StreamEvent } from "~/server/jetstream/protocol";
 import {
   refreshStreamOrigin,
   startStreamWorker,
@@ -11,8 +12,10 @@ import {
   atprotoStreamState,
   feedOriginAtproto,
   feedOriginAtprotoDocuments,
+  feedOrigins,
   user,
 } from "~/server/db/schema";
+import { StreamFailure } from "~/server/jetstream/protocol";
 
 const state = vi.hoisted(() => ({
   transport: undefined as StreamTransport | undefined,
@@ -182,7 +185,10 @@ it.each([true, false])(
     await database
       .insert(atprotoStreamState)
       .values({ id: "primary", service, seq: "1" });
+    const covered = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    await database.update(feedOrigins).set({ nextFetchAt: covered });
     const before = await database.select().from(feedOriginAtproto);
+    const schedules = await database.select().from(feedOrigins);
     let attempts = 0;
     const recover = vi.fn(() => {
       throw new Error("Recovery must wait for a normal fetch");
@@ -211,12 +217,12 @@ it.each([true, false])(
       expect(recover).not.toHaveBeenCalled();
       expect(tip).not.toHaveBeenCalled();
       expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+      // The second connection resumed from the checkpoint, so nothing was
+      // missed: the generation and every schedule stand.
+      expect(await database.select().from(feedOrigins)).toEqual(schedules);
       expect(
         (await database.select().from(atprotoStreamState))[0],
-      ).toMatchObject({ connected: false });
-      expect(
-        (await database.select().from(atprotoStreamState))[0]!.generation,
-      ).toBeGreaterThan(0);
+      ).toMatchObject({ connected: false, generation: 0, seq: "3" });
       expect(feed.origins).toHaveLength(1);
     } finally {
       shutdown.abort();
@@ -281,4 +287,232 @@ it("reports a pending recovery retry as a fetch error instead of an empty refres
   expect(second.result.status).toBe("error");
   expect(second.outcome).toEqual(first.outcome);
   expect(tip).not.toHaveBeenCalled();
+});
+
+/** One reader following `did` with a live, covered origin. */
+async function liveReader(
+  database: NonNullable<typeof fixture>["database"],
+  service: string,
+  did: string,
+) {
+  const now = new Date();
+  await database.insert(user).values({
+    id: "reader",
+    name: "Reader",
+    email: "reader@example.com",
+    emailVerified: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const locator = `at://${did}/site.standard.publication/site`;
+  const feed = await insertFeedWithOrigins(database, {
+    userId: "reader",
+    isActive: true,
+    details: {
+      name: "Publication",
+      platform: "website",
+      imageUrl: "",
+      origins: [{ kind: "atproto", locator }],
+    },
+  });
+  await database.update(feedOriginAtproto).set({
+    initialized: true,
+    streamService: service,
+    streamSeq: "1",
+    streamMode: "live",
+    publicationRecord: {
+      uri: locator,
+      cid: "pub",
+      value: { name: "Publication", url: "https://example.com" },
+    },
+    // Keep document processing, and its network calls, out of these tests.
+    repositoryActive: false,
+  });
+  await database
+    .insert(atprotoStreamState)
+    .values({ id: "primary", service, seq: "1" });
+  return { locator, originId: feed.origins[0]!.id };
+}
+function documentEvent(seq: number, did: string, rkey: string): StreamEvent {
+  return {
+    seq,
+    did,
+    time: new Date().toISOString(),
+    kind: "commit",
+    commit: {
+      operation: "create",
+      collection: "site.standard.document",
+      rkey,
+      rev: String(seq).padStart(13, "0"),
+      cid: `cid-${rkey}`,
+      record: {
+        site: `at://${did}/site.standard.publication/site`,
+        title: rkey,
+        path: `/${rkey}`,
+        publishedAt: new Date().toISOString(),
+      },
+    },
+  };
+}
+
+it("saves the checkpoint when a connection ends, not per event, and re-applies a replayed window once", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const shutdown = new AbortController();
+  const did = "did:plc:alice";
+  await liveReader(database, service, did);
+  const checkpoint = async () =>
+    (await database.select().from(atprotoStreamState))[0]!.seq;
+  const resumedFrom: Array<number | undefined> = [];
+  const duringStream: Array<string | null> = [];
+  state.transport = {
+    service,
+    hasReplay: true,
+    recover: vi.fn(),
+    tip: vi.fn(async () => 1),
+    report: vi.fn(),
+    async *stream(after, _signal, _dids, onOpen) {
+      await onOpen?.();
+      resumedFrom.push(after);
+      yield { events: [documentEvent(2, did, "a")], lastCursor: 2 };
+      // The first event is applied by now; its position is not saved yet.
+      duringStream.push(await checkpoint());
+      yield { events: [documentEvent(3, did, "b")], lastCursor: 3 };
+      if (resumedFrom.length === 1) throw new Error("upstream disconnected");
+      yield { events: [documentEvent(4, did, "c")], lastCursor: 4 };
+      shutdown.abort();
+    },
+  };
+  try {
+    await startStreamWorker(database, shutdown.signal);
+    expect(duringStream[0]).toBe("1");
+    // The closing connection left its position for the next one.
+    expect(resumedFrom).toEqual([1, 3]);
+    expect(await checkpoint()).toBe("4");
+    // The second connection replayed two events the first already applied.
+    expect(
+      (await database.select().from(feedOriginAtprotoDocuments))
+        .map(
+          (document) =>
+            `${document.uri.split("/").at(-1)}@${document.eventSeq}`,
+        )
+        .sort(),
+    ).toEqual(["a@2", "b@3", "c@4"]);
+  } finally {
+    shutdown.abort();
+  }
+});
+
+it("declares a gap when the service rejects the resume cursor, once", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const shutdown = new AbortController();
+  const { originId } = await liveReader(database, service, "did:plc:alice");
+  const covered = new Date(Date.now() + 6 * 60 * 60 * 1000);
+  await database.update(feedOrigins).set({ nextFetchAt: covered });
+  const resumedFrom: Array<number | undefined> = [];
+  state.transport = {
+    service,
+    hasReplay: true,
+    recover: vi.fn(),
+    tip: vi.fn(async () => 1),
+    report: vi.fn(),
+    async *stream(after, _signal, _dids, onOpen) {
+      resumedFrom.push(after);
+      if (after === 1) throw new StreamFailure("cursor-expired", 400);
+      // A cleared checkpoint is re-established from the live tip.
+      if (after === undefined) {
+        yield { events: [], lastCursor: 50 };
+        return;
+      }
+      await onOpen?.();
+      shutdown.abort();
+    },
+  };
+  try {
+    await startStreamWorker(database, shutdown.signal);
+    expect(resumedFrom).toEqual([1, undefined, 50]);
+    expect((await database.select().from(atprotoStreamState))[0]).toMatchObject(
+      { generation: 1, seq: "50" },
+    );
+    const origin = (await database
+      .select()
+      .from(feedOrigins)
+      .where(eq(feedOrigins.id, originId))
+      .get())!;
+    expect(origin.nextFetchAt!.getTime()).toBeLessThanOrEqual(Date.now());
+  } finally {
+    shutdown.abort();
+  }
+});
+
+it("follows a Publication created mid-stream and replays every event it skipped, in order", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const shutdown = new AbortController();
+  await liveReader(database, service, "did:plc:alice");
+  const newcomer = "did:plc:newcomer";
+  let joined = 0;
+  state.transport = {
+    service,
+    hasReplay: true,
+    recover: vi.fn(),
+    tip: vi.fn(async () => 1),
+    report: vi.fn(),
+    async *stream(_after, _signal, _dids, onOpen) {
+      await onOpen?.();
+      const feed = await insertFeedWithOrigins(database, {
+        userId: "reader",
+        isActive: true,
+        details: {
+          name: "Newcomer",
+          platform: "website",
+          imageUrl: "",
+          origins: [
+            {
+              kind: "atproto",
+              locator: `at://${newcomer}/site.standard.publication/site`,
+            },
+          ],
+        },
+      });
+      joined = feed.origins[0]!.id;
+      await database
+        .update(feedOriginAtproto)
+        .set({ streamService: service, streamSeq: "1", streamMode: "catchup" })
+        .where(eq(feedOriginAtproto.originId, joined));
+      yield { events: [documentEvent(2, newcomer, "a")], lastCursor: 2 };
+      yield {
+        events: [documentEvent(3, "did:plc:stranger", "x")],
+        lastCursor: 3,
+      };
+      yield { events: [documentEvent(4, newcomer, "b")], lastCursor: 4 };
+      shutdown.abort();
+    },
+  };
+  try {
+    await startStreamWorker(database, shutdown.signal);
+    expect(
+      (
+        await database
+          .select()
+          .from(feedOriginAtprotoDocuments)
+          .where(eq(feedOriginAtprotoDocuments.originId, joined))
+      )
+        .map((document) => document.eventSeq)
+        .sort(),
+    ).toEqual(["2", "4"]);
+    // Nobody follows the stranger, so its event reached no origin.
+    expect(
+      await database.select().from(feedOriginAtprotoDocuments),
+    ).toHaveLength(2);
+    expect((await database.select().from(atprotoStreamState))[0]?.seq).toBe(
+      "4",
+    );
+  } finally {
+    shutdown.abort();
+  }
 });

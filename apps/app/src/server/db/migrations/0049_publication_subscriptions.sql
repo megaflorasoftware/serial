@@ -59,6 +59,8 @@ CREATE TABLE `serial_feed_origin_atproto` (
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_publication_did_idx` ON `serial_feed_origin_atproto` (`publication_did`);
 --> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_dirty_idx` ON `serial_feed_origin_atproto` (`origin_id`) WHERE "serial_feed_origin_atproto"."publication_dirty" = 1;
+--> statement-breakpoint
 CREATE TABLE `serial_feed_origin_atproto_document` (
   `origin_id` integer NOT NULL,
   `uri` text NOT NULL,
@@ -75,6 +77,8 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
 );
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,"uri" desc);
+--> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_document_retry_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`retry_at`) WHERE "serial_feed_origin_atproto_document"."status" = 'retry';
 --> statement-breakpoint
 CREATE TABLE `serial_feed_origin_atproto_document_source` (
   `origin_id` integer NOT NULL,

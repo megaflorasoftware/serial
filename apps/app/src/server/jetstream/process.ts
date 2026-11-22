@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import {
   buildBlueskyCdnImageUrl,
   listedRecordSchema,
@@ -48,6 +48,8 @@ import type {
 import type { PublicationClient } from "../rss/atprotoClient";
 import type { FeedDatabase } from "../feeds/origins";
 import { workerPool } from "~/lib/workerPool";
+
+const DUE_ORIGIN_PAGE_SIZE = 50;
 
 export type CommittedUpdate = {
   userId: string;
@@ -385,6 +387,84 @@ export async function pendingDocumentCount(
     .where(pendingDocuments(originId, settings))
     .get();
   return row?.count ?? 0;
+}
+
+/**
+ * Live origins with a staged document whose retry is due, or a Publication
+ * record to apply, a page at a time in origin order. Both halves read a
+ * partial index of pending work only, so an idle sweep examines nothing.
+ */
+export async function originsWithDueWork(
+  database: StreamDatabase,
+  input: { after: number; now: Date; limit: number },
+) {
+  const dueTime = input.now.getTime();
+  return database.all<{ originId: number }>(sql`
+    select due.origin_id as "originId"
+    from (
+      select ${feedOriginAtprotoDocuments.originId} as origin_id
+      from ${feedOriginAtprotoDocuments}
+      where ${feedOriginAtprotoDocuments.status} = 'retry'
+        and ${feedOriginAtprotoDocuments.originId} > ${input.after}
+        and (${feedOriginAtprotoDocuments.retryAt} is null
+          or ${feedOriginAtprotoDocuments.retryAt} <= ${dueTime})
+      union
+      select ${feedOriginAtproto.originId} as origin_id
+      from ${feedOriginAtproto}
+      where ${feedOriginAtproto.publicationDirty} = 1
+        and ${feedOriginAtproto.originId} > ${input.after}
+    ) as due
+    inner join ${feedOriginAtproto}
+      on ${feedOriginAtproto.originId} = due.origin_id
+    where ${feedOriginAtproto.initialized} = 1
+      and ${feedOriginAtproto.streamMode} = 'live'
+      and ${feedOriginAtproto.repositoryActive} = 1
+    order by due.origin_id
+    limit ${input.limit}
+  `);
+}
+
+/**
+ * Drains staged work for the origins that have some, a page at a time. Only
+ * the instance holding the stream lease sweeps, so instances do not repeat
+ * each other's work.
+ */
+export async function drainDueOrigins(
+  database: StreamDatabase,
+  settings: StreamSettings,
+  options: Pick<ProcessingOptions, "client" | "readPage" | "publish"> & {
+    holdsLease: () => boolean;
+    signal: AbortSignal;
+    report?: (error: unknown) => void;
+  },
+) {
+  const { holdsLease, report, ...processing } = options;
+  let after = 0;
+  while (!processing.signal.aborted && holdsLease()) {
+    // Each page starts after the previous page's last origin.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const origins = await originsWithDueWork(database, {
+      after,
+      now: nowFor(settings),
+      limit: DUE_ORIGIN_PAGE_SIZE,
+    });
+    if (!origins.length) return;
+    for await (const unused of workerPool(origins, 4, async (origin) => {
+      try {
+        await processOriginDocuments(
+          database,
+          origin.originId,
+          settings,
+          processing,
+        );
+      } catch (error) {
+        if (!processing.signal.aborted) report?.(error);
+      }
+    })) {
+      void unused;
+    }
+    after = origins.at(-1)!.originId;
+  }
 }
 
 /** Staged versions whose retry time, if any, has passed. */

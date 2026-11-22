@@ -118,7 +118,7 @@ describe("Jetstream transport", () => {
     report(new DOMException("Cancelled", "AbortError"), "shutdown");
     expect(captureException).toHaveBeenCalledTimes(1);
   });
-  it("reads v2 live frames and resumes using the persisted sequence", async () => {
+  it("reads v2 live frames, resumes using the persisted sequence and asks for no identity events", async () => {
     const server = createServer();
     const sockets = new WebSocketServer({
       server,
@@ -130,10 +130,11 @@ describe("Jetstream transport", () => {
     const address = server.address();
     if (!address || typeof address === "string") throw new Error();
     let cursor: string | null = null;
+    let kinds: string[] = [];
     sockets.on("connection", (socket, request) => {
-      cursor = new URL(request.url!, "http://localhost").searchParams.get(
-        "cursor",
-      );
+      const requested = new URL(request.url!, "http://localhost").searchParams;
+      cursor = requested.get("cursor");
+      kinds = requested.getAll("kinds");
       socket.send(
         JSON.stringify({
           $type: "message",
@@ -161,6 +162,7 @@ describe("Jetstream transport", () => {
         break;
       }
       expect(cursor).toBe("10");
+      expect(kinds).toEqual(["commit", "account", "sync"]);
     } finally {
       controller.abort();
       for (const socket of sockets.clients) socket.terminate();
@@ -271,6 +273,8 @@ it("reads v1 commits, identities and accounts using timestamp cursors without ar
       "site.standard.document",
       "site.standard.publication",
     ]);
+    // The frozen legacy wire cannot filter by kind.
+    expect(requested?.searchParams.has("kinds")).toBe(false);
     expect(events.map((event) => event.seq)).toEqual(
       [1, 2, 3, 4, 5].map((n) => start + n),
     );

@@ -13,6 +13,7 @@ import {
   normalizeService,
   retryAfter,
   sequence,
+  STREAM_KINDS,
   StreamFailure,
   streamFailure,
 } from "./protocol";
@@ -337,6 +338,7 @@ export function createStreamTransport(input: {
         ...options(signal),
         afterSeq: after,
         beforeSeq: before,
+        kinds: [...STREAM_KINDS],
         maxReplans: 0,
         dids: dids as Array<`did:${string}:${string}`> | undefined,
       }),
@@ -371,9 +373,10 @@ export function createStreamTransport(input: {
       cursor: { load: async () => after, save: async () => {} },
     };
     if (!legacy) {
-      yield* decode(sdk.liveRawBatches(opts));
+      yield* decode(sdk.liveRawBatches({ ...opts, kinds: [...STREAM_KINDS] }));
       return;
     }
+    // The frozen legacy wire has no kind filter; it sends every kind.
     async function* batches() {
       for await (const event of v1.live({ ...opts, raw: true }))
         yield { events: [event], lastCursor: event.seq };
