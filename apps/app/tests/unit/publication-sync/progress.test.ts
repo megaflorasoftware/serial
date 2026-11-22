@@ -75,14 +75,33 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-it("neither polls nor announces a settled request, whatever runs in the background", async () => {
+const expectNoToast = () => {
+  expect(mocks.loading).not.toHaveBeenCalled();
+  expect(mocks.success).not.toHaveBeenCalled();
+  expect(mocks.warning).not.toHaveBeenCalled();
+};
+
+it("neither polls nor shows a toast for a request that has already settled", async () => {
   mocks.status.mockResolvedValue(settled);
   await mount();
   await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
   expect(mocks.status).toHaveBeenCalledTimes(1);
-  expect(mocks.loading).not.toHaveBeenCalled();
-  expect(mocks.success).not.toHaveBeenCalled();
-  expect(mocks.warning).not.toHaveBeenCalled();
+  expectNoToast();
+});
+
+it("shows nothing when a later read finds a background run on a settled request", async () => {
+  mocks.status.mockResolvedValue(settled);
+  await mount();
+  // A retry or recurring check holds the worker but writes no job state.
+  mocks.status.mockResolvedValue({ ...settled, running: true });
+  await act(async () => {
+    notifyPublicationSyncStatusChanged();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(mocks.status).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
+  expect(mocks.status).toHaveBeenCalledTimes(2);
+  expectNoToast();
 });
 
 it("reads the status again when the server announces a change", async () => {
@@ -102,9 +121,15 @@ it("reads the status again when the server announces a change", async () => {
     expect.stringContaining("1 imported"),
     expect.anything(),
   );
-  // Settled: later announcements still refetch, but nothing polls.
+  // Settled: nothing polls, and a later announcement reads once without a second toast.
   await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
   expect(mocks.status).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    notifyPublicationSyncStatusChanged();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(mocks.status).toHaveBeenCalledTimes(3);
+  expect(mocks.success).toHaveBeenCalledTimes(1);
 });
 
 it("falls back to a slow poll only while a request is in flight", async () => {

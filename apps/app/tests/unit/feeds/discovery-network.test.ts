@@ -449,18 +449,15 @@ describe("import discovery completeness", () => {
       ),
     ).toEqual([]);
   });
-  it.each([404, 410])(
-    "reports a site that answers %s as gone, apart from incomplete discovery",
-    async (status) => {
-      vi.mocked(readFeedHttp).mockImplementation(async (url) =>
-        statusResponse(url, status),
-      );
-      await expect(
-        discoverFeedOriginsForImport(`gone-${status}`, "https://example.com"),
-      ).rejects.toBeInstanceOf(PublicationGoneError);
-    },
-  );
-  it.each([403, 500, 503])(
+  it("reports a site that answers 410 as gone, apart from incomplete discovery", async () => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+      statusResponse(url, 410),
+    );
+    await expect(
+      discoverFeedOriginsForImport("gone-410", "https://example.com"),
+    ).rejects.toBeInstanceOf(PublicationGoneError);
+  });
+  it.each([403, 404, 500, 503])(
     "keeps a site that answers %s worth another attempt",
     async (status) => {
       vi.mocked(readFeedHttp).mockImplementation(async (url) =>

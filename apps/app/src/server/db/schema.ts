@@ -1233,8 +1233,9 @@ export const atprotoConnections = sqliteTable(
       mode: "timestamp_ms",
     }),
     /**
-     * When the earliest waiting import retry falls due. Until then a check
-     * stays idle even though that import is unfinished.
+     * When the earliest waiting retry falls due: a failed import, export or
+     * remote removal. Until then a check stays idle even though that work is
+     * unfinished.
      */
     subscriptionRetryAt: integer("subscription_retry_at", {
       mode: "timestamp_ms",

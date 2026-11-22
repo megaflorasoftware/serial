@@ -920,11 +920,89 @@ describe("failures that end or wait", () => {
   it("reruns in full after a failure that has no retry time of its own", async () => {
     await addLocal("one");
     await method("export");
+    // The grant is checked before any write is attempted.
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ scopes: "atproto" });
+    expect(await run()).toMatchObject({ failed: 1, exported: 0 });
+    expect(store.create).not.toHaveBeenCalled();
+    expect(await stored()).toMatchObject({
+      subscriptionRepoRev: null,
+      subscriptionRetryAt: null,
+    });
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ scopes: "atproto include:site.standard.authSocial" });
+    expect(await run()).toMatchObject({ exported: 1 });
+  });
+
+  it("waits an hour to retry a failed export, with checks idle until then", async () => {
+    await addLocal("one");
+    await method("export");
     vi.mocked(store.create).mockRejectedValueOnce(
       new Error("PDS write failed"),
     );
-    expect(await run()).toMatchObject({ failed: 1, exported: 0 });
+    const before = Date.now();
+    expect(await run()).toMatchObject({
+      status: "partial",
+      failed: 1,
+      exported: 0,
+    });
+    const waiting = await stored();
+    // The snapshot was complete and nothing was written, so the revision stands.
+    expect(waiting.subscriptionRepoRev).toBe("1");
+    const wait = waiting.subscriptionRetryAt!.getTime() - before;
+    expect(wait).toBeGreaterThanOrEqual(60 * 60_000);
+    expect(wait).toBeLessThan(61 * 60_000);
+    // Until the hour passes a check finds nothing to do and attempts no write.
+    expect(await run()).toMatchObject({ status: "completed", exported: 0 });
+    expect(store.create).toHaveBeenCalledTimes(1);
+    expect(await stored()).toEqual(waiting);
+    // The hour passes: one full pass retries the export from the cached snapshot.
+    await makeRetriesDue();
+    vi.mocked(store.list).mockClear();
+    expect(await run()).toMatchObject({
+      status: "completed",
+      exported: 1,
+      failed: 0,
+    });
+    expect(store.create).toHaveBeenCalledTimes(2);
+    expect(store.list).not.toHaveBeenCalled();
+    expect((await stored()).subscriptionRetryAt).toBeNull();
+  });
+
+  it("waits to retry a failed remote removal, and lists again once a removal landed", async () => {
+    records = [record("one", "a"), record("one", "b")];
+    await method("bidirectional");
+    await run();
+    // The user deleted the Feed, so both duplicate records are owed a removal.
+    await fixture.database.delete(feeds);
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionRepoRev: null });
+    vi.mocked(store.remove).mockRejectedValueOnce(
+      new Error("PDS write failed"),
+    );
+    expect(await run()).toMatchObject({ failed: 1, removed: 0 });
+    expect(records).toHaveLength(2);
+    // Nothing was written: the revision stands and the removal waits.
+    expect(await stored()).toMatchObject({ subscriptionRepoRev: "1" });
+    expect((await stored()).subscriptionRetryAt).toBeInstanceOf(Date);
+    expect(await run()).toMatchObject({ status: "completed", removed: 0 });
+    await makeRetriesDue();
+    // The first removal lands and the second fails: the repository changed.
+    vi.mocked(store.remove)
+      .mockImplementationOnce(async (value) => {
+        records = records.filter((row) => row.uri !== value.uri);
+        rev++;
+      })
+      .mockRejectedValueOnce(new Error("PDS write failed"));
+    expect(await run()).toMatchObject({ failed: 1, removed: 0 });
+    expect(records).toHaveLength(1);
     expect((await stored()).subscriptionRepoRev).toBeNull();
-    expect(await run()).toMatchObject({ exported: 1 });
+    // A cleared revision lists the repository and removes what is left.
+    expect(await run()).toMatchObject({ removed: 1 });
+    expect(records).toHaveLength(0);
+    expect(await fixture.database.select().from(feeds)).toHaveLength(0);
   });
 });

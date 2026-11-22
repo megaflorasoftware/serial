@@ -187,6 +187,59 @@ it("keeps a request in flight across an immediate continuation and totals its ru
     result: { exported: 2, deferred: 0 },
   });
 });
+it("keeps the failures an earlier run of the same request saw, without counting them twice", async () => {
+  await save();
+  const due = () =>
+    fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: new Date(0) })
+      .where(eq(atprotoConnections.id, "connection"));
+  const stoppedAtDeadline = {
+    ...completed(),
+    status: "partial" as const,
+    failed: 2,
+    deferred: 1,
+    retryAt: new Date(),
+  };
+  await runJobs(async () => stoppedAtDeadline);
+  await due();
+  // A continuation that lists the repository meets the same failures again.
+  await runJobs(async () => stoppedAtDeadline);
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: true,
+    result: { exported: 2, failed: 2 },
+  });
+  await due();
+  // One that reads the cached snapshot cannot see them and reports none.
+  await runJobs(async () => completed());
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    result: { exported: 3, failed: 2, deferred: 0, status: "partial" },
+  });
+});
+it("keeps what an in-flight request already did when a check finds nothing left", async () => {
+  await save();
+  await runJobs(async () => ({
+    ...completed(),
+    status: "partial",
+    deferred: 1,
+    retryAt: new Date(),
+  }));
+  // An inline run finished the rest before the continuation started.
+  await fixture.database.update(atprotoConnections).set({
+    subscriptionRepoRev: "rev-1",
+    subscriptionBackfillStarted: true,
+    subscriptionNextAttemptAt: new Date(0),
+  });
+  const sync = vi.fn<typeof syncPublicationSubscriptions>();
+  await runJobs(sync, { latestRev: async () => "rev-1" });
+  expect(sync).not.toHaveBeenCalled();
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    progress: null,
+    result: { status: "completed", exported: 1, deferred: 0 },
+  });
+});
 it("runs a retry in the background once its request has settled", async () => {
   await save();
   await runJobs(async () => ({
@@ -237,6 +290,20 @@ it("announces a run the user started while it progresses and when it settles", a
     pending: false,
     result: { exported: 1 },
   });
+});
+it("announces a change held back by the interval once the interval ends", async () => {
+  await save();
+  await runJobs(async ({ onProgress, runId }) => {
+    await onProgress?.({ runId: runId!, completed: 0, total: 2 });
+    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    expect(announce).toHaveBeenCalledTimes(1);
+    // The run goes quiet, as during a slow import, and the held change still goes out.
+    await vi.waitFor(() => expect(announce).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    return completed();
+  });
+  expect(announce).toHaveBeenCalledTimes(3);
 });
 it("keeps watching a request whose first run found sync busy", async () => {
   await save();

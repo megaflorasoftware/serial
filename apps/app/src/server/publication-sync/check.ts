@@ -104,10 +104,10 @@ export async function checkPublicationSync(
 ): Promise<SyncCheck> {
   if (!syncsSubscriptions(row)) return { state: "disabled" };
   const backfill = backfillSchedule(row, now);
-  const importRetryDue =
+  const retryDue =
     row.subscriptionRetryAt !== null &&
     row.subscriptionRetryAt.getTime() <= now.getTime();
-  if (row.subscriptionRepoRev === null || backfill.due || importRetryDue)
+  if (row.subscriptionRepoRev === null || backfill.due || retryDue)
     return { state: "due" };
   const rev = await latestRev(row.did);
   if (rev !== row.subscriptionRepoRev) return { state: "due", rev };

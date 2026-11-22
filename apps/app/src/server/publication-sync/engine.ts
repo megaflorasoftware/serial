@@ -2,7 +2,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { nextPublicationSyncAttempt } from "./requests";
 import { nextRetryAt } from "./retry";
 import { backfillPublicationOrigins } from "./backfill";
-import { checkPublicationSync, syncCheckColumns } from "./check";
+import { checkPublicationSync, earliest, syncCheckColumns } from "./check";
 import { planPublicationSync } from "./plan";
 import { saveSubscriptionObservation } from "./observation";
 import {
@@ -69,6 +69,23 @@ function groupByPublication<T extends { publicationUri: string }>(rows: T[]) {
 }
 /** The same bound Add gives a new Feed's first fetch. */
 const FIRST_FETCH_TIMEOUT_MS = 15_000;
+/** How long a failed export or remote removal waits before it is tried again. */
+const FAILED_WRITE_RETRY_MS = 60 * 60 * 1000;
+
+/** The PDS did not take a subscription write. The write is still owed. */
+class SubscriptionWriteError extends Error {}
+
+/** A lost claim ends the run as it always did; any other failure is the write's. */
+async function writeSubscription<T>(write: () => Promise<T>) {
+  try {
+    return await write();
+  } catch (error) {
+    if (error instanceof SubscriptionSyncChangedError) throw error;
+    throw new SubscriptionWriteError("Subscription write failed", {
+      cause: error,
+    });
+  }
+}
 
 /**
  * A Feed the sync created gets its first content at once, like a Feed the user
@@ -148,15 +165,18 @@ export async function syncPublicationSubscriptions(input: {
       authorizeWrite: () =>
         assertSubscriptionSyncCurrent(database, connection, true),
     });
-  let retryAt: Date | undefined;
+  let retryAt = null as Date | null;
   const retryAfter = (next: Date) => {
-    if (!retryAt || next < retryAt) retryAt = next;
+    retryAt = earliest(retryAt, next);
   };
-  /** The earliest import waiting for its retry time, which the connection stores. */
-  let importRetryAt = null as Date | null;
-  const awaitImportRetry = (next: Date) => {
+  /**
+   * The earliest import or PDS write waiting for its retry time, which the
+   * connection stores so checks stay idle until then.
+   */
+  let waitingRetryAt = null as Date | null;
+  const awaitRetry = (next: Date) => {
     retryAfter(next);
-    if (!importRetryAt || next < importRetryAt) importRetryAt = next;
+    waitingRetryAt = earliest(waitingRetryAt, next);
   };
   /** Failed work with no retry time of its own, for the next check to redo. */
   let mustReconcile = false;
@@ -208,7 +228,7 @@ export async function syncPublicationSubscriptions(input: {
       input.dependencies?.backfill ?? backfillPublicationOrigins
     )(database, connection);
     changedFeeds = backfill.attached > 0;
-    retryAt = backfill.retryAt;
+    retryAt = backfill.retryAt ?? null;
     const [previous, localOrigins, rev] = await Promise.all([
       database
         .select()
@@ -321,7 +341,7 @@ export async function syncPublicationSubscriptions(input: {
         priorImport?.importRetryAt &&
         priorImport.importRetryAt > new Date()
       ) {
-        awaitImportRetry(priorImport.importRetryAt);
+        awaitRetry(priorImport.importRetryAt);
         if (
           !observationUnchanged(
             old,
@@ -414,20 +434,24 @@ export async function syncPublicationSubscriptions(input: {
             .get();
           if ((current?.id ?? null) !== localFeedId)
             throw new Error("Feed changed during subscription sync");
-          if (action === "export")
-            records = [await store.create(publicationUri)];
-          else {
+          if (action === "export") {
+            records = [
+              await writeSubscription(() => store.create(publicationUri)),
+            ];
+            wroteRecords = true;
+          } else {
             for (const record of records) {
               // Recheck the grant after each delete before authorizing the next.
               // react-doctor-disable-next-line react-doctor/async-await-in-loop
               await assertSubscriptionSyncCurrent(database, connection, true);
               // Each delete uses the current grant and the previous observed CID.
               // react-doctor-disable-next-line react-doctor/async-await-in-loop
-              await store.remove(record);
+              await writeSubscription(() => store.remove(record));
+              // A removal that landed changed the repository, even if a later one fails.
+              wroteRecords = true;
             }
             records = [];
           }
-          wroteRecords = true;
         }
         const result = await database.transaction(async (tx) => {
           await assertSubscriptionSyncCurrent(tx, connection);
@@ -522,8 +546,13 @@ export async function syncPublicationSubscriptions(input: {
           if (retryImportAt === null) counts.skipped++;
           else {
             counts.deferred++;
-            awaitImportRetry(retryImportAt);
+            awaitRetry(retryImportAt);
           }
+        } else if (error instanceof SubscriptionWriteError) {
+          // The export or removal waits its turn like a failed import, so the
+          // checks in between stay idle instead of each retrying the write.
+          counts.failed++;
+          awaitRetry(new Date(Date.now() + FAILED_WRITE_RETRY_MS));
         } else {
           counts.failed++;
           mustReconcile = true;
@@ -550,14 +579,14 @@ export async function syncPublicationSubscriptions(input: {
     if (
       cursor !== connection.subscriptionSyncCursor ||
       finishedRev !== connection.subscriptionRepoRev ||
-      importRetryAt?.getTime() !== connection.subscriptionRetryAt?.getTime()
+      waitingRetryAt?.getTime() !== connection.subscriptionRetryAt?.getTime()
     )
       await database
         .update(atprotoConnections)
         .set({
           subscriptionSyncCursor: cursor,
           subscriptionRepoRev: finishedRev,
-          subscriptionRetryAt: importRetryAt,
+          subscriptionRetryAt: waitingRetryAt,
         })
         .where(
           and(
@@ -576,7 +605,7 @@ export async function syncPublicationSubscriptions(input: {
     const nextAttemptAt = nextPublicationSyncAttempt({
       ...counts,
       status: "partial",
-      retryAt,
+      ...(retryAt ? { retryAt } : {}),
     });
     if (nextAttemptAt) {
       await database

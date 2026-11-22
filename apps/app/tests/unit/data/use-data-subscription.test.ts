@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionStateAtom } from "~/lib/data/atoms";
+import { onPublicationSyncStatusChanged } from "~/lib/data/publication-sync";
+import { dataReconciliation } from "~/lib/data/reconciliation";
 import { markDataSubscriptionPaused } from "~/lib/data/subscriptionConnection";
 import { useDataSubscription } from "~/lib/data/useDataSubscription";
 
@@ -47,6 +49,12 @@ function Subscriber() {
 /** A stream that yields one chunk and then ends without an error. */
 async function* cleanlyEndedStream() {
   yield await Promise.resolve({ type: "noop" });
+}
+
+/** A stream that delivers its messages and then stays open. */
+async function* openStream(messages: unknown[]) {
+  for (const message of messages) yield await Promise.resolve(message);
+  await new Promise(() => {});
 }
 
 function mount() {
@@ -117,5 +125,33 @@ describe("useDataSubscription", () => {
     });
     expect(mocks.subscribe).toHaveBeenCalledTimes(2);
     expect(getDefaultStore().get(connectionStateAtom)).toBe("disconnected");
+  });
+
+  it("hands a sync status notice to its listeners and keeps it out of the data chunks", async () => {
+    const notified = vi.fn();
+    const stopListening = onPublicationSyncStatusChanged(notified);
+    const chunk = {
+      source: "rss",
+      chunk: { type: "feed-status", status: "empty", feedId: 1 },
+    };
+    mocks.subscribe.mockImplementation(() =>
+      Promise.resolve(
+        openStream([
+          { source: "publication-sync", chunk: { type: "status-changed" } },
+          chunk,
+        ]),
+      ),
+    );
+    unmount = mount();
+    await settle();
+    // One frame passes, which is when buffered data chunks reach the stores.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    stopListening();
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(
+      dataReconciliation.receivePublishedChunks,
+    ).toHaveBeenCalledExactlyOnceWith([chunk]);
   });
 });

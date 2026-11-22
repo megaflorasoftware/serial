@@ -3,6 +3,7 @@ import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { checkPublicationSync, earliest, syncCheckColumns } from "./check";
 import { nextPublicationSyncAttempt } from "./requests";
 import { scheduleUnchangedSince } from "./state";
+import { throttleWithTrailing } from "./throttle";
 import type { LatestRev, SyncCheckRow } from "./check";
 import type { syncPublicationSubscriptions } from "./engine";
 import type { db } from "~/server/db";
@@ -27,7 +28,10 @@ const JOB_CONCURRENCY = 2;
 export const REMOTE_CHANGE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 /** How soon a follow-up run must be due to count as the same piece of work. */
 const CONTINUATION_WINDOW_MS = 1000;
-/** The least time between two progress announcements of one run. */
+/**
+ * The least time between two progress announcements of one run. A change
+ * inside it is announced once the interval ends.
+ */
 const PROGRESS_ANNOUNCEMENT_INTERVAL_MS = 1000;
 
 type JobState = {
@@ -120,14 +124,23 @@ function continuesAtOnce(result: PublicationSyncResult, retry: Date | null) {
   );
 }
 
-/** One request's runs report a single total; background runs never add to it. */
+/**
+ * One request's runs report a single total. What each run did adds up. Its
+ * failures do not: a run that lists the repository meets every failure again,
+ * and one that reads the cached snapshot cannot see an invalid record, so the
+ * request keeps the most any of its runs saw. Background runs never add to it.
+ */
 function accumulatedResult(
   previous: PublicationSyncResult | null,
   result: PublicationSyncResult,
-) {
+): PublicationSyncResult {
   const accumulated = { ...result };
   for (const key of ["imported", "exported", "inactive", "removed"] as const)
     accumulated[key] += previous?.[key] ?? 0;
+  accumulated.failed = Math.max(result.failed, previous?.failed ?? 0);
+  // A request that failed somewhere did not complete cleanly, whatever its last run found.
+  if (accumulated.failed && accumulated.status === "completed")
+    accumulated.status = "partial";
   return accumulated;
 }
 
@@ -187,10 +200,10 @@ export async function runPublicationSyncJobs(
         subscriptionNextAttemptAt: next,
         ...(visible
           ? {
-              subscriptionJobResult: {
+              subscriptionJobResult: accumulatedResult(job.result, {
                 ...emptyPublicationSyncCounts(),
                 status: outcome,
-              },
+              }),
               subscriptionJobProgress: null,
             }
           : {}),
@@ -256,7 +269,12 @@ export async function runPublicationSyncJobs(
     const announceChange = async () => {
       if (visible && job.userId) await announce(job.userId);
     };
-    let announcedAt = 0;
+    const progressAnnouncement = throttleWithTrailing(
+      announceChange,
+      PROGRESS_ANNOUNCEMENT_INTERVAL_MS,
+      (error) =>
+        logError("[publication-sync] progress announcement failed", error),
+    );
     let result: PublicationSyncResult;
     try {
       result = job.userId
@@ -280,10 +298,7 @@ export async function runPublicationSyncJobs(
                     : {}),
                 })
                 .where(claim);
-              if (Date.now() - announcedAt < PROGRESS_ANNOUNCEMENT_INTERVAL_MS)
-                return;
-              announcedAt = Date.now();
-              await announceChange();
+              await progressAnnouncement.request();
             },
           })
         : { ...emptyPublicationSyncCounts(), status: "skipped" };
@@ -339,6 +354,8 @@ export async function runPublicationSyncJobs(
             eq(connections.subscriptionJobToken, token),
           ),
         );
+      // The settled state is announced now; a trailing progress one would repeat it.
+      progressAnnouncement.cancel();
       await announceChange();
     }
     return (

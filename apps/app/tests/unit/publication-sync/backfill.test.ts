@@ -259,7 +259,7 @@ it("backs off a dead RSS feed to once a day and ends the probe after 14 days", a
   });
   expect(readOriginEvidence).toHaveBeenCalledTimes(attempts);
 });
-it("ends a probe at once for a publication that cannot join its Feed", async () => {
+it("ends a probe at once for a publication whose record is invalid", async () => {
   const { PublicationGoneError } = await import("~/server/feeds/importErrors");
   await addFeed(1);
   const claimed = (await claimSubscriptionSync(fixture.database, "owner"))!;
