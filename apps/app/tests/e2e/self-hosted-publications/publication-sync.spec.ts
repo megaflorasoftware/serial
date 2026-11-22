@@ -34,7 +34,7 @@ async function refreshSources(
       if (due.feedId !== undefined) {
         await db
           .update(feedOrigins)
-          .set({ nextFetchAt: null })
+          .set({ nextFetchAt: new Date(0) })
           .where(eq(feedOrigins.feedId, due.feedId));
       }
     });

@@ -1763,13 +1763,15 @@
           ],
           "isUnique": false
         },
-        "feed_origin_user_id_next_fetch_at_idx": {
-          "name": "feed_origin_user_id_next_fetch_at_idx",
+        "feed_origin_due_idx": {
+          "name": "feed_origin_due_idx",
           "columns": [
             "user_id",
-            "next_fetch_at"
+            "next_fetch_at",
+            "feed_id"
           ],
-          "isUnique": false
+          "isUnique": false,
+          "where": "\"serial_feed_origin\".\"next_fetch_at\" is not null"
         },
         "feed_origin_feed_id_kind_unique": {
           "name": "feed_origin_feed_id_kind_unique",

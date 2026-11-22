@@ -57,6 +57,8 @@ export async function createPublicationSyncWorkload(
           feedId: row.id,
           kind: "atproto",
           locator: publicationUri(row.id),
+          // Active Feeds are scheduled; these wait so nothing refreshes them.
+          nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
         })),
       )
       .returning({ id: feedOrigins.id });

@@ -54,6 +54,8 @@ export async function createPublicationBackfillWorkload(
           feedId: id,
           kind: "rss",
           locator: `https://example.com/feed/${id}`,
+          // Active Feeds are scheduled; these wait so nothing refreshes them.
+          nextFetchAt: new Date("2099-01-01T00:00:00.000Z"),
         })),
       )
       .returning({ id: feedOrigins.id });

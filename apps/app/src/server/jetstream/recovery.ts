@@ -11,11 +11,12 @@ import {
   ensureStream,
   loadOrigin,
   nowFor,
+  originAppliesLive,
   planFor,
   stageDocuments,
   streamIsConnected,
 } from "./store";
-import { drainOriginDocuments } from "./process";
+import { drainOriginDocuments, pendingDocumentCount } from "./process";
 import { captureRecordValue } from "./document-source";
 import type { atprotoStreamState } from "../db/schema";
 import type { StreamTransport } from "./transport";
@@ -39,11 +40,48 @@ async function currentBoundary(
     : transport.tip(signal);
 }
 
-export type RecoveryOutcome = "done" | "deferred";
+/**
+ * What a bounded attempt left behind, which decides when the fetch schedule
+ * visits the origin next.
+ * - `covered`: a connected worker applies the origin's events as they arrive.
+ * - `polled`: nothing covers the origin between visits.
+ * - `unfinished`: a bounded scan or drain left work for the next visit.
+ * - `deferred`: an earlier failure's backoff still holds.
+ */
+export type RecoveryOutcome =
+  | { status: "covered" | "polled" | "unfinished" }
+  | { status: "deferred"; retryAt: Date | null };
+
+/** Without a covering worker, staged documents wait for the next visit. */
+async function uncoveredOutcome(
+  database: StreamDatabase,
+  originId: number,
+  settings: StreamSettings,
+): Promise<RecoveryOutcome> {
+  const pending = await pendingDocumentCount(database, originId, settings);
+  return { status: pending > 0 ? "unfinished" : "polled" };
+}
+
+/** The stream covers an origin it applies live for a user it serves unprompted. */
+async function attemptOutcome(
+  database: StreamDatabase,
+  originId: number,
+  settings: StreamSettings,
+): Promise<RecoveryOutcome> {
+  const [row, state] = await Promise.all([
+    loadOrigin(database, originId),
+    ensureStream(database, settings.service),
+  ]);
+  return row &&
+    originAppliesLive(row, state, nowFor(settings)) &&
+    eligible(row, await planFor(row, settings), settings)
+    ? { status: "covered" }
+    : uncoveredOutcome(database, originId, settings);
+}
 
 /**
  * A bounded attempt retains scan/replay progress. It never truncates the missed
- * interval. `deferred` means an earlier failure's backoff still holds.
+ * interval.
  */
 export async function recoverOrigin(
   database: StreamDatabase,
@@ -63,29 +101,20 @@ export async function recoverOrigin(
     candidate?.atproto.recoveryRetryAt &&
     candidate.atproto.recoveryRetryAt > nowFor(settings)
   )
-    return "deferred";
-  if (
-    !candidate ||
-    !eligible(
-      candidate,
-      await planFor(candidate, settings),
-      settings,
-      options.manual,
-    )
-  )
-    return "done";
+    return { status: "deferred", retryAt: candidate.atproto.recoveryRetryAt };
+  if (!candidate) return { status: "polled" };
+  const plan = await planFor(candidate, settings);
+  if (!eligible(candidate, plan, settings, options.manual))
+    return { status: "polled" };
   const initialState = await ensureStream(database, settings.service);
-  if (
-    candidate.atproto.initialized &&
-    candidate.atproto.streamMode === "live" &&
-    candidate.atproto.streamGeneration === initialState.generation &&
-    streamIsConnected(initialState, nowFor(settings))
-  ) {
+  if (originAppliesLive(candidate, initialState, nowFor(settings))) {
     await drainOriginDocuments(database, originId, settings, {
       ...options,
       signal,
     });
-    return "done";
+    return eligible(candidate, plan, settings)
+      ? { status: "covered" }
+      : uncoveredOutcome(database, originId, settings);
   }
   const owner = randomUUID();
   const now = nowFor(settings);
@@ -104,7 +133,8 @@ export async function recoverOrigin(
       )
       .returning({ originId: feedOriginAtproto.originId }),
   );
-  if (!claimed.length) return "done";
+  // Another attempt holds the origin; the next visit sees what it left.
+  if (!claimed.length) return { status: "unfinished" };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45_000);
   const combined = AbortSignal.any([signal, controller.signal]);
@@ -138,7 +168,7 @@ export async function recoverOrigin(
       !row ||
       !eligible(row, await planFor(row, settings), settings, options.manual)
     )
-      return "done";
+      return { status: "polled" };
     let state = await ensureStream(database, settings.service);
     if (state.seq === null)
       throw new Error("Waiting for a Jetstream bootstrap boundary");
@@ -237,7 +267,9 @@ export async function recoverOrigin(
         },
       });
       row = (await loadOrigin(database, originId))!;
-      if (!row.atproto.initialized || row.atproto.cursor) return "done";
+      // The bounded scan kept its cursor; the next visit continues it.
+      if (!row.atproto.initialized || row.atproto.cursor)
+        return { status: "unfinished" };
     }
     if (row.atproto.streamMode !== "live" || options.manual) {
       await runDatabaseWrite(database, () =>
@@ -291,7 +323,7 @@ export async function recoverOrigin(
         .set({ recoveryRetryAt: null, recoveryAttempts: 0 })
         .where(owned),
     );
-    return "done";
+    return await attemptOutcome(database, originId, settings);
   } catch (error) {
     if (!signal.aborted)
       await runDatabaseWrite(database, () =>

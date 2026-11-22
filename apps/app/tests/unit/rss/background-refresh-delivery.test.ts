@@ -47,6 +47,7 @@ describe("background refresh delivery", () => {
         userId: "watching-user",
         kind: "rss",
         locator: "https://example.com/watching.xml",
+        nextFetchAt: now,
         createdAt: now,
         updatedAt: now,
       })

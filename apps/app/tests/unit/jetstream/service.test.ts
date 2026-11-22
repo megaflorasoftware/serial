@@ -268,13 +268,17 @@ it("reports a pending recovery retry as a fetch error instead of an empty refres
   };
   const fetchable = { feed, origin: feed.origins[0]! };
   const first = await refreshStreamOrigin(database, fetchable);
-  expect(first.status).toBe("error");
+  expect(first.result.status).toBe("error");
   const origin = await database.select().from(feedOriginAtproto).get();
   expect(origin?.recoveryRetryAt?.getTime()).toBeGreaterThan(Date.now());
-  // Recovery backoff still owns scheduling; the generic fetch schedule is untouched.
-  expect(fetchable.origin.nextFetchAt).toBeNull();
+  // The failed recovery's backoff is what the fetch schedule waits for.
+  expect(first.outcome).toEqual({
+    status: "deferred",
+    retryAt: origin?.recoveryRetryAt,
+  });
   tip.mockClear();
   const second = await refreshStreamOrigin(database, fetchable);
-  expect(second.status).toBe("error");
+  expect(second.result.status).toBe("error");
+  expect(second.outcome).toEqual(first.outcome);
   expect(tip).not.toHaveBeenCalled();
 });
