@@ -342,6 +342,9 @@ async function insertFeedItems(
   );
 
   const existingByUrl = new Map(existingItems.map((item) => [item.url, item]));
+  const statedContentByUrl = new Map(
+    items.map((item) => [item.url, item.content]),
+  );
 
   const firstSeenAt = new Date();
   const feedItemListWithHash = feedItemList.map((item) => {
@@ -354,7 +357,16 @@ async function insertFeedItems(
         firstSeenAt,
       ),
     };
-    return { ...datedItem, contentHash: computeItemHash(datedItem) };
+    return {
+      ...datedItem,
+      // The hash follows the description as the feed states it. Storing it
+      // sanitized is a change of representation, not of the item, so items
+      // stored before sanitizing are not rewritten for it.
+      contentHash: computeItemHash({
+        ...datedItem,
+        content: statedContentByUrl.get(item.url),
+      }),
+    };
   });
 
   const changedItems = feedItemListWithHash.filter((incoming) => {

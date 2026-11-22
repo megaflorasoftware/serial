@@ -16,7 +16,10 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
-import { loadCappedReaderBodies } from "~/server/feeds/reader-bodies";
+import {
+  bodyHeadColumns,
+  loadCappedReaderBodies,
+} from "~/server/feeds/reader-bodies";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
@@ -1061,15 +1064,11 @@ export const requestFullTextForItems = protectedProcedure
   )
   .handler(async ({ context, input }): Promise<FeedItemFulltextResponse> => {
     try {
+      // Sizes first: only the bodies that fit the response are read.
       const rows = await context.db
         .select({
-          id: feedItems.id,
-          feedId: feedItems.feedId,
-          content: feedItems.content,
-          contentHash: feedItems.contentHash,
+          ...bodyHeadColumns,
           contentSnippet: feedItems.contentSnippet,
-          atprotoUri: feedItems.atprotoUri,
-          sourceCid: feedItems.sourceCid,
         })
         .from(feedItems)
         .innerJoin(feeds, eq(feedItems.feedId, feeds.id))

@@ -575,16 +575,7 @@
           "autoincrement": false
         }
       },
-      "indexes": {
-        "atproto_subscription_mirror_publication_idx": {
-          "name": "atproto_subscription_mirror_publication_idx",
-          "columns": [
-            "connection_id",
-            "publication_uri"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "serial_atproto_subscription_mirror_connection_id_serial_atproto_connections_id_fk": {
           "name": "serial_atproto_subscription_mirror_connection_id_serial_atproto_connections_id_fk",
@@ -1570,9 +1561,8 @@
           "name": "body_source",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'none'"
+          "notNull": false,
+          "autoincrement": false
         },
         "tags": {
           "name": "tags",
@@ -1597,7 +1587,8 @@
             "feed_id",
             "normalized_url"
           ],
-          "isUnique": false
+          "isUnique": false,
+          "where": "\"serial_feed_item\".\"normalized_url\" is not null"
         },
         "feed_item_feed_id_posted_at_idx": {
           "name": "feed_item_feed_id_posted_at_idx",
@@ -1649,7 +1640,8 @@
             "feed_id",
             "atproto_uri"
           ],
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"serial_feed_item\".\"atproto_uri\" is not null"
         }
       },
       "foreignKeys": {

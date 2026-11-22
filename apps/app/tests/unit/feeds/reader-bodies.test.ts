@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { bytesToBase64, stringifyLosslessJson } from "@serial/standard-site";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type { InStatement } from "@libsql/client";
 import type { ReaderBody } from "@serial/standard-site";
 import type { PublicationClient } from "~/server/rss/atprotoClient";
 import {
@@ -12,6 +13,7 @@ import {
 } from "~/server/db/schema";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
+  bodyHeadColumns,
   capReaderBodies,
   loadCappedReaderBodies,
   loadReaderBodies,
@@ -93,6 +95,14 @@ async function insertItem(input: {
     sourceCid: input.sourceCid ?? null,
     bodySource: input.content ? "rss" : "none",
   });
+}
+
+/** Every stored item's body head in id order, as the full-text request reads them. */
+function bodyHeads() {
+  return fixture.database
+    .select(bodyHeadColumns)
+    .from(feedItems)
+    .orderBy(feedItems.id);
 }
 
 async function retainSource(cid: string, text: string, withBlob = false) {
@@ -351,16 +361,67 @@ describe("reader bodies", () => {
         id: `rss-${String(index).padStart(2, "0")}`,
         content: `<p>${"x".repeat(1000)}</p>`,
       });
-    const rows = (await fixture.database.select().from(feedItems)).sort(
-      (a, b) => a.id.localeCompare(b.id),
-    );
     const { items, omitted } = await loadCappedReaderBodies(
       fixture.database,
-      rows,
+      await bodyHeads(),
       NOW,
     );
     expect(items).toHaveLength(60);
     expect(omitted).toEqual([]);
+    expect(items[0]?.body).toEqual({
+      form: "html",
+      html: `<p>${"x".repeat(1000)}</p>`,
+      revision: "hash-rss-00",
+    });
+  });
+
+  it("reads the stored HTML only of bodies that fit the response", async () => {
+    // 200 KiB bodies: twenty fit the 4 MiB response, the twenty-first does not.
+    const html = `<p>${"x".repeat(200 * 1024 - 7)}</p>`;
+    for (let index = 0; index < 30; index++)
+      // Sequential inserts keep ids ordered for the request below.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      await insertItem({
+        id: `rss-${String(index).padStart(2, "0")}`,
+        content: html,
+      });
+    const heads = await bodyHeads();
+    expect(heads[0]?.contentBytes).toBe(200 * 1024);
+    const execute = vi.spyOn(fixture.client, "execute");
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      heads,
+      NOW,
+    );
+    expect(items.map((entry) => entry.row.id)).toEqual(
+      heads.slice(0, 20).map((row) => row.id),
+    );
+    expect(omitted.map((row) => row.id)).toEqual(
+      heads.slice(20).map((row) => row.id),
+    );
+    const bodyReads = execute.mock.calls.flatMap((call) => {
+      const statement = call[0] as InStatement;
+      return typeof statement !== "string" && /"content"/.test(statement.sql)
+        ? [statement.args]
+        : [];
+    });
+    // One statement, for the twenty bodies that ship.
+    expect(bodyReads).toEqual([heads.slice(0, 20).map((row) => row.id)]);
+  });
+
+  it("ships the first body even when it alone exceeds the response", async () => {
+    await insertItem({
+      id: "rss-00",
+      content: `<p>${"x".repeat(5 * 1024 * 1024)}</p>`,
+    });
+    await insertItem({ id: "rss-01", content: "<p>small</p>" });
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      await bodyHeads(),
+      NOW,
+    );
+    expect(items.map((entry) => entry.row.id)).toEqual(["rss-00"]);
+    expect(omitted.map((row) => row.id)).toEqual(["rss-01"]);
   });
 
   it("returns null for items without a source and for other users' items", async () => {

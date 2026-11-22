@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   parseAtUri,
   READER_BODY_RESPONSE_BUDGET_BYTES,
@@ -29,6 +29,19 @@ type BodyRow = Pick<
   DatabaseFeedItem,
   "id" | "feedId" | "content" | "contentHash" | "atprotoUri" | "sourceCid"
 >;
+
+/** What says where a body comes from and how large its stored HTML is, without the HTML. */
+export type BodyHead = Omit<BodyRow, "content"> & { contentBytes: number };
+
+export const bodyHeadColumns = {
+  id: feedItems.id,
+  feedId: feedItems.feedId,
+  contentHash: feedItems.contentHash,
+  atprotoUri: feedItems.atprotoUri,
+  sourceCid: feedItems.sourceCid,
+  // The size comes from the record header; the body itself is not read.
+  contentBytes: sql<number>`octet_length(${feedItems.content})`,
+};
 
 /** The client item; lists and pages never carry a body, direct open and the body endpoint do. */
 export function toApplicationFeedItem(
@@ -151,12 +164,53 @@ export function capReaderBodies<T extends { body: ReaderBody | null }>(
 /** Rows loaded per slice, so a request never materializes bodies it will not send. */
 const BODY_LOAD_SLICE = 25;
 
+/** A retained source ships in place of the stored HTML, at a size known only once loaded. */
+function storedHtmlBytes(row: BodyHead) {
+  return row.sourceCid && row.atprotoUri ? 0 : row.contentBytes;
+}
+
+/**
+ * The leading rows whose stored HTML fits the budget. HTML ships at its stored
+ * size, so a row past the budget is certain to be cut and its body is never
+ * read. The first row always loads, as it always ships.
+ */
+function rowsKnownToFit<T extends BodyHead>(rows: T[], budget: number) {
+  let bytes = 0;
+  const cut = rows.findIndex((row, index) => {
+    bytes += storedHtmlBytes(row);
+    return index > 0 && bytes > budget;
+  });
+  return cut === -1 ? rows : rows.slice(0, cut);
+}
+
+/** The stored HTML of the given rows, in one statement. */
+async function withStoredHtml<T extends BodyHead>(
+  database: typeof db,
+  rows: T[],
+) {
+  const stored = await database
+    .select({ id: feedItems.id, content: feedItems.content })
+    .from(feedItems)
+    .where(
+      inArray(
+        feedItems.id,
+        rows.map((row) => row.id),
+      ),
+    );
+  const contentById = new Map(stored.map((row) => [row.id, row.content]));
+  return rows.map((row) => ({
+    ...row,
+    content: contentById.get(row.id) ?? "",
+  }));
+}
+
 /**
  * Loads bodies one slice at a time in request order and stops at the first
  * slice that crosses the response budget. Work stays bounded by the bytes
- * that ship, not by the number of ids asked for.
+ * that ship, not by the number of ids asked for: a slice reads only the
+ * stored HTML its sizes say can still fit.
  */
-export async function loadCappedReaderBodies<T extends BodyRow>(
+export async function loadCappedReaderBodies<T extends BodyHead>(
   database: typeof db,
   rows: T[],
   now = new Date(),
@@ -165,19 +219,20 @@ export async function loadCappedReaderBodies<T extends BodyRow>(
   let bytes = 0;
   for (let offset = 0; offset < rows.length; offset += BODY_LOAD_SLICE) {
     const slice = rows.slice(offset, offset + BODY_LOAD_SLICE);
+    const remaining = READER_BODY_RESPONSE_BUDGET_BYTES - bytes;
+    const fitting = rowsKnownToFit(slice, remaining);
     // Slices are sequential by design: the next one loads only if this one fit.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    const bodies = await loadReaderBodies(database, slice, now);
-    const entries = slice.map((row) => ({
+    const loaded = await withStoredHtml(database, fitting);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const bodies = await loadReaderBodies(database, loaded, now);
+    const entries = fitting.map((row) => ({
       row,
       body: bodies.get(row.id) ?? null,
     }));
-    const capped = capReaderBodies(
-      entries,
-      READER_BODY_RESPONSE_BUDGET_BYTES - bytes,
-    );
+    const capped = capReaderBodies(entries, remaining);
     items.push(...capped.items);
-    if (capped.omitted.length) break;
+    if (capped.omitted.length || fitting.length < slice.length) break;
     bytes += capped.items.reduce(
       (total, entry) => total + (entry.body ? readerBodyBytes(entry.body) : 0),
       0,

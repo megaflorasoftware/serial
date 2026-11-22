@@ -12,6 +12,7 @@ import {
   sqliteTableCreator,
   text,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import {
   createInsertSchema,
@@ -359,6 +360,10 @@ export type DatabaseFeed = typeof feeds.$inferSelect;
 export type DatabaseFeedWithOrigins = DatabaseFeed & {
   origins: HydratedFeedOrigin[];
 };
+/** A Feed row with only the common origin rows the application schema exposes. */
+export type DatabaseFeedWithCommonOrigins = DatabaseFeed & {
+  origins: DatabaseFeedOrigin[];
+};
 export type ApplicationFeed = z.infer<typeof feedsSchema>;
 
 export const feedOriginRss = sqliteTable("feed_origin_rss", {
@@ -611,9 +616,8 @@ export const feedItems = sqliteTable(
       .notNull()
       .default("rss"),
     atprotoUri: text("atproto_uri"),
-    bodySource: text("body_source", { enum: ["rss", "atproto", "none"] })
-      .notNull()
-      .default("none"),
+    /** Which origin supplied the body. NULL on items written before this column existed. */
+    bodySource: text("body_source", { enum: ["rss", "atproto", "none"] }),
     tags: text("tags", { mode: "json" })
       .$type<string[]>()
       .notNull()
@@ -623,14 +627,14 @@ export const feedItems = sqliteTable(
   },
   (example) => [
     unique().on(example.url, example.feedId),
-    index("feed_item_feed_normalized_url_idx").on(
-      example.feedId,
-      example.normalizedUrl,
-    ),
-    unique("feed_item_feed_atproto_uri_unique").on(
-      example.feedId,
-      example.atprotoUri,
-    ),
+    // Both are partial: text items store no normalization override and RSS
+    // items no Atmosphere URI, so most rows would only add NULL entries.
+    index("feed_item_feed_normalized_url_idx")
+      .on(example.feedId, example.normalizedUrl)
+      .where(sql`${example.normalizedUrl} is not null`),
+    uniqueIndex("feed_item_feed_atproto_uri_unique")
+      .on(example.feedId, example.atprotoUri)
+      .where(sql`${example.atprotoUri} is not null`),
     index("feed_item_feed_id_posted_at_idx").on(
       example.feedId,
       example.postedAt,
@@ -1363,10 +1367,6 @@ export const atprotoSubscriptionMirror = sqliteTable(
         table.visibility,
       ],
     }),
-    index("atproto_subscription_mirror_publication_idx").on(
-      table.connectionId,
-      table.publicationUri,
-    ),
   ],
 );
 export type DatabaseSubscriptionMirror =
