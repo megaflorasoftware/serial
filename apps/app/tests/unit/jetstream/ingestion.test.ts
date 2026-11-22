@@ -450,6 +450,19 @@ function replay(
     },
   };
 }
+/** Replays only the interval asked for, as the real transport does, up to a live tip. */
+function replayWithin(events: StreamEvent[], tip: number): StreamTransport {
+  return {
+    ...replay([], tip),
+    async *recover(after, through) {
+      for (const missed of events.filter(
+        (candidate) => candidate.seq > after && candidate.seq <= through,
+      ))
+        yield { events: [missed], lastCursor: missed.seq };
+      yield { events: [], lastCursor: through };
+    },
+  };
+}
 async function pause(through: number) {
   await fixture.database
     .update(feedOriginAtproto)
@@ -1403,6 +1416,8 @@ describe("normal fetch recovery after stream interruptions", () => {
     );
     expect((await state()).streamGeneration).toBe(1);
     expect((await ensureStream(fixture.database, SERVICE)).generation).toBe(2);
+    // A gap clears the checkpoint; the worker re-establishes it at the tip.
+    await fixture.database.update(atprotoStreamState).set({ seq: "30" });
     await recoverOrigin(
       fixture.database,
       originId,
@@ -1413,6 +1428,70 @@ describe("normal fetch recovery after stream interruptions", () => {
     );
     expect(list).toHaveBeenCalledTimes(2);
     expect((await state()).streamGeneration).toBe(2);
+  });
+
+  /** A connected worker whose saved checkpoint trails the events it has passed. */
+  async function connectAtTrailingCheckpoint(checkpoint: number) {
+    await fixture.database.update(atprotoStreamState).set({
+      seq: String(checkpoint),
+      connected: true,
+      leaseOwner: "worker",
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+  }
+  const recoverThrough = (transport: StreamTransport) =>
+    recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { manual: true, client, readPage },
+    );
+
+  it("catches up to the live tip, past an event the worker dropped ahead of its trailing checkpoint", async () => {
+    await connectAtTrailingCheckpoint(10);
+    await fixture.database
+      .update(user)
+      .set({ lastActiveAt: null })
+      .where(eq(user.id, "reader"));
+    // The worker passes the event without applying it, and its heartbeat has
+    // not saved that position yet.
+    await acceptBatch(
+      fixture.database,
+      { events: [event(15, "missed")] },
+      settings,
+    );
+    expect(await ledger(uri("missed"))).toBeUndefined();
+    expect((await state()).streamMode).toBe("paused");
+    // The reader returns and their refresh recovers before the next heartbeat.
+    await fixture.database
+      .update(user)
+      .set({ lastActiveAt: NOW })
+      .where(eq(user.id, "reader"));
+    const transport = replayWithin([event(15, "missed")], 15);
+    expect(await recoverThrough(transport)).toEqual({ status: "covered" });
+    expect(transport.tip).toHaveBeenCalledTimes(1);
+    expect(await state()).toMatchObject({
+      streamMode: "live",
+      streamSeq: "15",
+    });
+    expect(await ledger(uri("missed"))).toMatchObject({ eventSeq: "15" });
+  });
+
+  it("catches up a distrusted origin to the live tip when it recovers within one heartbeat", async () => {
+    await connectAtTrailingCheckpoint(10);
+    // The intake skipped event 15 before it followed the publisher and could
+    // not vouch for the interval. The saved checkpoint still trails it.
+    await distrustOriginCoverage(fixture.database, [originId], NOW);
+    const transport = replayWithin([event(15, "missed")], 15);
+    expect(await recoverThrough(transport)).toEqual({ status: "covered" });
+    expect(await state()).toMatchObject({
+      streamGeneration: 0,
+      streamMode: "live",
+      streamSeq: "15",
+    });
+    expect(await ledger(uri("missed"))).toMatchObject({ eventSeq: "15" });
   });
 
   it("preserves live updates that arrive while a no-key snapshot is being read", async () => {
@@ -1618,7 +1697,6 @@ describe("fetch schedule", () => {
       fixture.database,
       "worker",
       new Date(),
-      { resetCheckpoint: true },
     );
     expect(gap?.generation).toBe(1);
     expect(
@@ -1790,6 +1868,30 @@ describe("retry sweep", () => {
     await fixture.database
       .update(feedOriginAtproto)
       .set({ streamMode: "live", repositoryActive: false });
+    expect(await due()).toEqual([]);
+  });
+
+  it("leaves an inactive Feed's staged work for the Feed's return", async () => {
+    await accept(event(10));
+    await fixture.database
+      .update(feeds)
+      .set({ isActive: false })
+      .where(eq(feeds.id, feedId));
+    expect(await due()).toEqual([]);
+  });
+
+  it("selects an origin its reader no longer qualifies for at most once", async () => {
+    await accept(event(10));
+    await fixture.database
+      .update(user)
+      .set({ lastActiveAt: null })
+      .where(eq(user.id, "reader"));
+    expect(await due()).toEqual([{ originId }]);
+    await sweep(true);
+    // The sweep pauses it, the way an arriving event would, so its staged
+    // work stops asking for a sweep and waits for the origin's refresh.
+    expect((await state()).streamMode).toBe("paused");
+    expect(await ledger(uri("post"))).toMatchObject({ status: "retry" });
     expect(await due()).toEqual([]);
   });
 

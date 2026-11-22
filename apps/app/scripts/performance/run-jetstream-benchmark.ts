@@ -125,7 +125,10 @@ try {
   }
   const intake = await workload.intake();
   // Network-wide traffic for publishers nobody follows never reaches the database.
-  await fixedCost("skipped-event", { statements: 0, rows: 0 }, intake.skip);
+  await fixedCost("skipped-event", { statements: 0, rows: 0 }, async () => {
+    const { applied } = await intake.skip();
+    if (applied !== 0) throw new Error("A skipped event was applied");
+  });
   await fixedCost("intake-refresh", { statements: 1, rows: 0 }, intake.refresh);
   await fixedCost("idle-sweep", { statements: 1, rows: 0 }, workload.sweep);
   await fixedCost("disconnect", { statements: 1, rows: 0 }, () =>

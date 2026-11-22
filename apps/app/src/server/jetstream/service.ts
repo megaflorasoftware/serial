@@ -280,9 +280,7 @@ export async function startStreamWorker(
       stored.seq !== null &&
       legacyResumeLeavesGap(service, sequence(stored.seq), Date.now())
     )
-      await declareStreamGap(database, owner, new Date(), {
-        resetCheckpoint: true,
-      });
+      await declareStreamGap(database, owner, new Date());
     await establishBoundary(database, config, signal);
     return ensureStream(database, service);
   }
@@ -351,12 +349,14 @@ export async function startStreamWorker(
                 ))
               )
                 throw new StreamFailure("connection-ownership");
-              outage.connected();
               await openedIntake();
             },
           )) {
             await (await openedIntake()).accept(batch);
+            // Only a delivered batch ends an outage. A socket that opens and
+            // drops before one leaves the grace period running.
             attempt = 0;
+            outage.delivered();
           }
         } finally {
           const closing = intake;
@@ -369,9 +369,7 @@ export async function startStreamWorker(
         config.transport.report(error, "consumer");
         if (error instanceof StreamFailure && error.status === 400)
           // The rejected cursor left a gap that only each origin's refresh fills.
-          await declareStreamGap(database, owner, new Date(), {
-            resetCheckpoint: true,
-          });
+          await declareStreamGap(database, owner, new Date());
         else if (outage.outlastedGrace())
           // The next connection replays what this outage missed; until then
           // each covered origin is polled at its next refresh.

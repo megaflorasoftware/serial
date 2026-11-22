@@ -6,7 +6,12 @@ import {
   parsePublicationRecord,
   REFERENCE_IMPORT_REUSE_MS,
 } from "@serial/standard-site";
-import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
+import {
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
+  feedOrigins,
+  feeds,
+} from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { createPublicationClient } from "../rss/atprotoClient";
 import {
@@ -37,7 +42,13 @@ import {
   storeDocumentBlobs,
 } from "./document-source";
 import { CheckpointHostError } from "./protocol";
-import { eligible, loadOrigin, nowFor, planFor } from "./store";
+import {
+  eligible,
+  loadOrigin,
+  nowFor,
+  pauseOriginStream,
+  planFor,
+} from "./store";
 import { createStreamReporter } from "./report";
 import type { FetchedBlob } from "./document-source";
 import type { StreamDatabase, StreamSettings } from "./store";
@@ -46,6 +57,7 @@ import type {
   DOCUMENT_LEDGER_REASONS,
 } from "../db/schema";
 import type { PublicationClient } from "../rss/atprotoClient";
+import type { PlanConfig } from "../subscriptions/plans";
 import type { FeedDatabase } from "../feeds/origins";
 import { workerPool } from "~/lib/workerPool";
 
@@ -69,6 +81,29 @@ export type ProcessingOptions = {
   publish?: (update: CommittedUpdate) => Promise<void>;
 };
 
+/**
+ * An origin that cannot be processed leaves live mode the way it does when an
+ * event arrives for it, so its staged work stops asking for a sweep.
+ */
+async function pauseUnlessEligible(
+  database: StreamDatabase,
+  originId: number,
+  plan: PlanConfig,
+  settings: StreamSettings,
+  options: Pick<ProcessingOptions, "manual">,
+) {
+  await runDatabaseWrite(database, () =>
+    database.transaction(
+      async (tx) => {
+        const latest = await loadOrigin(tx, originId);
+        if (latest && !eligible(latest, plan, settings, options.manual))
+          await pauseOriginStream(tx, latest, nowFor(settings));
+      },
+      { behavior: "immediate" },
+    ),
+  );
+}
+
 export async function processOriginDocuments(
   database: StreamDatabase,
   originId: number,
@@ -89,7 +124,10 @@ export async function processOriginDocuments(
   )
     return;
   const plan = await planFor(row, settings);
-  if (!eligible(row, plan, settings, options.manual)) return;
+  if (!eligible(row, plan, settings, options.manual)) {
+    await pauseUnlessEligible(database, originId, plan, settings, options);
+    return;
+  }
   const report = createStreamReporter(settings.service);
   const client = options.client ?? createPublicationClient();
   let publication = parsePublicationRecord(row.atproto.publicationRecord);
@@ -390,24 +428,22 @@ export async function pendingDocumentCount(
 }
 
 /**
- * Live origins with a staged document whose retry is due, or a Publication
- * record to apply, a page at a time in origin order. Both halves read a
- * partial index of pending work only, so an idle sweep examines nothing.
+ * Live origins of active Feeds with a staged document whose retry is due, or
+ * a Publication record to apply, a page at a time in origin order. Both halves
+ * read a partial index of pending work only, so an idle sweep examines
+ * nothing. An inactive Feed's staged work waits for the Feed.
  */
 export async function originsWithDueWork(
   database: StreamDatabase,
   input: { after: number; now: Date; limit: number },
 ) {
-  const dueTime = input.now.getTime();
   return database.all<{ originId: number }>(sql`
     select due.origin_id as "originId"
     from (
       select ${feedOriginAtprotoDocuments.originId} as origin_id
       from ${feedOriginAtprotoDocuments}
-      where ${feedOriginAtprotoDocuments.status} = 'retry'
+      where ${retryIsDue(input.now)}
         and ${feedOriginAtprotoDocuments.originId} > ${input.after}
-        and (${feedOriginAtprotoDocuments.retryAt} is null
-          or ${feedOriginAtprotoDocuments.retryAt} <= ${dueTime})
       union
       select ${feedOriginAtproto.originId} as origin_id
       from ${feedOriginAtproto}
@@ -416,9 +452,14 @@ export async function originsWithDueWork(
     ) as due
     inner join ${feedOriginAtproto}
       on ${feedOriginAtproto.originId} = due.origin_id
+    inner join ${feedOrigins}
+      on ${feedOrigins.id} = due.origin_id
+    inner join ${feeds}
+      on ${feeds.id} = ${feedOrigins.feedId}
     where ${feedOriginAtproto.initialized} = 1
       and ${feedOriginAtproto.streamMode} = 'live'
       and ${feedOriginAtproto.repositoryActive} = 1
+      and ${feeds.isActive} = 1
     order by due.origin_id
     limit ${input.limit}
   `);
@@ -467,14 +508,24 @@ export async function drainDueOrigins(
   }
 }
 
-/** Staged versions whose retry time, if any, has passed. */
+/**
+ * A staged version whose retry time, if any, has passed. The status is a
+ * literal so the partial index of pending retries applies.
+ */
+function retryIsDue(now: Date) {
+  return and(
+    sql`${feedOriginAtprotoDocuments.status} = 'retry'`,
+    or(
+      isNull(feedOriginAtprotoDocuments.retryAt),
+      lte(feedOriginAtprotoDocuments.retryAt, now),
+    ),
+  )!;
+}
+
+/** One origin's staged versions whose retry is due. */
 function pendingDocuments(originId: number, settings: StreamSettings) {
   return and(
     eq(feedOriginAtprotoDocuments.originId, originId),
-    eq(feedOriginAtprotoDocuments.status, "retry"),
-    or(
-      isNull(feedOriginAtprotoDocuments.retryAt),
-      lte(feedOriginAtprotoDocuments.retryAt, nowFor(settings)),
-    ),
+    retryIsDue(nowFor(settings)),
   );
 }

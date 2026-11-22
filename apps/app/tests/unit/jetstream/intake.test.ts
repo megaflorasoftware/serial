@@ -4,7 +4,6 @@ import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { StreamEvent } from "~/server/jetstream/protocol";
 import {
   createSkippedEvents,
-  FOLLOWED_RELOAD_INTERVAL_MS,
   SKIPPED_EVENT_WINDOW_MS,
   startStreamIntake,
 } from "~/server/jetstream/intake";
@@ -86,7 +85,7 @@ describe("skipped events", () => {
 });
 
 describe("outage watch", () => {
-  it("reports an outage once, only after its grace period, and starts over after a connection", () => {
+  it("reports an outage once, only after its grace period, and starts over after a delivered batch", () => {
     let time = 0;
     const outage = createOutageWatch(100, () => time);
     expect(outage.outlastedGrace()).toBe(false);
@@ -96,7 +95,7 @@ describe("outage watch", () => {
     expect(outage.outlastedGrace()).toBe(true);
     time = 500;
     expect(outage.outlastedGrace()).toBe(false);
-    outage.connected();
+    outage.delivered();
     expect(outage.outlastedGrace()).toBe(false);
     time = 600;
     expect(outage.outlastedGrace()).toBe(true);
@@ -266,15 +265,15 @@ describe("stream intake", () => {
     expect(intake.checkpoint()).toBe(5);
   });
 
-  it("stops following a deleted origin's publisher at the next reload", async () => {
+  it("keeps a deleted origin's publisher followed until the next connection rebuilds the set", async () => {
     const gone = await follow("did:plc:gone");
     const intake = await start();
     await fixture.database.delete(feeds).where(eq(feeds.id, gone.feedId));
+    await intake.refresh();
     await intake.accept(batch(account(2, "did:plc:gone")));
     expect(applied()).toEqual([[2]]);
-    time += FOLLOWED_RELOAD_INTERVAL_MS;
-    await intake.refresh();
-    await intake.accept(batch(account(3, "did:plc:gone")));
+    const next = await start();
+    await next.accept(batch(account(3, "did:plc:gone")));
     expect(applied()).toEqual([[2]]);
   });
 });

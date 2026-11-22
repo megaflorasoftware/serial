@@ -260,13 +260,12 @@ export async function disconnectStream(
  * Events were lost for good: the service rejected the resume cursor, or could
  * not vouch for it. The new generation sends every origin through recovery,
  * and the origins the stream covered become due so that happens at their next
- * refresh. A rejected cursor also clears the checkpoint to resume at the tip.
+ * refresh. The checkpoint clears, so the next connection resumes at the tip.
  */
 export async function declareStreamGap(
   database: StreamDatabase,
   owner: string,
   now: Date,
-  options: { resetCheckpoint?: boolean } = {},
 ) {
   return runDatabaseWrite(database, () =>
     database.transaction(
@@ -276,7 +275,7 @@ export async function declareStreamGap(
           .set({
             generation: sql`${atprotoStreamState.generation} + 1`,
             connected: false,
-            ...(options.resetCheckpoint ? { seq: null } : {}),
+            seq: null,
           })
           .where(streamOwnedBy(owner))
           .returning({ generation: atprotoStreamState.generation });
@@ -673,6 +672,28 @@ async function applyMarker(
   }
 }
 
+/**
+ * The stream stops applying an origin whose Feed or account no longer
+ * qualifies for it. The origin becomes due, so its next refresh catches up;
+ * an inactive Feed's origin is unscheduled and stays that way.
+ */
+export async function pauseOriginStream(
+  tx: FeedDatabase,
+  row: Pick<StreamOrigin, "origin" | "atproto">,
+  now: Date,
+) {
+  if (
+    row.atproto.streamMode === "paused" ||
+    row.atproto.streamMode === "direct"
+  )
+    return;
+  await tx
+    .update(feedOriginAtproto)
+    .set({ streamMode: "paused" })
+    .where(eq(feedOriginAtproto.originId, row.origin.id));
+  await makeOriginsDue(tx, eq(feedOrigins.id, row.origin.id), now);
+}
+
 async function acceptOriginEvent(
   database: StreamDatabase,
   originId: number,
@@ -693,21 +714,7 @@ async function acceptOriginEvent(
         )
           throw new CheckpointHostError();
         if (!eligible(row, plan, settings, manual)) {
-          if (
-            row.atproto.streamMode !== "paused" &&
-            row.atproto.streamMode !== "direct"
-          ) {
-            await tx
-              .update(feedOriginAtproto)
-              .set({ streamMode: "paused" })
-              .where(eq(feedOriginAtproto.originId, originId));
-            // The stream no longer covers this origin; its next refresh catches up.
-            await makeOriginsDue(
-              tx,
-              eq(feedOrigins.id, originId),
-              nowFor(settings),
-            );
-          }
+          await pauseOriginStream(tx, row, nowFor(settings));
           return;
         }
         // Newly created origins first establish their bootstrap boundary.

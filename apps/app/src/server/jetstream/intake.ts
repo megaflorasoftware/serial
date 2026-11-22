@@ -7,8 +7,6 @@ const PUBLICATION_PAGE_SIZE = 1000;
 /** How long a skipped event stays replayable; several lease heartbeats wide. */
 export const SKIPPED_EVENT_WINDOW_MS = 2 * 60 * 1000;
 export const SKIPPED_EVENT_BUDGET_BYTES = 8 * 1024 * 1024;
-/** Deleted origins leave the followed set at this pace; a stale entry only costs a lookup. */
-export const FOLLOWED_RELOAD_INTERVAL_MS = 60 * 60 * 1000;
 
 type FollowedPublication = { originId: number; did: string };
 
@@ -112,7 +110,9 @@ export type StreamIntake = Awaited<ReturnType<typeof startStreamIntake>>;
  * Decides which stream events reach the database. Events for publishers
  * nobody follows are skipped in memory, so network-wide traffic costs no
  * statements. Batches and refreshes run one at a time, which keeps a replayed
- * event ahead of the live events that follow it.
+ * event ahead of the live events that follow it. The followed set is built
+ * once per connection: a deleted origin's publisher stays in it until the
+ * next connection, which only costs a lookup that finds nothing.
  */
 export async function startStreamIntake(input: {
   database: StreamDatabase;
@@ -129,24 +129,10 @@ export async function startStreamIntake(input: {
   const skipped = createSkippedEvents(startedAt, input.limits);
   const followed = new Set<string>();
   let newestOriginId = 0;
-  let loadedAt = startedAt;
   let refreshedAt = startedAt;
   let applied: number | undefined;
   let checkpoint: number | undefined;
   let replayLost = false;
-
-  /**
-   * Rebuilds the followed set from the origins already joined, so deleted
-   * origins leave it. Newer origins still join through a refresh, which is
-   * what hands them their skipped events.
-   */
-  async function reloadFollowed() {
-    const publications = await loadPublicationsAfter(input.database, 0);
-    followed.clear();
-    for (const { originId, did } of publications)
-      if (originId <= newestOriginId) followed.add(did);
-    loadedAt = now();
-  }
 
   /** Follows publishers of new origins, handing them the events skipped meanwhile. */
   async function followNewPublications() {
@@ -201,8 +187,6 @@ export async function startStreamIntake(input: {
           replayLost = true;
           throw error;
         }
-        if (now() - loadedAt >= FOLLOWED_RELOAD_INTERVAL_MS)
-          await reloadFollowed();
         checkpoint = reached;
       });
     },

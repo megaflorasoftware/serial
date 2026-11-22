@@ -448,6 +448,56 @@ it("declares a gap when the service rejects the resume cursor, once", async () =
   }
 });
 
+it("hands covered origins back to polling when the connection keeps opening and dropping before any batch", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const shutdown = new AbortController();
+  const { originId } = await liveReader(database, service, "did:plc:alice");
+  const covered = new Date(Date.now() + 6 * 60 * 60 * 1000);
+  await database.update(feedOrigins).set({ nextFetchAt: covered });
+  const started = Date.now();
+  let drops = 0;
+  // Each drop comes 90 seconds after the last; the grace period is two minutes.
+  const clock = vi
+    .spyOn(Date, "now")
+    .mockImplementation(() => started + drops * 90_000);
+  state.transport = {
+    service,
+    hasReplay: true,
+    recover: vi.fn(),
+    tip: vi.fn(async () => 1),
+    report: vi.fn(),
+    async *stream(_after, _signal, _dids, onOpen) {
+      if (drops < 3) {
+        drops++;
+        // The socket opens, then drops before it delivers anything.
+        await onOpen?.();
+        throw new Error("upstream disconnected");
+      }
+      shutdown.abort();
+      yield* [];
+    },
+  };
+  try {
+    await startStreamWorker(database, shutdown.signal);
+    const origin = (await database
+      .select()
+      .from(feedOrigins)
+      .where(eq(feedOrigins.id, originId))
+      .get())!;
+    // Due now, no longer six hours out.
+    expect(origin.nextFetchAt!.getTime()).toBeLessThan(started + 60_000);
+    // An outage is not a gap: the next connection still resumes from the checkpoint.
+    expect((await database.select().from(atprotoStreamState))[0]).toMatchObject(
+      { generation: 0, seq: "1" },
+    );
+  } finally {
+    clock.mockRestore();
+    shutdown.abort();
+  }
+});
+
 it("follows a Publication created mid-stream and replays every event it skipped, in order", async () => {
   fixture = await createBookmarkTestDatabase();
   const database = fixture.database;
