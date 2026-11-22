@@ -22,7 +22,9 @@ export function readJournal(): Journal {
 
 /** The journal index of the publication subscriptions migration. */
 export function featureIndex(journal: Journal) {
-  return journal.entries.find(({ tag }) => tag === FEATURE_TAG)!.idx;
+  const entry = journal.entries.find(({ tag }) => tag === FEATURE_TAG);
+  if (!entry) throw new Error(`Migration ${FEATURE_TAG} is not in the journal`);
+  return entry.idx;
 }
 
 export async function applyJournalRange(

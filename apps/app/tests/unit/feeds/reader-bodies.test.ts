@@ -17,6 +17,7 @@ import {
   capReaderBodies,
   loadCappedReaderBodies,
   loadReaderBodies,
+  loadRequestedReaderBodies,
   ownedBodyRow,
   refreshDocumentReferences,
   toApplicationFeedItem,
@@ -103,6 +104,27 @@ function bodyHeads() {
     .select(bodyHeadColumns)
     .from(feedItems)
     .orderBy(feedItems.id);
+}
+
+/** Ordered inserts of same-sized HTML items, ids `rss-00` onwards. */
+async function insertHtmlItems(count: number, html: string) {
+  for (let index = 0; index < count; index++)
+    // Sequential inserts keep ids ordered for the requests below.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await insertItem({
+      id: `rss-${String(index).padStart(2, "0")}`,
+      content: html,
+    });
+}
+
+/** The ids of each statement that read stored HTML through the client. */
+function storedHtmlReads(execute: { mock: { calls: unknown[][] } }) {
+  return execute.mock.calls.flatMap((call) => {
+    const statement = call[0] as InStatement;
+    return typeof statement !== "string" && /"content"/.test(statement.sql)
+      ? [statement.args]
+      : [];
+  });
 }
 
 async function retainSource(cid: string, text: string, withBlob = false) {
@@ -267,6 +289,10 @@ describe("reader bodies", () => {
     expect(
       capReaderBodies([{ id: "big", body: body(500) }], 100).items,
     ).toHaveLength(1);
+    // Only the body that leads the response is spared the budget.
+    expect(
+      capReaderBodies([{ id: "big", body: body(500) }], 100, false).items,
+    ).toHaveLength(0);
   });
 
   it("refreshes stale snapshots at their latest version and keeps young ones", async () => {
@@ -354,13 +380,7 @@ describe("reader bodies", () => {
   });
 
   it("loads bodies slice by slice and stops at the first slice over budget", async () => {
-    for (let index = 0; index < 60; index++)
-      // Sequential inserts keep ids ordered for the request below.
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      await insertItem({
-        id: `rss-${String(index).padStart(2, "0")}`,
-        content: `<p>${"x".repeat(1000)}</p>`,
-      });
+    await insertHtmlItems(60, `<p>${"x".repeat(1000)}</p>`);
     const { items, omitted } = await loadCappedReaderBodies(
       fixture.database,
       await bodyHeads(),
@@ -377,14 +397,7 @@ describe("reader bodies", () => {
 
   it("reads the stored HTML only of bodies that fit the response", async () => {
     // 200 KiB bodies: twenty fit the 4 MiB response, the twenty-first does not.
-    const html = `<p>${"x".repeat(200 * 1024 - 7)}</p>`;
-    for (let index = 0; index < 30; index++)
-      // Sequential inserts keep ids ordered for the request below.
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      await insertItem({
-        id: `rss-${String(index).padStart(2, "0")}`,
-        content: html,
-      });
+    await insertHtmlItems(30, `<p>${"x".repeat(200 * 1024 - 7)}</p>`);
     const heads = await bodyHeads();
     expect(heads[0]?.contentBytes).toBe(200 * 1024);
     const execute = vi.spyOn(fixture.client, "execute");
@@ -399,14 +412,115 @@ describe("reader bodies", () => {
     expect(omitted.map((row) => row.id)).toEqual(
       heads.slice(20).map((row) => row.id),
     );
-    const bodyReads = execute.mock.calls.flatMap((call) => {
-      const statement = call[0] as InStatement;
-      return typeof statement !== "string" && /"content"/.test(statement.sql)
-        ? [statement.args]
-        : [];
-    });
     // One statement, for the twenty bodies that ship.
-    expect(bodyReads).toEqual([heads.slice(0, 20).map((row) => row.id)]);
+    expect(storedHtmlReads(execute)).toEqual([
+      heads.slice(0, 20).map((row) => row.id),
+    ]);
+  });
+
+  it("cuts an oversized body that starts a later slice, without reading it", async () => {
+    await insertHtmlItems(25, "<p>small</p>");
+    await insertItem({
+      id: "rss-25",
+      content: `<p>${"x".repeat(5 * 1024 * 1024)}</p>`,
+    });
+    await insertItem({ id: "rss-26", content: "<p>small</p>" });
+    const heads = await bodyHeads();
+    const execute = vi.spyOn(fixture.client, "execute");
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      heads,
+      NOW,
+    );
+    // The oversized body leads its slice, not the response, so it waits.
+    expect(items.map((entry) => entry.row.id)).toEqual(
+      heads.slice(0, 25).map((row) => row.id),
+    );
+    expect(omitted.map((row) => row.id)).toEqual(["rss-25", "rss-26"]);
+    expect(storedHtmlReads(execute)).toEqual([
+      heads.slice(0, 25).map((row) => row.id),
+    ]);
+  });
+
+  it("leaves a sourced row's stored HTML unread until its source is gone", async () => {
+    await retainSource(CID, record());
+    await insertItem({
+      id: "doc",
+      content: "<p>RSS copy</p>",
+      atprotoUri: DOC,
+      sourceCid: CID,
+    });
+    await insertItem({
+      id: "gone",
+      content: "<p>Fallback</p>",
+      atprotoUri: `${DOC}-gone`,
+      sourceCid: CID,
+    });
+    await insertItem({ id: "rss", content: "<p>Body</p>" });
+    const heads = await bodyHeads();
+    const execute = vi.spyOn(fixture.client, "execute");
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      heads,
+      NOW,
+    );
+    expect(omitted).toEqual([]);
+    expect(
+      items.map((entry) => [
+        entry.row.id,
+        entry.body?.form === "html" ? entry.body.html : entry.body?.form,
+      ]),
+    ).toEqual([
+      ["doc", "source"],
+      ["gone", "<p>Fallback</p>"],
+      ["rss", "<p>Body</p>"],
+    ]);
+    // The HTML body first, then the one whose source turned out to be missing.
+    expect(storedHtmlReads(execute)).toEqual([["rss"], ["gone"]]);
+  });
+
+  it("reads a one-slice request in one statement and a larger one sizes first", async () => {
+    await insertHtmlItems(26, "<p>small</p>");
+    const ids = (await bodyHeads()).map((row) => row.id);
+    const execute = vi.spyOn(fixture.client, "execute");
+    const small = await loadRequestedReaderBodies(
+      fixture.database,
+      "reader",
+      [ids[2]!, ids[0]!, ids[1]!],
+      NOW,
+    );
+    expect(small.items.map((entry) => entry.row.id)).toEqual([
+      ids[2],
+      ids[0],
+      ids[1],
+    ]);
+    expect(small.items[0]?.body).toMatchObject({ html: "<p>small</p>" });
+    expect(small.omitted).toEqual([]);
+    // The bodies came with the rows.
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    execute.mockClear();
+    const large = await loadRequestedReaderBodies(
+      fixture.database,
+      "reader",
+      ids,
+      NOW,
+    );
+    expect(large.items.map((entry) => entry.row.id)).toEqual(ids);
+    // Sizes, then the stored HTML of each of the two slices.
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(storedHtmlReads(execute).slice(1)).toEqual([
+      ids.slice(0, 25),
+      ids.slice(25),
+    ]);
+
+    const foreign = await loadRequestedReaderBodies(
+      fixture.database,
+      "someone-else",
+      ids.slice(0, 3),
+      NOW,
+    );
+    expect(foreign).toEqual({ items: [], omitted: [] });
   });
 
   it("ships the first body even when it alone exceeds the response", async () => {

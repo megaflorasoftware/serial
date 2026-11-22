@@ -1,4 +1,3 @@
-import { sanitizeEmbeddedHtml } from "@serial/standard-site";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   createLocalBenchmarkTarget,
@@ -52,7 +51,7 @@ ${POSTS.map(
 ).join("\n")}
 </channel></rss>`;
 
-// A description the sanitizer would restate: storing it differently is not a change.
+// Plain text that HTML would read as markup. It is stored as the feed states it.
 const DESCRIPTION = "Q&A with <tips> & more";
 const VIDEO = {
   id: "vd14EElCRvs",
@@ -294,9 +293,9 @@ it("writes no item for a Feed that says the same on its first fetch after the up
   expect(blog.rows).toEqual([{ site_url: "https://blog.example.com/" }]);
 });
 
-it("still rewrites a video whose description its feed changed, storing it sanitized", async () => {
+it("rewrites a video only when its feed changed the description, storing it as stated", async () => {
   const before = await storedItems();
-  channelDescription = "Q&A, edited & more";
+  channelDescription = "Q&A, edited <tips> & more";
 
   const { results } = await fetchDue();
 
@@ -311,10 +310,8 @@ it("still rewrites a video whose description its feed changed, storing it saniti
     before.filter((row) => row.feed_id === 1),
   );
   const video = after.find((row) => row.feed_id === 2)!;
-  // The stored description is the sanitized form, which restates the text.
-  expect(video.content).toBe(sanitizeEmbeddedHtml(channelDescription));
-  expect(video.content).not.toBe(channelDescription);
-  // The hash follows what the feed stated, so the next fetch finds no change.
+  expect(video.content).toBe(channelDescription);
+  // The hash describes what is stored, as it did before the upgrade.
   expect(video.content_hash).toBe(
     computeItemHash({
       contentId: VIDEO.id,
@@ -325,8 +322,10 @@ it("still rewrites a video whose description its feed changed, storing it saniti
       postedAt: new Date(VIDEO.published),
     }),
   );
+  // The same description again is no change.
   expect((await fetchDue({ again: true })).results).toMatchObject([
     { feedItems: [] },
     { feedItems: [] },
   ]);
+  expect(await storedItems()).toEqual(after);
 });
