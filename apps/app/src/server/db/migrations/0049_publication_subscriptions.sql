@@ -55,12 +55,15 @@ CREATE TABLE `serial_feed_origin_atproto` (
   `newest_rkey` text,
   `initial_count` integer DEFAULT 0 NOT NULL,
   `initialized` integer DEFAULT false NOT NULL,
+  `staged_due_at` integer,
   FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_publication_did_idx` ON `serial_feed_origin_atproto` (`publication_did`);
 --> statement-breakpoint
-CREATE INDEX `feed_origin_atproto_dirty_idx` ON `serial_feed_origin_atproto` (`origin_id`) WHERE "serial_feed_origin_atproto"."publication_dirty" = 1;
+CREATE INDEX `feed_origin_atproto_dirty_idx` ON `serial_feed_origin_atproto` (`origin_id`) WHERE "serial_feed_origin_atproto"."publication_dirty" = 1 and "serial_feed_origin_atproto"."stream_mode" = 'live' and "serial_feed_origin_atproto"."initialized" = 1 and "serial_feed_origin_atproto"."repository_active" = 1;
+--> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_staged_due_at_idx` ON `serial_feed_origin_atproto` (`staged_due_at`) WHERE "serial_feed_origin_atproto"."staged_due_at" is not null and "serial_feed_origin_atproto"."stream_mode" = 'live' and "serial_feed_origin_atproto"."initialized" = 1 and "serial_feed_origin_atproto"."repository_active" = 1;
 --> statement-breakpoint
 CREATE TABLE `serial_feed_origin_atproto_document` (
   `origin_id` integer NOT NULL,
@@ -79,8 +82,6 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
 );
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,"uri" desc);
---> statement-breakpoint
-CREATE INDEX `feed_origin_atproto_document_retry_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`retry_at`) WHERE "serial_feed_origin_atproto_document"."status" = 'retry';
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_document_body_type_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`body_content_type`) WHERE "serial_feed_origin_atproto_document"."body_content_type" is not null;
 --> statement-breakpoint

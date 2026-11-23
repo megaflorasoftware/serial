@@ -21,6 +21,7 @@ it.each([1000, 10000, 50000])(
         history,
       );
       const platformChecks: string[] = [];
+      const restatements: string[] = [];
       for (const mode of [
         "changed",
         "duplicate",
@@ -44,6 +45,31 @@ it.each([1000, 10000, 50000])(
         expect(evidence.materializedRows).toBeLessThanOrEqual(185);
         expect(evidence.statementCount).toBeLessThanOrEqual(180);
         expect(result.publications).toBe(mode === "changed" ? 3 : 0);
+        // An event's cursor and the mark for the document it staged share one
+        // statement per subscriber, and processing restates the mark once.
+        // Nothing else touches when an origin's documents are due.
+        const dueWrites = evidence.statements.filter((entry) =>
+          /^update "serial_feed_origin_atproto" set .*"staged_due_at"/i.test(
+            entry.sql,
+          ),
+        );
+        expect(dueWrites).toHaveLength(mode === "changed" ? 6 : 0);
+        restatements.push(
+          ...dueWrites
+            .map((entry) => entry.sql)
+            .filter((sql) => !sql.includes('"stream_seq"')),
+        );
+        expect(
+          dueWrites.filter((entry) => entry.sql.includes('"stream_seq"')),
+        ).toHaveLength(mode === "changed" ? 3 : 0);
+        expect(
+          evidence.statements.filter(
+            (entry) =>
+              /^update "serial_feed_origin_atproto" set .*"stream_seq" =/i.test(
+                entry.sql,
+              ) && !entry.sql.includes('"staged_due_at"'),
+          ),
+        ).toHaveLength(0);
         if (mode !== "changed")
           expect(
             evidence.statements.filter((entry) =>
@@ -96,6 +122,17 @@ it.each([1000, 10000, 50000])(
       const sweep = session.instrumentation.snapshot();
       expect(sweep).toMatchObject({ statementCount: 1, materializedRows: 0 });
       const sweepSql = sweep.statements[0]!.sql;
+      // The same statement, finding nothing, with thousands of documents in
+      // backoff and thousands more held by an origin the stream has paused.
+      await workload.stageBacklog(2000);
+      session.instrumentation.reset();
+      expect(await workload.sweep()).toEqual({ publications: 0 });
+      const backlogSweep = session.instrumentation.snapshot();
+      expect(backlogSweep).toMatchObject({
+        statementCount: 1,
+        materializedRows: 0,
+      });
+      expect(backlogSweep.statements[0]!.sql).toBe(sweepSql);
       // Ending a connection is one marker write whatever the Feed count.
       session.instrumentation.reset();
       await disconnectStream(session.database, "benchmark");
@@ -137,11 +174,29 @@ it.each([1000, 10000, 50000])(
       const sweepDetails = sweepPlan.rows
         .map((row) => String(row.detail))
         .join("\n");
-      expect(sweepDetails).toContain("feed_origin_atproto_document_retry_idx");
-      expect(sweepDetails).toContain("feed_origin_atproto_dirty_idx");
-      expect(sweepDetails).not.toMatch(
-        /SCAN serial_feed_origin_atproto(_document)?\b(?! USING)/,
+      // Each half reads its partial index of origins the sweep may process:
+      // the due time by range, and no staged document at all.
+      expect(sweepDetails).toContain(
+        "INDEX feed_origin_atproto_staged_due_at_idx (staged_due_at<?)",
       );
+      expect(sweepDetails).toContain("INDEX feed_origin_atproto_dirty_idx");
+      expect(sweepDetails).not.toMatch(
+        /serial_feed_origin_atproto_document|SCAN serial_feed_origin_atproto\b(?! USING)|PRIMARY KEY|TEMP B-TREE/,
+      );
+      // Restating when an origin's documents are due reads the first entry
+      // of its due index, never the staged documents behind it.
+      expect(restatements).toHaveLength(3);
+      const restatePlan = await session.baseClient.execute({
+        sql: `EXPLAIN QUERY PLAN ${restatements[0]!}`,
+        args: Array.from(restatements[0]!.matchAll(/\?/g), () => 1),
+      });
+      const restateDetails = restatePlan.rows
+        .map((row) => String(row.detail))
+        .join("\n");
+      expect(restateDetails).toContain(
+        "COVERING INDEX feed_origin_atproto_document_due_idx (origin_id=? AND status=?)",
+      );
+      expect(restateDetails).not.toMatch(/TEMP B-TREE|SCAN/);
       // A committed document rechecks the platform against the retained
       // history with two index seeks, however long that history is.
       expect(platformChecks).toHaveLength(3);

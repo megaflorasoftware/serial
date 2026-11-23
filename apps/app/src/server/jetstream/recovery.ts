@@ -10,6 +10,7 @@ import {
   eligible,
   ensureStream,
   loadOrigin,
+  markDocumentsDue,
   nowFor,
   originAppliesLive,
   planFor,
@@ -252,7 +253,7 @@ export async function recoverOrigin(
                   !eligible(latest, currentPlan, settings, options.manual)
                 )
                   throw new Error("Feed no longer eligible");
-                await stageDocuments(
+                const awaitsImport = await stageDocuments(
                   tx,
                   records.map((record) => ({
                     originId,
@@ -264,6 +265,9 @@ export async function recoverOrigin(
                     now: nowFor(settings),
                   })),
                 );
+                // Should this attempt end before its drain, the sweep finds
+                // the documents once the origin is live.
+                if (awaitsImport) await markDocumentsDue(tx, latest);
               },
               { behavior: "immediate" },
             ),
