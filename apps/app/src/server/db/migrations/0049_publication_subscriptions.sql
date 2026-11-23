@@ -25,6 +25,7 @@ CREATE TABLE `serial_feed_origin_rss` (
   `etag` text,
   `last_modified_header` text,
   `alternate_locators` text,
+  `items_digest` text,
   FOREIGN KEY (`origin_id`) REFERENCES `serial_feed_origin`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

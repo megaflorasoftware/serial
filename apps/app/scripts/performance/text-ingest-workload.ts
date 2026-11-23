@@ -1,7 +1,9 @@
 import type { BenchmarkDatabase } from "./database";
 import type { RSSContent } from "~/server/rss/types";
+import type { ContentType } from "~/lib/content/descriptor";
 import { feeds, user } from "~/server/db/schema";
 import { ingestRssItems } from "~/server/rss/ingestRssItems";
+import { parsedFeedDigest } from "~/server/rss/parsedFeedDigest";
 
 export type TextIngestOperation = "unchanged" | "changed";
 
@@ -9,8 +11,10 @@ export type TextIngestOperation = "unchanged" | "changed";
 const BODY = `<p>${"Retained article body. ".repeat(400)}</p>`;
 
 /**
- * One text Feed whose document is already ingested. `unchanged` fetches the
- * same document again; `changed` fetches it with a few items edited.
+ * One text Feed whose document is already ingested. `unchanged` ingests the
+ * same items again, as a fetch does when the feed restates them; `changed`
+ * ingests them with a few edited. `digest` is what every fetch computes first,
+ * to skip the ingest of a feed that parses as it did.
  */
 export async function createTextIngestWorkload(
   database: BenchmarkDatabase,
@@ -57,6 +61,9 @@ export async function createTextIngestWorkload(
   return {
     get pages() {
       return pages;
+    },
+    digest(medium: ContentType) {
+      return parsedFeedDigest(medium, document(0));
     },
     async run(operation: TextIngestOperation, changed = 0) {
       revision++;

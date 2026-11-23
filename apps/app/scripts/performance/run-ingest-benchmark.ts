@@ -7,6 +7,7 @@ import {
 } from "./database";
 import { createObservationImageWorkload } from "./observation-image-workload";
 import { createJetstreamWorkload } from "./jetstream-workload";
+import { percentile } from "./model";
 import {
   readsBehindItemBody,
   textIngestBudget,
@@ -23,6 +24,12 @@ const profile = process.argv[
 ] as keyof typeof profiles;
 if (!(profile in profiles))
   throw new Error("Pass --profile small, representative, or stress");
+
+/** The median and 95th percentile of an operation's timed samples. */
+function timing(times: number[]) {
+  return { medianMs: percentile(times, 0.5), p95Ms: percentile(times, 0.95) };
+}
+
 const target = createLocalBenchmarkTarget();
 const session = openBenchmarkDatabase({ url: target.url });
 try {
@@ -62,8 +69,10 @@ try {
           images: result.images,
         });
     }
-    const ordered = samples.map((sample) => sample.ms).sort((a, b) => a - b);
-    results[name] = { medianMs: ordered[7], p95Ms: ordered[14], samples };
+    results[name] = {
+      ...timing(samples.map((sample) => sample.ms)),
+      samples,
+    };
   }
   const pageImages = createObservationImageWorkload();
   const imageSamples = [];
@@ -86,12 +95,8 @@ try {
         requests: pageImages.requests,
       });
   }
-  const imageTimes = imageSamples
-    .map((sample) => sample.ms)
-    .sort((a, b) => a - b);
   results["observation-image-enrichment"] = {
-    medianMs: imageTimes[7],
-    p95Ms: imageTimes[14],
+    ...timing(imageSamples.map((sample) => sample.ms)),
     samples: imageSamples,
   };
   const textFeed = await createTextIngestWorkload(
@@ -133,8 +138,10 @@ try {
           written: result.written,
         });
     }
-    const times = samples.map((sample) => sample.ms).sort((a, b) => a - b);
-    results[name] = { medianMs: times[7], p95Ms: times[14], samples };
+    results[name] = {
+      ...timing(samples.map((sample) => sample.ms)),
+      samples,
+    };
   }
   // Programs are inspected after the writes: local libSQL EXPLAIN can retain a read lock.
   const behindBody = (
@@ -148,6 +155,21 @@ try {
     throw new Error(
       `text-fetch-unchanged read behind an item's body: ${behindBody.join(", ")}`,
     );
+  // What every fetch pays before it reads an item: the digest of the parsed feed.
+  for (const medium of ["text", "video"] as const) {
+    const times = [];
+    for (let i = 0; i < 18; i++) {
+      globalThis.gc?.();
+      const started = performance.now();
+      textFeed.digest(medium);
+      const ms = performance.now() - started;
+      if (i >= 3) times.push(ms);
+    }
+    results[`feed-digest-${medium}`] = {
+      ...timing(times),
+      samples: times.map((ms) => ({ ms })),
+    };
+  }
   mkdirSync("benchmarks/results", { recursive: true });
   const output = `benchmarks/results/ingest-${profile}.json`;
   writeFileSync(

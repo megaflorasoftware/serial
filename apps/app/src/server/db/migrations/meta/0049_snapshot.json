@@ -3352,6 +3352,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "items_digest": {
+          "name": "items_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},

@@ -14,7 +14,8 @@ export type NewFeedOriginDetails = Omit<
   typeof feedOrigins.$inferInsert,
   "id" | "feedId" | "userId" | "createdAt" | "updatedAt"
 > &
-  Omit<typeof feedOriginRss.$inferInsert, "originId">;
+  // A new origin has ingested nothing, so it never arrives with a digest.
+  Omit<typeof feedOriginRss.$inferInsert, "originId" | "itemsDigest">;
 
 /** Feed values plus the origins it starts with, as produced by feed detection. */
 export type NewFeedDetails = Omit<

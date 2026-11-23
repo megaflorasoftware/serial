@@ -267,13 +267,20 @@ the Jetstream workload.
 
 ## Text feed ingest
 
-`pnpm benchmark:ingest` also fetches one text feed document of 200 items
-again, once unchanged and once with three items edited. The unchanged fetch
+`pnpm benchmark:ingest` also ingests one text feed document of 200 items
+again, once unchanged and once with three items edited. The unchanged ingest
 must cost the two narrow statements and nothing else: no item body or
 observation value read, no column stored behind an observed item's body read
 from its row, no page fetch and no write. The runner exits nonzero when either
 case exceeds the structural budget in
 `scripts/performance/text-ingest-budgets.ts`, whose checks
 `tests/unit/performance/text-ingest-bounds.test.ts` shares.
-`tests/unit/performance/text-fetch-bounds.test.ts` holds the same fetch at the
-pipeline level to one origin row written and no transaction.
+
+A fetch reaches that ingest only when the feed parses differently from the
+last time it was ingested in full. Each RSS origin keeps a digest of that
+parsed feed, and a fetch that parses to the same digest runs no item statement
+on a text or a video Feed. `tests/unit/performance/feed-fetch-bounds.test.ts`
+holds that fetch at the pipeline level to one origin row written, and holds a
+feed that restates the same items to the two narrow statements with no
+transaction. The runner reports the digest's own cost for the 200 item
+document as `feed-digest-text` and `feed-digest-video`.

@@ -4,6 +4,7 @@ import type { FetchableOrigin } from "~/server/rss/types";
 export type FetchableOriginOverrides = Partial<DatabaseFeedOrigin> & {
   etag?: string | null;
   lastModifiedHeader?: string | null;
+  itemsDigest?: string | null;
   id?: number;
   name?: string;
   platform?: DatabaseFeed["platform"];
@@ -25,6 +26,7 @@ export function makeFetchableOrigin(
     isActive = true,
     etag = null,
     lastModifiedHeader = null,
+    itemsDigest = null,
     ...origin
   } = overrides;
   return {
@@ -51,6 +53,7 @@ export function makeFetchableOrigin(
         etag,
         lastModifiedHeader,
         alternateLocators: null,
+        itemsDigest,
       },
       atproto: null,
       locator: defaults.url,

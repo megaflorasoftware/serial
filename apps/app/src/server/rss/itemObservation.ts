@@ -36,7 +36,7 @@ export function rssObservation(item: RSSContent): ItemObservation {
 }
 
 /** One hash for a set of stated fields, whatever order they are given in; absent fields do not count. */
-function digestOf(stated: Record<string, unknown>) {
+export function digestOf(stated: Record<string, unknown>) {
   const canonical = Object.entries(stated)
     .filter(([, value]) => value !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
@@ -55,6 +55,8 @@ export function observationDigest(observation: ItemObservation) {
 /**
  * Bump to derive every RSS observation again on its next fetch, after a change
  * to how `rssObservation` reads an item that stored observations should follow.
+ * Without a bump a feed that parses as before is not ingested at all, see
+ * `parsedFeedDigest`.
  */
 const RSS_DERIVATION = 1;
 

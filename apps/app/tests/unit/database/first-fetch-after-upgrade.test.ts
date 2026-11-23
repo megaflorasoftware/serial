@@ -293,6 +293,31 @@ it("writes no item for a Feed that says the same on its first fetch after the up
   expect(blog.rows).toEqual([{ site_url: "https://blog.example.com/" }]);
 });
 
+it("reads the items on the first fetch after the upgrade and not on the next", async () => {
+  const before = await storedItems();
+  const digests = () =>
+    session.baseClient.execute(
+      "SELECT items_digest FROM serial_feed_origin_rss ORDER BY origin_id",
+    );
+  // The upgrade knows of no ingested feed.
+  expect((await digests()).rows).toEqual([
+    { items_digest: null },
+    { items_digest: null },
+  ]);
+  const itemStatements = (statements: Array<{ sql: string }>) =>
+    statements.filter((entry) => /"serial_feed_item/.test(entry.sql));
+
+  const first = await fetchDue();
+  expect(itemStatements(first.statements).length).toBeGreaterThan(0);
+  for (const row of (await digests()).rows)
+    expect(row.items_digest).toMatch(/^[0-9a-f]{64}$/);
+
+  // The same feeds again touch no item, observed or not.
+  const next = await fetchDue({ again: true });
+  expect(itemStatements(next.statements)).toEqual([]);
+  expect(await storedItems()).toEqual(before);
+});
+
 it("rewrites a video only when its feed changed the description, storing it as stated", async () => {
   const before = await storedItems();
   channelDescription = "Q&A, edited <tips> & more";
