@@ -14,7 +14,6 @@ import {
   distrustOriginCoverage,
   ensureStream,
   holdStream,
-  makeStreamOriginsDue,
   saveCheckpoint,
 } from "./store";
 import { recoverOrigin } from "./recovery";
@@ -26,7 +25,7 @@ import { normalizeService, sequence, StreamFailure } from "./protocol";
 import { createStreamReporter } from "./report";
 import { resolveStreamService } from "./endpoint";
 import { startStreamIntake } from "./intake";
-import { createOutageWatch } from "./outage";
+import { hostUnreachable } from "./reachability";
 import type { RecoveryOutcome } from "./recovery";
 import type { FetchableOrigin } from "../rss/types";
 import type { FeedResult } from "../rss/fetchFeeds";
@@ -42,8 +41,6 @@ import { workerPool } from "~/lib/workerPool";
 const SNAPSHOT_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const SWEEP_INTERVAL_MS = 30_000;
-/** How long the stream may stay down before polling takes over its origins. */
-const OUTAGE_GRACE_MS = 2 * 60 * 1000;
 /**
  * The legacy wire replays from a time cursor and silently omits what it has
  * pruned, 24 hours back by default. A checkpoint this recent is well inside
@@ -152,9 +149,11 @@ export type StreamRefresh = { result: FeedResult; outcome: RecoveryOutcome };
 
 /**
  * Called by existing import/refresh entry points; the saved Feed survives
- * failure. A failure stays an error until a later recovery succeeds. The
- * outcome tells the caller when the fetch schedule should visit the origin
- * next, so the recovery backoff and the stream's coverage share that one clock.
+ * failure. A failure stays an error until a later recovery succeeds. An
+ * origin that has its documents and cannot reach the stream host did not
+ * fail: its fetch is skipped and shows nothing. The outcome tells the caller
+ * when the fetch schedule should visit the origin next, so the recovery
+ * backoff, an outage and the stream's coverage share that one clock.
  */
 export async function refreshStreamOrigin(
   database: StreamDatabase,
@@ -165,9 +164,34 @@ export async function refreshStreamOrigin(
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
   const ids = { id: fetchable.feed.id, originId: fetchable.origin.id };
-  let outcome: RecoveryOutcome;
+  /** Nothing about the origin failed, so its fetch shows nothing. */
+  const waiting: StreamRefresh = {
+    result: { status: "skipped", ...ids },
+    outcome: { status: "unreachable" },
+  };
+  /** The fetch failed, and the schedule follows whatever backoff recovery stored. */
+  const failed = async (error: unknown): Promise<StreamRefresh> => {
+    config.transport.report(error, "feed-recovery");
+    return {
+      result: { status: "error", ...ids, error },
+      outcome: {
+        status: "deferred",
+        retryAt: await recoveryRetryAt(database, fetchable.origin.id),
+      },
+    };
+  };
   try {
     await establishBoundary(database, config, signal);
+  } catch (error) {
+    // Recovery has not begun, so it had no say. An origin that has its
+    // documents waits when the host gave no answer for the stream's boundary.
+    if (!(fetchable.origin.atproto?.initialized && hostUnreachable(error)))
+      return failed(error);
+    config.transport.report(error, "feed-recovery");
+    return waiting;
+  }
+  let outcome: RecoveryOutcome;
+  try {
     outcome = await recoverOrigin(
       database,
       fetchable.origin.id,
@@ -184,15 +208,11 @@ export async function refreshStreamOrigin(
       },
     );
   } catch (error) {
-    config.transport.report(error, "feed-recovery");
-    return {
-      result: { status: "error", ...ids, error },
-      outcome: {
-        status: "deferred",
-        retryAt: await recoveryRetryAt(database, fetchable.origin.id),
-      },
-    };
+    // Recovery decides which failures wait and returns those. Anything it
+    // throws is an error, and the schedule follows whatever backoff is stored.
+    return failed(error);
   }
+  if (outcome.status === "unreachable") return waiting;
   if (outcome.status === "deferred")
     return {
       result: { status: "error", ...ids, error: new RecoveryDeferredError() },
@@ -234,7 +254,6 @@ export async function startStreamWorker(
   const service = config.settings.service;
   // Only the instance consuming the stream drains its retries.
   const lease = { held: false };
-  const outage = createOutageWatch(OUTAGE_GRACE_MS);
 
   async function processOrigins(originIds: number[]) {
     for await (const unused of workerPool(originIds, 4, async (originId) => {
@@ -353,10 +372,8 @@ export async function startStreamWorker(
             },
           )) {
             await (await openedIntake()).accept(batch);
-            // Only a delivered batch ends an outage. A socket that opens and
-            // drops before one leaves the grace period running.
+            // A delivered batch starts the reconnect backoff over.
             attempt = 0;
-            outage.delivered();
           }
         } finally {
           const closing = intake;
@@ -370,12 +387,9 @@ export async function startStreamWorker(
         if (error instanceof StreamFailure && error.status === 400)
           // The rejected cursor left a gap that only each origin's refresh fills.
           await declareStreamGap(database, owner, new Date());
-        else if (outage.outlastedGrace())
-          // The next connection replays what this outage missed; until then
-          // each covered origin is polled at its next refresh.
-          await runDatabaseWrite(database, () =>
-            makeStreamOriginsDue(database, new Date()),
-          );
+        // Any other outage leaves the origins alone. The next connection
+        // replays from the checkpoint, and polling could not reach this host
+        // either.
         await retryStream(error, attempt++, shutdown).catch(() => {});
       } finally {
         if (heartbeat) clearInterval(heartbeat);

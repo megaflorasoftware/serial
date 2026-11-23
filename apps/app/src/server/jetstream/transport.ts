@@ -18,6 +18,12 @@ import {
   streamFailure,
 } from "./protocol";
 import { createStreamReporter } from "./report";
+import {
+  forgetOutage,
+  hostUnreachable,
+  recentOutage,
+  rememberOutage,
+} from "./reachability";
 import type {
   EventBatch,
   LiveTransport,
@@ -383,6 +389,61 @@ export function createStreamTransport(input: {
     }
     yield* decode(batches());
   }
+  /**
+   * How a contact goes tells whether the host can be reached. A delivered
+   * batch forgets an outage; a contact that fails before it delivers one, in
+   * the way an unreachable host fails, is remembered.
+   */
+  async function* contacting(
+    batches: AsyncIterable<StreamBatch>,
+  ): AsyncGenerator<StreamBatch> {
+    let delivered = false;
+    try {
+      for await (const batch of batches) {
+        if (!delivered) forgetOutage(service);
+        delivered = true;
+        yield batch;
+      }
+    } catch (error) {
+      if (!delivered && hostUnreachable(error)) rememberOutage(service, error);
+      throw error;
+    }
+  }
+  /** Replay filters archive blocks by publisher; the short live handoff reaches an exact global boundary. */
+  async function* replayed(
+    after: number,
+    through: number,
+    signal: AbortSignal,
+    did?: string,
+  ): AsyncGenerator<StreamBatch> {
+    const controller = new AbortController();
+    const combined = AbortSignal.any([signal, controller.signal]);
+    let cursor = after;
+    try {
+      if (!legacy && input.apiKey) {
+        for await (const batch of archive(
+          cursor,
+          through,
+          combined,
+          did ? [did] : undefined,
+        )) {
+          cursor = batch.lastCursor;
+          yield batch;
+          if (cursor >= through) return;
+        }
+      }
+      for await (const batch of live(cursor, combined)) {
+        yield {
+          events: batch.events.filter((event) => event.seq <= through),
+          lastCursor: Math.min(through, batch.lastCursor),
+        };
+        if (batch.lastCursor >= through) return;
+      }
+      if (!signal.aborted) throw new StreamFailure("incomplete-recovery");
+    } finally {
+      controller.abort();
+    }
+  }
   return {
     service,
     hasReplay: !legacy && Boolean(input.apiKey),
@@ -394,14 +455,19 @@ export function createStreamTransport(input: {
       onOpen?: () => Promise<void>,
     ): AsyncGenerator<StreamBatch> {
       // Archive recovery belongs to normal Feed fetching, never worker reconnect.
-      yield* live(after, signal, dids, onOpen);
+      yield* contacting(live(after, signal, dids, onOpen));
     },
+    /**
+     * The host's newest position. While an outage is remembered this fails
+     * at once with the failure that found it, without opening a connection.
+     */
     async tip(signal: AbortSignal) {
+      const outage = recentOutage(service);
+      if (outage) throw outage.failure;
       const controller = new AbortController();
       try {
-        for await (const batch of live(
-          undefined,
-          AbortSignal.any([signal, controller.signal]),
+        for await (const batch of contacting(
+          live(undefined, AbortSignal.any([signal, controller.signal])),
         ))
           return batch.lastCursor;
         throw new StreamFailure("boundary");
@@ -409,7 +475,6 @@ export function createStreamTransport(input: {
         controller.abort();
       }
     },
-    /** Replay filters archive blocks by publisher; the short live handoff reaches an exact global boundary. */
     async *recover(
       after: number,
       through: number,
@@ -417,33 +482,7 @@ export function createStreamTransport(input: {
       did?: string,
     ): AsyncGenerator<StreamBatch> {
       if (after >= through) return;
-      const controller = new AbortController();
-      const combined = AbortSignal.any([signal, controller.signal]);
-      let cursor = after;
-      try {
-        if (!legacy && input.apiKey) {
-          for await (const batch of archive(
-            cursor,
-            through,
-            combined,
-            did ? [did] : undefined,
-          )) {
-            cursor = batch.lastCursor;
-            yield batch;
-            if (cursor >= through) return;
-          }
-        }
-        for await (const batch of live(cursor, combined)) {
-          yield {
-            events: batch.events.filter((event) => event.seq <= through),
-            lastCursor: Math.min(through, batch.lastCursor),
-          };
-          if (batch.lastCursor >= through) return;
-        }
-        if (!signal.aborted) throw new StreamFailure("incomplete-recovery");
-      } finally {
-        controller.abort();
-      }
+      yield* contacting(replayed(after, through, signal, did));
     },
   };
 }

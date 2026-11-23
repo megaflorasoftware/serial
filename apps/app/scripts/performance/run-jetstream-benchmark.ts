@@ -102,6 +102,22 @@ try {
     p95Ms: times[6],
     samples: healthy,
   };
+  // A repository that has not moved since its last full listing is not read
+  // again: the recovery asks for its revision and nothing else.
+  {
+    session.instrumentation.reset();
+    const started = performance.now();
+    const { requests } = await workload.recoverUnchanged();
+    const evidence = session.instrumentation.snapshot();
+    if (requests !== 1 || evidence.statementCount > 21)
+      throw new Error("An unmoved repository was read again");
+    results["unchanged-recovery"] = {
+      ms: performance.now() - started,
+      statements: evidence.statementCount,
+      rows: evidence.materializedRows,
+      requests,
+    };
+  }
   /** One fixed-cost operation: its statements must not grow with the fixture. */
   async function fixedCost(
     name: string,
@@ -136,6 +152,22 @@ try {
   await fixedCost("backlog-sweep", { statements: 1, rows: 0 }, workload.sweep);
   await fixedCost("disconnect", { statements: 1, rows: 0 }, () =>
     disconnectStream(session.database, "benchmark"),
+  );
+  // With no worker connected, a fetch that cannot reach the stream host
+  // claims its origin and lets it go, and the fetches behind it only look.
+  await fixedCost("outage-fetch", { statements: 8, rows: 5 }, async () => {
+    const { outcome } = await workload.outage(false);
+    if (outcome !== "unreachable")
+      throw new Error("An outage was not waited out");
+  });
+  await fixedCost(
+    "remembered-outage-fetch",
+    { statements: 3, rows: 2 },
+    async () => {
+      const { contacts } = await workload.outage(true);
+      if (contacts !== 0)
+        throw new Error("A remembered outage was asked again");
+    },
   );
   // The marker's write, then one statement for the covered origins.
   await fixedCost("gap", { statements: 2, rows: 1 }, () =>

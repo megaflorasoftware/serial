@@ -431,6 +431,9 @@ export const feedOriginAtproto = sqliteTable(
       .default(true),
     identitySeq: text("identity_seq"),
     listingEtag: text("listing_etag"),
+    // The repository revision the last complete listing saw. A recovery whose
+    // repository still reads this revision skips the listing.
+    listingRev: text("listing_rev"),
     cursor: text("cursor"),
     boundary: text("boundary"),
     newestRkey: text("newest_rkey"),

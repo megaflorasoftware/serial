@@ -6,6 +6,7 @@ import {
   retryStream,
 } from "~/server/jetstream/transport";
 import { createStreamReporter } from "~/server/jetstream/report";
+import { forgetOutage } from "~/server/jetstream/reachability";
 import {
   normalizeService,
   retryAfter,
@@ -164,6 +165,75 @@ describe("Jetstream transport", () => {
       expect(cursor).toBe("10");
       expect(kinds).toEqual(["commit", "account", "sync"]);
     } finally {
+      controller.abort();
+      for (const socket of sockets.clients) socket.terminate();
+      await new Promise<void>((resolve) =>
+        sockets.close(() => server.close(() => resolve())),
+      );
+    }
+  });
+  it("fails a tip at once while an outage is remembered, until a delivered batch forgets it", async () => {
+    const server = createServer();
+    const sockets = new WebSocketServer({
+      noServer: true,
+      handleProtocols: () => "xrpc.v1.json",
+    });
+    let down = true;
+    let attempts = 0;
+    server.on("upgrade", (request, socket, head) => {
+      attempts++;
+      if (down) {
+        socket.end(
+          "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n",
+        );
+        return;
+      }
+      sockets.handleUpgrade(request, socket, head, (client) => {
+        client.send(
+          JSON.stringify({
+            $type: "message",
+            payload: {
+              $type: "network.bsky.jetstream.subscribeEvents#account",
+              seq: 11,
+              did: "did:plc:alice",
+              time: "2026-09-18T12:00:00Z",
+              account: { did: "did:plc:alice", active: true },
+            },
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error();
+    const transport = createStreamTransport({
+      service: `http://127.0.0.1:${address.port}`,
+    });
+    const signal = new AbortController().signal;
+    const controller = new AbortController();
+    try {
+      const first: unknown = await transport
+        .tip(signal)
+        .catch((error: unknown) => error);
+      expect(first).toMatchObject({ operation: "connection", status: 503 });
+      // The next read opens no connection and fails as the first did.
+      expect(await transport.tip(signal).catch((error: unknown) => error)).toBe(
+        first,
+      );
+      expect(attempts).toBe(1);
+      // The worker's own connection is a contact, and this one succeeds.
+      down = false;
+      for await (const batch of transport.stream(10, controller.signal)) {
+        expect(batch.lastCursor).toBe(11);
+        break;
+      }
+      expect(await transport.tip(signal)).toBe(11);
+      expect(attempts).toBe(3);
+    } finally {
+      // A case that failed partway must not leave its outage remembered.
+      forgetOutage(transport.service);
       controller.abort();
       for (const socket of sockets.clients) socket.terminate();
       await new Promise<void>((resolve) =>

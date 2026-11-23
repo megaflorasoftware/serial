@@ -104,6 +104,22 @@ it.each([1000, 10000, 50000])(
       expect(
         session.instrumentation.snapshot().materializedRows,
       ).toBeLessThanOrEqual(5);
+      // A repository that has not moved since its last full listing costs
+      // the revision read: no Publication, no listing, nothing staged, and
+      // no Publication applied to the Feed again.
+      session.instrumentation.reset();
+      expect(await workload.recoverUnchanged()).toEqual({ requests: 1 });
+      const unchanged = session.instrumentation.snapshot();
+      expect(unchanged.statementCount).toBeLessThanOrEqual(21);
+      expect(
+        unchanged.statements
+          .map((entry) => entry.sql)
+          .filter((sql) =>
+            /^update "serial_feed_origin_atproto" set .*"(publication_record|listing_etag)"|^update "serial_feed"|^insert into "serial_feed_origin_atproto_document/i.test(
+              sql,
+            ),
+          ),
+      ).toEqual([]);
       // A network event for a publisher nobody follows costs no statement.
       const intake = await workload.intake();
       session.instrumentation.reset();
@@ -140,6 +156,39 @@ it.each([1000, 10000, 50000])(
         statementCount: 1,
         materializedRows: 0,
       });
+      // With no worker connected, a fetch that finds the stream host
+      // unreachable claims its origin and lets it go. It records no failure
+      // and reads no repository.
+      const originWrites = (
+        evidence: ReturnType<typeof session.instrumentation.snapshot>,
+      ) =>
+        evidence.statements
+          .map((entry) => entry.sql)
+          .filter((sql) =>
+            /^(update|delete from|insert into) "serial_feed/i.test(sql),
+          );
+      session.instrumentation.reset();
+      expect(await workload.outage(false)).toEqual({
+        outcome: "unreachable",
+        contacts: 1,
+      });
+      const visit = session.instrumentation.snapshot();
+      expect(visit.statementCount).toBe(8);
+      expect(originWrites(visit)).toHaveLength(2);
+      for (const write of originWrites(visit))
+        expect(write).toMatch(
+          /^update "serial_feed_origin_atproto" set "work_owner" = \?, "work_until" = \? where/,
+        );
+      // While that outage is remembered, the next origin's fetch writes
+      // nothing and opens no connection.
+      session.instrumentation.reset();
+      expect(await workload.outage(true)).toEqual({
+        outcome: "unreachable",
+        contacts: 0,
+      });
+      const remembered = session.instrumentation.snapshot();
+      expect(remembered.statementCount).toBe(3);
+      expect(originWrites(remembered)).toEqual([]);
       // A gap is the marker's write, then one statement that makes the covered
       // origins due.
       session.instrumentation.reset();

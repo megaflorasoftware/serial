@@ -188,7 +188,7 @@ const originInLiveMode = and(
  * recovers at its next refresh instead of waiting out a covered schedule.
  * Polled origins and origins in a recovery backoff keep their own schedule.
  */
-export function makeStreamOriginsDue(
+function makeStreamOriginsDue(
   database: Pick<FeedDatabase, "update">,
   now: Date,
 ) {

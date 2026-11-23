@@ -50,6 +50,7 @@ CREATE TABLE `serial_feed_origin_atproto` (
   `repository_active` integer DEFAULT true NOT NULL,
   `identity_seq` text,
   `listing_etag` text,
+  `listing_rev` text,
   `cursor` text,
   `boundary` text,
   `newest_rkey` text,

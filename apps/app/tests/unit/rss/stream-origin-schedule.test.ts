@@ -16,13 +16,26 @@ import {
 import {
   fetchAndInsertFeedData,
   STREAM_BACKSTOP_RECHECK_MS,
+  STREAM_HOST_RECHECK_MS,
 } from "~/server/rss/fetchFeeds";
 
 const refresh = vi.hoisted(
-  (): { outcome: RecoveryOutcome; afterRefresh: () => Promise<void> } => ({
-    outcome: { status: "polled" },
-    afterRefresh: async () => {},
-  }),
+  (): {
+    outcome: RecoveryOutcome;
+    afterRefresh: () => Promise<void>;
+    status: () => "empty" | "skipped";
+  } => {
+    const state = {
+      outcome: { status: "polled" } as RecoveryOutcome,
+      afterRefresh: async () => {},
+      /** The service skips the fetch of an origin that waits for the stream host. */
+      status: () =>
+        state.outcome.status === "unreachable"
+          ? ("skipped" as const)
+          : ("empty" as const),
+    };
+    return state;
+  },
 );
 
 vi.mock("~/server/logger", () => ({
@@ -53,7 +66,7 @@ vi.mock("~/server/jetstream/service", async () => {
       await refresh.afterRefresh();
       return {
         result: {
-          status: "empty",
+          status: refresh.status(),
           id: fetchable.feed.id,
           originId: fetchable.origin.id,
         },
@@ -88,7 +101,7 @@ async function scheduleAfter(outcome: RecoveryOutcome) {
       { ...feed, origins: [{ ...origin, rss: null, atproto }] },
     ]),
   ))
-    expect(result.status).toBe("empty");
+    expect(result.status).toBe(refresh.status());
   const row = await fixture.database
     .select({ nextFetchAt: feedOrigins.nextFetchAt })
     .from(feedOrigins)
@@ -162,6 +175,12 @@ describe("a stream origin's fetch schedule", () => {
   it("stays due when a bounded attempt left work behind", async () => {
     const window = await scheduleAfter({ status: "unfinished" });
     expect(window.nextFetchAt!.getTime()).toBeLessThanOrEqual(window.finished);
+  });
+
+  it("asks an unreachable stream host again in an hour", async () => {
+    const window = await scheduleAfter({ status: "unreachable" });
+    expectWithin(window.nextFetchAt, window, STREAM_HOST_RECHECK_MS);
+    expect(STREAM_HOST_RECHECK_MS).toBe(HOUR_MS);
   });
 
   it("waits for a failed recovery's backoff, or an hour when it left none", async () => {

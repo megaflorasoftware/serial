@@ -19,6 +19,7 @@ import {
 } from "./store";
 import { drainOriginDocuments, pendingDocumentCount } from "./process";
 import { captureRecordValue } from "./document-source";
+import { forgetOutage, hostUnreachable, recentOutage } from "./reachability";
 import type { atprotoStreamState } from "../db/schema";
 import type { StreamTransport } from "./transport";
 import type { StreamDatabase, StreamSettings } from "./store";
@@ -36,13 +37,12 @@ import type { ProcessingOptions } from "./process";
  */
 async function bootstrapBoundary(
   state: typeof atprotoStreamState.$inferSelect,
-  transport: StreamTransport,
+  tip: () => Promise<number>,
   settings: StreamSettings,
-  signal: AbortSignal,
 ) {
   return streamIsConnected(state, nowFor(settings))
     ? sequence(state.seq!)
-    : transport.tip(signal);
+    : tip();
 }
 
 /**
@@ -51,10 +51,12 @@ async function bootstrapBoundary(
  * - `covered`: a connected worker applies the origin's events as they arrive.
  * - `polled`: nothing covers the origin between visits.
  * - `unfinished`: a bounded scan or drain left work for the next visit.
+ * - `unreachable`: the stream host gave no answer, so an origin that has its
+ *   documents waits for it. The origin did not fail.
  * - `deferred`: an earlier failure's backoff still holds.
  */
 export type RecoveryOutcome =
-  | { status: "covered" | "polled" | "unfinished" }
+  | { status: "covered" | "polled" | "unfinished" | "unreachable" }
   | { status: "deferred"; retryAt: Date | null };
 
 /** Without a covering worker, staged documents wait for the next visit. */
@@ -121,8 +123,17 @@ export async function recoverOrigin(
       ? { status: "covered" }
       : uncoveredOutcome(database, originId, settings);
   }
-  const owner = randomUUID();
   const now = nowFor(settings);
+  // A connected worker is a contact that succeeded, whichever process made it.
+  if (streamIsConnected(initialState, now)) forgetOutage(settings.service);
+  // A contact moments ago found the host unreachable. The origin waits
+  // without a claim or another connection.
+  else if (
+    candidate.atproto.initialized &&
+    recentOutage(settings.service, now.getTime())
+  )
+    return { status: "unreachable" };
+  const owner = randomUUID();
   const claimed = await runDatabaseWrite(database, () =>
     database
       .update(feedOriginAtproto)
@@ -166,6 +177,13 @@ export async function recoverOrigin(
     eq(feedOriginAtproto.workOwner, owner),
   )!;
   const processing = { ...options, signal: combined, workOwner: owner };
+  // Whether the stream host answered during this attempt.
+  let reachedHost = false;
+  const tip = async () => {
+    const position = await transport.tip(combined);
+    reachedHost = true;
+    return position;
+  };
   try {
     combined.throwIfAborted();
     let row = await loadOrigin(database, originId);
@@ -198,7 +216,7 @@ export async function recoverOrigin(
       const boundary = bootstrap
         ? transport.hasReplay
           ? sequence(state.seq)
-          : await bootstrapBoundary(state, transport, settings, combined)
+          : await bootstrapBoundary(state, tip, settings)
         : sequence(row.atproto.streamSeq ?? state.seq);
       await runDatabaseWrite(database, () =>
         database
@@ -293,9 +311,7 @@ export async function recoverOrigin(
       // the transport's tip is past every such event.
       const through = Math.max(
         sequence(row.atproto.streamSeq!),
-        bootstrap
-          ? await bootstrapBoundary(state, transport, settings, combined)
-          : await transport.tip(combined),
+        bootstrap ? await bootstrapBoundary(state, tip, settings) : await tip(),
       );
       {
         for await (const batch of transport.recover(
@@ -304,6 +320,7 @@ export async function recoverOrigin(
           combined,
           row.atproto.publicationDid,
         )) {
+          reachedHost = true;
           combined.throwIfAborted();
           await acceptBatch(database, batch, settings, {
             originId,
@@ -337,6 +354,16 @@ export async function recoverOrigin(
     );
     return await attemptOutcome(database, originId, settings);
   } catch (error) {
+    // The host never answered this attempt. An origin that has its documents
+    // waits for it: nothing about the origin failed, so nothing is recorded.
+    if (
+      candidate.atproto.initialized &&
+      !reachedHost &&
+      hostUnreachable(error)
+    ) {
+      transport.report(error, "feed-recovery");
+      return { status: "unreachable" };
+    }
     if (!signal.aborted)
       await runDatabaseWrite(database, () =>
         database

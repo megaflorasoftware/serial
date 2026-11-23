@@ -40,6 +40,11 @@ import {
   user,
 } from "~/server/db/schema";
 import { captureRecordValue } from "~/server/jetstream/document-source";
+import {
+  forgetOutage,
+  recentOutage,
+  rememberOutage,
+} from "~/server/jetstream/reachability";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 
 vi.mock("~/server/logger", () => ({
@@ -1438,13 +1443,15 @@ describe("normal fetch recovery after stream interruptions", () => {
     expect((await ensureStream(fixture.database, SERVICE)).generation).toBe(2);
     // A gap clears the checkpoint; the worker re-establishes it at the tip.
     await fixture.database.update(atprotoStreamState).set({ seq: "30" });
+    // The repository moved during the interruption, so it is listed again.
+    const moved = { ...client, list, latestRev: async () => "rev-moved" };
     await recoverOrigin(
       fixture.database,
       originId,
       settings,
       transport,
       new AbortController().signal,
-      { manual: true, client: { ...client, list }, readPage },
+      { manual: true, client: moved, readPage },
     );
     expect(list).toHaveBeenCalledTimes(2);
     expect((await state()).streamGeneration).toBe(2);
@@ -1545,6 +1552,108 @@ describe("normal fetch recovery after stream interruptions", () => {
     expect((await fixture.database.select().from(feedItems))[0]?.title).toBe(
       "New live title",
     );
+  });
+});
+
+describe("an unreachable stream host", () => {
+  const unreachable = new StreamFailure("connection");
+  const down = (hasReplay: boolean) => ({
+    ...replay([], 30),
+    hasReplay,
+    tip: vi.fn(async (): Promise<number> => {
+      throw unreachable;
+    }),
+  });
+  const recover = (transport: StreamTransport) =>
+    recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client, readPage },
+    );
+  beforeEach(async () => {
+    // No worker is connected, so the origin is not covered and must ask the host.
+    await fixture.database.update(atprotoStreamState).set({ seq: "20" });
+  });
+  afterEach(() => forgetOutage(SERVICE));
+
+  it("leaves a no-key origin exactly as it was and records no failure", async () => {
+    const before = await state();
+    const transport = down(false);
+    expect(await recover(transport)).toEqual({ status: "unreachable" });
+    expect(await state()).toEqual(before);
+    expect(transport.report).toHaveBeenCalledWith(unreachable, "feed-recovery");
+    // The repository is not read for a recovery that cannot hand over.
+    expect(client.latestRev).not.toHaveBeenCalled();
+  });
+
+  it("keeps a replay origin's place without a failure and catches up once the host answers", async () => {
+    expect(await recover(down(true))).toEqual({ status: "unreachable" });
+    expect(await state()).toMatchObject({
+      streamSeq: "1",
+      streamMode: "catchup",
+      recoveryAttempts: 0,
+      recoveryRetryAt: null,
+      workOwner: null,
+    });
+    await recover(replay([event(10, "missed")], 30));
+    expect(await state()).toMatchObject({
+      streamSeq: "30",
+      streamMode: "live",
+    });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+  });
+
+  it("waits without a claim or a connection while an outage is remembered", async () => {
+    rememberOutage(SERVICE, unreachable, NOW.getTime());
+    const writes = vi.spyOn(fixture.database, "update");
+    const transport = replay([], 30);
+    expect(await recover(transport)).toEqual({ status: "unreachable" });
+    expect(writes).not.toHaveBeenCalled();
+    expect(transport.tip).not.toHaveBeenCalled();
+  });
+
+  it("takes a connected worker as a contact that succeeded", async () => {
+    rememberOutage(SERVICE, unreachable, NOW.getTime());
+    await pause(20);
+    await fixture.database.update(atprotoStreamState).set({
+      connected: true,
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+    await recover({ ...replay([], 20), hasReplay: false });
+    expect(recentOutage(SERVICE, NOW.getTime())).toBeUndefined();
+    expect((await state()).streamMode).toBe("live");
+  });
+
+  it("still fails an attempt whose host answered and then gave out", async () => {
+    const transport: StreamTransport = {
+      ...replay([], 30),
+      // eslint-disable-next-line require-yield
+      async *recover() {
+        throw unreachable;
+      },
+    };
+    await expect(recover(transport)).rejects.toBe(unreachable);
+    expect(await state()).toMatchObject({
+      recoveryAttempts: 1,
+      recoveryRetryAt: new Date(NOW.getTime() + 5000),
+    });
+  });
+
+  it("keeps the fetch error of an origin that has no documents yet, remembered outage or not", async () => {
+    await fixture.database.update(feedOriginAtproto).set({
+      initialized: false,
+      streamMode: "paused",
+      streamSeq: null,
+      streamService: null,
+    });
+    rememberOutage(SERVICE, unreachable, NOW.getTime());
+    const transport = down(false);
+    await expect(recover(transport)).rejects.toBe(unreachable);
+    expect(transport.tip).toHaveBeenCalled();
+    expect((await state()).recoveryAttempts).toBe(1);
   });
 });
 

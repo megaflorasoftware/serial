@@ -7,15 +7,20 @@ import {
   refreshStreamOrigin,
   startStreamWorker,
 } from "~/server/jetstream/service";
-import { insertFeedWithOrigins } from "~/server/feeds/origins";
+import { insertFeedWithOrigins, withOrigins } from "~/server/feeds/origins";
 import {
   atprotoStreamState,
   feedOriginAtproto,
   feedOriginAtprotoDocuments,
   feedOrigins,
+  feeds,
   user,
 } from "~/server/db/schema";
 import { StreamFailure } from "~/server/jetstream/protocol";
+import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
+import { STREAM_HOST_RECHECK_MS } from "~/server/rss/fetchFeeds";
+import { publisher } from "~/server/api/publisher";
+import { captureException } from "~/server/logger";
 
 const state = vi.hoisted(() => ({
   transport: undefined as StreamTransport | undefined,
@@ -448,32 +453,40 @@ it("declares a gap when the service rejects the resume cursor, once", async () =
   }
 });
 
-it("hands covered origins back to polling when the connection keeps opening and dropping before any batch", async () => {
+it("leaves covered origins as they are through an outage and resumes from the checkpoint when the host returns", async () => {
   fixture = await createBookmarkTestDatabase();
   const database = fixture.database;
   const service = "https://jetstream.example.com";
   const shutdown = new AbortController();
-  const { originId } = await liveReader(database, service, "did:plc:alice");
+  await liveReader(database, service, "did:plc:alice");
   const covered = new Date(Date.now() + 6 * 60 * 60 * 1000);
   await database.update(feedOrigins).set({ nextFetchAt: covered });
+  const rows = () =>
+    Promise.all([
+      database.select().from(feedOrigins),
+      database.select().from(feedOriginAtproto),
+    ]);
+  const before = await rows();
   const started = Date.now();
   let drops = 0;
-  // Each drop comes 90 seconds after the last; the grace period is two minutes.
+  // Each drop comes 90 seconds after the last, so the outage runs for minutes.
   const clock = vi
     .spyOn(Date, "now")
     .mockImplementation(() => started + drops * 90_000);
+  const resumedFrom: Array<number | undefined> = [];
   state.transport = {
     service,
     hasReplay: true,
     recover: vi.fn(),
     tip: vi.fn(async () => 1),
     report: vi.fn(),
-    async *stream(_after, _signal, _dids, onOpen) {
-      if (drops < 3) {
+    async *stream(after, _signal, _dids, onOpen) {
+      resumedFrom.push(after);
+      if (drops < 4) {
         drops++;
         // The socket opens, then drops before it delivers anything.
         await onOpen?.();
-        throw new Error("upstream disconnected");
+        throw new StreamFailure("connection-closed");
       }
       shutdown.abort();
       yield* [];
@@ -481,14 +494,10 @@ it("hands covered origins back to polling when the connection keeps opening and 
   };
   try {
     await startStreamWorker(database, shutdown.signal);
-    const origin = (await database
-      .select()
-      .from(feedOrigins)
-      .where(eq(feedOrigins.id, originId))
-      .get())!;
-    // Due now, no longer six hours out.
-    expect(origin.nextFetchAt!.getTime()).toBeLessThan(started + 60_000);
-    // An outage is not a gap: the next connection still resumes from the checkpoint.
+    // No origin was made due or written to: polling could not reach the host either.
+    expect(await rows()).toEqual(before);
+    // An outage is not a gap: every connection resumes from the checkpoint.
+    expect(resumedFrom).toEqual([1, 1, 1, 1, 1]);
     expect((await database.select().from(atprotoStreamState))[0]).toMatchObject(
       { generation: 0, seq: "1" },
     );
@@ -496,6 +505,188 @@ it("hands covered origins back to polling when the connection keeps opening and 
     clock.mockRestore();
     shutdown.abort();
   }
+});
+
+/** The reader's Feed with its hydrated origin, as the fetch pipeline hands it over. */
+async function fetchableReader(
+  database: NonNullable<typeof fixture>["database"],
+) {
+  const [feed] = await withOrigins(
+    database,
+    await database.select().from(feeds),
+  );
+  return { feed: feed!, origin: feed!.origins[0]! };
+}
+const unreachableTransport = (failure: Error): StreamTransport => ({
+  service: "https://jetstream.example.com",
+  hasReplay: false,
+  recover: vi.fn(),
+  tip: vi.fn(async () => {
+    throw failure;
+  }),
+  report: vi.fn(),
+  // eslint-disable-next-line require-yield
+  async *stream() {
+    throw failure;
+  },
+});
+
+it("skips a fetch that cannot reach the stream host, without an error or a recorded failure", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  await liveReader(database, service, "did:plc:alice");
+  const before = await database.select().from(feedOriginAtproto);
+  state.transport = unreachableTransport(new StreamFailure("connection"));
+  const refresh = await refreshStreamOrigin(
+    database,
+    await fetchableReader(database),
+  );
+  // The fetch pipeline shows a skipped origin as nothing and waits an hour.
+  expect(refresh.result.status).toBe("skipped");
+  expect(refresh.outcome).toEqual({ status: "unreachable" });
+  // Still live, with no failed attempt and no backoff of its own.
+  expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+  expect(state.transport.report).toHaveBeenCalledTimes(1);
+});
+
+it("skips a fetch whose stream boundary cannot be read from an unreachable host", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  await liveReader(database, service, "did:plc:alice");
+  // A declared gap cleared the checkpoint, and the host went away before a new one.
+  await database.update(atprotoStreamState).set({ seq: null });
+  const before = await database.select().from(feedOriginAtproto);
+  state.transport = unreachableTransport(new StreamFailure("connection", 502));
+  const refresh = await refreshStreamOrigin(
+    database,
+    await fetchableReader(database),
+  );
+  expect(refresh.result.status).toBe("skipped");
+  expect(refresh.outcome).toEqual({ status: "unreachable" });
+  expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+});
+
+it.each([
+  ["a refused position", new StreamFailure("cursor-expired", 400)],
+  ["a rate limit", new StreamFailure("connection", 429, 120_000)],
+])("keeps %s a failed fetch", async (_, failure) => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  await liveReader(database, "https://jetstream.example.com", "did:plc:alice");
+  state.transport = unreachableTransport(failure);
+  const refresh = await refreshStreamOrigin(
+    database,
+    await fetchableReader(database),
+  );
+  expect(refresh.result.status).toBe("error");
+  expect(refresh.outcome.status).toBe("deferred");
+  expect(
+    (await database.select().from(feedOriginAtproto).get())?.recoveryAttempts,
+  ).toBe(1);
+});
+
+it("keeps a host that answered and then dropped a failed fetch that follows its backoff", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  await liveReader(database, service, "did:plc:alice");
+  state.transport = {
+    service,
+    // With replay, an origin that has its documents catches up without a scan.
+    hasReplay: true,
+    tip: vi.fn(async () => 5),
+    // eslint-disable-next-line require-yield
+    async *recover() {
+      throw new StreamFailure("connection");
+    },
+    report: vi.fn(),
+    async *stream() {},
+  };
+  const refresh = await refreshStreamOrigin(
+    database,
+    await fetchableReader(database),
+  );
+  // Recovery recorded the failure, so the fetch shows it and waits its backoff.
+  expect(state.transport.tip).toHaveBeenCalledTimes(1);
+  expect(refresh.result.status).toBe("error");
+  const origin = await database.select().from(feedOriginAtproto).get();
+  expect(origin?.recoveryAttempts).toBe(1);
+  expect(origin?.recoveryRetryAt?.getTime()).toBeGreaterThan(Date.now());
+  expect(refresh.outcome).toEqual({
+    status: "deferred",
+    retryAt: origin?.recoveryRetryAt,
+  });
+});
+
+it("leaves a Feed out of error when its backstop fetch finds the stream host unreachable", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  await liveReader(database, "https://jetstream.example.com", "did:plc:alice");
+  const before = await database.select().from(feedOriginAtproto);
+  state.transport = unreachableTransport(new StreamFailure("connection"));
+  vi.mocked(publisher.publish).mockClear();
+  vi.mocked(captureException).mockClear();
+  const fetchable = await fetchableReader(database);
+  const started = Date.now();
+  const stats = await refreshUserFeeds({
+    db: database,
+    feedsList: [fetchable],
+    channel: "reader",
+  });
+  const finished = Date.now();
+  // The fetch reached for the host; it was not passed over as not yet due.
+  expect(state.transport.tip).toHaveBeenCalledTimes(1);
+  // A failed Feed is counted, named, captured and published as an error.
+  expect(stats).toMatchObject({
+    errorCount: 0,
+    originFailureFeedIds: [],
+    skippedCount: 1,
+  });
+  expect(captureException).not.toHaveBeenCalled();
+  expect(vi.mocked(publisher.publish).mock.calls).toEqual([
+    [
+      "reader",
+      {
+        source: "rss",
+        chunk: {
+          type: "feed-status",
+          status: "skipped",
+          feedId: fetchable.feed.id,
+        },
+      },
+    ],
+  ]);
+  // Nothing about the origin is recorded, and the schedule asks again in an hour.
+  expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+  const next = (await database.select().from(feedOrigins).get())!.nextFetchAt!;
+  expect(next.getTime()).toBeGreaterThanOrEqual(
+    Math.floor((started + STREAM_HOST_RECHECK_MS) / 1000) * 1000,
+  );
+  expect(next.getTime()).toBeLessThanOrEqual(finished + STREAM_HOST_RECHECK_MS);
+});
+
+it("keeps an unreachable host a fetch error for a Feed that has no documents yet", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  await liveReader(database, "https://jetstream.example.com", "did:plc:alice");
+  await database
+    .update(feedOriginAtproto)
+    .set({ initialized: false, streamMode: "paused", streamSeq: null });
+  state.transport = unreachableTransport(new StreamFailure("connection"));
+  const refresh = await refreshStreamOrigin(
+    database,
+    await fetchableReader(database),
+  );
+  // A new Feed saved during an outage keeps the existing fetch error and retry.
+  expect(refresh.result.status).toBe("error");
+  const origin = await database.select().from(feedOriginAtproto).get();
+  expect(origin?.recoveryAttempts).toBe(1);
+  expect(refresh.outcome).toEqual({
+    status: "deferred",
+    retryAt: origin?.recoveryRetryAt,
+  });
 });
 
 it("follows a Publication created mid-stream and replays every event it skipped, in order", async () => {

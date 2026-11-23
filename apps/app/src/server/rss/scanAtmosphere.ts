@@ -20,27 +20,61 @@ import type { db } from "../db";
 import type { FetchableOrigin } from "./types";
 import { logWarning } from "~/server/logger";
 
+type ScannedOrigin = {
+  origin: FetchableOrigin["origin"];
+  feed: Pick<FetchableOrigin["feed"], "siteUrl">;
+};
+type Publication = NonNullable<ReturnType<typeof parsePublicationRecord>>;
+
+/** The Feed already shows the Publication's name and site. */
+function showsPublication(
+  { origin, feed }: ScannedOrigin,
+  publication: Publication,
+) {
+  return (
+    origin.sourceName === publication.value.name &&
+    feed.siteUrl === publication.value.url
+  );
+}
+
+/**
+ * The last complete scan still stands: the repository reads the revision that
+ * listing saw, and the Feed shows the Publication stored from it. Reading the
+ * Publication and the listing again would find nothing. A scan still under
+ * way, an origin never listed in full and an unknown revision all read on.
+ */
+function lastScanStands(fetchable: ScannedOrigin, rev: string | null) {
+  const details = fetchable.origin.atproto;
+  if (
+    !details?.initialized ||
+    details.cursor ||
+    rev === null ||
+    rev !== details.listingRev
+  )
+    return false;
+  const stored = parsePublicationRecord(details.publicationRecord);
+  return (
+    stored?.uri === fetchable.origin.locator &&
+    showsPublication(fetchable, stored)
+  );
+}
+
 /** Stages bounded repository pages; Jetstream processing applies their content. */
 export async function scanAtmosphere(
   database: typeof db,
-  fetchable: {
-    origin: FetchableOrigin["origin"];
-    feed: Pick<FetchableOrigin["feed"], "siteUrl">;
-  },
+  fetchable: ScannedOrigin,
   client: PublicationClient,
   staging: {
     guard: SQL;
     signal: AbortSignal;
-    publication: (
-      record: NonNullable<ReturnType<typeof parsePublicationRecord>>,
-    ) => Promise<void>;
+    publication: (record: Publication) => Promise<void>;
     records: (
       records: Array<typeof listedRecordSchema._output>,
       rev: string | null,
     ) => Promise<void>;
   },
 ) {
-  const { origin, feed } = fetchable;
+  const { origin } = fetchable;
   const publicationUri = parsePublicationUri(origin.locator);
   if (!publicationUri) throw new Error("Invalid publication URI");
   if (!origin.atproto) throw new Error("Missing AT Protocol origin details");
@@ -52,14 +86,13 @@ export async function scanAtmosphere(
     initialized: origin.atproto.initialized,
   };
   const rev = await client.latestRev(publicationUri.did);
+  if (lastScanStands(fetchable, rev)) return;
   const publication = parsePublicationRecord(
     await client.getRecord(origin.locator),
   );
   if (!publication || publication.uri !== origin.locator)
     throw new Error("Invalid publication record");
-  const publicationChanged =
-    origin.sourceName !== publication.value.name ||
-    feed.siteUrl !== publication.value.url;
+  const publicationChanged = !showsPublication(fetchable, publication);
   await staging.publication(publication);
   let processedDocuments = 0;
   let firstEtag = origin.atproto.listingEtag;
@@ -197,7 +230,13 @@ export async function scanAtmosphere(
   await runDatabaseWrite(database, () =>
     database
       .update(feedOriginAtproto)
-      .set({ ...state, listingEtag: complete ? firstEtag : null })
+      .set({
+        ...state,
+        listingEtag: complete ? firstEtag : null,
+        // The revision read before the listing: a change made while it was
+        // read moves the repository past it, so the next scan lists again.
+        listingRev: complete ? rev : null,
+      })
       .where(and(eq(feedOriginAtproto.originId, origin.id), staging.guard)),
   );
 }
