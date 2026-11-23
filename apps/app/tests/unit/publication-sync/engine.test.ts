@@ -338,6 +338,26 @@ describe("publication subscription sync", () => {
     expect(await run()).toMatchObject({ status: "partial", removed: 0 });
     expect(await fixture.database.select().from(feeds)).toHaveLength(1);
   });
+
+  it("keeps a Feed whose record is missing from a listing read at no known revision", async () => {
+    records = [record("one"), record("two")];
+    await method("bidirectional");
+    await run();
+    records = [record("two")];
+    rev++;
+    // The revision cannot be read, so nothing vouches for the listing.
+    vi.mocked(store.latestRev).mockResolvedValueOnce(null);
+    expect(await run()).toMatchObject({
+      status: "partial",
+      removed: 0,
+      failed: 1,
+    });
+    expect(await fixture.database.select().from(feeds)).toHaveLength(2);
+    expect(records).toHaveLength(1);
+    // The next check reads the revision and trusts the same listing.
+    expect(await run()).toMatchObject({ status: "completed", removed: 1 });
+    expect(await fixture.database.select().from(feeds)).toHaveLength(1);
+  });
   it("rejects concurrent runs and stops committing after settings change", async () => {
     records = [record("one")];
     await method("import");

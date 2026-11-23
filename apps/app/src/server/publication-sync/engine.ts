@@ -492,6 +492,14 @@ export async function syncPublicationSubscriptions(input: {
           !old.length ||
           old[0]!.exportGeneration !== connection.subscriptionExportGeneration,
       });
+      // Only a listing read at a known revision proves a record is gone. A
+      // run that could not read one keeps the Feed for the next check.
+      if (action === "remove-local" && rev === null) {
+        counts.failed++;
+        mustReconcile = true;
+        await progress(index + 1, publications.length);
+        continue;
+      }
       try {
         // Most refreshes reach this fast path: no per-publication SQL or network calls.
         if (
