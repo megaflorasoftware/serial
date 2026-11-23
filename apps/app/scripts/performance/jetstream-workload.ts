@@ -22,6 +22,29 @@ import { startStreamIntake } from "~/server/jetstream/intake";
 import { StreamFailure } from "~/server/jetstream/protocol";
 import { forgetOutage, rememberOutage } from "~/server/jetstream/reachability";
 
+/** A remote read the measured operation must not make. */
+function forbidden(message: string) {
+  return (): never => {
+    throw new Error(message);
+  };
+}
+
+/** A publication client that may make only the reads given. */
+function clientReading(
+  forbid: () => never,
+  reads: Partial<PublicationClient> = {},
+): PublicationClient {
+  return {
+    resolvePds: forbid,
+    getDidDocument: forbid,
+    latestRev: forbid,
+    getRecord: forbid,
+    list: forbid,
+    loadBlob: forbid,
+    ...reads,
+  };
+}
+
 export async function createJetstreamWorkload(
   database: BenchmarkDatabase,
   fanout: number,
@@ -265,9 +288,6 @@ export async function createJetstreamWorkload(
         .set({ streamMode: "direct", streamSeq: String(seq) })
         .where(eq(feedOriginAtproto.originId, originId));
       let requests = 0;
-      const unexpected = () => {
-        throw new Error("An unmoved repository was read again");
-      };
       await recoverOrigin(
         database,
         originId,
@@ -285,17 +305,15 @@ export async function createJetstreamWorkload(
         new AbortController().signal,
         {
           manual: true,
-          client: {
-            resolvePds: unexpected,
-            getDidDocument: unexpected,
-            latestRev: async () => {
-              requests++;
-              return `rev${seq}`;
+          client: clientReading(
+            forbidden("An unmoved repository was read again"),
+            {
+              latestRev: async () => {
+                requests++;
+                return `rev${seq}`;
+              },
             },
-            getRecord: unexpected,
-            list: unexpected,
-            loadBlob: unexpected,
-          },
+          ),
         },
       );
       return { requests };
@@ -306,9 +324,7 @@ export async function createJetstreamWorkload(
      */
     async outage(remembered: boolean) {
       const failure = new StreamFailure("connection");
-      const unexpected = () => {
-        throw new Error("A waiting origin read remote data");
-      };
+      const unexpected = forbidden("A waiting origin read remote data");
       let contacts = 0;
       if (remembered) rememberOutage(service, failure, now.getTime());
       try {
@@ -330,14 +346,7 @@ export async function createJetstreamWorkload(
           new AbortController().signal,
           {
             manual: true,
-            client: {
-              resolvePds: unexpected,
-              getDidDocument: unexpected,
-              latestRev: unexpected,
-              getRecord: unexpected,
-              list: unexpected,
-              loadBlob: unexpected,
-            },
+            client: clientReading(unexpected),
           },
         );
         return { outcome: outcome.status, contacts };
@@ -438,9 +447,7 @@ export async function createJetstreamWorkload(
       return { publications };
     },
     async check() {
-      const unexpected = () => {
-        throw new Error("Healthy Feed fetched remote data");
-      };
+      const unexpected = forbidden("Healthy Feed fetched remote data");
       const transport: StreamTransport = {
         service,
         hasReplay: false,
@@ -457,14 +464,7 @@ export async function createJetstreamWorkload(
         new AbortController().signal,
         {
           manual: true,
-          client: {
-            resolvePds: unexpected,
-            getDidDocument: unexpected,
-            latestRev: unexpected,
-            getRecord: unexpected,
-            list: unexpected,
-            loadBlob: unexpected,
-          },
+          client: clientReading(unexpected),
         },
       );
       return { requests: 0 };

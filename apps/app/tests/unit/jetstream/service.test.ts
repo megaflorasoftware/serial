@@ -17,6 +17,10 @@ import {
   user,
 } from "~/server/db/schema";
 import { StreamFailure } from "~/server/jetstream/protocol";
+import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
+import { STREAM_HOST_RECHECK_MS } from "~/server/rss/fetchFeeds";
+import { publisher } from "~/server/api/publisher";
+import { captureException } from "~/server/logger";
 
 const state = vi.hoisted(() => ({
   transport: undefined as StreamTransport | undefined,
@@ -581,6 +585,86 @@ it.each([
   expect(
     (await database.select().from(feedOriginAtproto).get())?.recoveryAttempts,
   ).toBe(1);
+});
+
+it("keeps a host that answered and then dropped a failed fetch that follows its backoff", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  await liveReader(database, service, "did:plc:alice");
+  state.transport = {
+    service,
+    // With replay, an origin that has its documents catches up without a scan.
+    hasReplay: true,
+    tip: vi.fn(async () => 5),
+    // eslint-disable-next-line require-yield
+    async *recover() {
+      throw new StreamFailure("connection");
+    },
+    report: vi.fn(),
+    async *stream() {},
+  };
+  const refresh = await refreshStreamOrigin(
+    database,
+    await fetchableReader(database),
+  );
+  // Recovery recorded the failure, so the fetch shows it and waits its backoff.
+  expect(state.transport.tip).toHaveBeenCalledTimes(1);
+  expect(refresh.result.status).toBe("error");
+  const origin = await database.select().from(feedOriginAtproto).get();
+  expect(origin?.recoveryAttempts).toBe(1);
+  expect(origin?.recoveryRetryAt?.getTime()).toBeGreaterThan(Date.now());
+  expect(refresh.outcome).toEqual({
+    status: "deferred",
+    retryAt: origin?.recoveryRetryAt,
+  });
+});
+
+it("leaves a Feed out of error when its backstop fetch finds the stream host unreachable", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  await liveReader(database, "https://jetstream.example.com", "did:plc:alice");
+  const before = await database.select().from(feedOriginAtproto);
+  state.transport = unreachableTransport(new StreamFailure("connection"));
+  vi.mocked(publisher.publish).mockClear();
+  vi.mocked(captureException).mockClear();
+  const fetchable = await fetchableReader(database);
+  const started = Date.now();
+  const stats = await refreshUserFeeds({
+    db: database,
+    feedsList: [fetchable],
+    channel: "reader",
+  });
+  const finished = Date.now();
+  // The fetch reached for the host; it was not passed over as not yet due.
+  expect(state.transport.tip).toHaveBeenCalledTimes(1);
+  // A failed Feed is counted, named, captured and published as an error.
+  expect(stats).toMatchObject({
+    errorCount: 0,
+    originFailureFeedIds: [],
+    skippedCount: 1,
+  });
+  expect(captureException).not.toHaveBeenCalled();
+  expect(vi.mocked(publisher.publish).mock.calls).toEqual([
+    [
+      "reader",
+      {
+        source: "rss",
+        chunk: {
+          type: "feed-status",
+          status: "skipped",
+          feedId: fetchable.feed.id,
+        },
+      },
+    ],
+  ]);
+  // Nothing about the origin is recorded, and the schedule asks again in an hour.
+  expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+  const next = (await database.select().from(feedOrigins).get())!.nextFetchAt!;
+  expect(next.getTime()).toBeGreaterThanOrEqual(
+    Math.floor((started + STREAM_HOST_RECHECK_MS) / 1000) * 1000,
+  );
+  expect(next.getTime()).toBeLessThanOrEqual(finished + STREAM_HOST_RECHECK_MS);
 });
 
 it("keeps an unreachable host a fetch error for a Feed that has no documents yet", async () => {

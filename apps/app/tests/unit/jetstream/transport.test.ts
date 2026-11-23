@@ -6,6 +6,7 @@ import {
   retryStream,
 } from "~/server/jetstream/transport";
 import { createStreamReporter } from "~/server/jetstream/report";
+import { forgetOutage } from "~/server/jetstream/reachability";
 import {
   normalizeService,
   retryAfter,
@@ -231,6 +232,8 @@ describe("Jetstream transport", () => {
       expect(await transport.tip(signal)).toBe(11);
       expect(attempts).toBe(3);
     } finally {
+      // A case that failed partway must not leave its outage remembered.
+      forgetOutage(transport.service);
       controller.abort();
       for (const socket of sockets.clients) socket.terminate();
       await new Promise<void>((resolve) =>

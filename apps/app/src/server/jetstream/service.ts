@@ -164,9 +164,34 @@ export async function refreshStreamOrigin(
   const signal = AbortSignal.timeout(50_000);
   const updates: CommittedUpdate[] = [];
   const ids = { id: fetchable.feed.id, originId: fetchable.origin.id };
-  let outcome: RecoveryOutcome;
+  /** Nothing about the origin failed, so its fetch shows nothing. */
+  const waiting: StreamRefresh = {
+    result: { status: "skipped", ...ids },
+    outcome: { status: "unreachable" },
+  };
+  /** The fetch failed, and the schedule follows whatever backoff recovery stored. */
+  const failed = async (error: unknown): Promise<StreamRefresh> => {
+    config.transport.report(error, "feed-recovery");
+    return {
+      result: { status: "error", ...ids, error },
+      outcome: {
+        status: "deferred",
+        retryAt: await recoveryRetryAt(database, fetchable.origin.id),
+      },
+    };
+  };
   try {
     await establishBoundary(database, config, signal);
+  } catch (error) {
+    // Recovery has not begun, so it had no say. An origin that has its
+    // documents waits when the host gave no answer for the stream's boundary.
+    if (!(fetchable.origin.atproto?.initialized && hostUnreachable(error)))
+      return failed(error);
+    config.transport.report(error, "feed-recovery");
+    return waiting;
+  }
+  let outcome: RecoveryOutcome;
+  try {
     outcome = await recoverOrigin(
       database,
       fetchable.origin.id,
@@ -183,22 +208,11 @@ export async function refreshStreamOrigin(
       },
     );
   } catch (error) {
-    config.transport.report(error, "feed-recovery");
-    // An origin that has its documents also waits when the stream's boundary
-    // could not be read from the host before recovery began.
-    if (!(fetchable.origin.atproto?.initialized && hostUnreachable(error)))
-      return {
-        result: { status: "error", ...ids, error },
-        outcome: {
-          status: "deferred",
-          retryAt: await recoveryRetryAt(database, fetchable.origin.id),
-        },
-      };
-    outcome = { status: "unreachable" };
+    // Recovery decides which failures wait and returns those. What it throws
+    // it has recorded, with a backoff the schedule follows.
+    return failed(error);
   }
-  // Nothing about the origin failed, so its fetch shows nothing.
-  if (outcome.status === "unreachable")
-    return { result: { status: "skipped", ...ids }, outcome };
+  if (outcome.status === "unreachable") return waiting;
   if (outcome.status === "deferred")
     return {
       result: { status: "error", ...ids, error: new RecoveryDeferredError() },

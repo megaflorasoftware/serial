@@ -38,12 +38,12 @@ function showsPublication(
 }
 
 /**
- * The repository still reads the revision the last complete listing saw, and
- * the Feed shows the Publication stored from it. Reading the Publication and
- * the listing again would find nothing. A scan still under way, an origin
- * never listed in full and an unknown revision all read on.
+ * The last complete scan still stands: the repository reads the revision that
+ * listing saw, and the Feed shows the Publication stored from it. Reading the
+ * Publication and the listing again would find nothing. A scan still under
+ * way, an origin never listed in full and an unknown revision all read on.
  */
-function repositoryUnchanged(fetchable: ScannedOrigin, rev: string | null) {
+function lastScanStands(fetchable: ScannedOrigin, rev: string | null) {
   const details = fetchable.origin.atproto;
   if (
     !details?.initialized ||
@@ -86,7 +86,7 @@ export async function scanAtmosphere(
     initialized: origin.atproto.initialized,
   };
   const rev = await client.latestRev(publicationUri.did);
-  if (repositoryUnchanged(fetchable, rev)) return;
+  if (lastScanStands(fetchable, rev)) return;
   const publication = parsePublicationRecord(
     await client.getRecord(origin.locator),
   );
