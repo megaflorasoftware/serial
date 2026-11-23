@@ -33,10 +33,6 @@
         "rules": ["react-doctor/effect-needs-cleanup"]
       },
       {
-        "files": ["src/components/content-reader/SandboxedFrame.tsx"],
-        "rules": ["react-doctor/only-export-components"]
-      },
-      {
         "files": ["src/components/debug/ClientPerformanceProfiler.tsx"],
         "rules": ["react-doctor/no-hydration-branch-on-browser-global"]
       },

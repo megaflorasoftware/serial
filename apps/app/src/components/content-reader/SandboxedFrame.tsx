@@ -41,7 +41,7 @@ export const SANDBOXED_FRAME_DEFAULT_HEIGHT = 480;
  * only. `<base target>` sends every link to a new tab, which is `noopener`
  * by default in current browsers.
  */
-export function sandboxedFrameDocument(html: string) {
+function sandboxedFrameDocument(html: string) {
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     `<meta http-equiv="Content-Security-Policy" content="${SANDBOXED_FRAME_CSP}">` +
