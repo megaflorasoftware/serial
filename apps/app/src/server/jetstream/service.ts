@@ -208,8 +208,8 @@ export async function refreshStreamOrigin(
       },
     );
   } catch (error) {
-    // Recovery decides which failures wait and returns those. What it throws
-    // it has recorded, with a backoff the schedule follows.
+    // Recovery decides which failures wait and returns those. Anything it
+    // throws is an error, and the schedule follows whatever backoff is stored.
     return failed(error);
   }
   if (outcome.status === "unreachable") return waiting;
