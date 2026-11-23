@@ -182,6 +182,62 @@ function VideoControls({
   );
 }
 
+/** The player's state as its `data-social-post-video-state` reports it. */
+function playerState(failed: boolean, playing: boolean, started: boolean) {
+  if (failed) return "failed";
+  if (playing) return "playing";
+  return started ? "paused" : "poster";
+}
+
+/** The button over the whole video: play, pause, or the spinner while it loads. */
+function PlayToggle({
+  platform,
+  failed,
+  loading,
+  playing,
+  onClick,
+}: {
+  platform: string;
+  failed: boolean;
+  loading: boolean;
+  playing: boolean;
+  onClick: () => void;
+}) {
+  const label = failed
+    ? `Video from the post on ${platform} could not be played`
+    : loading
+      ? "Video loading"
+      : playing
+        ? "Pause video"
+        : "Play video";
+  return (
+    <button
+      type="button"
+      data-social-post-video-toggle
+      aria-label={label}
+      aria-disabled={failed}
+      onClick={onClick}
+      className={clsx(
+        "absolute inset-0 z-20 grid place-items-center",
+        failed ? "cursor-default" : "cursor-pointer",
+      )}
+    >
+      <span
+        className={clsx(
+          "bg-background grid size-16 place-items-center rounded-2xl shadow-2xl transition-all group-hover:scale-105",
+          { "opacity-0": playing && !loading },
+        )}
+      >
+        {loading ? (
+          <Loader2Icon aria-hidden="true" className="animate-spin" size={28} />
+        ) : (
+          <PlayIcon aria-hidden="true" size={28} />
+        )}
+      </span>
+    </button>
+  );
+}
+
 /**
  * A Bluesky video inside a social card, drawn with the custom player's
  * chrome: poster and play button until first play, then the speed rail,
@@ -301,21 +357,12 @@ export function SocialVideoPlayer({
   };
 
   const showPoster = !started || (!playing && !loading && progress === 0);
-  const label = failed
-    ? `Video from the post on ${platform} could not be played`
-    : loading
-      ? "Video loading"
-      : playing
-        ? "Pause video"
-        : "Play video";
 
   return (
     <div
       ref={containerRef}
       data-social-post-video-player={video.gif ? "gif" : "video"}
-      data-social-post-video-state={
-        failed ? "failed" : playing ? "playing" : started ? "paused" : "poster"
-      }
+      data-social-post-video-state={playerState(failed, playing, started)}
       className="group relative w-full overflow-hidden rounded bg-black"
       style={style}
     >
@@ -365,34 +412,13 @@ export function SocialVideoPlayer({
         />
       </div>
       {!video.gif && (
-        <button
-          type="button"
-          data-social-post-video-toggle
-          aria-label={label}
-          aria-disabled={failed}
+        <PlayToggle
+          platform={platform}
+          failed={failed}
+          loading={loading}
+          playing={playing}
           onClick={toggle}
-          className={clsx(
-            "absolute inset-0 z-20 grid place-items-center",
-            failed ? "cursor-default" : "cursor-pointer",
-          )}
-        >
-          <span
-            className={clsx(
-              "bg-background grid size-16 place-items-center rounded-2xl shadow-2xl transition-all group-hover:scale-105",
-              { "opacity-0": playing && !loading },
-            )}
-          >
-            {loading ? (
-              <Loader2Icon
-                aria-hidden="true"
-                className="animate-spin"
-                size={28}
-              />
-            ) : (
-              <PlayIcon aria-hidden="true" size={28} />
-            )}
-          </span>
-        </button>
+        />
       )}
       {failed && (
         <p
