@@ -14,7 +14,9 @@ services:
       retries: 10
       start_period: 2s
   libsql:
-    image: ghcr.io/tursodatabase/libsql-server:latest-arm
+    # Pinned by digest. 0.24.32 and the later `latest` builds can stop answering
+    # writes when several arrive at once; check upstream before moving this.
+    image: ghcr.io/tursodatabase/libsql-server:v0.24.31@sha256:98cfed33d8a670efdb9663217c84cdf24e37a87584c2a594ab1241a1f83eaba9
     volumes:
       - libsql-data:/var/lib/sqld
     command: ["sqld", "--http-listen-addr", "0.0.0.0:8080"]
