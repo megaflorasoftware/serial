@@ -758,14 +758,14 @@ export const streamingImport = protectedProcedure
           timeoutPromise,
         ]);
         const insertResult = await Promise.race([
-          dbSemaphore.run(() => {
-            if (timedOut) throw new Error("Import timed out");
-            // Once the write starts, report its real result. Returning a timeout
-            // while this transaction commits would leave the import state ahead
-            // of the progress stream.
-            clearTimeout(timeoutTimer);
-            return runDatabaseWrite(context.db, () =>
-              context.db.transaction(
+          runDatabaseWrite(context.db, () =>
+            dbSemaphore.run(() => {
+              if (timedOut) throw new Error("Import timed out");
+              // Once the write starts, report its real result. Returning a timeout
+              // while this transaction commits would leave the import state ahead
+              // of the progress stream.
+              clearTimeout(timeoutTimer);
+              return context.db.transaction(
                 async (tx) => {
                   const result = await insertFeedWithCategories(
                     tx,
@@ -812,9 +812,9 @@ export const streamingImport = protectedProcedure
                   return result;
                 },
                 { behavior: "immediate" },
-              ),
-            );
-          }),
+              );
+            }),
+          ),
           timeoutPromise,
         ]);
         return reportInsertResult(insertResult);

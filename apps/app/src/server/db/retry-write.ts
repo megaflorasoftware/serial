@@ -24,7 +24,11 @@ async function retryBusyWrite<T>(write: () => Promise<T>): Promise<T> {
 
 const pendingWrites = new WeakMap<object, Promise<unknown>>();
 
-/** Queue local file writes; remote libSQL manages its own write concurrency. */
+/**
+ * Queue local file writes; remote libSQL manages its own write concurrency.
+ * Take this before a `dbSemaphore` slot: a slot held while queueing can
+ * leave the write at the head of the queue waiting for one.
+ */
 export async function runDatabaseWrite<T>(
   database: { $client?: { protocol: string } },
   write: () => Promise<T>,

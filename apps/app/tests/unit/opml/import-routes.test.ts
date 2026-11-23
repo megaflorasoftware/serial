@@ -2,6 +2,7 @@ import { createRouterClient } from "@orpc/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type * as Evidence from "~/server/feeds/revalidationEvidence";
+import type * as RetryWrite from "~/server/db/retry-write";
 import type * as Subscriptions from "~/server/subscriptions/helpers";
 import type * as Invalidation from "~/server/reconciliation/invalidation";
 import type { ORPCContext } from "~/server/orpc/base";
@@ -18,6 +19,8 @@ import {
   viewFeeds,
 } from "~/server/db/schema";
 import { newRssFeedDetails } from "~/server/rss/types";
+import { runDatabaseWrite } from "~/server/db/retry-write";
+import { dbSemaphore } from "~/lib/semaphore";
 
 const state = vi.hoisted((): { database: unknown } => ({
   database: undefined,
@@ -51,6 +54,10 @@ vi.mock("~/server/feeds/revalidationEvidence", async (original) => ({
   ...(await original<typeof Evidence>()),
   readOriginEvidence: vi.fn(),
 }));
+vi.mock("~/server/db/retry-write", async (original) => {
+  const actual = await original<typeof RetryWrite>();
+  return { ...actual, runDatabaseWrite: vi.fn(actual.runDatabaseWrite) };
+});
 
 let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 const rss = newRssFeedDetails({
@@ -216,5 +223,41 @@ it.each(["bulk", "streaming"] as const)(
     }
     expect(await fixture.database.select().from(feeds)).toHaveLength(1);
     expect(await fixture.database.select().from(feedOrigins)).toHaveLength(1);
+  },
+);
+
+it.each(["bulk", "streaming"] as const)(
+  "%s OPML waits for the write queue without holding a connection slot",
+  async (route) => {
+    const feedInputs = Array.from({ length: 3 }, () => ({
+      feedUrl: "https://example.com/rss",
+      categories: [],
+    }));
+    const importFeeds = async () => {
+      if (route === "bulk")
+        return void (await api().bulk({ feeds: feedInputs }));
+      for await (const event of await api().streaming({ feeds: feedInputs }))
+        void event;
+    };
+    let release = () => {};
+    vi.mocked(runDatabaseWrite).mockClear();
+    const held = runDatabaseWrite(
+      fixture.database,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    // Two imports overlap: six writes queue behind the held one, more than
+    // the five connection slots.
+    const imports = Promise.all([importFeeds(), importFeeds()]);
+    try {
+      await vi.waitFor(() => expect(runDatabaseWrite).toHaveBeenCalledTimes(7));
+      await expect(dbSemaphore.run(async () => "free")).resolves.toBe("free");
+    } finally {
+      release();
+      await held;
+      await imports;
+    }
   },
 );
