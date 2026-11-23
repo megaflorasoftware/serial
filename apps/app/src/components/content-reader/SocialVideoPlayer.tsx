@@ -9,7 +9,7 @@ import {
   VolumeXIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { ReaderSocialVideo } from "@serial/standard-site";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { YOUTUBE_PLAYBACK_SPEEDS } from "~/components/CustomVideoPlayer/constants";
@@ -74,6 +74,114 @@ function useInView(
   }, [enabled, ref]);
 }
 
+/** One shortcut button of the control bar, named by its tooltip. */
+function ControlButton({
+  shortcut,
+  label,
+  onClick,
+  children,
+}: {
+  shortcut: string;
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const [hasInlineShortcutsVisible] = useFlagState("INLINE_SHORTCUTS");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <ButtonWithShortcut
+          shortcut={shortcut}
+          size="icon"
+          variant={
+            hasInlineShortcutsVisible === "show-shortcuts" ? "outline" : "ghost"
+          }
+          aria-label={label}
+          onClick={onClick}
+        >
+          {children}
+        </ButtonWithShortcut>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** The chrome over a started video: speed rail, timestamps, mute, fullscreen and scrubber. */
+function VideoControls({
+  speed,
+  progress,
+  duration,
+  muted,
+  onSpeedChange,
+  onSeek,
+  onToggleMute,
+  onToggleFullscreen,
+}: {
+  speed: number;
+  progress: number;
+  duration: number;
+  muted: boolean;
+  onSpeedChange: (speed: number) => void;
+  onSeek: (seconds: number) => void;
+  onToggleMute: () => void;
+  onToggleFullscreen: () => void;
+}) {
+  return (
+    <>
+      <div className="dark absolute inset-y-0 right-0 z-30 flex flex-col items-end justify-center bg-gradient-to-l from-black/50 from-70% to-transparent p-3 pl-8 text-white opacity-0 transition-opacity group-hover:opacity-100">
+        <ToggleGroup
+          type="single"
+          value={speed.toString()}
+          onValueChange={(value) => {
+            if (value) onSpeedChange(parseFloat(value));
+          }}
+          size="xs"
+          className="flex flex-col items-center justify-center font-mono"
+        >
+          {YOUTUBE_PLAYBACK_SPEEDS.map((entry) => (
+            <ToggleGroupItem key={entry.value} value={entry.value.toString()}>
+              {entry.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <div className="dark absolute inset-x-0 bottom-0 z-30 flex flex-col justify-end bg-gradient-to-t from-black/50 from-70% to-transparent p-3 pt-8 text-white opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center justify-between">
+          <div className="w-max font-mono text-sm font-bold">
+            {transformSecondsToFormattedTime(progress)} /{" "}
+            {transformSecondsToFormattedTime(duration)}
+          </div>
+          <div className="flex items-center gap-2">
+            <ControlButton
+              shortcut="m"
+              label="Toggle mute"
+              onClick={onToggleMute}
+            >
+              {muted ? <VolumeXIcon size={16} /> : <Volume2Icon size={16} />}
+            </ControlButton>
+            <ControlButton
+              shortcut="f"
+              label="Toggle fullscreen"
+              onClick={onToggleFullscreen}
+            >
+              <FullscreenIcon size={16} />
+            </ControlButton>
+          </div>
+        </div>
+        <Slider
+          value={[progress]}
+          min={0}
+          max={duration || 1}
+          step={0.1}
+          onValueChange={(value) => onSeek(value[0]!)}
+          className="mt-2 mr-4"
+        />
+      </div>
+    </>
+  );
+}
+
 /**
  * A Bluesky video inside a social card, drawn with the custom player's
  * chrome: poster and play button until first play, then the speed rail,
@@ -100,7 +208,6 @@ export function SocialVideoPlayer({
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
-  const [hasInlineShortcutsVisible] = useFlagState("INLINE_SHORTCUTS");
   const startedRef = useRef(false);
 
   const fail = useCallback((error: unknown) => {
@@ -296,84 +403,16 @@ export function SocialVideoPlayer({
         </p>
       )}
       {started && !failed && !video.gif && (
-        <>
-          <div className="dark absolute inset-y-0 right-0 z-30 flex flex-col items-end justify-center bg-gradient-to-l from-black/50 from-70% to-transparent p-3 pl-8 text-white opacity-0 transition-opacity group-hover:opacity-100">
-            <ToggleGroup
-              type="single"
-              value={speed.toString()}
-              onValueChange={(value) => {
-                if (value) changeSpeed(parseFloat(value));
-              }}
-              size="xs"
-              className="flex flex-col items-center justify-center font-mono"
-            >
-              {YOUTUBE_PLAYBACK_SPEEDS.map((entry) => (
-                <ToggleGroupItem
-                  key={entry.value}
-                  value={entry.value.toString()}
-                >
-                  {entry.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-          <div className="dark absolute inset-x-0 bottom-0 z-30 flex flex-col justify-end bg-gradient-to-t from-black/50 from-70% to-transparent p-3 pt-8 text-white opacity-0 transition-opacity group-hover:opacity-100">
-            <div className="flex items-center justify-between">
-              <div className="w-max font-mono text-sm font-bold">
-                {transformSecondsToFormattedTime(progress)} /{" "}
-                {transformSecondsToFormattedTime(duration)}
-              </div>
-              <div className="flex items-center gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ButtonWithShortcut
-                      shortcut="m"
-                      size="icon"
-                      variant={
-                        hasInlineShortcutsVisible === "show-shortcuts"
-                          ? "outline"
-                          : "ghost"
-                      }
-                      onClick={toggleMute}
-                    >
-                      {muted ? (
-                        <VolumeXIcon size={16} />
-                      ) : (
-                        <Volume2Icon size={16} />
-                      )}
-                    </ButtonWithShortcut>
-                  </TooltipTrigger>
-                  <TooltipContent>Toggle mute</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ButtonWithShortcut
-                      shortcut="f"
-                      size="icon"
-                      variant={
-                        hasInlineShortcutsVisible === "show-shortcuts"
-                          ? "outline"
-                          : "ghost"
-                      }
-                      onClick={toggleFullscreen}
-                    >
-                      <FullscreenIcon size={16} />
-                    </ButtonWithShortcut>
-                  </TooltipTrigger>
-                  <TooltipContent>Toggle fullscreen</TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-            <Slider
-              value={[progress]}
-              min={0}
-              max={duration || 1}
-              step={0.1}
-              onValueChange={(value) => seek(value[0]!)}
-              className="mt-2 mr-4"
-            />
-          </div>
-        </>
+        <VideoControls
+          speed={speed}
+          progress={progress}
+          duration={duration}
+          muted={muted}
+          onSpeedChange={changeSpeed}
+          onSeek={seek}
+          onToggleMute={toggleMute}
+          onToggleFullscreen={toggleFullscreen}
+        />
       )}
     </div>
   );

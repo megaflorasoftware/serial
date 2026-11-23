@@ -41,6 +41,8 @@ export function RowPreviewImage({ src }: { src: string }) {
   );
 }
 
+// Each condition shows or hides one optional field of a flat card.
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function
 export function RecordCard({ card }: { card: RecordCardData }) {
   const date = card.publishedAt ? new Date(card.publishedAt) : null;
   const published =

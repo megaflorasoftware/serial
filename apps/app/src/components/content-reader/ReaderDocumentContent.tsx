@@ -77,6 +77,8 @@ function RichText({ content }: { content: ReaderRichText }) {
     <>
       {content.map((inline, index) =>
         inline.kind === "footnote" ? (
+          // Inline runs have no identity and never reorder.
+          // react-doctor-disable-next-line react-doctor/no-array-index-as-key
           <sup key={index}>
             <a
               href={`#${footnoteId(inline.number)}`}
@@ -87,6 +89,8 @@ function RichText({ content }: { content: ReaderRichText }) {
             </a>
           </sup>
         ) : (
+          // Inline runs have no identity and never reorder.
+          // react-doctor-disable-next-line react-doctor/no-array-index-as-key
           <Fragment key={index}>{marksOf(inline)}</Fragment>
         ),
       )}
@@ -167,6 +171,8 @@ function Blocks({
   return (
     <>
       {blocks.map((block, index) => (
+        // Blocks of a parsed document have no identity and never reorder.
+        // react-doctor-disable-next-line react-doctor/no-array-index-as-key
         <Block key={index} block={block} options={options} />
       ))}
     </>
@@ -193,11 +199,19 @@ function ListBlock({
     >
       {block.items.map((item, index) => (
         <li
+          // List items have no identity and never reorder.
+          // react-doctor-disable-next-line react-doctor/no-array-index-as-key
           key={index}
           className={item.checked !== null ? "task-list-item" : undefined}
         >
           {item.checked !== null && (
-            <input type="checkbox" disabled checked={item.checked} readOnly />
+            <input
+              type="checkbox"
+              aria-label="Task"
+              disabled
+              checked={item.checked}
+              readOnly
+            />
           )}{" "}
           <Blocks blocks={item.content} options={options} />
         </li>
@@ -246,6 +260,8 @@ function ImageGroupBlock({
   const grid = layout.mode === "grid" ? layout : null;
   const picture = (index: number) => (
     <Picture
+      // A group's images have no identity and never reorder.
+      // react-doctor-disable-next-line react-doctor/no-array-index-as-key
       key={index}
       image={block.images[index]!}
       index={index}
@@ -278,6 +294,8 @@ function ImageGroupBlock({
           <div data-reader-image-group-items>
             {block.images.map((image, index) =>
               grid && !grid.ratio ? (
+                // A group's images have no identity and never reorder.
+                // react-doctor-disable-next-line react-doctor/no-array-index-as-key
                 <div key={index} style={cellStyle(image)}>
                   {picture(index)}
                 </div>
