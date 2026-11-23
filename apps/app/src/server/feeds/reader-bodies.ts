@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   parseAtUri,
   READER_BODY_RESPONSE_BUDGET_BYTES,
@@ -30,6 +30,22 @@ type BodyRow = Pick<
   "id" | "feedId" | "content" | "contentHash" | "atprotoUri" | "sourceCid"
 >;
 
+/** What says where a body comes from and how large its stored HTML is, without the HTML. */
+export type BodyHead = Omit<BodyRow, "content"> & { contentBytes: number };
+
+/** A body head that may already carry its stored HTML. */
+type RequestedBody = BodyHead & { content?: string };
+
+export const bodyHeadColumns = {
+  id: feedItems.id,
+  feedId: feedItems.feedId,
+  contentHash: feedItems.contentHash,
+  atprotoUri: feedItems.atprotoUri,
+  sourceCid: feedItems.sourceCid,
+  // The size comes from the record header; the body itself is not read.
+  contentBytes: sql<number>`octet_length(${feedItems.content})`,
+};
+
 /** The client item; lists and pages never carry a body, direct open and the body endpoint do. */
 export function toApplicationFeedItem(
   row: DatabaseFeedItem,
@@ -49,9 +65,14 @@ function htmlBody(row: BodyRow): ReaderBody | null {
     : null;
 }
 
+/** The row names a retained source as its body. */
+function namesSource(row: Pick<BodyRow, "sourceCid" | "atprotoUri">) {
+  return Boolean(row.sourceCid && row.atprotoUri);
+}
+
 /** Feed items whose body is a retained source, keyed to the origin that holds it. */
 async function sourceKeys(database: typeof db, rows: BodyRow[]) {
-  const sourced = rows.filter((row) => row.sourceCid && row.atprotoUri);
+  const sourced = rows.filter(namesSource);
   if (!sourced.length)
     return new Map<string, { originId: number; uri: string; cid: string }>();
   const origins = await database
@@ -130,33 +151,128 @@ export async function loadReaderBodies(
   );
 }
 
-/** Bodies in request order until the response budget is spent; the rest are named. */
+function shippedBytes(body: ReaderBody | null) {
+  return body ? readerBodyBytes(body) : 0;
+}
+
+/**
+ * How many leading entries fit the budget. The body that leads a response
+ * ships whatever its size, so one oversized body cannot starve a request. No
+ * later body does, or every slice could add one past the budget.
+ */
+function leadingFit<T>(
+  entries: T[],
+  bytesOf: (entry: T) => number,
+  budget: number,
+  leadsResponse: boolean,
+) {
+  let bytes = 0;
+  const cut = entries.findIndex((entry, index) => {
+    bytes += bytesOf(entry);
+    return bytes > budget && !(leadsResponse && index === 0);
+  });
+  return cut === -1 ? entries.length : cut;
+}
+
+/**
+ * Bodies in request order until the response budget is spent; the rest are
+ * named. Entries that follow others in the same response do not lead it.
+ */
 export function capReaderBodies<T extends { body: ReaderBody | null }>(
   entries: T[],
   budget = READER_BODY_RESPONSE_BUDGET_BYTES,
+  leadsResponse = true,
 ) {
-  let bytes = 0;
-  let cut = entries.length;
-  for (const [index, entry] of entries.entries()) {
-    bytes += entry.body ? readerBodyBytes(entry.body) : 0;
-    // The first body always ships so one oversized body cannot starve a request.
-    if (index > 0 && bytes > budget) {
-      cut = index;
-      break;
-    }
-  }
+  const cut = leadingFit(
+    entries,
+    (entry) => shippedBytes(entry.body),
+    budget,
+    leadsResponse,
+  );
   return { items: entries.slice(0, cut), omitted: entries.slice(cut) };
 }
 
 /** Rows loaded per slice, so a request never materializes bodies it will not send. */
 const BODY_LOAD_SLICE = 25;
 
+/** A retained source ships in place of the stored HTML, at a size known only once loaded. */
+function storedHtmlBytes(row: BodyHead) {
+  return namesSource(row) ? 0 : row.contentBytes;
+}
+
+/**
+ * The leading rows whose stored HTML fits the budget. HTML ships at its stored
+ * size, so a row past the budget is certain to be cut and its body is never
+ * read.
+ */
+function rowsKnownToFit<T extends BodyHead>(
+  rows: T[],
+  budget: number,
+  leadsResponse: boolean,
+) {
+  return rows.slice(
+    0,
+    leadingFit(rows, storedHtmlBytes, budget, leadsResponse),
+  );
+}
+
+/** The stored HTML of the given rows by id, in one statement; none for no rows. */
+async function storedHtmlOf(database: typeof db, rows: BodyHead[]) {
+  if (!rows.length) return new Map<string, string>();
+  const stored = await database
+    .select({ id: feedItems.id, content: feedItems.content })
+    .from(feedItems)
+    .where(
+      inArray(
+        feedItems.id,
+        rows.map((row) => row.id),
+      ),
+    );
+  return new Map(stored.map((row) => [row.id, row.content]));
+}
+
+/**
+ * Bodies for one slice. Stored HTML is read only for rows whose body it is: a
+ * row that names a retained source reads its HTML only when that source is
+ * gone. Rows that already carry their HTML read nothing.
+ */
+async function loadSliceBodies(
+  database: typeof db,
+  rows: RequestedBody[],
+  now: Date,
+) {
+  const unread = rows.filter((row) => row.content === undefined);
+  const html = await storedHtmlOf(
+    database,
+    unread.filter((row) => !namesSource(row)),
+  );
+  const bodies = await loadReaderBodies(
+    database,
+    rows.map((row) => ({
+      ...row,
+      content: row.content ?? html.get(row.id) ?? "",
+    })),
+    now,
+  );
+  const sourceless = unread.filter(
+    (row) => namesSource(row) && !bodies.get(row.id) && row.contentBytes > 0,
+  );
+  const fallback = await storedHtmlOf(database, sourceless);
+  for (const row of sourceless)
+    bodies.set(
+      row.id,
+      htmlBody({ ...row, content: fallback.get(row.id) ?? "" }),
+    );
+  return bodies;
+}
+
 /**
  * Loads bodies one slice at a time in request order and stops at the first
  * slice that crosses the response budget. Work stays bounded by the bytes
- * that ship, not by the number of ids asked for.
+ * that ship, not by the number of ids asked for: a slice reads only the
+ * stored HTML its sizes say can still fit.
  */
-export async function loadCappedReaderBodies<T extends BodyRow>(
+export async function loadCappedReaderBodies<T extends RequestedBody>(
   database: typeof db,
   rows: T[],
   now = new Date(),
@@ -165,25 +281,70 @@ export async function loadCappedReaderBodies<T extends BodyRow>(
   let bytes = 0;
   for (let offset = 0; offset < rows.length; offset += BODY_LOAD_SLICE) {
     const slice = rows.slice(offset, offset + BODY_LOAD_SLICE);
+    const remaining = READER_BODY_RESPONSE_BUDGET_BYTES - bytes;
+    const leadsResponse = offset === 0;
+    const fitting = rowsKnownToFit(slice, remaining, leadsResponse);
+    if (!fitting.length) break;
     // Slices are sequential by design: the next one loads only if this one fit.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    const bodies = await loadReaderBodies(database, slice, now);
-    const entries = slice.map((row) => ({
+    const bodies = await loadSliceBodies(database, fitting, now);
+    const entries = fitting.map((row) => ({
       row,
       body: bodies.get(row.id) ?? null,
     }));
-    const capped = capReaderBodies(
-      entries,
-      READER_BODY_RESPONSE_BUDGET_BYTES - bytes,
-    );
+    const capped = capReaderBodies(entries, remaining, leadsResponse);
     items.push(...capped.items);
-    if (capped.omitted.length) break;
+    if (capped.omitted.length || fitting.length < slice.length) break;
     bytes += capped.items.reduce(
-      (total, entry) => total + (entry.body ? readerBodyBytes(entry.body) : 0),
+      (total, entry) => total + shippedBytes(entry.body),
       0,
     );
   }
   return { items, omitted: rows.slice(items.length) };
+}
+
+const requestedBodyColumns = {
+  ...bodyHeadColumns,
+  contentSnippet: feedItems.contentSnippet,
+};
+
+/**
+ * The requested items the user owns, in request order, which decides the
+ * bodies that fit under the response cap. A request of one slice reads its
+ * bodies with its rows, in one statement. A larger one reads sizes first, so
+ * the bodies that will not ship are never read.
+ */
+async function requestedBodyRows(
+  database: typeof db,
+  userId: string,
+  ids: string[],
+) {
+  const rows: Array<RequestedBody & Pick<DatabaseFeedItem, "contentSnippet">> =
+    await database
+      .select(
+        ids.length <= BODY_LOAD_SLICE
+          ? { ...requestedBodyColumns, content: feedItems.content }
+          : requestedBodyColumns,
+      )
+      .from(feedItems)
+      .innerJoin(feeds, eq(feedItems.feedId, feeds.id))
+      .where(and(inArray(feedItems.id, ids), eq(feeds.userId, userId)));
+  const position = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+}
+
+/** The reader bodies a user asked for by id, capped at the response budget. */
+export async function loadRequestedReaderBodies(
+  database: typeof db,
+  userId: string,
+  ids: string[],
+  now = new Date(),
+) {
+  return loadCappedReaderBodies(
+    database,
+    await requestedBodyRows(database, userId, ids),
+    now,
+  );
 }
 
 /**

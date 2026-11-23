@@ -1,61 +1,16 @@
-import {
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
-
-const MIGRATIONS_DIRECTORY = "src/server/db/migrations";
-const POST_MIGRATIONS_DIRECTORY = "src/server/db/post-migrations";
-const FEATURE_TAG = "0049_publication_subscriptions";
-
-type Journal = { entries: Array<{ idx: number; tag: string }> };
-
-function statements(content: string) {
-  return content
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-}
-
-function readJournal(): Journal {
-  return JSON.parse(
-    readFileSync(`${MIGRATIONS_DIRECTORY}/meta/_journal.json`, "utf8"),
-  ) as Journal;
-}
-
-async function applyJournalRange(
-  client: ReturnType<typeof createClient>,
-  entries: Journal["entries"],
-  from: number,
-  through: number,
-  options: { withPostMigrations: boolean },
-) {
-  for (const entry of entries.filter(
-    ({ idx }) => idx >= from && idx <= through,
-  )) {
-    const migrationStatements = statements(
-      readFileSync(`${MIGRATIONS_DIRECTORY}/${entry.tag}.sql`, "utf8"),
-    );
-    const postDirectory = `${POST_MIGRATIONS_DIRECTORY}/${entry.tag}`;
-    if (options.withPostMigrations && existsSync(postDirectory)) {
-      for (const file of readdirSync(postDirectory)
-        .filter((file) => file.endsWith(".sql"))
-        .sort()) {
-        migrationStatements.push(
-          ...statements(readFileSync(`${postDirectory}/${file}`, "utf8")),
-        );
-      }
-    }
-    // Match production's atomic schema + data transaction for each journal entry.
-    await client.batch(migrationStatements, "write");
-  }
-}
+import {
+  applyJournalRange,
+  FEATURE_TAG,
+  MIGRATIONS_DIRECTORY,
+  POST_MIGRATIONS_DIRECTORY,
+  readJournal,
+  statements,
+} from "./migration-journal";
 
 async function columnNames(
   client: ReturnType<typeof createClient>,
@@ -274,6 +229,8 @@ describe("publication subscriptions migration", () => {
         name_edited_at: null,
         is_active: 0,
       });
+      // No item is rewritten for the new columns: body_source stays NULL on
+      // every row from before the migration, whatever its content.
       expect(
         (
           await client.execute(
@@ -283,28 +240,28 @@ describe("publication subscriptions migration", () => {
       ).toEqual([
         {
           id: "body",
-          body_source: "rss",
+          body_source: null,
           source_kind: "rss",
           atproto_uri: null,
           tags: "[]",
         },
         {
           id: "empty",
-          body_source: "none",
+          body_source: null,
           source_kind: "rss",
           atproto_uri: null,
           tags: "[]",
         },
         {
           id: "video",
-          body_source: "rss",
+          body_source: null,
           source_kind: "rss",
           atproto_uri: null,
           tags: "[]",
         },
         {
           id: "whitespace",
-          body_source: "rss",
+          body_source: null,
           source_kind: "rss",
           atproto_uri: null,
           tags: "[]",
@@ -479,6 +436,62 @@ describe("publication subscriptions migration", () => {
       expect(String(dueIndex.rows[0]?.sql)).toMatch(
         /\(`user_id`,`next_fetch_at`,`feed_id`\) WHERE .*next_fetch_at.* is not null/i,
       );
+      // Feed item lookups by override URL and by document hold only the rows
+      // that have one; text items and RSS items add no NULL entries.
+      const itemIndexes = await client.execute(
+        `SELECT name, sql FROM sqlite_master
+         WHERE name IN ('feed_item_feed_normalized_url_idx', 'feed_item_feed_atproto_uri_unique')
+         ORDER BY name`,
+      );
+      expect(itemIndexes.rows.map((row) => String(row.sql))).toEqual([
+        expect.stringMatching(
+          /^CREATE UNIQUE INDEX .*\(`feed_id`,`atproto_uri`\) WHERE .*atproto_uri.* is not null$/i,
+        ),
+        expect.stringMatching(
+          /^CREATE INDEX .*\(`feed_id`,`normalized_url`\) WHERE .*normalized_url.* is not null$/i,
+        ),
+      ]);
+      // A lookup that names the column with bound values still seeks through
+      // the partial index: the comparison itself rules out NULL.
+      for (const [sql, indexName] of [
+        [
+          "SELECT id FROM serial_feed_item WHERE feed_id = ? AND normalized_url IN (?, ?, ?)",
+          "feed_item_feed_normalized_url_idx",
+        ],
+        [
+          "SELECT id FROM serial_feed_item WHERE feed_id = ? AND atproto_uri IN (?, ?, ?)",
+          "feed_item_feed_atproto_uri_unique",
+        ],
+      ] as const) {
+        const plan = await client.execute({
+          sql: `EXPLAIN QUERY PLAN ${sql}`,
+          args: Array.from(sql.matchAll(/\?/g), () => "lookup"),
+        });
+        expect(plan.rows.map((row) => String(row.detail))).toEqual([
+          expect.stringContaining(`USING INDEX ${indexName} (feed_id=? AND `),
+        ]);
+      }
+      // The mirror's primary key already leads with the connection, so every
+      // read, the unlink delete and the connection cascade seek through it.
+      expect(
+        (
+          await client.execute(
+            "PRAGMA index_list(serial_atproto_subscription_mirror)",
+          )
+        ).rows.map((row) => row.name),
+      ).toEqual(["sqlite_autoindex_serial_atproto_subscription_mirror_1"]);
+      for (const sql of [
+        "SELECT * FROM serial_atproto_subscription_mirror WHERE connection_id = ? AND visibility = ?",
+        "DELETE FROM serial_atproto_subscription_mirror WHERE connection_id = ?",
+      ]) {
+        const plan = await client.execute({
+          sql: `EXPLAIN QUERY PLAN ${sql}`,
+          args: Array.from(sql.matchAll(/\?/g), () => "lookup"),
+        });
+        expect(plan.rows.map((row) => String(row.detail)).join("\n")).toMatch(
+          /USING (COVERING )?INDEX sqlite_autoindex_serial_atproto_subscription_mirror_1 \(connection_id=\?/,
+        );
+      }
     } finally {
       client.close();
     }

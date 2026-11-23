@@ -16,7 +16,7 @@ import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
 } from "~/lib/reconciliation";
-import { loadCappedReaderBodies } from "~/server/feeds/reader-bodies";
+import { loadRequestedReaderBodies } from "~/server/feeds/reader-bodies";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { loadApplicationViews } from "~/server/api/utils/loadApplicationViews";
 import { captureException } from "~/server/logger";
@@ -33,8 +33,6 @@ import { workerPool } from "~/lib/workerPool";
 import {
   contentCategories,
   feedCategories,
-  feedItems,
-  feeds,
   feedsSchema,
   viewFeeds,
   views,
@@ -1061,28 +1059,11 @@ export const requestFullTextForItems = protectedProcedure
   )
   .handler(async ({ context, input }): Promise<FeedItemFulltextResponse> => {
     try {
-      const rows = await context.db
-        .select({
-          id: feedItems.id,
-          feedId: feedItems.feedId,
-          content: feedItems.content,
-          contentHash: feedItems.contentHash,
-          contentSnippet: feedItems.contentSnippet,
-          atprotoUri: feedItems.atprotoUri,
-          sourceCid: feedItems.sourceCid,
-        })
-        .from(feedItems)
-        .innerJoin(feeds, eq(feedItems.feedId, feeds.id))
-        .where(
-          and(
-            inArray(feedItems.id, input.itemIds),
-            eq(feeds.userId, context.user.id),
-          ),
-        );
-      // Request order decides which bodies fit under the response cap.
-      const position = new Map(input.itemIds.map((id, index) => [id, index]));
-      rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
-      const { items, omitted } = await loadCappedReaderBodies(context.db, rows);
+      const { items, omitted } = await loadRequestedReaderBodies(
+        context.db,
+        context.user.id,
+        input.itemIds,
+      );
       return {
         items: items.map((entry) => ({
           id: entry.row.id,

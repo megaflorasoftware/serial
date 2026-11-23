@@ -5,7 +5,7 @@ import type {
   ApplicationView,
   DatabaseContentCategory,
   DatabaseFeedCategory,
-  DatabaseFeedWithOrigins,
+  DatabaseFeedWithCommonOrigins,
   DatabaseViewCategory,
   DatabaseViewFeed,
   DatabaseViewSection,
@@ -31,7 +31,7 @@ type ReconciliationDatabase = typeof defaultDatabase;
 
 type OrganizationRows = {
   views: Array<typeof views.$inferSelect>;
-  feeds: DatabaseFeedWithOrigins[];
+  feeds: DatabaseFeedWithCommonOrigins[];
   tags: DatabaseContentCategory[];
   feedTags: DatabaseFeedCategory[];
   viewTags: DatabaseViewCategory[];

@@ -4,6 +4,8 @@ import { initialOriginSchedule } from "./schedule";
 import type { db as defaultDatabase } from "~/server/db";
 import type {
   DatabaseFeed,
+  DatabaseFeedOrigin,
+  DatabaseFeedWithCommonOrigins,
   DatabaseFeedWithOrigins,
   HydratedFeedOrigin,
 } from "~/server/db/schema";
@@ -185,11 +187,14 @@ export async function attachMissingFeedOrigins(
 }
 
 /** Attach origin rows to their Feed rows, preserving the Feed order given. */
-export function attachOrigins<TFeed extends { id: number }>(
+export function attachOrigins<
+  TFeed extends { id: number },
+  TOrigin extends { feedId: number } = HydratedFeedOrigin,
+>(
   feedRows: TFeed[],
-  originRows: HydratedFeedOrigin[],
-): Array<TFeed & { origins: HydratedFeedOrigin[] }> {
-  const originsByFeedId = new Map<number, HydratedFeedOrigin[]>();
+  originRows: TOrigin[],
+): Array<TFeed & { origins: TOrigin[] }> {
+  const originsByFeedId = new Map<number, TOrigin[]>();
   for (const origin of originRows) {
     const existing = originsByFeedId.get(origin.feedId);
     if (existing) existing.push(origin);
@@ -222,32 +227,31 @@ export async function loadOriginsForFeeds(
 }
 
 /**
- * Every Feed a user owns with its origins nested, ordered by Feed id. One
+ * Every Feed a user owns with its common origin rows nested, ordered by Feed
+ * id: the shape the application schema exposes. The protocol detail rows, with
+ * their validators, stream state and Publication record, stay unread. One
  * left-joined statement so the reconciliation statement budget is unchanged;
  * a Feed with no origins still appears with an empty list.
  */
 export async function loadUserFeedsWithOrigins(
   database: FeedDatabase,
   userId: string,
-): Promise<DatabaseFeedWithOrigins[]> {
+): Promise<DatabaseFeedWithCommonOrigins[]> {
   const rows = await database
-    .select({ feed: feeds, ...originSelection })
+    .select({ feed: feeds, origin: feedOrigins })
     .from(feeds)
     .leftJoin(feedOrigins, eq(feedOrigins.feedId, feeds.id))
-    .leftJoin(feedOriginRss, eq(feedOriginRss.originId, feedOrigins.id))
-    .leftJoin(feedOriginAtproto, eq(feedOriginAtproto.originId, feedOrigins.id))
     .where(eq(feeds.userId, userId))
     .orderBy(asc(feeds.id), asc(feedOrigins.id));
   const feedRows: DatabaseFeed[] = [];
   const seenFeedIds = new Set<number>();
-  const originRows: HydratedFeedOrigin[] = [];
+  const originRows: DatabaseFeedOrigin[] = [];
   for (const row of rows) {
     if (!seenFeedIds.has(row.feed.id)) {
       seenFeedIds.add(row.feed.id);
       feedRows.push(row.feed);
     }
-    if (row.origin)
-      originRows.push(hydrateOrigin({ ...row, origin: row.origin }));
+    if (row.origin) originRows.push(row.origin);
   }
   return attachOrigins(feedRows, originRows);
 }

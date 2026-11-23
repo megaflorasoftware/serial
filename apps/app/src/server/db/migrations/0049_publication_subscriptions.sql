@@ -185,13 +185,13 @@ CREATE TABLE `serial_feed_item_observation` (
 --> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `source_kind` text DEFAULT 'rss' NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `atproto_uri` text;--> statement-breakpoint
-ALTER TABLE `serial_feed_item` ADD `body_source` text DEFAULT 'none' NOT NULL;--> statement-breakpoint
+-- body_source stays NULL on existing rows: backfilling it would rewrite every
+-- item, bodies included. NULL marks an item written before this migration.
+ALTER TABLE `serial_feed_item` ADD `body_source` text;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `tags` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_feed_item` ADD `source_cid` text;--> statement-breakpoint
-CREATE INDEX `feed_item_feed_normalized_url_idx` ON `serial_feed_item` (`feed_id`,`normalized_url`);--> statement-breakpoint
-CREATE UNIQUE INDEX `feed_item_feed_atproto_uri_unique` ON `serial_feed_item` (`feed_id`,`atproto_uri`);
---> statement-breakpoint
-UPDATE serial_feed_item SET body_source = 'rss' WHERE content <> '';
+CREATE INDEX `feed_item_feed_normalized_url_idx` ON `serial_feed_item` (`feed_id`,`normalized_url`) WHERE "serial_feed_item"."normalized_url" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `feed_item_feed_atproto_uri_unique` ON `serial_feed_item` (`feed_id`,`atproto_uri`) WHERE "serial_feed_item"."atproto_uri" is not null;
 --> statement-breakpoint
 CREATE TABLE `serial_atproto_subscription_mirror` (
 	`connection_id` text NOT NULL,
@@ -213,7 +213,6 @@ CREATE TABLE `serial_atproto_subscription_mirror` (
 	FOREIGN KEY (`connection_id`) REFERENCES `serial_atproto_connections`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `atproto_subscription_mirror_publication_idx` ON `serial_atproto_subscription_mirror` (`connection_id`,`publication_uri`);--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_sync_cursor` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_repo_rev` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_import_generation` integer DEFAULT 0 NOT NULL;--> statement-breakpoint

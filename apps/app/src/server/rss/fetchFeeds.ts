@@ -1,4 +1,3 @@
-import { sanitizeEmbeddedHtml } from "@serial/standard-site";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   FEED_ADD_MAX_DISCOVERED_FEEDS,
@@ -309,7 +308,8 @@ async function insertFeedItems(
       return {
         feedId,
         contentId: item.id,
-        content: sanitizeEmbeddedHtml(item.content ?? ""),
+        // A video description is plain text and is stored as its feed states it.
+        content: item.content ?? "",
         bodySource: item.content ? "rss" : "none",
         contentSnippet: item.contentSnippet,
         contentType: feedContentType,
