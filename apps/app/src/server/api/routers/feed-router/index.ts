@@ -121,8 +121,8 @@ export const createFromSubscriptionImport = protectedProcedure
             userId,
             feed.feedUrl,
           );
-          const result = await dbSemaphore.run(() =>
-            runDatabaseWrite(context.db, () =>
+          const result = await runDatabaseWrite(context.db, () =>
+            dbSemaphore.run(() =>
               context.db.transaction(
                 (tx) =>
                   insertFeedWithCategories(
