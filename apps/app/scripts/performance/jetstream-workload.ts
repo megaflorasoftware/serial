@@ -266,7 +266,45 @@ export async function createJetstreamWorkload(
       await database
         .update(feedOriginAtprotoDocuments)
         .set({ status: "ready" });
-      await database.update(feedOriginAtproto).set({ publicationDirty: false });
+      await database
+        .update(feedOriginAtproto)
+        .set({ publicationDirty: false, stagedDueAt: null });
+    },
+    /**
+     * Staged documents the sweep has no business reading: `count` waiting out
+     * a backoff on a live origin, and `count` due on an origin the stream has
+     * paused.
+     */
+    async stageBacklog(count: number) {
+      const [, waiting, paused] = origins;
+      if (!waiting || !paused) throw new Error("A backlog needs three origins");
+      const retryAt = new Date(Date.now() + 60 * 60 * 1000);
+      const staged = (originId: number, dueAt: Date | null) =>
+        Array.from({ length: count }, (_, index) => ({
+          originId,
+          uri: `at://${did}/site.standard.document/backlog-${index}`,
+          cid: `backlog-${index}`,
+          status: "retry" as const,
+          attempts: dueAt ? 5 : 0,
+          retryAt: dueAt,
+        }));
+      const documents = [...staged(waiting, retryAt), ...staged(paused, null)];
+      for (let offset = 0; offset < documents.length; offset += 500)
+        // Bound fixture inserts to one batch in flight.
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
+        await database
+          .insert(feedOriginAtprotoDocuments)
+          .values(documents.slice(offset, offset + 500));
+      await Promise.all([
+        database
+          .update(feedOriginAtproto)
+          .set({ stagedDueAt: retryAt })
+          .where(eq(feedOriginAtproto.originId, waiting)),
+        database
+          .update(feedOriginAtproto)
+          .set({ stagedDueAt: new Date(0), streamMode: "paused" })
+          .where(eq(feedOriginAtproto.originId, paused)),
+      ]);
     },
     /** The worker's intake over this fixture, loaded before anything is measured. */
     async intake() {

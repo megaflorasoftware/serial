@@ -422,13 +422,28 @@ export const feedOriginAtproto = sqliteTable(
     initialized: integer("initialized", { mode: "boolean" })
       .notNull()
       .default(false),
+    /**
+     * The earliest time a staged document of this origin is due. NULL when
+     * none is staged; the epoch when one is due at once.
+     */
+    stagedDueAt: integer("staged_due_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     index("feed_origin_atproto_publication_did_idx").on(table.publicationDid),
-    // Only origins with a Publication record waiting to be applied.
+    // The retry sweep reads these two indexes and nothing else. Each keeps
+    // only origins the sweep may process, so a paused, uninitialized or
+    // deactivated origin costs it nothing however much work it holds. The
+    // sweep states the same conditions as literals; see `sweepable`.
     index("feed_origin_atproto_dirty_idx")
       .on(table.originId)
-      .where(sql`${table.publicationDirty} = 1`),
+      .where(
+        sql`${table.publicationDirty} = 1 and ${table.streamMode} = 'live' and ${table.initialized} = 1 and ${table.repositoryActive} = 1`,
+      ),
+    index("feed_origin_atproto_staged_due_at_idx")
+      .on(table.stagedDueAt)
+      .where(
+        sql`${table.stagedDueAt} is not null and ${table.streamMode} = 'live' and ${table.initialized} = 1 and ${table.repositoryActive} = 1`,
+      ),
   ],
 );
 
@@ -453,6 +468,8 @@ export const DOCUMENT_LEDGER_REASONS = [
   "invalid",
   "oversized",
   "adapter",
+  // The import kept failing until its retries ran out.
+  "failed",
 ] as const;
 
 /**
@@ -492,10 +509,6 @@ export const feedOriginAtprotoDocuments = sqliteTable(
       table.retryAt,
       sql`${table.uri} desc`,
     ),
-    // Only staged documents: the retry sweep finds origins with due work here.
-    index("feed_origin_atproto_document_retry_idx")
-      .on(table.originId, table.retryAt)
-      .where(sql`${table.status} = 'retry'`),
     // Readable versions by content type: the platform check probes this
     // instead of reading the retained sources.
     index("feed_origin_atproto_document_body_type_idx")

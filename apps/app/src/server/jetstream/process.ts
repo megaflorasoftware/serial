@@ -6,13 +6,9 @@ import {
   parsePublicationRecord,
   REFERENCE_IMPORT_REUSE_MS,
 } from "@serial/standard-site";
-import {
-  feedOriginAtproto,
-  feedOriginAtprotoDocuments,
-  feedOrigins,
-  feeds,
-} from "../db/schema";
+import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
+import { nextRetryAt } from "../publication-sync/retry";
 import { createPublicationClient } from "../rss/atprotoClient";
 import {
   deriveDocumentBody,
@@ -52,7 +48,7 @@ import {
 } from "./store";
 import { createStreamReporter } from "./report";
 import type { FetchedBlob } from "./document-source";
-import type { StreamDatabase, StreamSettings } from "./store";
+import type { StreamDatabase, StreamOrigin, StreamSettings } from "./store";
 import type {
   ApplicationFeedItem,
   DOCUMENT_LEDGER_REASONS,
@@ -61,8 +57,6 @@ import type { PublicationClient } from "../rss/atprotoClient";
 import type { PlanConfig } from "../subscriptions/plans";
 import type { FeedDatabase } from "../feeds/origins";
 import { workerPool } from "~/lib/workerPool";
-
-const DUE_ORIGIN_PAGE_SIZE = 50;
 
 export type CommittedUpdate = {
   userId: string;
@@ -81,6 +75,54 @@ export type ProcessingOptions = {
   readPage?: typeof readFeedHttp;
   publish?: (update: CommittedUpdate) => Promise<void>;
 };
+
+/**
+ * When the origin's staged documents are next due, read from the rows left:
+ * the first entry of the due index, where a document never tried sorts ahead
+ * of every retry time and counts as due at once. NULL when none is staged.
+ */
+function nextDocumentDue(originId: number) {
+  return sql`(select coalesce(${feedOriginAtprotoDocuments.retryAt}, 0) from ${feedOriginAtprotoDocuments} where ${feedOriginAtprotoDocuments.originId} = ${originId} and ${feedOriginAtprotoDocuments.status} = 'retry' order by ${feedOriginAtprotoDocuments.retryAt} limit 1)`;
+}
+
+/**
+ * Restates on the origin when its staged documents are next due, after a pass
+ * changed them. One seek, and a write only when the time moved. A document
+ * staged meanwhile is counted: this is one statement, and staging marks the
+ * origin in the transaction that stages.
+ */
+async function restateDocumentsDue(database: StreamDatabase, originId: number) {
+  const next = nextDocumentDue(originId);
+  await runDatabaseWrite(database, () =>
+    database
+      .update(feedOriginAtproto)
+      .set({ stagedDueAt: next })
+      .where(
+        and(
+          eq(feedOriginAtproto.originId, originId),
+          sql`${feedOriginAtproto.stagedDueAt} is not ${next}`,
+        ),
+      ),
+  );
+}
+
+/**
+ * Staged documents of an origin whose Publication is gone or unreadable wait
+ * for the Publication and ask for no sweep. Its return marks the origin for
+ * one, and that pass restates when they are due.
+ */
+async function shelveDocuments(
+  database: StreamDatabase,
+  row: Pick<StreamOrigin, "origin" | "atproto">,
+) {
+  if (row.atproto.stagedDueAt === null) return;
+  await runDatabaseWrite(database, () =>
+    database
+      .update(feedOriginAtproto)
+      .set({ stagedDueAt: null })
+      .where(eq(feedOriginAtproto.originId, row.origin.id)),
+  );
+}
 
 /**
  * An origin that cannot be processed leaves live mode the way it does when an
@@ -132,12 +174,17 @@ export async function processOriginDocuments(
   const report = createStreamReporter(settings.service);
   const client = options.client ?? createPublicationClient();
   let publication = parsePublicationRecord(row.atproto.publicationRecord);
-  if (!publication && row.atproto.publicationSeq) return; // Author deleted or invalidated the Publication.
+  // The author deleted or invalidated the Publication.
+  if (!publication && row.atproto.publicationSeq)
+    return shelveDocuments(database, row);
   if (!publication)
     publication = parsePublicationRecord(
       await client.getRecord(row.origin.locator),
     );
-  if (!publication) throw new Error("Invalid Publication record");
+  if (!publication) {
+    await shelveDocuments(database, row);
+    throw new Error("Invalid Publication record");
+  }
   if (row.atproto.publicationDirty) {
     const changed = await runDatabaseWrite(database, () =>
       database.transaction(
@@ -215,11 +262,9 @@ export async function processOriginDocuments(
       eq(feedOriginAtprotoDocuments.cid, entry.cid),
       eq(feedOriginAtprotoDocuments.status, "retry"),
     );
-    const invalidate = async (
-      reason: (typeof DOCUMENT_LEDGER_REASONS)[number],
-      error: Error,
-    ) => {
-      await runDatabaseWrite(database, () =>
+    /** The version leaves the pending set for good; only a newer one is tried. */
+    const retire = (reason: (typeof DOCUMENT_LEDGER_REASONS)[number]) =>
+      runDatabaseWrite(database, () =>
         database.transaction(async (tx) => {
           const marked = await tx
             .update(feedOriginAtprotoDocuments)
@@ -234,6 +279,11 @@ export async function processOriginDocuments(
           ]);
         }),
       );
+    const invalidate = async (
+      reason: (typeof DOCUMENT_LEDGER_REASONS)[number],
+      error: Error,
+    ) => {
+      await retire(reason);
       report(error, "document-validation");
     };
     try {
@@ -348,22 +398,24 @@ export async function processOriginDocuments(
         if (!removed.has(item.id)) committed.set(item.id, item);
     } catch (error) {
       report(error, "document-processing");
-      await runDatabaseWrite(database, () =>
-        database
-          .update(feedOriginAtprotoDocuments)
-          .set({
-            attempts: entry.attempts + 1,
-            retryAt: new Date(
-              now.getTime() +
-                Math.min(3_600_000, 5000 * 2 ** Math.min(entry.attempts, 10)),
-            ),
-          })
-          .where(identity),
-      );
+      const attempts = entry.attempts + 1;
+      const retryAt = nextRetryAt(attempts, now);
+      // Once its retries are spent, the version waits for its publisher's next edit.
+      if (!retryAt) await retire("failed");
+      else
+        await runDatabaseWrite(database, () =>
+          database
+            .update(feedOriginAtprotoDocuments)
+            .set({ attempts, retryAt })
+            .where(identity),
+        );
     }
   })) {
     void unused;
   }
+  // Nothing staged before and nothing found leaves nothing to restate.
+  if (pending.length || row.atproto.stagedDueAt !== null)
+    await restateDocumentsDue(database, originId);
   // The readable versions' content types decide the Feed's platform; a batch
   // that wrote nothing readable cannot have changed it.
   const platformChanged = committed.size
@@ -432,47 +484,44 @@ export async function pendingDocumentCount(
 }
 
 /**
- * Live origins of active Feeds with a staged document whose retry is due, or
- * a Publication record to apply, a page at a time in origin order. Both halves
- * read a partial index of pending work only, so an idle sweep examines
- * nothing. An inactive Feed's staged work waits for the Feed.
+ * An origin the retry sweep may process: the stream applies it live and its
+ * repository is active. Both pending-work indexes keep only these origins, and
+ * SQLite uses a partial index only for a query that states its terms as the
+ * same literals.
  */
-export async function originsWithDueWork(
-  database: StreamDatabase,
-  input: { after: number; now: Date; limit: number },
-) {
-  return database.all<{ originId: number }>(sql`
-    select due.origin_id as "originId"
-    from (
-      select ${feedOriginAtprotoDocuments.originId} as origin_id
-      from ${feedOriginAtprotoDocuments}
-      where ${retryIsDue(input.now)}
-        and ${feedOriginAtprotoDocuments.originId} > ${input.after}
-      union
-      select ${feedOriginAtproto.originId} as origin_id
-      from ${feedOriginAtproto}
-      where ${feedOriginAtproto.publicationDirty} = 1
-        and ${feedOriginAtproto.originId} > ${input.after}
-    ) as due
-    inner join ${feedOriginAtproto}
-      on ${feedOriginAtproto.originId} = due.origin_id
-    inner join ${feedOrigins}
-      on ${feedOrigins.id} = due.origin_id
-    inner join ${feeds}
-      on ${feeds.id} = ${feedOrigins.feedId}
-    where ${feedOriginAtproto.initialized} = 1
-      and ${feedOriginAtproto.streamMode} = 'live'
-      and ${feedOriginAtproto.repositoryActive} = 1
-      and ${feeds.isActive} = 1
-    order by due.origin_id
-    limit ${input.limit}
+const sweepable = sql`${feedOriginAtproto.streamMode} = 'live' and ${feedOriginAtproto.initialized} = 1 and ${feedOriginAtproto.repositoryActive} = 1`;
+
+/**
+ * Origins the sweep may process that hold a staged document now due, or a
+ * Publication record to apply. Each half reads only its partial index, one
+ * entry per origin with due work, so the sweep costs the same however many
+ * documents are staged, in backoff, or held by origins it may not process.
+ * An origin whose Feed or reader no longer qualifies is found once:
+ * processing it pauses it.
+ */
+export async function originsWithDueWork(database: StreamDatabase, now: Date) {
+  // The halves are neither merged nor ordered nor paged by origin in SQL: any
+  // of those has SQLite walk every origin in key order instead of the entries
+  // that are due. An origin with both kinds of work is listed twice.
+  const due = await database.all<{ originId: number }>(sql`
+    select ${feedOriginAtproto.originId} as "originId"
+    from ${feedOriginAtproto}
+    where ${lte(feedOriginAtproto.stagedDueAt, now)}
+      and ${sweepable}
+    union all
+    select ${feedOriginAtproto.originId}
+    from ${feedOriginAtproto}
+    where ${feedOriginAtproto.publicationDirty} = 1
+      and ${sweepable}
   `);
+  return [...new Set(due.map((origin) => origin.originId))];
 }
 
 /**
- * Drains staged work for the origins that have some, a page at a time. Only
- * the instance holding the stream lease sweeps, so instances do not repeat
- * each other's work.
+ * Drains one page of staged work for each origin that has some due. Only the
+ * instance holding the stream lease sweeps, so instances do not repeat each
+ * other's work. Each origin is visited once per sweep, so one that stays due
+ * cannot hold the others back.
  */
 export async function drainDueOrigins(
   database: StreamDatabase,
@@ -484,38 +533,22 @@ export async function drainDueOrigins(
   },
 ) {
   const { holdsLease, report, ...processing } = options;
-  let after = 0;
-  while (!processing.signal.aborted && holdsLease()) {
-    // Each page starts after the previous page's last origin.
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop
-    const origins = await originsWithDueWork(database, {
-      after,
-      now: nowFor(settings),
-      limit: DUE_ORIGIN_PAGE_SIZE,
-    });
-    if (!origins.length) return;
-    for await (const unused of workerPool(origins, 4, async (origin) => {
-      try {
-        await processOriginDocuments(
-          database,
-          origin.originId,
-          settings,
-          processing,
-        );
-      } catch (error) {
-        if (!processing.signal.aborted) report?.(error);
-      }
-    })) {
-      void unused;
+  const sweeps = () => !processing.signal.aborted && holdsLease();
+  if (!sweeps()) return;
+  const originIds = await originsWithDueWork(database, nowFor(settings));
+  for await (const unused of workerPool(originIds, 4, async (originId) => {
+    if (!sweeps()) return;
+    try {
+      await processOriginDocuments(database, originId, settings, processing);
+    } catch (error) {
+      if (!processing.signal.aborted) report?.(error);
     }
-    after = origins.at(-1)!.originId;
+  })) {
+    void unused;
   }
 }
 
-/**
- * A staged version whose retry time, if any, has passed. The status is a
- * literal so the partial index of pending retries applies.
- */
+/** A staged version whose retry time, if any, has passed. */
 function retryIsDue(now: Date) {
   return and(
     sql`${feedOriginAtprotoDocuments.status} = 'retry'`,

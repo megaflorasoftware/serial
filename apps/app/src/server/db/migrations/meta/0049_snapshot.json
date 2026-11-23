@@ -3284,6 +3284,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "staged_due_at": {
+          "name": "staged_due_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -3300,7 +3307,15 @@
             "origin_id"
           ],
           "isUnique": false,
-          "where": "\"serial_feed_origin_atproto\".\"publication_dirty\" = 1"
+          "where": "\"serial_feed_origin_atproto\".\"publication_dirty\" = 1 and \"serial_feed_origin_atproto\".\"stream_mode\" = 'live' and \"serial_feed_origin_atproto\".\"initialized\" = 1 and \"serial_feed_origin_atproto\".\"repository_active\" = 1"
+        },
+        "feed_origin_atproto_staged_due_at_idx": {
+          "name": "feed_origin_atproto_staged_due_at_idx",
+          "columns": [
+            "staged_due_at"
+          ],
+          "isUnique": false,
+          "where": "\"serial_feed_origin_atproto\".\"staged_due_at\" is not null and \"serial_feed_origin_atproto\".\"stream_mode\" = 'live' and \"serial_feed_origin_atproto\".\"initialized\" = 1 and \"serial_feed_origin_atproto\".\"repository_active\" = 1"
         }
       },
       "foreignKeys": {
@@ -3473,15 +3488,6 @@
             "\"uri\" desc"
           ],
           "isUnique": false
-        },
-        "feed_origin_atproto_document_retry_idx": {
-          "name": "feed_origin_atproto_document_retry_idx",
-          "columns": [
-            "origin_id",
-            "retry_at"
-          ],
-          "isUnique": false,
-          "where": "\"serial_feed_origin_atproto_document\".\"status\" = 'retry'"
         },
         "feed_origin_atproto_document_body_type_idx": {
           "name": "feed_origin_atproto_document_body_type_idx",

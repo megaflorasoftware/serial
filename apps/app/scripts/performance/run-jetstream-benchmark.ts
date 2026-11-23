@@ -131,6 +131,9 @@ try {
   });
   await fixedCost("intake-refresh", { statements: 1, rows: 0 }, intake.refresh);
   await fixedCost("idle-sweep", { statements: 1, rows: 0 }, workload.sweep);
+  // Documents in backoff, or held by a paused origin, are none of the sweep's work.
+  await workload.stageBacklog(profiles[profile].history);
+  await fixedCost("backlog-sweep", { statements: 1, rows: 0 }, workload.sweep);
   await fixedCost("disconnect", { statements: 1, rows: 0 }, () =>
     disconnectStream(session.database, "benchmark"),
   );

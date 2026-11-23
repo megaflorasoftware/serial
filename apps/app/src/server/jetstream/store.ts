@@ -401,16 +401,41 @@ function stagedValues(
   } as const;
 }
 
+/** A document staged for import is due at once, which the origin records as the epoch. */
+const DOCUMENTS_DUE_AT_ONCE = new Date(0);
+
+/** The origin, as its transaction read it, already asks the retry sweep for a visit now. */
+function documentsAreDue(row: Pick<StreamOrigin, "atproto">) {
+  return row.atproto.stagedDueAt?.getTime() === DOCUMENTS_DUE_AT_ONCE.getTime();
+}
+
+/**
+ * Tells the retry sweep that the origin holds a document due at once. Takes
+ * the origin as the caller's transaction read it, so documents already due
+ * cost no statement.
+ */
+export async function markDocumentsDue(
+  tx: FeedDatabase,
+  row: Pick<StreamOrigin, "origin" | "atproto">,
+) {
+  if (documentsAreDue(row)) return;
+  await tx
+    .update(feedOriginAtproto)
+    .set({ stagedDueAt: DOCUMENTS_DUE_AT_ONCE })
+    .where(eq(feedOriginAtproto.originId, row.origin.id));
+}
+
 /**
  * Runs inside the caller's transaction. Staged records live in their own
  * source rows; the ledger only records that work is pending. One page of
- * documents costs a fixed handful of statements.
+ * documents costs a fixed handful of statements. Tells whether a document now
+ * awaits import, which the caller marks on the origin in the same transaction.
  */
 export async function stageDocuments(
   database: FeedDatabase,
   inputs: StagedDocumentInput[],
 ) {
-  if (!inputs.length) return;
+  if (!inputs.length) return false;
   const originId = inputs[0]!.originId;
   const existing = await database
     .select()
@@ -434,7 +459,7 @@ export async function stageDocuments(
       input,
       values: stagedValues(input, old.get(input.uri)),
     }));
-  if (!staged.length) return;
+  if (!staged.length) return false;
   for (let offset = 0; offset < staged.length; offset += 50) {
     // Bound each statement below SQLite's host-parameter limit.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -479,13 +504,14 @@ export async function stageDocuments(
       keep: [values.bodyCid, values.status === "retry" ? input.cid : null],
     })),
   );
+  return retrying.length > 0;
 }
 
-export async function stageDocument(
+export function stageDocument(
   database: FeedDatabase,
   input: StagedDocumentInput,
 ) {
-  await stageDocuments(database, [input]);
+  return stageDocuments(database, [input]);
 }
 
 /** Rounds a lossless value through ordinary JSON, for columns that store it that way. */
@@ -502,6 +528,7 @@ function olderDocuments(originId: number, seq: number) {
     ),
   );
 }
+/** Applies one commit, and tells whether it left a document awaiting import. */
 async function applyCommit(
   tx: FeedDatabase,
   row: StreamOrigin,
@@ -513,10 +540,10 @@ async function applyCommit(
     row.atproto.accountSeq &&
     event.seq <= sequence(row.atproto.accountSeq)
   )
-    return;
+    return false;
   const uri = `at://${event.did}/${event.commit.collection}/${event.commit.rkey}`;
   if (event.commit.collection === "site.standard.publication") {
-    if (uri !== row.origin.locator) return;
+    if (uri !== row.origin.locator) return false;
     if (
       !row.atproto.publicationSeq ||
       sequence(row.atproto.publicationSeq) < event.seq
@@ -552,12 +579,12 @@ async function applyCommit(
       !row.atproto.publicationRecord &&
       event.seq <= sequence(row.atproto.publicationSeq)
     )
-      return;
+      return false;
     if (
       row.atproto.repositoryRev &&
       event.commit.rev < row.atproto.repositoryRev
     )
-      return;
+      return false;
     const parsed = parseDocumentRecord({
       uri,
       cid: event.commit.cid,
@@ -577,9 +604,9 @@ async function applyCommit(
           ),
         )
         .get();
-      if (!known) return;
+      if (!known) return false;
     }
-    await stageDocument(tx, {
+    return stageDocument(tx, {
       originId,
       uri,
       cid: event.commit.cid ?? "",
@@ -594,6 +621,7 @@ async function applyCommit(
       deleted: !belongs || event.commit.operation === "delete",
     });
   }
+  return false;
 }
 async function applyMarker(
   tx: FeedDatabase,
@@ -697,6 +725,51 @@ export async function pauseOriginStream(
   await makeOriginsDue(tx, eq(feedOrigins.id, row.origin.id), now);
 }
 
+/** Applies one event, and tells whether it left a document awaiting import. */
+async function applyEvent(
+  tx: FeedDatabase,
+  row: StreamOrigin,
+  event: StreamEvent,
+) {
+  if (event.kind === "commit") return applyCommit(tx, row, event);
+  await applyMarker(tx, row, event);
+  return false;
+}
+
+/**
+ * What an applied event leaves on its origin, in one statement: the cursor of
+ * an origin that follows the stream, and the mark for a document it staged.
+ */
+async function recordAppliedEvent(
+  tx: FeedDatabase,
+  row: Pick<StreamOrigin, "origin">,
+  seq: number,
+  change: { followsStream: boolean; marksDue: boolean },
+) {
+  const origin = eq(feedOriginAtproto.originId, row.origin.id);
+  // Keep the pre-gap cursor even while newer live events are applied.
+  const inCurrentGeneration = sql`${feedOriginAtproto.streamGeneration} = ${currentStreamGeneration}`;
+  const cursor = String(seq);
+  if (change.marksDue)
+    // The mark holds in any generation, so the cursor's condition moves into its value.
+    await tx
+      .update(feedOriginAtproto)
+      .set({
+        stagedDueAt: DOCUMENTS_DUE_AT_ONCE,
+        ...(change.followsStream
+          ? {
+              streamSeq: sql`case when ${inCurrentGeneration} then ${cursor} else ${feedOriginAtproto.streamSeq} end`,
+            }
+          : {}),
+      })
+      .where(origin);
+  else if (change.followsStream)
+    await tx
+      .update(feedOriginAtproto)
+      .set({ streamSeq: cursor })
+      .where(and(origin, inCurrentGeneration));
+}
+
 async function acceptOriginEvent(
   database: StreamDatabase,
   originId: number,
@@ -723,19 +796,11 @@ async function acceptOriginEvent(
         // Newly created origins first establish their bootstrap boundary.
         if (!row.atproto.streamSeq) return;
         if (!recovery && sequence(row.atproto.streamSeq) >= event.seq) return;
-        if (event.kind === "commit") await applyCommit(tx, row, event);
-        else await applyMarker(tx, row, event);
-        if (!recovery && row.atproto.streamMode === "live")
-          await tx
-            .update(feedOriginAtproto)
-            .set({ streamSeq: String(event.seq) })
-            .where(
-              and(
-                eq(feedOriginAtproto.originId, originId),
-                // Keep the pre-gap cursor even while newer live events are applied.
-                sql`${feedOriginAtproto.streamGeneration} = ${currentStreamGeneration}`,
-              ),
-            );
+        const awaitsImport = await applyEvent(tx, row, event);
+        await recordAppliedEvent(tx, row, event.seq, {
+          followsStream: !recovery && row.atproto.streamMode === "live",
+          marksDue: awaitsImport && !documentsAreDue(row),
+        });
       },
       { behavior: "immediate" },
     ),
