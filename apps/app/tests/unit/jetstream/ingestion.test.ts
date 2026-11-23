@@ -1887,6 +1887,24 @@ describe("retry sweep", () => {
         readPage,
       },
     );
+  const readablePublication = { name: "Fixed", url: "https://example.com" };
+  /** The publisher rewriting the Publication record, as the stream reports it. */
+  function publicationEdit(seq: number, record: unknown): StreamEvent {
+    return {
+      seq,
+      did: DID,
+      time: NOW.toISOString(),
+      kind: "commit",
+      commit: {
+        operation: "update",
+        collection: "site.standard.publication",
+        rkey: "site",
+        rev: String(seq).padStart(13, "0"),
+        cid: `pubcid${seq}`,
+        record,
+      },
+    };
+  }
   /** Staged documents waiting out a backoff, written the way a failed pass leaves them. */
   async function stageInBackoff(id: number, count: number, retryAt: Date) {
     await fixture.database.insert(feedOriginAtprotoDocuments).values(
@@ -2040,6 +2058,143 @@ describe("retry sweep", () => {
     await sweep(true);
     expect(await ledger(uri("post"))).toMatchObject({ status: "ready" });
     expect(await due()).toEqual([]);
+  });
+
+  it("holds no due work for an origin whose Publication does not parse", async () => {
+    await accept(event(10), publicationEdit(11, { name: "No address" }));
+    expect(await state()).toMatchObject({
+      publicationDirty: true,
+      publicationSeq: "11",
+    });
+    expect(await due()).toEqual([originId]);
+    await sweep(true);
+    // Neither the record nor the staged document asks for a second sweep.
+    expect(await state()).toMatchObject({
+      publicationDirty: false,
+      stagedDueAt: null,
+    });
+    expect(await ledger(uri("post"))).toMatchObject({ status: "retry" });
+    expect(await due()).toEqual([]);
+    // The publisher's next edit is work of its own, and that pass imports what waited.
+    await accept(publicationEdit(12, readablePublication));
+    expect(await due()).toEqual([originId]);
+    await sweep(true);
+    expect(await ledger(uri("post"))).toMatchObject({ status: "ready" });
+    expect(await due()).toEqual([]);
+  });
+
+  it("restates when a waiting document is due once the Publication parses again", async () => {
+    await stageInBackoff(originId, 1, later(3_600_000));
+    await accept(publicationEdit(11, { name: "No address" }));
+    await sweep(true);
+    expect((await state()).stagedDueAt).toBeNull();
+    await accept(publicationEdit(12, readablePublication));
+    await sweep(true);
+    // Nothing was due in that pass, and the document's wait still stands.
+    expect(await state()).toMatchObject({
+      publicationDirty: false,
+      stagedDueAt: later(3_600_000),
+    });
+    expect(await due(later(3_600_000))).toEqual([originId]);
+  });
+
+  it("keeps the mark of a Publication event that arrives while a pass finds no readable record", async () => {
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ publicationRecord: null });
+    await accept(event(10));
+    await expect(
+      processOriginDocuments(fixture.database, originId, settings, {
+        client: {
+          ...client,
+          // The repository still serves the unreadable record the event replaces.
+          getRecord: async () => {
+            await accept(publicationEdit(11, readablePublication));
+            return { uri: PUB, cid: "unreadable", value: {} };
+          },
+        },
+        readPage,
+      }),
+    ).rejects.toThrow("Invalid Publication record");
+    expect(await state()).toMatchObject({
+      publicationDirty: true,
+      stagedDueAt: AT_ONCE,
+    });
+    expect(await due()).toEqual([originId]);
+    await sweep(true);
+    expect(await ledger(uri("post"))).toMatchObject({ status: "ready" });
+    expect(await due()).toEqual([]);
+  });
+
+  it("visits each origin once in a pass, whichever work it holds", async () => {
+    const second = await addReader("second");
+    const third = await addReader("third");
+    // The first origin holds a document, the second a Publication record to
+    // apply, and the third both.
+    await accept(unreadable(10));
+    await fixture.database
+      .delete(feedOriginAtprotoDocuments)
+      .where(eq(feedOriginAtprotoDocuments.originId, second.originId));
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ stagedDueAt: null, publicationDirty: true })
+      .where(eq(feedOriginAtproto.originId, second.originId));
+    await fixture.database
+      .update(feedOriginAtproto)
+      .set({ publicationDirty: true })
+      .where(eq(feedOriginAtproto.originId, third.originId));
+    expect((await due()).sort((left, right) => left - right)).toEqual([
+      originId,
+      second.originId,
+      third.originId,
+    ]);
+    // The clock passes a failed document's wait between any two statements,
+    // so a second visit to an origin would find its document due and fail it
+    // again.
+    let clock = NOW.getTime();
+    const loadBlob = vi.fn(async () => {
+      throw new Error("Required body unavailable");
+    });
+    await drainDueOrigins(
+      fixture.database,
+      {
+        ...settings,
+        now: () => new Date((clock += 120_000)),
+        getPlanId: async () => "pro",
+      },
+      {
+        holdsLease: () => true,
+        signal: new AbortController().signal,
+        client: { ...client, loadBlob },
+        readPage,
+      },
+    );
+    expect(loadBlob).toHaveBeenCalledTimes(2);
+    expect(
+      await fixture.database
+        .select({
+          originId: feedOriginAtprotoDocuments.originId,
+          attempts: feedOriginAtprotoDocuments.attempts,
+        })
+        .from(feedOriginAtprotoDocuments)
+        .orderBy(feedOriginAtprotoDocuments.originId),
+    ).toEqual([
+      { originId, attempts: 1 },
+      { originId: third.originId, attempts: 1 },
+    ]);
+    expect(
+      await fixture.database
+        .select({
+          originId: feedOriginAtproto.originId,
+          publicationDirty: feedOriginAtproto.publicationDirty,
+        })
+        .from(feedOriginAtproto)
+        .orderBy(feedOriginAtproto.originId),
+    ).toEqual([
+      { originId, publicationDirty: false },
+      { originId: second.originId, publicationDirty: false },
+      { originId: third.originId, publicationDirty: false },
+    ]);
   });
 
   it("stops retrying a document after 14 days of failures, until its publisher edits it", async () => {

@@ -6,7 +6,11 @@ import {
   parsePublicationRecord,
   REFERENCE_IMPORT_REUSE_MS,
 } from "@serial/standard-site";
-import { feedOriginAtproto, feedOriginAtprotoDocuments } from "../db/schema";
+import {
+  feedOriginAtproto,
+  feedOriginAtprotoDocuments,
+  sweepableOrigin,
+} from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { nextRetryAt } from "../publication-sync/retry";
 import { createPublicationClient } from "../rss/atprotoClient";
@@ -107,20 +111,30 @@ async function restateDocumentsDue(database: StreamDatabase, originId: number) {
 }
 
 /**
- * Staged documents of an origin whose Publication is gone or unreadable wait
- * for the Publication and ask for no sweep. Its return marks the origin for
- * one, and that pass restates when they are due.
+ * An origin whose Publication is gone or unreadable asks for no sweep. Its
+ * staged documents wait for the Publication, and a record that does not parse
+ * stops waiting to be applied. The Publication's next event marks the origin
+ * again, and that pass restates when the documents are due. Nothing is
+ * written when such an event arrived after the row was read.
  */
-async function shelveDocuments(
+async function shelveOrigin(
   database: StreamDatabase,
   row: Pick<StreamOrigin, "origin" | "atproto">,
 ) {
-  if (row.atproto.stagedDueAt === null) return;
+  const { stagedDueAt, publicationDirty, publicationSeq } = row.atproto;
+  if (stagedDueAt === null && !publicationDirty) return;
   await runDatabaseWrite(database, () =>
     database
       .update(feedOriginAtproto)
-      .set({ stagedDueAt: null })
-      .where(eq(feedOriginAtproto.originId, row.origin.id)),
+      .set({ stagedDueAt: null, publicationDirty: false })
+      .where(
+        and(
+          eq(feedOriginAtproto.originId, row.origin.id),
+          publicationSeq === null
+            ? isNull(feedOriginAtproto.publicationSeq)
+            : eq(feedOriginAtproto.publicationSeq, publicationSeq),
+        ),
+      ),
   );
 }
 
@@ -176,13 +190,13 @@ export async function processOriginDocuments(
   let publication = parsePublicationRecord(row.atproto.publicationRecord);
   // The author deleted or invalidated the Publication.
   if (!publication && row.atproto.publicationSeq)
-    return shelveDocuments(database, row);
+    return shelveOrigin(database, row);
   if (!publication)
     publication = parsePublicationRecord(
       await client.getRecord(row.origin.locator),
     );
   if (!publication) {
-    await shelveDocuments(database, row);
+    await shelveOrigin(database, row);
     throw new Error("Invalid Publication record");
   }
   if (row.atproto.publicationDirty) {
@@ -413,8 +427,13 @@ export async function processOriginDocuments(
   })) {
     void unused;
   }
-  // Nothing staged before and nothing found leaves nothing to restate.
-  if (pending.length || row.atproto.stagedDueAt !== null)
+  // Nothing staged before and nothing found leaves nothing to restate, unless
+  // this pass applied a Publication that documents may have been shelved for.
+  if (
+    pending.length ||
+    row.atproto.stagedDueAt !== null ||
+    row.atproto.publicationDirty
+  )
     await restateDocumentsDue(database, originId);
   // The readable versions' content types decide the Feed's platform; a batch
   // that wrote nothing readable cannot have changed it.
@@ -483,13 +502,8 @@ export async function pendingDocumentCount(
   return row?.count ?? 0;
 }
 
-/**
- * An origin the retry sweep may process: the stream applies it live and its
- * repository is active. Both pending-work indexes keep only these origins, and
- * SQLite uses a partial index only for a query that states its terms as the
- * same literals.
- */
-const sweepable = sql`${feedOriginAtproto.streamMode} = 'live' and ${feedOriginAtproto.initialized} = 1 and ${feedOriginAtproto.repositoryActive} = 1`;
+/** The condition both pending-work indexes keep, stated the way they state it. */
+const sweepable = sweepableOrigin(feedOriginAtproto);
 
 /**
  * Origins the sweep may process that hold a staged document now due, or a

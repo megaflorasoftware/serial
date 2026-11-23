@@ -28,6 +28,7 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { ReaderBody } from "@serial/standard-site";
 import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
 import type { ItemObservation } from "./feed-item-observation";
@@ -380,6 +381,21 @@ export const feedOriginRss = sqliteTable("feed_origin_rss", {
   itemsDigest: text("items_digest"),
 });
 
+/**
+ * An origin the retry sweep may process: the stream applies it live and its
+ * repository is active. Both pending-work indexes keep only these origins.
+ * SQLite uses a partial index only for a query that states the index's terms
+ * as the same literals, so the sweep states this same condition.
+ */
+export function sweepableOrigin(
+  origin: Record<
+    "streamMode" | "initialized" | "repositoryActive",
+    AnySQLiteColumn
+  >,
+) {
+  return sql`${origin.streamMode} = 'live' and ${origin.initialized} = 1 and ${origin.repositoryActive} = 1`;
+}
+
 export const feedOriginAtproto = sqliteTable(
   "feed_origin_atproto",
   {
@@ -432,17 +448,14 @@ export const feedOriginAtproto = sqliteTable(
     index("feed_origin_atproto_publication_did_idx").on(table.publicationDid),
     // The retry sweep reads these two indexes and nothing else. Each keeps
     // only origins the sweep may process, so a paused, uninitialized or
-    // deactivated origin costs it nothing however much work it holds. The
-    // sweep states the same conditions as literals; see `sweepable`.
+    // deactivated origin costs it nothing however much work it holds.
     index("feed_origin_atproto_dirty_idx")
       .on(table.originId)
-      .where(
-        sql`${table.publicationDirty} = 1 and ${table.streamMode} = 'live' and ${table.initialized} = 1 and ${table.repositoryActive} = 1`,
-      ),
+      .where(sql`${table.publicationDirty} = 1 and ${sweepableOrigin(table)}`),
     index("feed_origin_atproto_staged_due_at_idx")
       .on(table.stagedDueAt)
       .where(
-        sql`${table.stagedDueAt} is not null and ${table.streamMode} = 'live' and ${table.initialized} = 1 and ${table.repositoryActive} = 1`,
+        sql`${table.stagedDueAt} is not null and ${sweepableOrigin(table)}`,
       ),
   ],
 );
