@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type * as Store from "~/server/jetstream/store";
 import type { StreamTransport } from "~/server/jetstream/transport";
 import type { StreamEvent } from "~/server/jetstream/protocol";
 import {
@@ -17,6 +18,8 @@ import {
   user,
 } from "~/server/db/schema";
 import { StreamFailure } from "~/server/jetstream/protocol";
+import { declareStreamGap, disconnectStream } from "~/server/jetstream/store";
+import { resolveStreamService } from "~/server/jetstream/endpoint";
 import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
 import { STREAM_HOST_RECHECK_MS } from "~/server/rss/fetchFeeds";
 import { publisher } from "~/server/api/publisher";
@@ -32,8 +35,16 @@ vi.mock("~/env", () => ({
   },
 }));
 vi.mock("~/server/jetstream/endpoint", () => ({
-  resolveStreamService: async (url: string) => url,
+  resolveStreamService: vi.fn(async (url: string) => url),
 }));
+vi.mock("~/server/jetstream/store", async (original) => {
+  const actual = await original<typeof Store>();
+  return {
+    ...actual,
+    declareStreamGap: vi.fn(actual.declareStreamGap),
+    disconnectStream: vi.fn(actual.disconnectStream),
+  };
+});
 vi.mock("~/server/jetstream/transport", () => ({
   createStreamTransport: () => state.transport,
   retryStream: vi.fn(async () => {}),
@@ -451,6 +462,63 @@ it("declares a gap when the service rejects the resume cursor, once", async () =
   } finally {
     shutdown.abort();
   }
+});
+
+it("keeps running when the database fails between connections", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const shutdown = new AbortController();
+  await liveReader(database, service, "did:plc:alice");
+  const unavailable = new Error("database unavailable");
+  vi.mocked(disconnectStream).mockRejectedValueOnce(unavailable);
+  vi.mocked(declareStreamGap).mockRejectedValueOnce(unavailable);
+  const resumedFrom: Array<number | undefined> = [];
+  const report = vi.fn();
+  state.transport = {
+    service,
+    hasReplay: true,
+    recover: vi.fn(),
+    tip: vi.fn(async () => 1),
+    report,
+    async *stream(after, _signal, _dids, onOpen) {
+      resumedFrom.push(after);
+      // The gap is declared on the second refusal, after the first write failed.
+      if (after === 1) throw new StreamFailure("cursor-expired", 400);
+      if (after === undefined) {
+        yield { events: [], lastCursor: 50 };
+        return;
+      }
+      await onOpen?.();
+      shutdown.abort();
+    },
+  };
+  try {
+    await startStreamWorker(database, shutdown.signal);
+    expect(resumedFrom).toEqual([1, 1, undefined, 50]);
+    expect(report).toHaveBeenCalledWith(unavailable, "gap");
+    expect(report).toHaveBeenCalledWith(unavailable, "lease");
+    expect((await database.select().from(atprotoStreamState))[0]).toMatchObject(
+      { generation: 1, seq: "50", connected: false },
+    );
+  } finally {
+    shutdown.abort();
+  }
+});
+
+it("contacts no stream host and holds no lease while nothing follows the Atmosphere", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const shutdown = new AbortController();
+  vi.mocked(resolveStreamService).mockClear();
+  state.transport = undefined;
+  const worker = startStreamWorker(database, shutdown.signal);
+  // Long enough for the first look at the origins, which finds none.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  shutdown.abort();
+  await worker;
+  expect(resolveStreamService).not.toHaveBeenCalled();
+  expect(await database.select().from(atprotoStreamState)).toEqual([]);
 });
 
 it("leaves covered origins as they are through an outage and resumes from the checkpoint when the host returns", async () => {
