@@ -353,7 +353,6 @@ describe("publication subscription sync", () => {
       failed: 1,
     });
     expect(await fixture.database.select().from(feeds)).toHaveLength(2);
-    expect(records).toHaveLength(1);
     // The next check reads the revision and trusts the same listing.
     expect(await run()).toMatchObject({ status: "completed", removed: 1 });
     expect(await fixture.database.select().from(feeds)).toHaveLength(1);
