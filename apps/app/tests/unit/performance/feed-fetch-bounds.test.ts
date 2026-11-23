@@ -23,6 +23,7 @@ import {
 } from "~/server/rss/feedCache";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 import { readFeedHttp } from "~/server/rss/feedHttp";
+import { parsedFeedDigest } from "~/server/rss/parsedFeedDigest";
 
 vi.mock("~/server/rss/feedHttp", () => ({ readFeedHttp: vi.fn() }));
 vi.mock("~/server/rss/feedCache", () => ({
@@ -69,6 +70,8 @@ const CHANNEL = readFileSync(
   "utf-8",
 );
 const CHANNEL_VIDEOS = 14;
+/** The same channel before its first video. */
+const CHANNEL_WITHOUT_VIDEOS = CHANNEL.replace(/<entry>[\s\S]*?<\/entry>/g, "");
 const VIDEO_TITLE = "Tragic mistake... Anthropic leaks Claude’s source code";
 
 const WRITE = /^(insert into|update|delete from) /i;
@@ -178,14 +181,21 @@ function itemStatements(
 }
 
 describe.each([
-  { medium: "text", platform: "website", url: BLOG_URL, items: POSTS.length },
+  {
+    medium: "text",
+    platform: "website",
+    url: BLOG_URL,
+    items: POSTS.length,
+    empty: blog([]),
+  },
   {
     medium: "video",
     platform: "youtube",
     url: CHANNEL_URL,
     items: CHANNEL_VIDEOS,
+    empty: CHANNEL_WITHOUT_VIDEOS,
   },
-] as const)("a $medium feed", ({ platform, url, items }) => {
+] as const)("a $medium feed", ({ medium, platform, url, items, empty }) => {
   beforeEach(async () => {
     await addFeed(platform, url);
   });
@@ -267,6 +277,44 @@ describe.each([
     expect(itemStatements(next.evidence).length).toBeGreaterThan(0);
     expect(await storedDigest()).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  it("keeps the digest of a feed that states no items, and reads none", async () => {
+    served[url]!.text = empty;
+    const first = await fetchDue();
+    expect(first.results).toMatchObject([{ status: "empty" }]);
+    expect(itemStatements(first.evidence)).toEqual([]);
+    expect(await storedDigest()).toBe(parsedFeedDigest(medium, []));
+
+    const { results, evidence } = await fetchDue();
+    expect(results).toMatchObject([{ status: "empty" }]);
+    expect(evidence.statements.map((entry) => entry.sql)).toEqual([
+      expect.stringMatching(SCHEDULE_WRITE),
+    ]);
+    expect(await storedDigest()).toBe(parsedFeedDigest(medium, []));
+  });
+
+  it("keeps the same digest when another reader's fetch supplies the empty feed", async () => {
+    served[url]!.text = empty;
+    await fetchDue();
+    const [, parsed] = vi.mocked(setCachedFeedResult).mock.calls.at(-1)!;
+    expect(parsed).toMatchObject({ status: "empty" });
+    // The shared cache hands back what it serialized, to an origin with no digest yet.
+    vi.mocked(getCachedFeedResult).mockResolvedValue(
+      JSON.parse(JSON.stringify(parsed)) as CachedFeedResult,
+    );
+    await session.database.update(feedOriginRss).set({ itemsDigest: null });
+    const first = await fetchDue();
+    expect(first.results).toMatchObject([{ status: "empty", fromCache: true }]);
+    expect(itemStatements(first.evidence)).toEqual([]);
+    expect(await storedDigest()).toBe(parsedFeedDigest(medium, []));
+
+    const { results, evidence } = await fetchDue();
+    expect(results).toMatchObject([{ status: "empty", fromCache: true }]);
+    expect(evidence.statements.map((entry) => entry.sql)).toEqual([
+      expect.stringMatching(SCHEDULE_WRITE),
+    ]);
+    expect(await storedDigest()).toBe(parsedFeedDigest(medium, []));
+  });
 });
 
 it("ingests a text item that changed after a skipped fetch", async () => {
@@ -329,23 +377,30 @@ it("takes the narrow item read when a text feed restates the same items", async 
   ).toEqual([]);
 });
 
-it("ingests again when the Feed moves from video to text", async () => {
-  const feed = await addFeed("youtube", CHANNEL_URL);
-  await fetchDue();
-  const asVideo = await storedDigest();
-  expect(itemStatements((await fetchDue()).evidence)).toEqual([]);
+it.each([
+  { move: "video to text", from: "youtube", to: "website" },
+  { move: "text to video", from: "website", to: "youtube" },
+] as const)(
+  "ingests again when the Feed moves from $move",
+  async ({ from, to }) => {
+    // Both ingests can read the channel's document.
+    const feed = await addFeed(from, CHANNEL_URL);
+    await fetchDue();
+    const before = await storedDigest();
+    expect(itemStatements((await fetchDue()).evidence)).toEqual([]);
 
-  await session.database
-    .update(feeds)
-    .set({ platform: "website" })
-    .where(eq(feeds.id, feed.id));
-  const moved = await fetchDue();
-  expect(moved.results).toMatchObject([{ status: "success" }]);
-  // The text ingest reads what the video ingest stored.
-  expect(itemStatements(moved.evidence).length).toBeGreaterThan(0);
-  expect(await storedDigest()).not.toBe(asVideo);
-  expect(itemStatements((await fetchDue()).evidence)).toEqual([]);
-});
+    await session.database
+      .update(feeds)
+      .set({ platform: to })
+      .where(eq(feeds.id, feed.id));
+    const moved = await fetchDue();
+    expect(moved.results).toMatchObject([{ status: "success" }]);
+    // The Feed's new ingest reads what its old one stored.
+    expect(itemStatements(moved.evidence).length).toBeGreaterThan(0);
+    expect(await storedDigest()).not.toBe(before);
+    expect(itemStatements((await fetchDue()).evidence)).toEqual([]);
+  },
+);
 
 it("keeps the stored digest when an ingest fails", async () => {
   await addFeed("website", BLOG_URL);

@@ -81,3 +81,17 @@ it("follows what only the text ingest reads", () => {
     );
   }
 });
+
+/**
+ * A known feed's digest under each ingest, derivation version included. Once
+ * a feed no longer parses to its stored digest, every Feed of that medium is
+ * ingested again on its next fetch. A derivation bump means exactly that and
+ * changes the digest here with it. Any other change to these should be as
+ * deliberate, since it costs the same.
+ */
+it.each([
+  ["text", "61be674cb1aa80b63fc87e6604edab4041e893aa625960c269611df87b90d150"],
+  ["video", "7750de353d934e22357a921c558bc078c9dd3215d7be6880091316c1b99c29c0"],
+] as const)("pins what a known %s feed digests to", (medium, pinned) => {
+  expect(parsedFeedDigest(medium, [item(), other])).toBe(pinned);
+});
