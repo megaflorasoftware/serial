@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   FEED_ADD_MAX_DISCOVERED_FEEDS,
   FEED_INGESTION_CONCURRENCY,
@@ -24,6 +24,7 @@ import { resolveItemDate } from "./publishedDate";
 import { ingestRssItems } from "./ingestRssItems";
 import { refreshOriginMetadata } from "./originMetadata";
 import { boundFeedItems } from "./feedBounds";
+import { parsedFeedDigest } from "./parsedFeedDigest";
 import { readFeedHttp } from "./feedHttp";
 import { isAuthorizedTestRssUrl } from "./testRssOrigin";
 import type { SQL } from "drizzle-orm";
@@ -192,7 +193,10 @@ type FetchStateUpdate = Pick<
   typeof feedOrigins.$inferInsert,
   "lastFetchedAt" | "nextFetchAt"
 > &
-  Pick<typeof feedOriginRss.$inferInsert, "etag" | "lastModifiedHeader">;
+  Pick<
+    typeof feedOriginRss.$inferInsert,
+    "etag" | "lastModifiedHeader" | "itemsDigest"
+  >;
 
 /** The HTTP validators a fetch returned, when they differ from the ones it sent. */
 function changedValidators(
@@ -211,10 +215,30 @@ function changedValidators(
 }
 
 /**
+ * The digest of the feed a fetch just ingested, when it differs from the one
+ * the fetch read. It stands only if no other fetch stored one meanwhile: two
+ * overlapping fetches cannot tell whose items were written last, so the digest
+ * is cleared and the next fetch reads the items.
+ */
+function ingestedDigest(
+  origin: Pick<HydratedFeedOrigin, "rss">,
+  { itemsDigest }: FetchStateUpdate,
+) {
+  const read = origin.rss?.itemsDigest ?? null;
+  if (!itemsDigest || itemsDigest === read) return null;
+  return {
+    itemsDigest: sql<
+      string | null
+    >`case when ${feedOriginRss.itemsDigest} is ${read} then ${itemsDigest} end`,
+  };
+}
+
+/**
  * Every fetch-state write lands on the origin, never on the Feed: one row for
- * the schedule, and the RSS detail row only when a validator changed. The
- * schedule moves only if it still exists: an origin unscheduled since the
- * fetch began belongs to a Feed that was deactivated meanwhile.
+ * the schedule, and the RSS detail row only when a validator or the ingested
+ * feed changed. The schedule moves only if it still exists: an origin
+ * unscheduled since the fetch began belongs to a Feed that was deactivated
+ * meanwhile.
  */
 async function writeOriginFetchState(
   context: { db: typeof Database },
@@ -235,27 +259,33 @@ async function writeOriginFetchState(
         ),
     ),
   );
-  const validators = changedValidators(origin, update);
-  if (validators)
+  const details = {
+    ...changedValidators(origin, update),
+    ...ingestedDigest(origin, update),
+  };
+  if (Object.keys(details).length)
     await runDatabaseWrite(context.db, () =>
       dbSemaphore.run(() =>
         context.db
           .update(feedOriginRss)
-          .set(validators)
+          .set(details)
           .where(eq(feedOriginRss.originId, origin.id)),
       ),
     );
 }
 
+/** What a fetch that ingested a parsed feed leaves on its origin. */
 function fetchedState(
   now: Date,
   fetchMetadata: FeedFetchMetadata,
+  itemsDigest: string,
 ): FetchStateUpdate {
   return {
     lastFetchedAt: now,
     nextFetchAt: calculateNextFetch(fetchMetadata, now),
     etag: fetchMetadata.etag ?? null,
     lastModifiedHeader: fetchMetadata.lastModified ?? null,
+    itemsDigest,
   };
 }
 
@@ -282,6 +312,11 @@ function uniqueFeeds(fetchableOrigins: FetchableOrigin[]): DatabaseFeed[] {
   return [...byId.values()];
 }
 
+/**
+ * Stores a video feed's items as the feed states them. A change to what this
+ * stores for the same parsed item needs `VIDEO_DERIVATION` bumped in
+ * `parsedFeedDigest.ts`, or an unchanged feed never reaches it.
+ */
 async function insertFeedItems(
   context: { db: typeof Database },
   feedId: number,
@@ -452,8 +487,17 @@ export async function* fetchAndInsertFeedData(
         return result;
       }
 
+      /**
+       * Brings a parsed feed into storage. A feed that parses as it did when
+       * last ingested in full has no item to read or write. `itemsDigest`
+       * identifies what was ingested, for the origin to keep.
+       */
       const writeItems = async (data: RSSFeedWithMetadata) => {
-        if (isTextPlatform(feed.platform)) {
+        const items = boundFeedItems(data.items);
+        const medium = contentMediumOf(feed.platform);
+        const itemsDigest = parsedFeedDigest(medium, items);
+        const unchanged = itemsDigest === origin.rss?.itemsDigest;
+        if (medium === CONTENT_TYPE.TEXT) {
           const metadataChanged = await refreshOriginMetadata(
             context.db,
             fetchable,
@@ -464,24 +508,25 @@ export async function* fetchAndInsertFeedData(
               siteUrl: data.url,
             },
           );
-          const written = await ingestRssItems(
-            context.db,
-            feed,
-            boundFeedItems(data.items),
-          );
+          const written = unchanged
+            ? { items: [], removedItemIds: [] }
+            : await ingestRssItems(context.db, feed, items);
           return {
-            feedItems: written.items,
-            removedItemIds: written.removedItemIds,
-            metadataChanged,
+            itemsDigest,
+            written: {
+              feedItems: written.items,
+              removedItemIds: written.removedItemIds,
+              metadataChanged,
+            },
           };
         }
         return {
-          feedItems: await insertFeedItems(
-            context,
-            feed.id,
-            boundFeedItems(data.items),
-            databaseFeeds,
-          ),
+          itemsDigest,
+          written: {
+            feedItems: unchanged
+              ? []
+              : await insertFeedItems(context, feed.id, items, databaseFeeds),
+          },
         };
       };
 
@@ -502,7 +547,7 @@ export async function* fetchAndInsertFeedData(
         }
 
         if (cachedResult.status === "empty") {
-          const written = await writeItems({
+          const { written, itemsDigest } = await writeItems({
             ...cachedResult.data,
             id: feed.id,
             items: [],
@@ -511,7 +556,7 @@ export async function* fetchAndInsertFeedData(
           await writeOriginFetchState(
             context,
             origin,
-            fetchedState(now, cachedResult.fetchMetadata),
+            fetchedState(now, cachedResult.fetchMetadata, itemsDigest),
           );
           return {
             status: "empty",
@@ -523,11 +568,14 @@ export async function* fetchAndInsertFeedData(
         }
 
         // cached success
-        const written = await writeItems({ ...cachedResult.data, id: feed.id });
+        const { written, itemsDigest } = await writeItems({
+          ...cachedResult.data,
+          id: feed.id,
+        });
         await writeOriginFetchState(
           context,
           origin,
-          fetchedState(now, cachedResult.data.fetchMetadata),
+          fetchedState(now, cachedResult.data.fetchMetadata, itemsDigest),
         );
 
         return {
@@ -584,7 +632,7 @@ export async function* fetchAndInsertFeedData(
       const completedFeed = feedData as RSSFeedWithMetadata;
 
       if (!completedFeed.items.length) {
-        const written = await writeItems(completedFeed);
+        const { written, itemsDigest } = await writeItems(completedFeed);
         await setCachedFeedResult(origin.locator, {
           status: "empty",
           fetchMetadata: completedFeed.fetchMetadata,
@@ -598,7 +646,7 @@ export async function* fetchAndInsertFeedData(
         await writeOriginFetchState(
           context,
           origin,
-          fetchedState(now, completedFeed.fetchMetadata),
+          fetchedState(now, completedFeed.fetchMetadata, itemsDigest),
         );
         return {
           status: "empty",
@@ -620,11 +668,11 @@ export async function* fetchAndInsertFeedData(
         },
       });
 
-      const written = await writeItems(completedFeed);
+      const { written, itemsDigest } = await writeItems(completedFeed);
       await writeOriginFetchState(
         context,
         origin,
-        fetchedState(now, completedFeed.fetchMetadata),
+        fetchedState(now, completedFeed.fetchMetadata, itemsDigest),
       );
       return { status: "success", ...written, ...ids };
     } catch (e) {

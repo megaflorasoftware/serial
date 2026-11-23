@@ -375,6 +375,9 @@ export const feedOriginRss = sqliteTable("feed_origin_rss", {
   alternateLocators: text("alternate_locators", { mode: "json" }).$type<
     string[]
   >(),
+  // Identifies the parsed feed last ingested in full. A fetch that parses to
+  // the same digest reads and writes no item. NULL until a fetch ingests.
+  itemsDigest: text("items_digest"),
 });
 
 export const feedOriginAtproto = sqliteTable(

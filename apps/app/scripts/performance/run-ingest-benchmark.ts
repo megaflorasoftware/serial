@@ -148,6 +148,23 @@ try {
     throw new Error(
       `text-fetch-unchanged read behind an item's body: ${behindBody.join(", ")}`,
     );
+  // What every fetch pays before it reads an item: the digest of the parsed feed.
+  for (const medium of ["text", "video"] as const) {
+    const times = [];
+    for (let i = 0; i < 18; i++) {
+      globalThis.gc?.();
+      const started = performance.now();
+      textFeed.digest(medium);
+      const ms = performance.now() - started;
+      if (i >= 3) times.push(ms);
+    }
+    const ordered = [...times].sort((a, b) => a - b);
+    results[`feed-digest-${medium}`] = {
+      medianMs: ordered[7],
+      p95Ms: ordered[14],
+      samples: times.map((ms) => ({ ms })),
+    };
+  }
   mkdirSync("benchmarks/results", { recursive: true });
   const output = `benchmarks/results/ingest-${profile}.json`;
   writeFileSync(
