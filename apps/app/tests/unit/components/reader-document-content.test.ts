@@ -13,9 +13,9 @@ import type {
 } from "@serial/standard-site";
 import { ReaderDocumentContent } from "~/components/content-reader/ReaderDocumentContent";
 import {
+  SANDBOXED_FRAME_CSP,
   SANDBOXED_FRAME_SANDBOX,
   SANDBOXED_SRC_FRAME_SANDBOX,
-  sandboxedFrameDocument,
 } from "~/components/content-reader/SandboxedFrame";
 import { getElements } from "~/lib/hooks/useArticleNavigation";
 
@@ -307,7 +307,11 @@ describe("Reader document content", () => {
     expect(frame.style.height).toBe("243px");
     const srcdoc = frame.getAttribute("srcdoc")!;
     expect(srcdoc).toBe(
-      sandboxedFrameDocument("<p>Page</p><script>alert(1)</script>"),
+      '<!doctype html><html><head><meta charset="utf-8">' +
+        `<meta http-equiv="Content-Security-Policy" content="${SANDBOXED_FRAME_CSP}">` +
+        '<base target="_blank"></head><body>' +
+        "<p>Page</p><script>alert(1)</script>" +
+        "</body></html>",
     );
     expect(srcdoc).toContain('<base target="_blank">');
     expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
