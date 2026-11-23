@@ -267,9 +267,95 @@ describe("Atmosphere repository recovery", () => {
       name: "Publication",
     });
     const items = await fixture.database.select().from(feedItems);
+    // The repository moved without changing a document, so it is listed again.
+    remote.latestRev = vi.fn(async () => "rev2");
     await refresh(remote);
     expect(await fixture.database.select().from(feedItems)).toEqual(items);
     expect(remote.list).toHaveBeenCalledTimes(2);
+  });
+  it("reads neither the Publication nor the listing while the repository has not moved", async () => {
+    const remote = client([record("003")]);
+    await refresh(remote);
+    const items = await fixture.database.select().from(feedItems);
+    expect(items).toHaveLength(1);
+    expect(
+      await fixture.database.select().from(feedOriginAtproto).get(),
+    ).toMatchObject({ listingRev: "rev1", streamMode: "live" });
+    vi.mocked(remote.getRecord).mockClear();
+    vi.mocked(remote.list).mockClear();
+    const written = vi.spyOn(fixture.database, "transaction");
+    await refresh(remote);
+    expect(remote.latestRev).toHaveBeenCalledTimes(2);
+    expect(remote.getRecord).not.toHaveBeenCalled();
+    expect(remote.list).not.toHaveBeenCalled();
+    // Nothing was staged and no Publication was applied again.
+    expect(written).not.toHaveBeenCalled();
+    expect(await fixture.database.select().from(feedItems)).toEqual(items);
+    // The rest of recovery still ran: the origin is back with the stream.
+    expect(
+      await fixture.database.select().from(feedOriginAtproto).get(),
+    ).toMatchObject({
+      listingRev: "rev1",
+      streamMode: "live",
+      publicationDirty: false,
+    });
+  });
+  it.each([
+    [
+      "the revision cannot be read",
+      async (remote: PublicationClient) => {
+        remote.latestRev = vi.fn(async () => null);
+      },
+    ],
+    [
+      "the Feed no longer shows the stored Publication",
+      async () => {
+        await fixture.database
+          .update(feeds)
+          .set({ siteUrl: "https://elsewhere.example.com" });
+      },
+    ],
+    [
+      "a scan is still under way",
+      async () => {
+        await fixture.database
+          .update(feedOriginAtproto)
+          .set({ cursor: "older" });
+      },
+    ],
+    [
+      "the origin was never listed in full",
+      async () => {
+        await fixture.database
+          .update(feedOriginAtproto)
+          .set({ initialized: false });
+      },
+    ],
+  ])("lists an unmoved repository again when %s", async (_, change) => {
+    const remote = client([record("003")]);
+    await refresh(remote);
+    vi.mocked(remote.list).mockClear();
+    await change(remote);
+    await refresh(remote);
+    expect(remote.list).toHaveBeenCalled();
+  });
+  it("forgets the listed revision when a bounded scan stops before its end", async () => {
+    const remote = client([record("003")]);
+    await refresh(remote);
+    remote.latestRev = vi.fn(async () => "rev2");
+    // Two full pages of new documents are all one visit may stage.
+    remote.list = vi.fn(async (_did, cursor) => ({
+      records: Array.from({ length: 100 }, (_, index) =>
+        record(String(900 - Number(cursor ?? 0) - index)),
+      ),
+      cursor: String(Number(cursor ?? 0) + 100),
+      etag: null,
+      notModified: false as const,
+    }));
+    await refresh(remote);
+    expect(
+      await fixture.database.select().from(feedOriginAtproto).get(),
+    ).toMatchObject({ listingRev: null });
   });
   it("processes edits after the known boundary on the entire first page", async () => {
     const remote = client([record("003"), record("002")]);

@@ -19,6 +19,8 @@ import {
   processOriginDocuments,
 } from "~/server/jetstream/process";
 import { startStreamIntake } from "~/server/jetstream/intake";
+import { StreamFailure } from "~/server/jetstream/protocol";
+import { forgetOutage, rememberOutage } from "~/server/jetstream/reachability";
 
 export async function createJetstreamWorkload(
   database: BenchmarkDatabase,
@@ -251,6 +253,97 @@ export async function createJetstreamWorkload(
         },
       );
       return { pages, images, publications };
+    },
+    /**
+     * A recovery without replay of an origin whose repository still reads the
+     * revision its last full listing saw. Only that revision is asked for.
+     */
+    async recoverUnchanged() {
+      const originId = origins[0]!;
+      await database
+        .update(feedOriginAtproto)
+        .set({ streamMode: "direct", streamSeq: String(seq) })
+        .where(eq(feedOriginAtproto.originId, originId));
+      let requests = 0;
+      const unexpected = () => {
+        throw new Error("An unmoved repository was read again");
+      };
+      await recoverOrigin(
+        database,
+        originId,
+        settings,
+        {
+          service,
+          hasReplay: false,
+          report: () => {},
+          tip: async () => seq,
+          async *stream() {},
+          async *recover() {
+            yield { events: [], lastCursor: seq };
+          },
+        },
+        new AbortController().signal,
+        {
+          manual: true,
+          client: {
+            resolvePds: unexpected,
+            getDidDocument: unexpected,
+            latestRev: async () => {
+              requests++;
+              return `rev${seq}`;
+            },
+            getRecord: unexpected,
+            list: unexpected,
+            loadBlob: unexpected,
+          },
+        },
+      );
+      return { requests };
+    },
+    /**
+     * One fetch of an origin no worker covers while the stream host gives no
+     * answer. A `remembered` fetch follows another that found the outage.
+     */
+    async outage(remembered: boolean) {
+      const failure = new StreamFailure("connection");
+      const unexpected = () => {
+        throw new Error("A waiting origin read remote data");
+      };
+      let contacts = 0;
+      if (remembered) rememberOutage(service, failure, now.getTime());
+      try {
+        const outcome = await recoverOrigin(
+          database,
+          origins[0]!,
+          settings,
+          {
+            service,
+            hasReplay: false,
+            report: () => {},
+            stream: unexpected,
+            recover: unexpected,
+            tip: async () => {
+              contacts++;
+              throw failure;
+            },
+          },
+          new AbortController().signal,
+          {
+            manual: true,
+            client: {
+              resolvePds: unexpected,
+              getDidDocument: unexpected,
+              latestRev: unexpected,
+              getRecord: unexpected,
+              list: unexpected,
+              loadBlob: unexpected,
+            },
+          },
+        );
+        return { outcome: outcome.status, contacts };
+      } finally {
+        forgetOutage(service);
+      }
     },
     async prepareHealthy() {
       await database.update(atprotoStreamState).set({

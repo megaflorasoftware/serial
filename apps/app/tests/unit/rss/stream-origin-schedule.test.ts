@@ -16,6 +16,7 @@ import {
 import {
   fetchAndInsertFeedData,
   STREAM_BACKSTOP_RECHECK_MS,
+  STREAM_HOST_RECHECK_MS,
 } from "~/server/rss/fetchFeeds";
 
 const refresh = vi.hoisted(
@@ -162,6 +163,12 @@ describe("a stream origin's fetch schedule", () => {
   it("stays due when a bounded attempt left work behind", async () => {
     const window = await scheduleAfter({ status: "unfinished" });
     expect(window.nextFetchAt!.getTime()).toBeLessThanOrEqual(window.finished);
+  });
+
+  it("asks an unreachable stream host again in an hour", async () => {
+    const window = await scheduleAfter({ status: "unreachable" });
+    expectWithin(window.nextFetchAt, window, STREAM_HOST_RECHECK_MS);
+    expect(STREAM_HOST_RECHECK_MS).toBe(HOUR_MS);
   });
 
   it("waits for a failed recovery's backoff, or an hour when it left none", async () => {

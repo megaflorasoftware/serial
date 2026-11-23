@@ -3270,6 +3270,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "listing_rev": {
+          "name": "listing_rev",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "cursor": {
           "name": "cursor",
           "type": "text",

@@ -7,7 +7,6 @@ import {
   SKIPPED_EVENT_WINDOW_MS,
   startStreamIntake,
 } from "~/server/jetstream/intake";
-import { createOutageWatch } from "~/server/jetstream/outage";
 import { legacyResumeLeavesGap } from "~/server/jetstream/service";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import { feeds, user } from "~/server/db/schema";
@@ -81,24 +80,6 @@ describe("skipped events", () => {
     expect(
       skipped.take(new Set(["did:plc:a"])).map((event) => event.seq),
     ).toEqual([2, 3]);
-  });
-});
-
-describe("outage watch", () => {
-  it("reports an outage once, only after its grace period, and starts over after a delivered batch", () => {
-    let time = 0;
-    const outage = createOutageWatch(100, () => time);
-    expect(outage.outlastedGrace()).toBe(false);
-    time = 99;
-    expect(outage.outlastedGrace()).toBe(false);
-    time = 100;
-    expect(outage.outlastedGrace()).toBe(true);
-    time = 500;
-    expect(outage.outlastedGrace()).toBe(false);
-    outage.delivered();
-    expect(outage.outlastedGrace()).toBe(false);
-    time = 600;
-    expect(outage.outlastedGrace()).toBe(true);
   });
 });
 

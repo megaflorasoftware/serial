@@ -62,6 +62,8 @@ const ERROR_BACKOFF_MS = 60 * 60 * 1000; // 1 hour
  * polling it would repeat that work. This recheck is only a backstop.
  */
 export const STREAM_BACKSTOP_RECHECK_MS = 6 * 60 * 60 * 1000;
+/** How long a stream origin waits before asking an unreachable stream host again. */
+export const STREAM_HOST_RECHECK_MS = 60 * 60 * 1000;
 export { FEED_INGESTION_CONCURRENCY } from "@serial/bookmark-capture";
 
 export type FetchFeedsStatus = "success" | "empty" | "error" | "skipped";
@@ -298,6 +300,8 @@ function nextStreamFetch(outcome: RecoveryOutcome, now: Date) {
       return calculateNextFetch({}, now);
     case "unfinished":
       return now;
+    case "unreachable":
+      return new Date(now.getTime() + STREAM_HOST_RECHECK_MS);
     case "deferred":
       return outcome.retryAt ?? new Date(now.getTime() + ERROR_BACKOFF_MS);
   }
