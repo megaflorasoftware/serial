@@ -88,6 +88,48 @@ describe("publication subscription sync bounds", () => {
     30_000,
   );
   it.each([100, 1_000])(
+    "stores a moved revision over unchanged subscriptions in one write, for %s publications",
+    async (count) => {
+      const { requests, evidence } = await measure(count, "moved");
+      const budget = publicationSyncBudget("moved", count);
+      // The revision read and one listing.
+      expect(requests).toBe(budget.requests);
+      expect(evidence.statementCount).toBeLessThanOrEqual(budget.statements);
+      expect(evidence.materializedRows).toBeLessThanOrEqual(budget.rows);
+      const written = writes(evidence.statements);
+      expect(written).toHaveLength(1);
+      expect(written[0]!.sql).toContain("subscription_repo_rev");
+      // No claim and no lease: the job and the run were never taken.
+      expect(written[0]!.sql).not.toMatch(
+        /subscription_job_token|subscription_sync_token/,
+      );
+      expect(
+        touches(evidence.statements, "serial_atproto_subscription_mirror"),
+      ).toBe(false);
+      expect(touches(evidence.statements, "serial_feed_origin")).toBe(false);
+    },
+    30_000,
+  );
+  it.each([100, 1_000])(
+    "runs once over a changed listing without reading it twice, for %s publications",
+    async (count) => {
+      const { requests, evidence } = await measure(count, "changed");
+      const budget = publicationSyncBudget("changed", count);
+      // The check's revision and listing, then the run's second revision read.
+      expect(requests).toBe(budget.requests);
+      expect(evidence.statementCount).toBeLessThanOrEqual(budget.statements);
+      expect(evidence.materializedRows).toBeLessThanOrEqual(budget.rows);
+      // Only the rewritten subscription's mirror row is written.
+      expect(
+        writes(evidence.statements).filter((statement) =>
+          statement.sql.includes("serial_atproto_subscription_mirror"),
+        ),
+      ).toHaveLength(1);
+      expect(touches(evidence.statements, "serial_feed_item")).toBe(false);
+    },
+    30_000,
+  );
+  it.each([100, 1_000])(
     "uses constant statements for a requested pass over %s unchanged publications",
     async (count) => {
       const { result, requests, evidence } = await measure(count, "requested");
@@ -98,7 +140,8 @@ describe("publication subscription sync bounds", () => {
         exported: 0,
         removed: 0,
       });
-      expect(requests).toBe(2);
+      // One listing between two revision reads.
+      expect(requests).toBe(budget.requests);
       expect(evidence.statementCount).toBeLessThanOrEqual(budget.statements);
       expect(evidence.materializedRows).toBeLessThanOrEqual(budget.rows);
       expect(touches(evidence.statements, "serial_feed_item")).toBe(false);
