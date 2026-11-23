@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
@@ -15,9 +15,9 @@ export type LightboxImage = {
 };
 
 /** Body images with no known shape reserve a landscape frame. */
-export const DEFAULT_IMAGE_ASPECT_RATIO = "4 / 3";
+const DEFAULT_IMAGE_ASPECT_RATIO = "4 / 3";
 
-export function imageAspectRatio(ratio: LightboxImage["aspectRatio"]): string {
+function imageAspectRatio(ratio: LightboxImage["aspectRatio"]): string {
   return ratio && ratio.width > 0 && ratio.height > 0
     ? `${ratio.width} / ${ratio.height}`
     : DEFAULT_IMAGE_ASPECT_RATIO;
@@ -46,6 +46,7 @@ export function ArticleImageLightboxGroup({
   const count = images.length;
   const previous = index !== null && index > 0 ? index - 1 : null;
   const next = index !== null && index < count - 1 ? index + 1 : null;
+  const group = useMemo(() => ({ images, open: setIndex }), [images]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowLeft" && previous !== null) {
@@ -58,7 +59,7 @@ export function ArticleImageLightboxGroup({
   };
 
   return (
-    <LightboxGroupContext.Provider value={{ images, open: setIndex }}>
+    <LightboxGroupContext.Provider value={group}>
       {children}
       <Dialog
         open={current !== null}

@@ -168,6 +168,13 @@ async function storedDigest() {
   return details!.itemsDigest;
 }
 
+/** A result as the shared cache returns it: read back from its JSON. */
+function fromSharedCache(result: unknown) {
+  // The cache stores JSON, so dates return as text. A structured clone keeps them.
+  // react-doctor-disable-next-line react-doctor/no-json-parse-stringify-clone
+  return JSON.parse(JSON.stringify(result)) as CachedFeedResult;
+}
+
 function writes(evidence: Awaited<ReturnType<typeof fetchDue>>["evidence"]) {
   return evidence.statements
     .filter((entry) => WRITE.test(entry.sql))
@@ -222,9 +229,7 @@ describe.each([
     await fetchDue();
     const [, parsed] = vi.mocked(setCachedFeedResult).mock.calls.at(-1)!;
     // The shared cache hands back what it serialized.
-    vi.mocked(getCachedFeedResult).mockResolvedValue(
-      JSON.parse(JSON.stringify(parsed)) as CachedFeedResult,
-    );
+    vi.mocked(getCachedFeedResult).mockResolvedValue(fromSharedCache(parsed));
     const { results, evidence } = await fetchDue();
     expect(results).toMatchObject([
       { status: "success", feedItems: [], fromCache: true },
@@ -299,9 +304,7 @@ describe.each([
     const [, parsed] = vi.mocked(setCachedFeedResult).mock.calls.at(-1)!;
     expect(parsed).toMatchObject({ status: "empty" });
     // The shared cache hands back what it serialized, to an origin with no digest yet.
-    vi.mocked(getCachedFeedResult).mockResolvedValue(
-      JSON.parse(JSON.stringify(parsed)) as CachedFeedResult,
-    );
+    vi.mocked(getCachedFeedResult).mockResolvedValue(fromSharedCache(parsed));
     await session.database.update(feedOriginRss).set({ itemsDigest: null });
     const first = await fetchDue();
     expect(first.results).toMatchObject([{ status: "empty", fromCache: true }]);
