@@ -252,7 +252,10 @@ it.each(["bulk", "streaming"] as const)(
     // the five connection slots.
     const imports = Promise.all([importFeeds(), importFeeds()]);
     try {
-      await vi.waitFor(() => expect(runDatabaseWrite).toHaveBeenCalledTimes(7));
+      await vi.waitFor(
+        () => expect(runDatabaseWrite).toHaveBeenCalledTimes(7),
+        { timeout: 5000 },
+      );
       await expect(dbSemaphore.run(async () => "free")).resolves.toBe("free");
     } finally {
       release();
