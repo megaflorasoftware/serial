@@ -128,8 +128,23 @@ jobs:
           curl -sSfL https://get.tur.so/install.sh | bash
           echo "$HOME/.turso" >> "$GITHUB_PATH"
 
+      # libsql-server 0.24.32 can stop answering writes when several arrive
+      # at once. `turso dev` runs the sqld it finds on PATH, so this release
+      # stands in for the latest one the CLI would otherwise download.
+      - name: Install libsql-server 0.24.31
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/libsql-server.tar.xz" https://github.com/tursodatabase/libsql/releases/download/libsql-server-v0.24.31/libsql-server-x86_64-unknown-linux-gnu.tar.xz
+          echo "edc6e17188d7f2e7c6a76eb7ea21f57f4f90fd49578f16a3884fe433e9ecbd84  $RUNNER_TEMP/libsql-server.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/libsql-server.tar.xz" -C "$RUNNER_TEMP"
+          install -m 755 "$RUNNER_TEMP/libsql-server-x86_64-unknown-linux-gnu/sqld" "$HOME/.turso/sqld"
+
       - name: Run ${{ matrix.name }} E2E tests
         run: pnpm --filter @serial/app test:e2e:${{ matrix.suite }} ${{ matrix.shard }}
+
+      # Fails if the CLI replaced the pinned server during the run.
+      - name: Check libsql-server is still 0.24.31
+        if: ${{ always() }}
+        run: sqld --version | grep -F "sqld 0.24.31"
 
       - name: Verify E2E process cleanup
         if: ${{ always() && matrix.verify_cleanup }}
