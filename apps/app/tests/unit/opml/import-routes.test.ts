@@ -87,7 +87,9 @@ beforeEach(async () => {
     userId: "owner",
     isActive: false,
     details: {
+      // A name its reader chose, which an origin that joins must not replace.
       name: "Custom",
+      nameEditedAt: new Date(),
       platform: "website",
       siteUrl: "https://example.com",
       origins: [

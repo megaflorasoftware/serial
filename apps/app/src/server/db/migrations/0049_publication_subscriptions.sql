@@ -69,6 +69,7 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
   `event_seq` text,
   `event_rev` text,
   `body_cid` text,
+  `body_content_type` text,
   `reason` text,
   `retry_at` integer,
   `attempts` integer DEFAULT 0 NOT NULL,
@@ -79,6 +80,8 @@ CREATE TABLE `serial_feed_origin_atproto_document` (
 CREATE INDEX `feed_origin_atproto_document_due_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`status`,`retry_at`,"uri" desc);
 --> statement-breakpoint
 CREATE INDEX `feed_origin_atproto_document_retry_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`retry_at`) WHERE "serial_feed_origin_atproto_document"."status" = 'retry';
+--> statement-breakpoint
+CREATE INDEX `feed_origin_atproto_document_body_type_idx` ON `serial_feed_origin_atproto_document` (`origin_id`,`body_content_type`) WHERE "serial_feed_origin_atproto_document"."body_content_type" is not null;
 --> statement-breakpoint
 CREATE TABLE `serial_feed_origin_atproto_document_source` (
   `origin_id` integer NOT NULL,
@@ -174,6 +177,7 @@ CREATE INDEX `feed_item_alias_item_idx` ON `serial_feed_item_alias` (`item_id`);
 CREATE TABLE `serial_feed_item_observation` (
 	`item_id` text NOT NULL,
 	`kind` text NOT NULL,
+	`digest` text,
 	`value` text NOT NULL,
 	PRIMARY KEY(`item_id`, `kind`),
 	FOREIGN KEY (`item_id`) REFERENCES `serial_feed_item`(`id`) ON UPDATE no action ON DELETE cascade

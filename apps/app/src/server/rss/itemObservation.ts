@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sanitizeEmbeddedContent } from "@serial/standard-site";
 import { boundFeedItems } from "./feedBounds";
 import type { DatabaseFeedItem } from "../db/schema";
@@ -32,6 +33,51 @@ export function rssObservation(item: RSSContent): ItemObservation {
     publishedAt: item.publishedDate,
     tags: item.tags ?? [],
   };
+}
+
+/** One hash for a set of stated fields, whatever order they are given in; absent fields do not count. */
+function digestOf(stated: Record<string, unknown>) {
+  const canonical = Object.entries(stated)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+/**
+ * Identifies an observation as its source stated it. The page image comes from
+ * a later lookup, not from the source, so it stays out: an observation whose
+ * source did not change keeps its digest whether or not the lookup has run.
+ */
+export function observationDigest(observation: ItemObservation) {
+  return digestOf({ ...observation, pageImageUrl: undefined });
+}
+
+/**
+ * Bump to derive every RSS observation again on its next fetch, after a change
+ * to how `rssObservation` reads an item that stored observations should follow.
+ */
+const RSS_DERIVATION = 1;
+
+/**
+ * Identifies an RSS observation by the parsed item it derives from, so an
+ * unchanged item is recognised before its body is sanitized. Covers exactly
+ * what `rssObservation` reads.
+ */
+export function rssItemDigest(item: RSSContent) {
+  return digestOf({
+    derivation: RSS_DERIVATION,
+    id: item.id,
+    url: item.url,
+    title: item.title,
+    author: item.author,
+    content: item.content,
+    contentSnippet: item.contentSnippet,
+    thumbnail: item.thumbnail,
+    mediaThumbnail: item.mediaThumbnail,
+    firstImageUrl: item.firstImageUrl,
+    publishedDate: item.publishedDate,
+    tags: item.tags,
+  });
 }
 
 export function composeItem(

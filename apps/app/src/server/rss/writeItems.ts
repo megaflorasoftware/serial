@@ -1,19 +1,57 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { runDatabaseWrite } from "../db/retry-write";
 import { feedItemAliases, feedItemObservations, feedItems } from "../db/schema";
 import { buildConflictUpdateColumns } from "../db/utils";
 import { toApplicationFeedItem } from "../feeds/reader-bodies";
-import { composeItem, legacyObservation } from "./itemObservation";
+import {
+  composeItem,
+  legacyObservation,
+  observationDigest,
+} from "./itemObservation";
 import { computeItemHash } from "./hash";
+import {
+  itemLocators,
+  loadMatchedItems,
+  readItemIdentity,
+  sameIdentity,
+} from "./itemIdentity";
 import { resolveItemDate } from "./publishedDate";
 import type { FeedDatabase } from "../feeds/origins";
+import type { MatchedItems } from "./itemIdentity";
 import type { ItemObservation } from "./itemObservation";
 import type { db } from "../db";
 import type { DatabaseFeed, DatabaseFeedItem } from "../db/schema";
 import { dbSemaphore } from "~/lib/semaphore";
 
-type Sources = Partial<Record<ItemObservation["kind"], ItemObservation>>;
+/** An observation on its way in. */
+export type IncomingObservation = {
+  observation: ItemObservation;
+  /** Identifies what its source stated; stored so the next fetch can tell without the value. */
+  digest: string;
+  /** No page lookup ran for it this time. A page image stored for the same URL stands. */
+  keepStoredPageImage?: boolean;
+};
+
+type StoredObservation = { value: ItemObservation; digest: string | null };
+type Sources = Partial<Record<ItemObservation["kind"], StoredObservation>>;
+
+type ItemWrites = {
+  /** Items another item absorbed, stored or not; readers drop them. */
+  removedItemIds: string[];
+  /** The absorbed items that exist in storage. */
+  deletedItemIds: string[];
+  items: Array<typeof feedItems.$inferInsert>;
+  observations: Array<typeof feedItemObservations.$inferInsert>;
+  aliases: Array<typeof feedItemAliases.$inferInsert>;
+};
+
+type CommitGuards = {
+  canWrite: (transaction: FeedDatabase) => Promise<boolean>;
+  didWrite: (transaction: FeedDatabase) => Promise<void>;
+};
+
+const NOTHING_WRITTEN = { items: [], removedItemIds: [] as string[] };
 
 function combineUserState(keep: DatabaseFeedItem, other: DatabaseFeedItem) {
   for (const [field, timestamp] of [
@@ -33,298 +71,378 @@ function combineUserState(keep: DatabaseFeedItem, other: DatabaseFeedItem) {
   );
 }
 
-/** One write transaction owns identity, snapshots, aliases, and the visible composite. */
-export async function writeObservedItems(
+/** Each stored item's observations; an item from before observations existed speaks for itself. */
+function storedSources({ items, observations }: MatchedItems) {
+  const sources = new Map<string, Sources>();
+  for (const { itemId, kind, value, digest } of observations)
+    sources.set(itemId, { ...sources.get(itemId), [kind]: { value, digest } });
+  for (const item of items)
+    if (!sources.has(item.id))
+      sources.set(item.id, {
+        rss: { value: legacyObservation(item), digest: null },
+      });
+  return sources;
+}
+
+/** An undated RSS item keeps its first-seen time across refreshes and edits. */
+function datedObservation(
+  observation: ItemObservation,
+  stored: Sources,
+  row: DatabaseFeedItem | undefined,
+  now: Date,
+): ItemObservation {
+  if (
+    observation.kind !== "rss" ||
+    Number.isFinite(new Date(observation.publishedAt).getTime())
+  )
+    return observation;
+  return {
+    ...observation,
+    publishedAt: resolveItemDate(
+      new Date(observation.publishedAt),
+      stored.rss?.value.publishedAt
+        ? new Date(stored.rss.value.publishedAt)
+        : row?.postedAt,
+      now,
+    ).toISOString(),
+  };
+}
+
+/** With no lookup of its own, an observation keeps the page image stored for the same URL. */
+function withStandingPageImage(
+  { observation, keepStoredPageImage }: IncomingObservation,
+  stored: StoredObservation | undefined,
+): ItemObservation {
+  return keepStoredPageImage &&
+    stored?.value.url === observation.url &&
+    stored.value.pageImageUrl !== undefined
+    ? { ...observation, pageImageUrl: stored.value.pageImageUrl }
+    : observation;
+}
+
+function sameStoredObservation(
+  previous: MatchedItems["observations"][number] | undefined,
+  next: StoredObservation,
+) {
+  return (
+    previous !== undefined &&
+    previous.digest === next.digest &&
+    JSON.stringify(previous.value) === JSON.stringify(next.value)
+  );
+}
+
+/**
+ * Everything one batch changes, worked out from the matched items alone:
+ * identity, the visible composite, each origin's observation, and aliases.
+ */
+function planItemWrites(
+  feedId: number,
+  matched: MatchedItems,
+  incoming: IncomingObservation[],
+  now: Date,
+): ItemWrites {
+  const persisted = new Set(matched.items.map((item) => item.id));
+  const rows = new Map(matched.items.map((item) => [item.id, { ...item }]));
+  const sources = storedSources(matched);
+  const lookup = itemLocators(matched);
+  const changed = new Map<string, typeof feedItems.$inferInsert>();
+  const touched = new Set<string>();
+  const removedItemIds: string[] = [];
+  for (const entry of incoming) {
+    const { observation } = entry;
+    // RSS GUIDs may be reused across distinct URLs. Only documents
+    // have a stable identity that can establish a URL change.
+    const byKey =
+      observation.kind === "atproto"
+        ? lookup.get(`atproto:${observation.key}`)
+        : undefined;
+    const byUrl = lookup.get(observation.url);
+    // The stable document identity survives a collision with an RSS-only row.
+    const id = byKey ?? byUrl ?? createId();
+    const row = rows.get(id);
+    const values = sources.get(id) ?? {};
+    const otherId =
+      byKey && byUrl && byKey !== byUrl
+        ? id === byKey
+          ? byUrl
+          : byKey
+        : undefined;
+    if (otherId) {
+      const other = rows.get(otherId);
+      if (row && other) combineUserState(row, other);
+      Object.assign(values, { ...sources.get(otherId), ...values });
+      // The absorbed item's locators, historical ones included, follow it.
+      for (const [locator, target] of lookup)
+        if (target === otherId) lookup.set(locator, id);
+      removedItemIds.push(otherId);
+      changed.delete(otherId);
+      touched.delete(otherId);
+      rows.delete(otherId);
+      sources.delete(otherId);
+    }
+    values[observation.kind] = {
+      value: datedObservation(
+        withStandingPageImage(entry, values[observation.kind]),
+        values,
+        row,
+        now,
+      ),
+      digest: entry.digest,
+    };
+    sources.set(id, values);
+    touched.add(id);
+    const composed = composeItem(values.rss?.value, values.atproto?.value);
+    const value = {
+      ...row,
+      ...composed,
+      id,
+      feedId,
+      normalizedUrl: null,
+      contentType: "text" as const,
+      orientation: null,
+      createdAt: row?.createdAt ?? now,
+      updatedAt: now,
+      contentHash: computeItemHash({
+        ...composed,
+        content: JSON.stringify(composed),
+      }),
+    };
+    if (!row || row.contentHash !== value.contentHash || otherId)
+      changed.set(id, value);
+    lookup.set(observation.url, id);
+    if (observation.kind === "atproto")
+      lookup.set(`atproto:${observation.key}`, id);
+    rows.set(id, {
+      isWatched: false,
+      isWatchLater: false,
+      progress: 0,
+      duration: 0,
+      isWatchedUpdatedAt: null,
+      isWatchLaterUpdatedAt: null,
+      ...value,
+    });
+  }
+  const previousObservations = new Map(
+    matched.observations.map((entry) => [
+      `${entry.itemId}:${entry.kind}`,
+      entry,
+    ]),
+  );
+  const previousAliases = new Map(
+    matched.aliases.map((alias) => [alias.locator, alias.itemId]),
+  );
+  return {
+    removedItemIds,
+    deletedItemIds: removedItemIds.filter((id) => persisted.has(id)),
+    items: [...changed.values()],
+    observations: [...touched].flatMap((itemId) =>
+      Object.values(sources.get(itemId)!)
+        .filter(
+          (stored) =>
+            !sameStoredObservation(
+              previousObservations.get(`${itemId}:${stored.value.kind}`),
+              stored,
+            ),
+        )
+        .map((stored) => ({ itemId, kind: stored.value.kind, ...stored })),
+    ),
+    aliases: [...lookup]
+      .filter(
+        ([locator, id]) =>
+          touched.has(id) && previousAliases.get(locator) !== id,
+      )
+      .map(([locator, itemId]) => ({ feedId, locator, itemId })),
+  };
+}
+
+function writesNothing(writes: ItemWrites) {
+  return !(
+    writes.deletedItemIds.length ||
+    writes.items.length ||
+    writes.observations.length ||
+    writes.aliases.length
+  );
+}
+
+function slices<T>(rows: T[], size: number) {
+  return Array.from({ length: Math.ceil(rows.length / size) }, (_, index) =>
+    rows.slice(index * size, (index + 1) * size),
+  );
+}
+
+/** Statement order matters: absorbed rows free their URL, items precede what references them. */
+async function applyItemWrites(tx: FeedDatabase, writes: ItemWrites) {
+  // Deleting an absorbed item cascades its observations and aliases, which
+  // the survivor's writes below restate.
+  if (writes.deletedItemIds.length)
+    await tx
+      .delete(feedItems)
+      .where(inArray(feedItems.id, writes.deletedItemIds));
+  const written: DatabaseFeedItem[] = [];
+  // Keep each statement below SQLite's host-parameter limit.
+  for (const batch of slices(writes.items, 25)) {
+    // Keep statement order inside the single writer transaction.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const rows = await tx
+      .insert(feedItems)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: feedItems.id,
+        set: buildConflictUpdateColumns(feedItems, [
+          "contentId",
+          "url",
+          "normalizedUrl",
+          "title",
+          "author",
+          "content",
+          "sourceCid",
+          "contentSnippet",
+          "thumbnail",
+          "postedAt",
+          "sourceKind",
+          "bodySource",
+          "atprotoUri",
+          "tags",
+          "contentHash",
+          "updatedAt",
+          "isWatched",
+          "isWatchLater",
+          "isWatchedUpdatedAt",
+          "isWatchLaterUpdatedAt",
+          "progress",
+          "createdAt",
+        ]),
+      })
+      .returning();
+    written.push(...rows);
+  }
+  for (const batch of slices(writes.observations, 100))
+    // Bound each statement and preserve transaction order.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await tx
+      .insert(feedItemObservations)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: [feedItemObservations.itemId, feedItemObservations.kind],
+        set: {
+          value: sql`excluded.value`,
+          digest: sql`excluded.digest`,
+        },
+      });
+  for (const batch of slices(writes.aliases, 100))
+    // Bound each statement and preserve transaction order.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await tx
+      .insert(feedItemAliases)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: [feedItemAliases.feedId, feedItemAliases.locator],
+        set: { itemId: sql`excluded.item_id` },
+      });
+  return written;
+}
+
+function inWriteTransaction<T>(
+  database: typeof db,
+  write: (transaction: FeedDatabase) => Promise<T>,
+) {
+  return runDatabaseWrite(database, () =>
+    dbSemaphore.run(() =>
+      database.transaction(write, { behavior: "immediate" }),
+    ),
+  );
+}
+
+/**
+ * Reads the matched items outside the transaction, where their bodies do not
+ * hold the writer lock, then writes only if a narrow reread inside it finds
+ * the same state. `stale` tells the caller another writer got there first.
+ */
+async function writeIfUnchanged(
+  database: typeof db,
+  feed: Pick<DatabaseFeed, "id" | "platform">,
+  incoming: IncomingObservation[],
+) {
+  const observations = incoming.map((entry) => entry.observation);
+  const matched = await loadMatchedItems(database, feed.id, observations);
+  const writes = planItemWrites(feed.id, matched, incoming, new Date());
+  if (writesNothing(writes)) return NOTHING_WRITTEN;
+  const written = await inWriteTransaction(database, async (tx) =>
+    sameIdentity(matched, await readItemIdentity(tx, feed.id, observations))
+      ? applyItemWrites(tx, writes)
+      : ("stale" as const),
+  );
+  return written === "stale" ? written : writtenItems(feed, written, writes);
+}
+
+/** Reads and writes under one lock: for writers that guard their commit, and when the reread lost to another writer. */
+function writeInOneTransaction(
+  database: typeof db,
+  feed: Pick<DatabaseFeed, "id" | "platform">,
+  incoming: IncomingObservation[],
+  commit?: CommitGuards,
+) {
+  return inWriteTransaction(database, async (tx) => {
+    if (commit && !(await commit.canWrite(tx))) return NOTHING_WRITTEN;
+    const writes = planItemWrites(
+      feed.id,
+      await loadMatchedItems(
+        tx,
+        feed.id,
+        incoming.map((entry) => entry.observation),
+      ),
+      incoming,
+      new Date(),
+    );
+    const written = await applyItemWrites(tx, writes);
+    await commit?.didWrite(tx);
+    return writtenItems(feed, written, writes);
+  });
+}
+
+function writtenItems(
+  feed: Pick<DatabaseFeed, "platform">,
+  written: DatabaseFeedItem[],
+  writes: ItemWrites,
+) {
+  return {
+    items: written.map((item) => toApplicationFeedItem(item, feed.platform)),
+    removedItemIds: writes.removedItemIds,
+  };
+}
+
+/**
+ * Writes identity, observations, aliases and the visible composite for one
+ * batch. A writer with commit guards runs wholly inside its transaction. Any
+ * other reads first and holds the writer lock only to verify and write.
+ */
+export async function writeIncomingObservations(
+  database: typeof db,
+  feed: Pick<DatabaseFeed, "id" | "platform">,
+  incoming: IncomingObservation[],
+  commit?: CommitGuards,
+) {
+  if (!incoming.length) return NOTHING_WRITTEN;
+  if (commit) return writeInOneTransaction(database, feed, incoming, commit);
+  const written = await writeIfUnchanged(database, feed, incoming);
+  return written === "stale"
+    ? writeInOneTransaction(database, feed, incoming)
+    : written;
+}
+
+export function writeObservedItems(
   database: typeof db,
   feed: Pick<DatabaseFeed, "id" | "platform">,
   incoming: ItemObservation[],
-  commit?: {
-    canWrite: (transaction: FeedDatabase) => Promise<boolean>;
-    didWrite: (transaction: FeedDatabase) => Promise<void>;
-  },
+  commit?: CommitGuards,
 ) {
-  if (!incoming.length) return { items: [], removedItemIds: [] as string[] };
-  return runDatabaseWrite(database, () =>
-    dbSemaphore.run(() =>
-      database.transaction(
-        async (tx) => {
-          if (commit && !(await commit.canWrite(tx)))
-            return { items: [], removedItemIds: [] as string[] };
-          const locators = [
-            ...new Set(
-              incoming.flatMap((item) =>
-                item.kind === "atproto"
-                  ? [item.url, `atproto:${item.key}`]
-                  : [item.url],
-              ),
-            ),
-          ];
-          const aliases = await tx
-            .select()
-            .from(feedItemAliases)
-            .where(
-              and(
-                eq(feedItemAliases.feedId, feed.id),
-                inArray(feedItemAliases.locator, locators),
-              ),
-            );
-          const aliasIds = [...new Set(aliases.map((alias) => alias.itemId))];
-          const atprotoUris = incoming
-            .filter((item) => item.kind === "atproto")
-            .map((item) => item.key);
-          // Separate indexed branches avoid scanning the Feed for an OR predicate.
-          const selectMatches = (condition: ReturnType<typeof inArray>) =>
-            tx
-              .select()
-              .from(feedItems)
-              .where(and(eq(feedItems.feedId, feed.id), condition));
-          let matches = selectMatches(inArray(feedItems.url, locators))
-            .union(selectMatches(inArray(feedItems.normalizedUrl, locators)))
-            .$dynamic();
-          if (aliasIds.length)
-            matches = matches.union(
-              selectMatches(inArray(feedItems.id, aliasIds)),
-            );
-          if (atprotoUris.length)
-            matches = matches.union(
-              selectMatches(inArray(feedItems.atprotoUri, atprotoUris)),
-            );
-          const existing = await matches;
-          const ids = existing.map((item) => item.id);
-          const persistedIds = new Set(ids);
-          const observations = ids.length
-            ? await tx
-                .select()
-                .from(feedItemObservations)
-                .where(inArray(feedItemObservations.itemId, ids))
-            : [];
-          const rows = new Map(existing.map((item) => [item.id, item]));
-          const sources = new Map<string, Sources>();
-          for (const observation of observations) {
-            const values = sources.get(observation.itemId) ?? {};
-            values[observation.kind] = observation.value;
-            sources.set(observation.itemId, values);
-          }
-          for (const item of existing) {
-            if (!sources.has(item.id))
-              sources.set(item.id, { rss: legacyObservation(item) });
-          }
-          const lookup = new Map(
-            aliases.map((alias) => [alias.locator, alias.itemId]),
-          );
-          for (const item of existing) {
-            lookup.set(item.url, item.id);
-            if (item.normalizedUrl) lookup.set(item.normalizedUrl, item.id);
-            if (item.atprotoUri)
-              lookup.set(`atproto:${item.atprotoUri}`, item.id);
-          }
-          const changed = new Map<string, typeof feedItems.$inferInsert>();
-          const touched = new Set<string>();
-          const removedItemIds: string[] = [];
-          const replacements = new Map<string, string>();
-          const now = new Date();
-          for (const observation of incoming) {
-            // RSS GUIDs may be reused across distinct URLs. Only documents
-            // have a stable identity that can establish a URL change.
-            const byKey =
-              observation.kind === "atproto"
-                ? lookup.get(`atproto:${observation.key}`)
-                : undefined;
-            const byUrl = lookup.get(observation.url);
-            // The stable document identity survives a collision with an RSS-only row.
-            const id = byKey ?? byUrl ?? createId();
-            const row = rows.get(id);
-            const values = sources.get(id) ?? {};
-            const otherId =
-              byKey && byUrl && byKey !== byUrl
-                ? id === byKey
-                  ? byUrl
-                  : byKey
-                : undefined;
-            if (otherId) {
-              const other = rows.get(otherId);
-              if (row && other) combineUserState(row, other);
-              Object.assign(values, { ...sources.get(otherId), ...values });
-              for (const [locator, target] of lookup)
-                if (target === otherId) lookup.set(locator, id);
-              for (const [loser, winner] of replacements)
-                if (winner === otherId) replacements.set(loser, id);
-              replacements.set(otherId, id);
-              removedItemIds.push(otherId);
-              changed.delete(otherId);
-              touched.delete(otherId);
-              rows.delete(otherId);
-              sources.delete(otherId);
-            }
-            values[observation.kind] =
-              observation.kind === "rss" &&
-              !Number.isFinite(new Date(observation.publishedAt).getTime())
-                ? {
-                    ...observation,
-                    publishedAt: resolveItemDate(
-                      new Date(observation.publishedAt),
-                      values.rss?.publishedAt
-                        ? new Date(values.rss.publishedAt)
-                        : row?.postedAt,
-                      now,
-                    ).toISOString(),
-                  }
-                : observation;
-            sources.set(id, values);
-            touched.add(id);
-            const composed = composeItem(values.rss, values.atproto);
-            const value = {
-              ...row,
-              ...composed,
-              id,
-              feedId: feed.id,
-              normalizedUrl: null,
-              contentType: "text" as const,
-              orientation: null,
-              createdAt: row?.createdAt ?? now,
-              updatedAt: now,
-              contentHash: computeItemHash({
-                ...composed,
-                content: JSON.stringify(composed),
-              }),
-            };
-            if (!row || row.contentHash !== value.contentHash || otherId)
-              changed.set(id, value);
-            lookup.set(observation.url, id);
-            if (observation.kind === "atproto")
-              lookup.set(`atproto:${observation.key}`, id);
-            rows.set(id, {
-              isWatched: false,
-              isWatchLater: false,
-              progress: 0,
-              duration: 0,
-              isWatchedUpdatedAt: null,
-              isWatchLaterUpdatedAt: null,
-              ...value,
-            });
-          }
-          // Move aliases before deleting collided rows, whose snapshots cascade away.
-          for (const [loser, winner] of replacements) {
-            if (persistedIds.has(winner)) {
-              // Transfer aliases before their old owner is deleted.
-              // react-doctor-disable-next-line react-doctor/async-await-in-loop
-              await tx
-                .update(feedItemAliases)
-                .set({ itemId: winner })
-                .where(eq(feedItemAliases.itemId, loser));
-            } else {
-              // A winner created in this batch does not exist yet. Carry the
-              // loser's historical aliases across its cascading deletion.
-              // react-doctor-disable-next-line react-doctor/async-await-in-loop
-              const inheritedAliases = await tx
-                .select()
-                .from(feedItemAliases)
-                .where(eq(feedItemAliases.itemId, loser));
-              for (const alias of inheritedAliases)
-                lookup.set(alias.locator, winner);
-            }
-            // Free the colliding URL before writing the surviving item.
-            // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            await tx.delete(feedItems).where(eq(feedItems.id, loser));
-          }
-          const written: DatabaseFeedItem[] = [];
-          const changes = [...changed.values()];
-          // Keep each statement below SQLite's host-parameter limit.
-          for (let offset = 0; offset < changes.length; offset += 25) {
-            // Keep statement order inside the single writer transaction.
-            // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            const batch = await tx
-              .insert(feedItems)
-              .values(changes.slice(offset, offset + 25))
-              .onConflictDoUpdate({
-                target: feedItems.id,
-                set: buildConflictUpdateColumns(feedItems, [
-                  "contentId",
-                  "url",
-                  "normalizedUrl",
-                  "title",
-                  "author",
-                  "content",
-                  "sourceCid",
-                  "contentSnippet",
-                  "thumbnail",
-                  "postedAt",
-                  "sourceKind",
-                  "bodySource",
-                  "atprotoUri",
-                  "tags",
-                  "contentHash",
-                  "updatedAt",
-                  "isWatched",
-                  "isWatchLater",
-                  "isWatchedUpdatedAt",
-                  "isWatchLaterUpdatedAt",
-                  "progress",
-                  "createdAt",
-                ]),
-              })
-              .returning();
-            written.push(...batch);
-          }
-          const previousSnapshots = new Map(
-            observations.map((entry) => [
-              `${entry.itemId}:${entry.kind}`,
-              JSON.stringify(entry.value),
-            ]),
-          );
-          const snapshots = [...touched].flatMap((id) =>
-            Object.values(sources.get(id)!)
-              .filter(
-                (value) =>
-                  previousSnapshots.get(`${id}:${value.kind}`) !==
-                  JSON.stringify(value),
-              )
-              .map((value) => ({ itemId: id, kind: value.kind, value })),
-          );
-          for (let offset = 0; offset < snapshots.length; offset += 100) {
-            // Bound each statement and preserve transaction order.
-            // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            await tx
-              .insert(feedItemObservations)
-              .values(snapshots.slice(offset, offset + 100))
-              .onConflictDoUpdate({
-                target: [
-                  feedItemObservations.itemId,
-                  feedItemObservations.kind,
-                ],
-                set: { value: sql`excluded.value` },
-              });
-          }
-          const previousAliases = new Map(
-            aliases.map((alias) => [alias.locator, alias.itemId]),
-          );
-          const aliasWrites = [...lookup]
-            .filter(
-              ([locator, id]) =>
-                touched.has(id) && previousAliases.get(locator) !== id,
-            )
-            .map(([locator, itemId]) => ({ feedId: feed.id, locator, itemId }));
-          for (let offset = 0; offset < aliasWrites.length; offset += 100) {
-            // Bound each statement and preserve transaction order.
-            // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            await tx
-              .insert(feedItemAliases)
-              .values(aliasWrites.slice(offset, offset + 100))
-              .onConflictDoUpdate({
-                target: [feedItemAliases.feedId, feedItemAliases.locator],
-                set: { itemId: sql`excluded.item_id` },
-              });
-          }
-          await commit?.didWrite(tx);
-          return {
-            items: written.map((item) =>
-              toApplicationFeedItem(item, feed.platform),
-            ),
-            removedItemIds,
-          };
-        },
-        { behavior: "immediate" },
-      ),
-    ),
+  return writeIncomingObservations(
+    database,
+    feed,
+    incoming.map((observation) => ({
+      observation,
+      digest: observationDigest(observation),
+    })),
+    commit,
   );
 }

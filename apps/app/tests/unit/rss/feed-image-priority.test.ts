@@ -148,7 +148,8 @@ it("persists the release OG image ahead of its RSS body screenshot and retains i
   vi.mocked(readFeedHttp).mockClear();
   await refresh();
   expect((await stored()).thumbnail).toBe(OG);
-  expect(readFeedHttp).toHaveBeenCalledTimes(2);
+  // The feed is fetched again; the unchanged item's page is not.
+  expect(readFeedHttp).toHaveBeenCalledTimes(1);
 });
 
 it.each(["rss", "atproto"] as const)(

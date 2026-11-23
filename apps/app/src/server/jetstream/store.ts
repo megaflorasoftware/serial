@@ -392,7 +392,9 @@ function stagedValues(
     status,
     eventSeq: String(input.seq),
     eventRev: input.rev ?? null,
+    // The readable version and its content type survive restaging together.
     bodyCid: old?.bodyCid ?? null,
+    bodyContentType: old?.bodyContentType ?? null,
     reason: status === "invalid" ? (oversized ? "oversized" : "invalid") : null,
     attempts: 0,
     retryAt: null,
@@ -450,6 +452,7 @@ export async function stageDocuments(
           eventSeq: sql`excluded.event_seq`,
           eventRev: sql`excluded.event_rev`,
           bodyCid: sql`excluded.body_cid`,
+          bodyContentType: sql`excluded.body_content_type`,
           reason: sql`excluded.reason`,
           attempts: sql`excluded.attempts`,
           retryAt: sql`excluded.retry_at`,

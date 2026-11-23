@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { legacyItemInputsSchema } from "./legacyItemHash";
 import type { FeedFetchMetadata, RSSFeedWithMetadata } from "./types";
 import { getKV } from "~/server/kv";
 
@@ -34,6 +35,7 @@ const rssContentSchema = z.object({
   tags: z.array(z.string()).optional(),
   content: z.string().optional(),
   contentSnippet: z.string().optional(),
+  legacy: legacyItemInputsSchema.optional(),
   source: z
     .object({
       title: z.string().optional(),

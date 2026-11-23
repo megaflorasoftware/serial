@@ -1,9 +1,9 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { platformOfContentType } from "@serial/standard-site";
 import { runDatabaseWrite } from "../db/retry-write";
 import {
+  feedOriginAtproto,
   feedOriginAtprotoDocuments,
-  feedOriginAtprotoDocumentSources,
   feedOrigins,
   feeds,
 } from "../db/schema";
@@ -12,29 +12,13 @@ import type { FeedDatabase } from "~/server/feeds/origins";
 import type { db } from "../db";
 import type { DatabaseFeed, DatabaseFeedOrigin } from "../db/schema";
 import { CONTENT_PLATFORM, isVideoPlatform } from "~/lib/content/descriptor";
+import { FEED_ORIGIN_KIND } from "~/server/db/schema";
 import { dbSemaphore } from "~/lib/semaphore";
 
 type MetadataOrigin = {
   feed: Pick<DatabaseFeed, "id" | "name" | "siteUrl" | "platform">;
   origin: DatabaseFeedOrigin;
 };
-
-export async function refreshOriginMetadata(
-  database: typeof db,
-  { origin, feed }: MetadataOrigin,
-  metadata: OriginMetadata,
-) {
-  return runDatabaseWrite(database, () =>
-    dbSemaphore.run(() =>
-      database.transaction(
-        async (tx) => {
-          return applyOriginMetadata(tx, { origin, feed }, metadata);
-        },
-        { behavior: "immediate" },
-      ),
-    ),
-  );
-}
 
 type OriginMetadata = {
   name: string;
@@ -43,100 +27,191 @@ type OriginMetadata = {
   siteUrl?: string | null;
 };
 
-export async function applyOriginMetadata(
-  database: FeedDatabase,
+/** What the source says about itself, in the shape its origin row stores it. */
+function sourceFields(metadata: OriginMetadata) {
+  return {
+    sourceName: metadata.name,
+    sourceImageUrl: metadata.imageUrl ?? null,
+    sourceDescription: metadata.description ?? null,
+  };
+}
+
+function sourceDiffers(origin: DatabaseFeedOrigin, metadata: OriginMetadata) {
+  const next = sourceFields(metadata);
+  return (
+    next.sourceName !== origin.sourceName ||
+    next.sourceImageUrl !== origin.sourceImageUrl ||
+    next.sourceDescription !== origin.sourceDescription
+  );
+}
+
+async function hasPublicationOrigin(database: FeedDatabase, feedId: number) {
+  const publication = await database
+    .select({ id: feedOrigins.id })
+    .from(feedOrigins)
+    .where(
+      and(
+        eq(feedOrigins.feedId, feedId),
+        eq(feedOrigins.kind, FEED_ORIGIN_KIND.ATPROTO),
+      ),
+    )
+    .get();
+  return publication !== undefined;
+}
+
+/**
+ * An RSS fetch's metadata. A feed that says what it said last time writes
+ * nothing and opens no transaction. A site URL that differs matters only
+ * where no Publication owns the Feed's, which one narrow read settles. The
+ * platform is left alone: an RSS fetch cannot change the Atmosphere side.
+ */
+export async function refreshOriginMetadata(
+  database: typeof db,
   { origin, feed }: MetadataOrigin,
   metadata: OriginMetadata,
 ) {
-  await database
-    .update(feedOrigins)
-    .set({
-      sourceName: metadata.name,
-      sourceImageUrl: metadata.imageUrl ?? null,
-      sourceDescription: metadata.description ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(feedOrigins.id, origin.id));
-  const origins = await database
-    .select()
-    .from(feedOrigins)
-    .where(eq(feedOrigins.feedId, feed.id));
-  const publication = origins.find((item) => item.kind === "atproto");
-  const rss = origins.find((item) => item.kind === "rss");
-  await database
-    .update(feeds)
-    .set({
-      name: sql`case when ${feeds.nameEditedAt} is null then ${publication?.sourceName || rss?.sourceName || feed.name} else ${feeds.name} end`,
-      imageUrl: publication?.sourceImageUrl || rss?.sourceImageUrl || "",
-      updatedAt: new Date(),
-    })
-    .where(eq(feeds.id, feed.id));
-  const shouldUpdateSiteUrl =
-    !!metadata.siteUrl && (!publication || origin.kind === "atproto");
-  if (shouldUpdateSiteUrl)
-    await database
-      .update(feeds)
-      .set({ siteUrl: metadata.siteUrl })
-      .where(eq(feeds.id, feed.id));
-  const platformChanged = publication
-    ? await recomputeFeedPlatform(database, feed, publication.id)
-    : false;
-  return (
-    platformChanged ||
-    metadata.name !== origin.sourceName ||
-    (metadata.imageUrl ?? null) !== origin.sourceImageUrl ||
-    (metadata.description ?? null) !== origin.sourceDescription ||
-    (shouldUpdateSiteUrl && metadata.siteUrl !== feed.siteUrl)
+  const siteUrlDiffers =
+    !!metadata.siteUrl && metadata.siteUrl !== feed.siteUrl;
+  if (
+    !sourceDiffers(origin, metadata) &&
+    !(siteUrlDiffers && !(await hasPublicationOrigin(database, feed.id)))
+  )
+    return false;
+  return runDatabaseWrite(database, () =>
+    dbSemaphore.run(() =>
+      database.transaction(
+        async (tx) =>
+          applyOriginMetadata(tx, { origin, feed }, metadata, {
+            platform: false,
+          }),
+        { behavior: "immediate" },
+      ),
+    ),
   );
 }
 
 /**
- * The platform the origin's retained document sources agree on: the content
- * `$type` of each readable version, mapped through the adapter registry.
- * `website` when they disagree or when nothing readable is retained.
+ * Stores what a source says about itself and derives the Feed's name, image
+ * and site URL from its origins. Each write happens only where the stored
+ * value differs, so the Feed's `updated_at` moves only when the Feed did.
+ * Returns whether anything changed.
+ */
+export async function applyOriginMetadata(
+  database: FeedDatabase,
+  { origin, feed }: MetadataOrigin,
+  metadata: OriginMetadata,
+  { platform }: { platform: boolean } = { platform: true },
+) {
+  const sourceChanged = sourceDiffers(origin, metadata);
+  if (sourceChanged)
+    await database
+      .update(feedOrigins)
+      .set({ ...sourceFields(metadata), updatedAt: new Date() })
+      .where(eq(feedOrigins.id, origin.id));
+  const origins = await database
+    .select()
+    .from(feedOrigins)
+    .where(eq(feedOrigins.feedId, feed.id));
+  const publication = origins.find(
+    (item) => item.kind === FEED_ORIGIN_KIND.ATPROTO,
+  );
+  const rss = origins.find((item) => item.kind === FEED_ORIGIN_KIND.RSS);
+  const name = publication?.sourceName || rss?.sourceName || feed.name;
+  const imageUrl = publication?.sourceImageUrl || rss?.sourceImageUrl || "";
+  const presented = await database
+    .update(feeds)
+    .set({
+      name: sql`case when ${feeds.nameEditedAt} is null then ${name} else ${feeds.name} end`,
+      imageUrl,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(feeds.id, feed.id),
+        or(
+          sql`${feeds.imageUrl} is not ${imageUrl}`,
+          and(isNull(feeds.nameEditedAt), sql`${feeds.name} is not ${name}`),
+        ),
+      ),
+    );
+  const ownsSiteUrl =
+    !!metadata.siteUrl &&
+    (!publication || origin.kind === FEED_ORIGIN_KIND.ATPROTO);
+  const located = ownsSiteUrl
+    ? await database
+        .update(feeds)
+        .set({ siteUrl: metadata.siteUrl, updatedAt: new Date() })
+        .where(
+          and(
+            eq(feeds.id, feed.id),
+            sql`${feeds.siteUrl} is not ${metadata.siteUrl}`,
+          ),
+        )
+    : undefined;
+  const platformChanged =
+    platform && publication
+      ? await recomputeFeedPlatform(database, feed, publication.id)
+      : false;
+  return (
+    sourceChanged ||
+    presented.rowsAffected > 0 ||
+    (located?.rowsAffected ?? 0) > 0 ||
+    platformChanged
+  );
+}
+
+/** The content type at one end of the origin's readable versions, by one index seek. */
+function edgeContentType(
+  database: FeedDatabase,
+  originId: number,
+  order: typeof asc,
+) {
+  return database
+    .select({ type: feedOriginAtprotoDocuments.bodyContentType })
+    .from(feedOriginAtprotoDocuments)
+    .where(
+      and(
+        eq(feedOriginAtprotoDocuments.originId, originId),
+        isNotNull(feedOriginAtprotoDocuments.bodyContentType),
+      ),
+    )
+    .orderBy(order(feedOriginAtprotoDocuments.bodyContentType))
+    .limit(1);
+}
+
+/**
+ * The platform the origin's readable versions agree on: the content `$type`
+ * each was stored with, mapped through the adapter registry. `website` when
+ * they disagree or when nothing readable is retained. The lowest and highest
+ * types bound every other, so two index seeks decide it however long the
+ * history is; types between two that map to one platform are not consulted.
  */
 export async function atmospherePlatformOf(
   database: FeedDatabase,
   originId: number,
 ): Promise<ContentPlatform> {
-  const rows: Array<{ contentType: string | null }> = await database
+  const [edges] = await database
     .select({
-      contentType: sql<
+      lowest: sql<string | null>`(${edgeContentType(database, originId, asc)})`,
+      highest: sql<
         string | null
-      >`distinct json_extract(${feedOriginAtprotoDocumentSources.record}, '$.content."$type"')`,
+      >`(${edgeContentType(database, originId, desc)})`,
     })
-    .from(feedOriginAtprotoDocuments)
-    .innerJoin(
-      feedOriginAtprotoDocumentSources,
-      and(
-        eq(
-          feedOriginAtprotoDocumentSources.originId,
-          feedOriginAtprotoDocuments.originId,
-        ),
-        eq(
-          feedOriginAtprotoDocumentSources.uri,
-          feedOriginAtprotoDocuments.uri,
-        ),
-        eq(
-          feedOriginAtprotoDocumentSources.cid,
-          feedOriginAtprotoDocuments.bodyCid,
-        ),
-      ),
-    )
-    .where(eq(feedOriginAtprotoDocuments.originId, originId))
-    .limit(2);
-  const platforms = new Set<ContentPlatform>(
-    rows.map((row) => platformOfContentType(row.contentType)),
-  );
-  const [platform] = platforms;
-  return platforms.size === 1 && platform ? platform : CONTENT_PLATFORM.WEBSITE;
+    .from(feedOriginAtproto)
+    .where(eq(feedOriginAtproto.originId, originId));
+  if (!edges || edges.lowest === null || edges.highest === null)
+    return CONTENT_PLATFORM.WEBSITE;
+  const platform = platformOfContentType(edges.lowest);
+  return platform === platformOfContentType(edges.highest)
+    ? platform
+    : CONTENT_PLATFORM.WEBSITE;
 }
 
 /**
- * Recomputes a Feed's platform from its Atmosphere origin's retained sources.
+ * Recomputes a Feed's platform from its Atmosphere origin's readable versions.
  * The stored platform stands in for the RSS side: a video platform is left
  * alone, since RSS video wins over Atmosphere; otherwise the agreed Atmosphere
- * platform is written, `website` when the sources disagree or none exist.
+ * platform is written, `website` when the versions disagree or none exist.
  * Returns whether the stored platform changed.
  */
 export async function recomputeFeedPlatform(

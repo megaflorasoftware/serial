@@ -14,7 +14,9 @@ import {
   applyOriginMetadata,
   atmospherePlatformOf,
   recomputeFeedPlatform,
+  refreshOriginMetadata,
 } from "~/server/rss/originMetadata";
+import { recordContentType } from "~/server/jetstream/document-source";
 
 vi.mock("~/lib/semaphore", () => ({
   dbSemaphore: { run: <T>(fn: () => T) => fn() },
@@ -53,7 +55,10 @@ beforeEach(async () => {
 });
 afterEach(() => fixture.cleanup());
 
-/** One readable document version whose source carries the given content `$type`. */
+/**
+ * One document version whose source carries the given content `$type`. A
+ * readable version records that type on the ledger, as processing does.
+ */
 async function retain(
   rkey: string,
   contentType: string | null,
@@ -63,12 +68,18 @@ async function retain(
   } = {},
 ) {
   const cid = `cid-${rkey}`;
+  const readable = options.readable !== false;
   await fixture.database.insert(feedOriginAtprotoDocuments).values({
     originId: origin.id,
     uri: uri(rkey),
     cid,
     status: options.status ?? "ready",
-    bodyCid: options.readable === false ? null : cid,
+    bodyCid: readable ? cid : null,
+    bodyContentType: readable
+      ? recordContentType({
+          content: contentType ? { $type: contentType } : {},
+        })
+      : null,
   });
   await fixture.database.insert(feedOriginAtprotoDocumentSources).values({
     originId: origin.id,
@@ -142,6 +153,26 @@ it("falls back to website when the sources disagree or one is unregistered", asy
   );
 });
 
+it("counts a readable version that names no content type, unlike one with no readable body", async () => {
+  await retain("001", "pub.leaflet.content");
+  // Readable but untyped: an unknown platform, so the Feed is mixed.
+  await retain("002", null);
+  expect(await atmospherePlatformOf(fixture.database, origin.id)).toBe(
+    "website",
+  );
+});
+
+it("returns to the remaining platform when the disagreeing document is deleted", async () => {
+  await retain("001", "pub.leaflet.content");
+  await retain("002", "blog.pckt.content");
+  await fixture.database
+    .delete(feedOriginAtprotoDocuments)
+    .where(eq(feedOriginAtprotoDocuments.uri, uri("002")));
+  expect(await atmospherePlatformOf(fixture.database, origin.id)).toBe(
+    "leaflet",
+  );
+});
+
 it("ignores sources without a readable body", async () => {
   await retain("001", "pub.leaflet.content");
   await retain("002", "app.offprint.content", { readable: false });
@@ -208,6 +239,18 @@ it("leaves an RSS video platform alone", async () => {
     ),
   ).toBe(false);
   expect(await storedPlatform()).toBe("youtube");
+});
+
+it("leaves the platform to the Atmosphere side on an RSS metadata refresh", async () => {
+  await retain("001", "app.offprint.content");
+  expect(
+    await refreshOriginMetadata(
+      fixture.database,
+      { origin, feed },
+      { name: "Renamed by its feed", siteUrl: null },
+    ),
+  ).toBe(true);
+  expect(await storedPlatform()).toBe("website");
 });
 
 it("recomputes inside the origin metadata refresh and reports the change", async () => {

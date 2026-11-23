@@ -33,6 +33,15 @@ describe("platform adapter registry", () => {
     expect(platformOfContentType("at.markpub.markdown")).toBe("website");
   });
 
+  it("gives each platform one content type", () => {
+    // The Feed platform check compares only the lowest and highest content
+    // type an origin holds, which is exact while no two types share a platform.
+    const platforms = [...PLATFORM_ADAPTERS.values()].map(
+      (adapter) => adapter.platform,
+    );
+    expect(new Set(platforms).size).toBe(platforms.length);
+  });
+
   it("lists the pckt gallery as the one adapter reference collection", () => {
     expect(ADAPTER_REFERENCE_COLLECTIONS).toEqual(["blog.pckt.gallery"]);
   });

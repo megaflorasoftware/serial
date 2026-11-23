@@ -113,7 +113,14 @@ function paragraphText(paragraph: HtmlNode) {
   return text.trim();
 }
 
-/** Sanitize once and derive fallbacks from the same tree that produces the body. */
+/**
+ * Sanitize once and derive fallbacks from the same tree that produces the body.
+ *
+ * RSS ingest recognises an unchanged item by a digest of the parsed feed item,
+ * before this runs, so a change here does not reach observations already
+ * stored. Bump `RSS_DERIVATION` in the app's `server/rss/itemObservation.ts`
+ * when stored RSS observations should be derived again.
+ */
 export function sanitizeEmbeddedContent(html: string) {
   const parsed = embeddedProcessor.parse(html);
   // Sanitization unwraps unsupported `aside` elements. Keep their paragraph

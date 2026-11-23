@@ -4,7 +4,8 @@ export const MAX_PARSED_FEED_ITEMS = 200;
 export const MAX_ITEM_CONTENT_BYTES = 256 * 1024;
 export const MAX_ITEM_SNIPPET_BYTES = 32 * 1024;
 
-function truncateUtf8(value: string | undefined, maxBytes: number) {
+/** The longest whole-character prefix that fits the byte bound. */
+export function truncateUtf8(value: string | undefined, maxBytes: number) {
   if (!value) return value;
   const encoded = new TextEncoder().encode(value);
   if (encoded.byteLength <= maxBytes) return value;

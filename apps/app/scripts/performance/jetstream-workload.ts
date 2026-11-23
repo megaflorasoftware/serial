@@ -9,6 +9,7 @@ import {
   feedItems,
   feedOriginAtproto,
   feedOriginAtprotoDocuments,
+  feedOriginAtprotoDocumentSources,
   user,
 } from "~/server/db/schema";
 import { acceptBatch, ensureStream } from "~/server/jetstream/store";
@@ -96,6 +97,37 @@ export async function createJetstreamWorkload(
         postedAt: now,
       })),
     );
+  // The same history as retained documents: each a readable version with its
+  // source, all of one content type. Their keys sort below every listed one.
+  for (let offset = 0; offset < history; offset += 500) {
+    const versions = Array.from(
+      { length: Math.min(500, history - offset) },
+      (_, index) => ({
+        originId: origins[0]!,
+        uri: `at://${did}/site.standard.document/000-history-${offset + index}`,
+        cid: `history-${offset + index}`,
+      }),
+    );
+    // Bound fixture inserts to one batch in flight.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database.insert(feedOriginAtprotoDocuments).values(
+      versions.map((version) => ({
+        ...version,
+        status: "ready" as const,
+        bodyCid: version.cid,
+        bodyContentType: "pub.leaflet.content",
+      })),
+    );
+    // Sources reference the documents just inserted.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await database.insert(feedOriginAtprotoDocumentSources).values(
+      versions.map((version) => ({
+        ...version,
+        record: '{"content":{"$type":"pub.leaflet.content"}}',
+        createdAt: now,
+      })),
+    );
+  }
   let seq = 1;
   function event(): StreamEvent {
     return {

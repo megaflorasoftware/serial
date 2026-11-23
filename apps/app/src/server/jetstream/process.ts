@@ -38,6 +38,7 @@ import {
   OversizedDocumentSourceError,
   pruneDocumentSources,
   readStagedRecord,
+  recordContentType,
   stageDocumentSource,
   storeDocumentBlobs,
 } from "./document-source";
@@ -326,6 +327,9 @@ export async function processOriginDocuments(
             .set({
               status: "ready",
               bodyCid,
+              bodyContentType: readable
+                ? recordContentType(captured.value)
+                : entry.bodyContentType,
               reason: outcome.kind === "rejected" ? "adapter" : null,
               attempts: 0,
               retryAt: null,
@@ -360,8 +364,8 @@ export async function processOriginDocuments(
   })) {
     void unused;
   }
-  // The retained sources decide the Feed's platform; a batch that wrote nothing
-  // readable cannot have changed it.
+  // The readable versions' content types decide the Feed's platform; a batch
+  // that wrote nothing readable cannot have changed it.
   const platformChanged = committed.size
     ? await runDatabaseWrite(database, () =>
         database.transaction(
