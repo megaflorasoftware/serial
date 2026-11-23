@@ -4,7 +4,6 @@ import { initialOriginSchedule } from "./schedule";
 import type { db as defaultDatabase } from "~/server/db";
 import type {
   DatabaseFeed,
-  DatabaseFeedOrigin,
   DatabaseFeedWithCommonOrigins,
   DatabaseFeedWithOrigins,
   HydratedFeedOrigin,
@@ -226,33 +225,44 @@ export async function loadOriginsForFeeds(
   return chunks.flat().map(hydrateOrigin);
 }
 
+/** A user's Feed rows in id order, which their index by user already keeps. */
+function userFeedRows(database: FeedDatabase, userId: string) {
+  return database
+    .select()
+    .from(feeds)
+    .where(eq(feeds.userId, userId))
+    .orderBy(asc(feeds.id));
+}
+
+/**
+ * A user's common origin rows in id order. The database is asked for no order:
+ * its index by user keeps locator order, so it would sort the rows in a
+ * temporary b-tree and read each one twice.
+ */
+async function userOriginRows(database: FeedDatabase, userId: string) {
+  const rows = await database
+    .select()
+    .from(feedOrigins)
+    .where(eq(feedOrigins.userId, userId));
+  return rows.sort((left, right) => left.id - right.id);
+}
+
 /**
  * Every Feed a user owns with its common origin rows nested, ordered by Feed
  * id: the shape the application schema exposes. The protocol detail rows, with
- * their validators, stream state and Publication record, stay unread. One
- * left-joined statement so the reconciliation statement budget is unchanged;
- * a Feed with no origins still appears with an empty list.
+ * their validators, stream state and Publication record, stay unread. Feeds
+ * and origins are each read by user, a row read per Feed and one per origin,
+ * where joining them reads four per Feed. A Feed with no origins still appears
+ * with an empty list.
  */
 export async function loadUserFeedsWithOrigins(
   database: FeedDatabase,
   userId: string,
 ): Promise<DatabaseFeedWithCommonOrigins[]> {
-  const rows = await database
-    .select({ feed: feeds, origin: feedOrigins })
-    .from(feeds)
-    .leftJoin(feedOrigins, eq(feedOrigins.feedId, feeds.id))
-    .where(eq(feeds.userId, userId))
-    .orderBy(asc(feeds.id), asc(feedOrigins.id));
-  const feedRows: DatabaseFeed[] = [];
-  const seenFeedIds = new Set<number>();
-  const originRows: DatabaseFeedOrigin[] = [];
-  for (const row of rows) {
-    if (!seenFeedIds.has(row.feed.id)) {
-      seenFeedIds.add(row.feed.id);
-      feedRows.push(row.feed);
-    }
-    if (row.origin) originRows.push(row.origin);
-  }
+  const [feedRows, originRows] = await Promise.all([
+    userFeedRows(database, userId),
+    userOriginRows(database, userId),
+  ]);
   return attachOrigins(feedRows, originRows);
 }
 
