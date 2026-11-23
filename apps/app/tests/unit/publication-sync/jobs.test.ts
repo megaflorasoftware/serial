@@ -2,7 +2,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
+import type { SubscriptionListing } from "~/server/publication-sync/record-store";
 import { atprotoConnections, user } from "~/server/db/schema";
+import { listingDigest } from "~/server/publication-sync/check";
 import { persistAtprotoSyncSettings } from "~/server/auth/atproto/sync-settings";
 import {
   getPublicationSyncJob,
@@ -29,17 +31,33 @@ const completed = () => ({
   status: "completed" as const,
   exported: 1,
 });
+const subscription = (rkey: string, cid = `cid-${rkey}`) => ({
+  uri: `at://${did}/site.standard.graph.subscription/${rkey}`,
+  cid,
+  publicationUri: `at://${did}/site.standard.publication/${rkey}`,
+});
+const listed = (
+  ...records: Array<ReturnType<typeof subscription>>
+): SubscriptionListing => ({ records, invalidRecordUris: [] });
+/** A test that names no PDS answer must not reach the PDS. */
+const unasked = async (): Promise<never> => {
+  throw new Error("The check asked the PDS unexpectedly");
+};
 /** Jobs for an account whose refresh the client owns, unless a test says otherwise. */
 const runJobs = (
   sync: typeof syncPublicationSubscriptions,
   options: {
     background?: boolean;
     latestRev?: () => Promise<string | null>;
+    list?: () => Promise<SubscriptionListing>;
   } = {},
 ) =>
   runPublicationSyncJobs(fixture.database, sync, {
     refreshesInBackground: async () => options.background ?? false,
-    latestRev: options.latestRev,
+    remote: {
+      latestRev: options.latestRev ?? unasked,
+      list: options.list ?? unasked,
+    },
     announce,
   });
 const announce = vi.fn<(userId: string) => Promise<void>>(async () => {});
@@ -49,14 +67,18 @@ const connection = async () =>
     .from(atprotoConnections)
     .where(eq(atprotoConnections.id, "connection"))
     .get())!;
-/** A connection whose last run and backfill finished cleanly against `rev`, due for a check. */
-const dueWithCleanRun = async (rev = "rev-1") => {
+/**
+ * A connection whose last run and backfill finished cleanly against `rev` and
+ * the given listing, due for a check.
+ */
+const dueWithCleanRun = async (rev = "rev-1", listing = listed()) => {
   await save();
   await runJobs(async () => completed());
   await fixture.database
     .update(atprotoConnections)
     .set({
       subscriptionRepoRev: rev,
+      subscriptionListingDigest: listingDigest(listing),
       subscriptionBackfillStarted: true,
       subscriptionNextAttemptAt: new Date(0),
     })
@@ -367,14 +389,114 @@ it("leaves a client-owned account unscheduled after an idle check", async () => 
   await runJobs(vi.fn(), { latestRev: async () => "rev-1" });
   expect((await connection()).subscriptionNextAttemptAt).toBeNull();
 });
-it("runs when the repository revision changed, handing the engine what it read", async () => {
+it("runs when the subscriptions changed, handing the engine what it read", async () => {
+  await dueWithCleanRun("rev-1", listed(subscription("one")));
+  const sync = vi
+    .fn<typeof syncPublicationSubscriptions>()
+    .mockResolvedValue(completed());
+  const listing = listed(subscription("one"), subscription("two"));
+  await runJobs(sync, {
+    latestRev: async () => "rev-2",
+    list: async () => listing,
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(sync.mock.calls[0]![0].check).toEqual({
+    state: "due",
+    rev: "rev-2",
+    listing,
+  });
+});
+it("stores a moved revision in one write and claims nothing when the subscriptions did not change", async () => {
+  const listing = listed(subscription("one"), subscription("two"));
+  const before = await dueWithCleanRun("rev-1", listing);
+  const sync = vi.fn<typeof syncPublicationSubscriptions>();
+  const list = vi.fn(async () => listed(...[...listing.records].reverse()));
+  const update = vi.spyOn(fixture.database, "update");
+  const started = Date.now();
+  await runJobs(sync, {
+    background: true,
+    latestRev: async () => "rev-2",
+    list,
+  });
+  expect(sync).not.toHaveBeenCalled();
+  expect(list).toHaveBeenCalledTimes(1);
+  expect(update).toHaveBeenCalledTimes(1);
+  const after = await connection();
+  expect(after.subscriptionNextAttemptAt!.getTime()).toBeGreaterThanOrEqual(
+    started + REMOTE_CHANGE_CHECK_INTERVAL_MS,
+  );
+  // Only the revision and the schedule moved: no claim, no lease, no result.
+  expect(after).toEqual({
+    ...before,
+    subscriptionRepoRev: "rev-2",
+    subscriptionNextAttemptAt: after.subscriptionNextAttemptAt,
+  });
+});
+it.each([
+  ["a record was added", listed(subscription("one"), subscription("two"))],
+  ["a record was removed", listed()],
+  ["a record was rewritten", listed(subscription("one", "cid-edited"))],
+  [
+    "a record stopped parsing",
+    { records: [], invalidRecordUris: [subscription("one").uri] },
+  ],
+])("runs when %s under a moved revision", async (_change, listing) => {
+  await dueWithCleanRun("rev-1", listed(subscription("one")));
+  const sync = vi
+    .fn<typeof syncPublicationSubscriptions>()
+    .mockResolvedValue(completed());
+  await runJobs(sync, {
+    latestRev: async () => "rev-2",
+    list: async () => listing,
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect((await connection()).subscriptionRepoRev).toBe("rev-1");
+});
+it("leaves a listing it cannot read for the run to read", async () => {
   await dueWithCleanRun();
   const sync = vi
     .fn<typeof syncPublicationSubscriptions>()
     .mockResolvedValue(completed());
-  await runJobs(sync, { latestRev: async () => "rev-2" });
-  expect(sync).toHaveBeenCalledTimes(1);
+  await runJobs(sync, {
+    latestRev: async () => "rev-2",
+    list: async () => {
+      throw new Error("page failed");
+    },
+  });
   expect(sync.mock.calls[0]![0].check).toEqual({ state: "due", rev: "rev-2" });
+});
+it("runs a connection upgraded with a revision and no listing digest", async () => {
+  await dueWithCleanRun();
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionListingDigest: null });
+  const sync = vi
+    .fn<typeof syncPublicationSubscriptions>()
+    .mockResolvedValue(completed());
+  await runJobs(sync, {
+    latestRev: async () => "rev-2",
+    list: async () => listed(),
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+});
+it("does not store a moved revision over a request made while the check read the listing", async () => {
+  await dueWithCleanRun();
+  const requestedAt = new Date();
+  await runJobs(vi.fn(), {
+    background: true,
+    latestRev: async () => "rev-2",
+    list: async () => {
+      await fixture.database.update(atprotoConnections).set({
+        subscriptionNextAttemptAt: requestedAt,
+        subscriptionRepoRev: null,
+      });
+      return listed();
+    },
+  });
+  expect(await connection()).toMatchObject({
+    subscriptionNextAttemptAt: requestedAt,
+    subscriptionRepoRev: null,
+  });
 });
 it("runs a cleared revision in full without asking the PDS first", async () => {
   await save();

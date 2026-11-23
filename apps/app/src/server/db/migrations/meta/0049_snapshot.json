@@ -324,6 +324,21 @@
           "notNull": false,
           "autoincrement": false
         },
+        "subscription_write_failures": {
+          "name": "subscription_write_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "subscription_write_retry_at": {
+          "name": "subscription_write_retry_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "subscription_job_token": {
           "name": "subscription_job_token",
           "type": "text",
@@ -361,6 +376,13 @@
         },
         "subscription_repo_rev": {
           "name": "subscription_repo_rev",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subscription_listing_digest": {
+          "name": "subscription_listing_digest",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

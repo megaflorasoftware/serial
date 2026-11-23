@@ -4,6 +4,7 @@ import type { AtprotoSyncPreferences } from "~/lib/auth/atproto-sync-settings";
 import {
   FULL_RECONCILE,
   newPublicationSyncRequest,
+  RETRY_REFUSED_WRITES,
 } from "~/server/publication-sync/requests";
 import { syncSettingsFromPreferences } from "~/lib/auth/atproto-sync-settings";
 import { atprotoConnections } from "~/server/db/schema";
@@ -26,6 +27,7 @@ export async function persistAtprotoSyncSettings(
         preferences.importSubscriptions || preferences.exportSubscriptions,
       ),
       ...FULL_RECONCILE,
+      ...RETRY_REFUSED_WRITES,
       subscriptionImportGeneration: preferences.importSubscriptions
         ? sql`case when ${atprotoConnections.importSubscriptions} = 0 then ${atprotoConnections.subscriptionImportGeneration} + 1 else ${atprotoConnections.subscriptionImportGeneration} end`
         : atprotoConnections.subscriptionImportGeneration,

@@ -15,7 +15,14 @@ export function publicationSyncBudget(
     check: { requests: 1, statements: 2, rows: 1 },
     // The same, however many imports wait for their retry time.
     waiting: { requests: 1, statements: 2, rows: 1 },
-    // Claim, mirror, local origins, cursor and release.
-    requested: { requests: 2, statements: 8, rows: publications * 2 + 5 },
+    // The same two statements, with one listing beside the revision read.
+    moved: { requests: 2, statements: 2, rows: 1 },
+    // The check's revision and listing, the run's second revision read, and
+    // one rewritten subscription's observation. Both counts are the measured
+    // ones, with no headroom to hide a later statement in.
+    changed: { requests: 3, statements: 15, rows: publications * 2 + 5 },
+    // Claim, mirror, local origins, cursor and release. The listing sits
+    // between two revision reads.
+    requested: { requests: 3, statements: 8, rows: publications * 2 + 5 },
   }[operation];
 }

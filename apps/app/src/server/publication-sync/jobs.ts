@@ -4,7 +4,7 @@ import { checkPublicationSync, earliest, syncCheckColumns } from "./check";
 import { nextPublicationSyncAttempt } from "./requests";
 import { scheduleUnchangedSince } from "./state";
 import { throttleWithTrailing } from "./throttle";
-import type { LatestRev, SyncCheckRow } from "./check";
+import type { SubscriptionRemote, SyncCheckRow } from "./check";
 import type { syncPublicationSubscriptions } from "./engine";
 import type { db } from "~/server/db";
 import type {
@@ -81,7 +81,8 @@ export async function getPublicationSyncJob(
 
 type Account = { id: string; role: string | null };
 type JobDependencies = {
-  latestRev?: LatestRev;
+  /** What a check asks the PDS. */
+  remote?: SubscriptionRemote;
   /** Whether the account's Feed refresh, and so its recurring check, runs in the background. */
   refreshesInBackground?: (account: Account) => Promise<boolean>;
   /** Tells the user's open clients that the persisted status changed. */
@@ -187,17 +188,20 @@ export async function runPublicationSyncJobs(
   /**
    * A check that found nothing to do costs this one guarded write and no
    * claim. A request the user started ends here too, with `outcome` to show.
+   * `rev` is a newer revision whose listing the last run already saw.
    */
   const settleUnclaimed = async (
     job: DueJob,
     next: Date | null,
     outcome: PublicationSyncResult["status"],
+    rev?: string,
   ) => {
     const visible = requestInFlight(job);
     const settled = await database
       .update(connections)
       .set({
         subscriptionNextAttemptAt: next,
+        ...(rev === undefined ? {} : { subscriptionRepoRev: rev }),
         ...(visible
           ? {
               subscriptionJobResult: accumulatedResult(job.result, {
@@ -225,7 +229,7 @@ export async function runPublicationSyncJobs(
   let continued = false;
   for await (const again of workerPool(rows, JOB_CONCURRENCY, async (row) => {
     // A check that cannot decide must not hold up the rest of the page.
-    const check = await checkPublicationSync(row, dependencies.latestRev).catch(
+    const check = await checkPublicationSync(row, dependencies.remote).catch(
       (error: unknown) => {
         logError("[publication-sync] check failed", error);
         return { state: "due" } as const;
@@ -240,6 +244,7 @@ export async function runPublicationSyncJobs(
         row,
         earliest(await nextRemoteChangeCheck(row), check.retryAt),
         "completed",
+        check.rev,
       );
       return false;
     }

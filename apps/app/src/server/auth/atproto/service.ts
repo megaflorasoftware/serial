@@ -532,10 +532,13 @@ export async function unlinkAtprotoConnection(userId: string): Promise<void> {
       .set({
         userId: null,
         subscriptionRepoRev: null,
+        subscriptionListingDigest: null,
         subscriptionSyncCursor: null,
         subscriptionRequestId: null,
         subscriptionNextAttemptAt: null,
         subscriptionRetryAt: null,
+        subscriptionWriteFailures: 0,
+        subscriptionWriteRetryAt: null,
         subscriptionJobToken: null,
         subscriptionJobExpiresAt: null,
         subscriptionJobProgress: null,

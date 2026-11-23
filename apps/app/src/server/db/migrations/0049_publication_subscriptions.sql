@@ -217,6 +217,7 @@ CREATE TABLE `serial_atproto_subscription_mirror` (
 --> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_sync_cursor` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_repo_rev` text;--> statement-breakpoint
+ALTER TABLE `serial_atproto_connections` ADD `subscription_listing_digest` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_import_generation` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_export_generation` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_sync_token` text;--> statement-breakpoint
@@ -243,6 +244,8 @@ ALTER TABLE `serial_atproto_connections` ADD `subscription_backfill_next_attempt
 ALTER TABLE `serial_atproto_connections` ADD `subscription_request_id` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_next_attempt_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_retry_at` integer;--> statement-breakpoint
+ALTER TABLE `serial_atproto_connections` ADD `subscription_write_failures` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE `serial_atproto_connections` ADD `subscription_write_retry_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_token` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_expires_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_job_progress` text;--> statement-breakpoint

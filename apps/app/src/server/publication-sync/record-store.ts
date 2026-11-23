@@ -16,14 +16,16 @@ export type SubscriptionRecord = {
   cid: string;
   publicationUri: string;
 };
+/** The subscription collection as the PDS lists it: what parses, and what does not. */
+export type SubscriptionListing = {
+  records: SubscriptionRecord[];
+  invalidRecordUris: string[];
+};
 /** Subscription transport is independent of sync policy and persistence. */
 export interface SubscriptionRecordStore {
   visibility: "public" | "private";
   latestRev: () => Promise<string | null>;
-  list: () => Promise<{
-    records: SubscriptionRecord[];
-    invalidRecordUris: string[];
-  }>;
+  list: () => Promise<SubscriptionListing>;
   create: (publicationUri: string) => Promise<SubscriptionRecord>;
   remove: (record: SubscriptionRecord) => Promise<void>;
 }

@@ -1,8 +1,13 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { nextPublicationSyncAttempt } from "./requests";
+import { nextPublicationSyncAttempt, RETRY_REFUSED_WRITES } from "./requests";
 import { nextRetryAt } from "./retry";
 import { backfillPublicationOrigins } from "./backfill";
-import { checkPublicationSync, earliest, syncCheckColumns } from "./check";
+import {
+  checkPublicationSync,
+  earliest,
+  listingDigest,
+  syncCheckColumns,
+} from "./check";
 import { planPublicationSync } from "./plan";
 import { saveSubscriptionObservation } from "./observation";
 import {
@@ -17,13 +22,14 @@ import {
   SubscriptionSyncChangedError,
   syncClaimCondition,
 } from "./state";
-import type { SyncCheck } from "./check";
+import type { SyncCheck, SyncCheckRow } from "./check";
 import type {
   SubscriptionRecord,
   SubscriptionRecordStore,
 } from "./record-store";
 import type { db as Database } from "~/server/db";
 import type {
+  DatabaseAtprotoConnection,
   DatabaseFeedWithOrigins,
   DatabaseSubscriptionMirror,
 } from "~/server/db/schema";
@@ -69,8 +75,6 @@ function groupByPublication<T extends { publicationUri: string }>(rows: T[]) {
 }
 /** The same bound Add gives a new Feed's first fetch. */
 const FIRST_FETCH_TIMEOUT_MS = 15_000;
-/** How long a failed export or remote removal waits before it is tried again. */
-const FAILED_WRITE_RETRY_MS = 60 * 60 * 1000;
 
 /** The PDS did not take a subscription write. The write is still owed. */
 class SubscriptionWriteError extends Error {}
@@ -124,6 +128,84 @@ async function resolveImportedFeed(userId: string, publicationUri: string) {
   return details;
 }
 
+type WriteRetries = Pick<
+  DatabaseAtprotoConnection,
+  "subscriptionWriteFailures" | "subscriptionWriteRetryAt"
+>;
+
+/**
+ * Subscription writes the PDS refuses share one wait on the connection, on
+ * the shared retry rule. A pass that meets a refusal counts one failure and
+ * sets the time of the next attempt. Until that time a pass leaves owed writes
+ * alone, whatever started it, so only waits that were served are counted.
+ * Once the retries run out the writes wait for the count to start over.
+ */
+function refusedWriteRetries(connection: WriteRetries, now = new Date()) {
+  const failures = connection.subscriptionWriteFailures;
+  const retryAt = connection.subscriptionWriteRetryAt;
+  // Only these two columns: the caller hands in a whole connection row.
+  const stored: WriteRetries = {
+    subscriptionWriteFailures: failures,
+    subscriptionWriteRetryAt: retryAt,
+  };
+  /** The retries ran out: a count with no time left to wait for. */
+  const stopped = failures > 0 && retryAt === null;
+  const waitsUntil = retryAt !== null && retryAt > now ? retryAt : null;
+  let leftOwed = false;
+  let refusal: WriteRetries | undefined;
+  return {
+    /** Why this pass attempts no write, or null when it may. */
+    held: stopped
+      ? ({ stopped: true } as const)
+      : waitsUntil && ({ stopped: false, until: waitsUntil } as const),
+    /** An owed write this pass left unattempted. */
+    leaveOwed() {
+      leftOwed = true;
+    },
+    /** The PDS refused a write. Resolves to when the next attempt may run. */
+    refuse() {
+      refusal ??= {
+        subscriptionWriteFailures: failures + 1,
+        subscriptionWriteRetryAt: nextRetryAt(failures + 1),
+      };
+      return refusal.subscriptionWriteRetryAt;
+    },
+    /**
+     * What the connection stores after the pass: one more failure, nothing
+     * once a whole pass owed no write, and otherwise what it held.
+     */
+    finished(sawEveryPublication: boolean): WriteRetries {
+      if (refusal) return refusal;
+      return sawEveryPublication && !leftOwed ? RETRY_REFUSED_WRITES : stored;
+    },
+  };
+}
+
+/**
+ * The listing at `rev` is the one the last finished run saw, so only the
+ * revision is new. The write lands while the revision the check compared
+ * against still stands: a Feed change, a settings save or a run replaces it.
+ */
+async function saveCheckedRev(
+  database: typeof Database,
+  checked: Pick<SyncCheckRow, "id" | "subscriptionRepoRev">,
+  rev: string,
+) {
+  await database
+    .update(atprotoConnections)
+    .set({ subscriptionRepoRev: rev })
+    .where(
+      and(
+        eq(atprotoConnections.id, checked.id),
+        // A check only compares a listing against a stored revision.
+        eq(
+          atprotoConnections.subscriptionRepoRev,
+          checked.subscriptionRepoRev!,
+        ),
+      ),
+    );
+}
+
 export async function syncPublicationSubscriptions(input: {
   database: typeof Database;
   userId: string;
@@ -143,19 +225,30 @@ export async function syncPublicationSubscriptions(input: {
   const { database, userId } = input;
   const counts = emptyPublicationSyncCounts();
   const injectedStore = input.dependencies?.store;
-  const check =
-    input.check ??
-    (await checkPublicationSync(
-      await database
+  const checked = input.check
+    ? undefined
+    : await database
         .select(syncCheckColumns)
         .from(atprotoConnections)
         .where(eq(atprotoConnections.userId, userId))
-        .get(),
-      injectedStore && (() => injectedStore.latestRev()),
+        .get();
+  const check =
+    input.check ??
+    (await checkPublicationSync(
+      checked,
+      injectedStore && {
+        latestRev: () => injectedStore.latestRev(),
+        list: () => injectedStore.list(),
+      },
     ));
   if (check.state === "disabled") return { ...counts, status: "skipped" };
-  // Nothing changed on either side: no claim, no reads, no writes.
-  if (check.state === "current") return { ...counts, status: "completed" };
+  // Nothing changed on either side: no claim and no reads. A revision that
+  // moved under an unchanged listing costs the one write that stores it.
+  if (check.state === "current") {
+    if (checked && check.rev !== undefined)
+      await saveCheckedRev(database, checked, check.rev);
+    return { ...counts, status: "completed" };
+  }
   const connection = await claimSubscriptionSync(database, userId);
   if (!connection) return { ...counts, status: "busy" };
   const store =
@@ -229,6 +322,10 @@ export async function syncPublicationSubscriptions(input: {
     )(database, connection);
     changedFeeds = backfill.attached > 0;
     retryAt = backfill.retryAt ?? null;
+    // An origin backfill attached is a new export to make, like a Feed change.
+    const writeRetries = refusedWriteRetries(
+      backfill.attached > 0 ? RETRY_REFUSED_WRITES : connection,
+    );
     const [previous, localOrigins, rev] = await Promise.all([
       database
         .select()
@@ -270,7 +367,12 @@ export async function syncPublicationSubscriptions(input: {
             })),
           invalidRecordUris: [],
         }
-      : await store.list();
+      : // The check read the listing after this revision; one read serves both.
+        (check.listing ?? (await store.list()));
+    // A cached snapshot is the listing the stored digest already describes.
+    const snapshotDigest = cached
+      ? connection.subscriptionListingDigest
+      : listingDigest(snapshot);
     const invalidUris = new Set(snapshot.invalidRecordUris);
     const invalidPublications = new Set(
       previous
@@ -405,6 +507,17 @@ export async function syncPublicationSubscriptions(input: {
           await progress(index + 1, publications.length);
           continue;
         }
+        const writesRecord = action === "export" || action === "remove-remote";
+        if (writesRecord && writeRetries.held) {
+          writeRetries.leaveOwed();
+          if (writeRetries.held.stopped) counts.skipped++;
+          else {
+            counts.deferred++;
+            awaitRetry(writeRetries.held.until);
+          }
+          await progress(index + 1, publications.length);
+          continue;
+        }
         await renewSubscriptionSync(database, connection);
         let prepared: PreparedFeedImport | undefined;
         let maxActiveFeeds = 0;
@@ -418,7 +531,7 @@ export async function syncPublicationSubscriptions(input: {
           )(database, userId);
           maxActiveFeeds = budget.maxActiveFeeds;
         }
-        if (action === "export" || action === "remove-remote") {
+        if (writesRecord) {
           await assertSubscriptionSyncCurrent(database, connection, true);
           // A Feed may have been deleted while reading the PDS listing.
           const current = await database
@@ -552,7 +665,8 @@ export async function syncPublicationSubscriptions(input: {
           // The export or removal waits its turn like a failed import, so the
           // checks in between stay idle instead of each retrying the write.
           counts.failed++;
-          awaitRetry(new Date(Date.now() + FAILED_WRITE_RETRY_MS));
+          const retryWriteAt = writeRetries.refuse();
+          if (retryWriteAt) awaitRetry(retryWriteAt);
         } else {
           counts.failed++;
           mustReconcile = true;
@@ -576,17 +690,33 @@ export async function syncPublicationSubscriptions(input: {
     // part of that snapshot: the same revision yields it again.
     const finishedRev =
       mustReconcile || !observedCompleteSnapshot || wroteRecords ? null : rev;
+    // The digest describes the listing at the stored revision and means
+    // nothing without one, so a pass that stores none leaves it alone.
+    const finishedDigest =
+      finishedRev === null
+        ? connection.subscriptionListingDigest
+        : snapshotDigest;
+    const finishedWrites = writeRetries.finished(
+      observedCompleteSnapshot && !mustReconcile,
+    );
     if (
       cursor !== connection.subscriptionSyncCursor ||
       finishedRev !== connection.subscriptionRepoRev ||
-      waitingRetryAt?.getTime() !== connection.subscriptionRetryAt?.getTime()
+      finishedDigest !== connection.subscriptionListingDigest ||
+      waitingRetryAt?.getTime() !== connection.subscriptionRetryAt?.getTime() ||
+      finishedWrites.subscriptionWriteFailures !==
+        connection.subscriptionWriteFailures ||
+      finishedWrites.subscriptionWriteRetryAt?.getTime() !==
+        connection.subscriptionWriteRetryAt?.getTime()
     )
       await database
         .update(atprotoConnections)
         .set({
           subscriptionSyncCursor: cursor,
           subscriptionRepoRev: finishedRev,
+          subscriptionListingDigest: finishedDigest,
           subscriptionRetryAt: waitingRetryAt,
+          ...finishedWrites,
         })
         .where(
           and(

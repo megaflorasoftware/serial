@@ -11,6 +11,16 @@ import { atprotoConnections, feedOrigins } from "~/server/db/schema";
  */
 export const FULL_RECONCILE = { subscriptionRepoRev: null } as const;
 
+/**
+ * A Feed the user changed, settings the user saved and an origin backfill
+ * attached are a reason to try again. The retries of a subscription write the
+ * PDS refused start over, with no wait left to serve.
+ */
+export const RETRY_REFUSED_WRITES = {
+  subscriptionWriteFailures: 0,
+  subscriptionWriteRetryAt: null,
+} as const;
+
 export function newPublicationSyncRequest(enabled: boolean) {
   return {
     subscriptionRequestId: randomUUID(),
@@ -45,7 +55,11 @@ export async function requestSyncForFeedChange(
   if (!feedIds.length) return false;
   const requested = await database
     .update(atprotoConnections)
-    .set({ subscriptionNextAttemptAt: new Date(), ...FULL_RECONCILE })
+    .set({
+      subscriptionNextAttemptAt: new Date(),
+      ...FULL_RECONCILE,
+      ...RETRY_REFUSED_WRITES,
+    })
     .where(
       and(
         syncEnabledFor(userId),

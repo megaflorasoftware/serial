@@ -1290,6 +1290,22 @@ export const atprotoConnections = sqliteTable(
     subscriptionRetryAt: integer("subscription_retry_at", {
       mode: "timestamp_ms",
     }),
+    /**
+     * Retries in a row in which the PDS refused a subscription write. It sets
+     * the wait before the next retry and ends retries once they run out. A
+     * Feed change, a settings save or a backfill attach starts it again.
+     */
+    subscriptionWriteFailures: integer("subscription_write_failures")
+      .notNull()
+      .default(0),
+    /**
+     * When a refused subscription write may next be attempted. Until then a
+     * run leaves owed writes alone, whatever started it. Empty beside a
+     * count means the retries ran out and the writes wait for a reset.
+     */
+    subscriptionWriteRetryAt: integer("subscription_write_retry_at", {
+      mode: "timestamp_ms",
+    }),
     subscriptionJobToken: text("subscription_job_token"),
     subscriptionJobExpiresAt: integer("subscription_job_expires_at", {
       mode: "timestamp_ms",
@@ -1307,6 +1323,12 @@ export const atprotoConnections = sqliteTable(
     }).$type<PublicationSyncResult>(),
     subscriptionSyncCursor: text("subscription_sync_cursor"),
     subscriptionRepoRev: text("subscription_repo_rev"),
+    /**
+     * Digest of the subscription listing read at `subscriptionRepoRev`. A
+     * check whose revision moved compares the listing against it, so only a
+     * changed listing starts a run.
+     */
+    subscriptionListingDigest: text("subscription_listing_digest"),
     subscriptionImportGeneration: integer("subscription_import_generation")
       .notNull()
       .default(0),
