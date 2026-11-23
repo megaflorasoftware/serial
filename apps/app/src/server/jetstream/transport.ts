@@ -35,6 +35,8 @@ import type { StreamBatch } from "./protocol";
 import { isLegacyJetstream } from "~/lib/jetstream-endpoint";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
+/** Past this the socket stops reading, so the host holds what it has not sent. */
+const PAUSE_BUFFER_BYTES = MAX_BUFFER_BYTES / 2;
 const MAX_STASHED_RECORDS = 4096;
 
 /**
@@ -167,6 +169,9 @@ export function liveTransport(
           fail(new StreamFailure("live-buffer"));
           return;
         }
+        // A reader that falls behind slows the host down instead of losing
+        // the buffer to the failure above.
+        if (bytes > PAUSE_BUFFER_BYTES) socket.pause();
         onFrame?.(message);
         queue.push(message);
         wake();
@@ -180,6 +185,7 @@ export function liveTransport(
           const next = queue.shift();
           if (next !== undefined) {
             bytes -= Buffer.byteLength(next);
+            if (socket.isPaused && bytes <= PAUSE_BUFFER_BYTES) socket.resume();
             yield next;
             continue;
           }

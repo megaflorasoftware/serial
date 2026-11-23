@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createStreamTransport,
+  liveTransport,
   retryStream,
 } from "~/server/jetstream/transport";
 import { createStreamReporter } from "~/server/jetstream/report";
@@ -467,6 +468,41 @@ it("carries lossless record text on decoded live commits", async () => {
       });
       break;
     }
+  } finally {
+    controller.abort();
+    for (const socket of sockets.clients) socket.terminate();
+    await new Promise<void>((resolve) =>
+      sockets.close(() => server.close(() => resolve())),
+    );
+  }
+});
+
+it("slows a host that outpaces its reader instead of overflowing the buffer", async () => {
+  const server = createServer();
+  const sockets = new WebSocketServer({ server });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error();
+  // 12 MiB at once, past the 8 MiB the transport buffers.
+  const frame = "x".repeat(64 * 1024);
+  const frames = 192;
+  sockets.on("connection", (socket) => {
+    for (let index = 0; index < frames; index++) socket.send(frame);
+  });
+  const controller = new AbortController();
+  let received = 0;
+  try {
+    for await (const message of liveTransport(true).stream(
+      () => `ws://127.0.0.1:${address.port}`,
+      controller.signal,
+    )) {
+      // The reader starts late: by then the host has sent all the socket takes.
+      if (received === 0)
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(message).toHaveLength(frame.length);
+      if (++received === frames) break;
+    }
+    expect(received).toBe(frames);
   } finally {
     controller.abort();
     for (const socket of sockets.clients) socket.terminate();

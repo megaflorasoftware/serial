@@ -230,6 +230,15 @@ export async function refreshStreamOrigin(
   };
 }
 
+/** Whether any Feed here follows the Atmosphere. */
+async function followsAtmosphere(database: StreamDatabase) {
+  const tracked = await database
+    .select({ id: feedOriginAtproto.originId })
+    .from(feedOriginAtproto)
+    .limit(1);
+  return tracked.length > 0;
+}
+
 export async function startStreamWorker(
   database: StreamDatabase,
   shutdown: AbortSignal,
@@ -238,13 +247,21 @@ export async function startStreamWorker(
   let configured: Awaited<ReturnType<typeof configuration>> | undefined;
   let retries = 0;
   while (!shutdown.aborted && !configured) {
+    let operation = "origins";
     try {
+      // An instance that follows nothing on the Atmosphere never contacts the
+      // stream host, and holds no lease.
+      if (!(await followsAtmosphere(database))) {
+        await delay(10_000, undefined, { signal: shutdown }).catch(() => {});
+        continue;
+      }
+      operation = "configuration";
       configured = await configuration();
     } catch (error) {
       createStreamReporter(
         normalizeService(env.ATPROTO_JETSTREAM_ENDPOINT),
         shutdown,
-      )(error, "configuration");
+      )(error, operation);
       await retryStream(error, retries++, shutdown).catch(() => {});
     }
   }
@@ -304,6 +321,15 @@ export async function startStreamWorker(
     return ensureStream(database, service);
   }
 
+  /** A write the loop outlives: its failure is reported and the next connection redoes it. */
+  async function settle(operation: string, write: () => Promise<unknown>) {
+    try {
+      await write();
+    } catch (error) {
+      config.transport.report(error, operation);
+    }
+  }
+
   async function consume() {
     let attempt = 0;
     while (!shutdown.aborted) {
@@ -334,11 +360,7 @@ export async function startStreamWorker(
             connection.abort();
           });
         }, HEARTBEAT_INTERVAL_MS);
-        const tracked = await database
-          .select({ id: feedOriginAtproto.originId })
-          .from(feedOriginAtproto)
-          .limit(1);
-        if (!tracked.length) {
+        if (!(await followsAtmosphere(database))) {
           await delay(10_000, undefined, { signal });
           continue;
         }
@@ -386,7 +408,9 @@ export async function startStreamWorker(
         config.transport.report(error, "consumer");
         if (error instanceof StreamFailure && error.status === 400)
           // The rejected cursor left a gap that only each origin's refresh fills.
-          await declareStreamGap(database, owner, new Date());
+          await settle("gap", () =>
+            declareStreamGap(database, owner, new Date()),
+          );
         // Any other outage leaves the origins alone. The next connection
         // replays from the checkpoint, and polling could not reach this host
         // either.
@@ -394,7 +418,8 @@ export async function startStreamWorker(
       } finally {
         if (heartbeat) clearInterval(heartbeat);
         connection.abort();
-        await disconnectStream(database, owner);
+        // A release that fails is made again when the next connection ends.
+        await settle("lease", () => disconnectStream(database, owner));
       }
     }
   }
