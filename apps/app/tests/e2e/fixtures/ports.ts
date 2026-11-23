@@ -84,3 +84,5 @@ export const PUBLICATIONS_PDS_PORT = getPort(
   "SERIAL_TEST_PUBLICATIONS_PDS_PORT",
   3014,
 );
+
+// temporary: forces the e2e jobs to run for the libsql-server pin check
