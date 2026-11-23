@@ -538,6 +538,7 @@ export async function unlinkAtprotoConnection(userId: string): Promise<void> {
         subscriptionNextAttemptAt: null,
         subscriptionRetryAt: null,
         subscriptionWriteFailures: 0,
+        subscriptionWriteRetryAt: null,
         subscriptionJobToken: null,
         subscriptionJobExpiresAt: null,
         subscriptionJobProgress: null,

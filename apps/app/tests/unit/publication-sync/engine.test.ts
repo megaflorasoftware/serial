@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type {
   SubscriptionRecord,
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
+import type { backfillPublicationOrigins } from "~/server/publication-sync/backfill";
 import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import { runPublicationSyncJobs } from "~/server/publication-sync/jobs";
 import { listingDigest } from "~/server/publication-sync/check";
@@ -57,11 +58,12 @@ let fetchCreatedFeed: ReturnType<
   typeof vi.fn<(database: unknown, feed: { id: number }) => Promise<void>>
 >;
 let maxActiveFeeds: number;
-const run = () =>
+const run = (backfill?: typeof backfillPublicationOrigins) =>
   syncPublicationSubscriptions({
     database: fixture.database,
     userId: "owner",
     dependencies: {
+      ...(backfill ? { backfill } : {}),
       store,
       resolveFeed: (userId, uri) => resolveFeed(userId, uri),
       fetchCreatedFeed: (database, feed) => fetchCreatedFeed(database, feed),
@@ -92,7 +94,10 @@ const method = (
     fixture.database,
   );
 
-/** Time passes: every waiting import retry falls due, in the mirror and on the connection. */
+/**
+ * Time passes: every waiting retry falls due, in the mirror and on the
+ * connection. Stopped writes have no time to fall due.
+ */
 const makeRetriesDue = async () => {
   await fixture.database
     .update(atprotoSubscriptionMirror)
@@ -100,6 +105,10 @@ const makeRetriesDue = async () => {
   await fixture.database
     .update(atprotoConnections)
     .set({ subscriptionRetryAt: new Date(0) });
+  await fixture.database
+    .update(atprotoConnections)
+    .set({ subscriptionWriteRetryAt: new Date(0) })
+    .where(isNotNull(atprotoConnections.subscriptionWriteRetryAt));
 };
 
 beforeEach(async () => {
@@ -1006,6 +1015,10 @@ describe("failures that end or wait", () => {
     const wait = waiting.subscriptionRetryAt!.getTime() - before;
     expect(wait).toBeGreaterThanOrEqual(60_000);
     expect(wait).toBeLessThan(2 * 60_000);
+    // The write's own time is what the connection waits for.
+    expect(waiting.subscriptionWriteRetryAt).toEqual(
+      waiting.subscriptionRetryAt,
+    );
     // Until the wait passes a check finds nothing to do and attempts no write.
     expect(await run()).toMatchObject({ status: "completed", exported: 0 });
     expect(store.create).toHaveBeenCalledTimes(1);
@@ -1024,6 +1037,7 @@ describe("failures that end or wait", () => {
     expect(await stored()).toMatchObject({
       subscriptionRetryAt: null,
       subscriptionWriteFailures: 0,
+      subscriptionWriteRetryAt: null,
     });
   });
 
@@ -1052,6 +1066,17 @@ describe("failures that end or wait", () => {
       const delay = retryAt.getTime() - before;
       delays.push(Math.round(delay / 60_000));
       waited += delay;
+      // A pass that starts inside the wait serves none of it.
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      await fixture.database
+        .update(atprotoConnections)
+        .set({ subscriptionRepoRev: null });
+      const attempted = create.mock.calls.length;
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      expect(await run()).toMatchObject({ deferred: 1, failed: 0 });
+      expect(create).toHaveBeenCalledTimes(attempted);
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      expect((await stored()).subscriptionWriteFailures).toBe(delays.length);
       // oxlint-disable-next-line react-doctor/async-await-in-loop
       await makeRetriesDue();
     }
@@ -1068,6 +1093,7 @@ describe("failures that end or wait", () => {
       subscriptionRepoRev: "1",
       subscriptionRetryAt: null,
       subscriptionWriteFailures: attempts,
+      subscriptionWriteRetryAt: null,
     });
     expect(await run()).toMatchObject({ status: "completed" });
     // A run another app's change starts leaves the owed export unattempted.
@@ -1091,9 +1117,11 @@ describe("failures that end or wait", () => {
       2 * 60_000,
     );
     // So does saving the connection settings.
-    await fixture.database
-      .update(atprotoConnections)
-      .set({ subscriptionWriteFailures: attempts, subscriptionRetryAt: null });
+    await fixture.database.update(atprotoConnections).set({
+      subscriptionWriteFailures: attempts,
+      subscriptionWriteRetryAt: null,
+      subscriptionRetryAt: null,
+    });
     await method("export");
     refused = false;
     expect(await run()).toMatchObject({ exported: 1, failed: 0 });
@@ -1148,10 +1176,190 @@ describe("failures that end or wait", () => {
       .mockRejectedValueOnce(new Error("PDS write failed"));
     expect(await run()).toMatchObject({ failed: 1, removed: 0 });
     expect(records).toHaveLength(1);
-    expect((await stored()).subscriptionRepoRev).toBeNull();
-    // A cleared revision lists the repository and removes what is left.
+    expect(await stored()).toMatchObject({
+      subscriptionRepoRev: null,
+      subscriptionWriteFailures: 2,
+    });
+    // A cleared revision lists the repository at once, and the removal that
+    // is left still waits for its own time.
+    vi.mocked(store.remove).mockClear();
+    expect(await run()).toMatchObject({ deferred: 1, removed: 0 });
+    expect(store.list).toHaveBeenCalled();
+    expect(store.remove).not.toHaveBeenCalled();
+    expect((await stored()).subscriptionWriteFailures).toBe(2);
+    await makeRetriesDue();
     expect(await run()).toMatchObject({ removed: 1 });
     expect(records).toHaveLength(0);
     expect(await fixture.database.select().from(feeds)).toHaveLength(0);
+  });
+
+  describe("a refused export waiting for its time", () => {
+    /** The PDS refused the export of "one": one failure, a minute to wait. */
+    const refuseExport = async (sync: "export" | "bidirectional") => {
+      await addLocal("one");
+      await method(sync);
+      vi.mocked(store.create).mockRejectedValueOnce(
+        new Error("PDS write failed"),
+      );
+      expect(await run()).toMatchObject({ failed: 1, exported: 0 });
+      return stored();
+    };
+    /** The pass that follows reaches the export and leaves it waiting. */
+    const expectExportLeftWaiting = async (
+      waiting: Awaited<ReturnType<typeof stored>>,
+      deferred = 1,
+    ) => {
+      const attempted = vi.mocked(store.create).mock.calls.length;
+      expect(await run()).toMatchObject({ deferred, failed: 0, exported: 0 });
+      expect(store.create).toHaveBeenCalledTimes(attempted);
+      const after = await stored();
+      expect(after).toMatchObject({
+        subscriptionWriteFailures: waiting.subscriptionWriteFailures,
+        subscriptionWriteRetryAt: waiting.subscriptionWriteRetryAt,
+      });
+      // The wait still stands on the connection, so later checks stay idle.
+      expect(after.subscriptionRetryAt!.getTime()).toBeLessThanOrEqual(
+        waiting.subscriptionWriteRetryAt!.getTime(),
+      );
+    };
+
+    it("is left alone when an import retry falls due first", async () => {
+      const waiting = await refuseExport("bidirectional");
+      records.push(record("two"));
+      rev++;
+      resolveFeed.mockRejectedValue(new Error("offline"));
+      expect(await run()).toMatchObject({ deferred: 2, imported: 0 });
+      // Only the import's wait passes.
+      await fixture.database
+        .update(atprotoSubscriptionMirror)
+        .set({ importRetryAt: new Date(0) });
+      await fixture.database
+        .update(atprotoConnections)
+        .set({ subscriptionRetryAt: new Date(0) });
+      resolveFeed.mockClear();
+      // The import is tried again and waits again, beside the export.
+      await expectExportLeftWaiting(waiting, 2);
+      expect(resolveFeed).toHaveBeenCalledTimes(1);
+    });
+
+    it("is left alone when another app changes the listing", async () => {
+      const waiting = await refuseExport("export");
+      records.push(record("elsewhere"));
+      rev++;
+      vi.mocked(store.list).mockClear();
+      await expectExportLeftWaiting(waiting);
+      expect(store.list).toHaveBeenCalledTimes(1);
+    });
+
+    it("is left alone when backfill falls due and attaches nothing", async () => {
+      const waiting = await refuseExport("export");
+      await fixture.database
+        .update(atprotoConnections)
+        .set({ subscriptionBackfillNextAttemptAt: new Date(0) });
+      await expectExportLeftWaiting(waiting);
+    });
+
+    it("is left alone after a pass that ran out of time", async () => {
+      const waiting = await refuseExport("bidirectional");
+      records.push(record("two"));
+      rev++;
+      // Importing "two" takes the pass beyond its minute, before it reaches "one".
+      const realNow = Date.now.bind(Date);
+      let passed = 0;
+      const clock = vi
+        .spyOn(Date, "now")
+        .mockImplementation(() => realNow() + passed);
+      resolveFeed.mockImplementationOnce((_userId, uri) => {
+        passed = 61_000;
+        return Promise.resolve(details(uri));
+      });
+      try {
+        expect(await run()).toMatchObject({ imported: 1, deferred: 1 });
+      } finally {
+        clock.mockRestore();
+      }
+      expect(store.create).toHaveBeenCalledTimes(1);
+      expect(await stored()).toMatchObject({
+        subscriptionRepoRev: null,
+        subscriptionWriteFailures: 1,
+        subscriptionWriteRetryAt: waiting.subscriptionWriteRetryAt,
+      });
+      // The unfinished pass is followed at once by one that reaches "one".
+      await expectExportLeftWaiting(waiting);
+    });
+
+    it("is left alone after a failure that reruns the pass in full", async () => {
+      await addLocal("one");
+      const two = await addLocal("two");
+      await method("export");
+      // "one" is refused, and "two" loses its Feed before its turn.
+      vi.mocked(store.create).mockImplementationOnce(async () => {
+        await fixture.database.delete(feeds).where(eq(feeds.id, two.id));
+        throw new Error("PDS write failed");
+      });
+      expect(await run()).toMatchObject({ failed: 2, exported: 0 });
+      const waiting = await stored();
+      expect(waiting).toMatchObject({
+        subscriptionRepoRev: null,
+        subscriptionWriteFailures: 1,
+      });
+      await expectExportLeftWaiting(waiting);
+    });
+
+    it("is left alone after another write landed in the same pass", async () => {
+      await addLocal("one");
+      await addLocal("two");
+      await method("export");
+      vi.mocked(store.create).mockRejectedValueOnce(
+        new Error("PDS write failed"),
+      );
+      expect(await run()).toMatchObject({ failed: 1, exported: 1 });
+      const waiting = await stored();
+      // The export that landed changed the repository, so the next check runs.
+      expect(waiting).toMatchObject({
+        subscriptionRepoRev: null,
+        subscriptionWriteFailures: 1,
+      });
+      await expectExportLeftWaiting(waiting);
+      // Its time comes: one attempt, and the count ends with the owed write.
+      await makeRetriesDue();
+      expect(await run()).toMatchObject({ exported: 1, failed: 0 });
+      expect(store.create).toHaveBeenCalledTimes(3);
+      expect(await stored()).toMatchObject({
+        subscriptionWriteFailures: 0,
+        subscriptionWriteRetryAt: null,
+      });
+    });
+  });
+
+  it("resumes stopped writes when backfill attaches an origin", async () => {
+    await addLocal("one");
+    await method("export");
+    // The PDS refused the export of "one" for 14 days.
+    await fixture.database.update(atprotoConnections).set({
+      subscriptionRepoRev: "1",
+      subscriptionWriteFailures: 25,
+      subscriptionWriteRetryAt: null,
+      subscriptionBackfillStarted: true,
+      subscriptionBackfillNextAttemptAt: new Date(0),
+    });
+    // Backfill that attaches nothing leaves the stopped export alone.
+    expect(await run(() => Promise.resolve({ attached: 0 }))).toMatchObject({
+      skipped: 1,
+      exported: 0,
+    });
+    expect(store.create).not.toHaveBeenCalled();
+    expect((await stored()).subscriptionWriteFailures).toBe(25);
+    // An origin it attaches is a new export to make, so the retries start over.
+    expect(
+      await run(async () => {
+        await addLocal("two");
+        return { attached: 1 };
+      }),
+    ).toMatchObject({ exported: 2, skipped: 0 });
+    expect(await stored()).toMatchObject({
+      subscriptionWriteFailures: 0,
+      subscriptionWriteRetryAt: null,
+    });
   });
 });

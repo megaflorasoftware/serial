@@ -12,10 +12,14 @@ import { atprotoConnections, feedOrigins } from "~/server/db/schema";
 export const FULL_RECONCILE = { subscriptionRepoRev: null } as const;
 
 /**
- * A Feed the user changed or settings the user saved are a reason to try
- * again. The retries of a subscription write the PDS refused start over.
+ * A Feed the user changed, settings the user saved and an origin backfill
+ * attached are a reason to try again. The retries of a subscription write the
+ * PDS refused start over, with no wait left to serve.
  */
-export const RETRY_REFUSED_WRITES = { subscriptionWriteFailures: 0 } as const;
+export const RETRY_REFUSED_WRITES = {
+  subscriptionWriteFailures: 0,
+  subscriptionWriteRetryAt: null,
+} as const;
 
 export function newPublicationSyncRequest(enabled: boolean) {
   return {
