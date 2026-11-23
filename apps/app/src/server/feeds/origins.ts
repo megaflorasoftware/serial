@@ -400,8 +400,11 @@ export async function createOrReuseFeed(
       existing,
       input.details.origins,
     );
+    const existingOriginIds = new Set(
+      existing.origins.map((origin) => origin.id),
+    );
     const joined = feed.origins.filter(
-      (origin) => !existing.origins.includes(origin),
+      (origin) => !existingOriginIds.has(origin.id),
     );
     return {
       feed: await presentedWithOrigins(
