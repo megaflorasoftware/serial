@@ -247,6 +247,7 @@ export async function startStreamWorker(
   let configured: Awaited<ReturnType<typeof configuration>> | undefined;
   let retries = 0;
   while (!shutdown.aborted && !configured) {
+    let operation = "origins";
     try {
       // An instance that follows nothing on the Atmosphere never contacts the
       // stream host, and holds no lease.
@@ -254,12 +255,13 @@ export async function startStreamWorker(
         await delay(10_000, undefined, { signal: shutdown }).catch(() => {});
         continue;
       }
+      operation = "configuration";
       configured = await configuration();
     } catch (error) {
       createStreamReporter(
         normalizeService(env.ATPROTO_JETSTREAM_ENDPOINT),
         shutdown,
-      )(error, "configuration");
+      )(error, operation);
       await retryStream(error, retries++, shutdown).catch(() => {});
     }
   }
