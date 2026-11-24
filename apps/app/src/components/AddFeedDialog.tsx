@@ -147,16 +147,16 @@ export function AddFeedDialog() {
     if (pendingAction || !canMutate) return;
     setPendingAction("feed");
 
-    const createFeedPromise = discovery
-      .finishSelection(feed)
-      .then((selection) =>
+    const createFeedPromise = discovery.finishSelection(feed).then(
+      (selection) =>
+        selection &&
         createFeed({
           url: selection.url,
           selection,
           categoryIds: [],
           viewIds: [],
         }),
-      );
+    );
     toast.promise(createFeedPromise, {
       error: (error) =>
         error instanceof Error
@@ -166,7 +166,8 @@ export function AddFeedDialog() {
 
     try {
       const result = await createFeedPromise;
-      const createdFeed = result.feeds[0];
+      // A cancelled selection adds nothing.
+      const createdFeed = result?.feeds[0];
       if (!createdFeed) return;
 
       feedCreatedDuringOnboarding(createdFeed.id);
