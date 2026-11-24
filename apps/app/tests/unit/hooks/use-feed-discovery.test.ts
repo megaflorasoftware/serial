@@ -80,7 +80,7 @@ it("displays early RSS and waits for completed origins before resolving selectio
   expect(api.isDiscovering).toBe(false);
 });
 
-it("cancels on close and rejects a pending Add even if an obsolete stream still emits", async () => {
+it("cancels on close and settles a pending Add with nothing even if an obsolete stream still emits", async () => {
   const finish = deferred();
   let signal: AbortSignal | undefined;
   vi.mocked(orpcRouterClient.feed.discoverFeedsStream).mockImplementationOnce(
@@ -98,14 +98,14 @@ it("cancels on close and rejects a pending Add even if an obsolete stream still 
   await act(async () => {
     discovery = api.discoverFeeds("example.com");
   });
-  const selection = api.finishSelection(rss).catch((error: unknown) => error);
+  const selection = api.finishSelection(rss);
   act(() => api.reset());
   expect(signal?.aborted).toBe(true);
   await act(async () => {
     finish.resolve();
     await discovery!;
   });
-  expect(await selection).toBeInstanceOf(Error);
+  expect(await selection).toBeNull();
   expect(api.discoveredFeeds).toEqual([]);
   expect(api.discoveryState).toBe("input");
 });
@@ -222,7 +222,7 @@ it("replacing a search cancels its pending selection and ignores late results", 
   await act(async () => {
     first = api.discoverFeeds("example.com");
   });
-  const selection = api.finishSelection(rss).catch((error: unknown) => error);
+  const selection = api.finishSelection(rss);
   act(() => api.handleUrlChange("other.example"));
   await act(async () => {
     await api.discoverFeeds("other.example");
@@ -232,7 +232,7 @@ it("replacing a search cancels its pending selection and ignores late results", 
     finish.resolve();
     await first!;
   });
-  expect(await selection).toBeInstanceOf(Error);
+  expect(await selection).toBeNull();
   expect(api.url).toBe("other.example");
   expect(api.discoveredFeeds).toEqual([]);
   expect(api.discoveryState).toBe("no-results");

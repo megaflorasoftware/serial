@@ -87,14 +87,13 @@ export function useFeedDiscovery() {
     },
     [url, cancel],
   );
+  /** The picked Feed as its finished search knows it, or null once that search was cancelled. */
   const finishSelection = useCallback(async (feed: DiscoveredFeed) => {
     const search = active.current;
-    if (
-      !search ||
-      !(await search.completion) ||
-      active.current !== search ||
-      search.controller.signal.aborted
-    )
+    const complete = await search?.completion;
+    // Closing the dialog or searching again is the reader's choice, not a failure.
+    if (search && active.current !== search) return null;
+    if (!search || !complete)
       throw new Error("Feed discovery was interrupted. Please search again.");
     const completed = search.feeds.find((row) =>
       matchesDiscoveredFeed(row, feed),
