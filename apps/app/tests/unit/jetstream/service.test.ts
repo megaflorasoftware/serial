@@ -506,6 +506,50 @@ it("keeps running when the database fails between connections", async () => {
   }
 });
 
+it("sends a followed Publication through recovery when the stream passes over one of its messages", async () => {
+  fixture = await createBookmarkTestDatabase();
+  const database = fixture.database;
+  const service = "https://jetstream.example.com";
+  const shutdown = new AbortController();
+  const { originId } = await liveReader(database, service, "did:plc:alice");
+  const due = new Date(Date.now() + 6 * 60 * 60 * 1000);
+  await database.update(feedOrigins).set({ nextFetchAt: due });
+  state.transport = {
+    service,
+    hasReplay: false,
+    recover: vi.fn(),
+    tip: vi.fn(async () => 1),
+    report: vi.fn(),
+    async *stream(_after, _signal, _dids, onOpen, onUnreadable) {
+      await onOpen?.();
+      onUnreadable?.("did:plc:stranger");
+      onUnreadable?.("did:plc:alice");
+      yield { events: [], lastCursor: 2 };
+      shutdown.abort();
+    },
+  };
+  try {
+    await startStreamWorker(database, shutdown.signal);
+    // Outside every stream generation, and due for its refresh now.
+    expect(
+      await database
+        .select()
+        .from(feedOriginAtproto)
+        .where(eq(feedOriginAtproto.originId, originId)),
+    ).toMatchObject([{ streamGeneration: -1 }]);
+    const [schedule] = await database
+      .select()
+      .from(feedOrigins)
+      .where(eq(feedOrigins.id, originId));
+    expect(schedule!.nextFetchAt!.getTime()).toBeLessThan(due.getTime());
+    expect((await database.select().from(atprotoStreamState))[0]).toMatchObject(
+      { seq: "2" },
+    );
+  } finally {
+    shutdown.abort();
+  }
+});
+
 it("contacts no stream host and holds no lease while nothing follows the Atmosphere", async () => {
   fixture = await createBookmarkTestDatabase();
   const database = fixture.database;

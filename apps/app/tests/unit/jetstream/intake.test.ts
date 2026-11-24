@@ -246,6 +246,56 @@ describe("stream intake", () => {
     expect(intake.checkpoint()).toBe(5);
   });
 
+  it("distrusts a followed publisher's origins before progress passes a message that could not be read", async () => {
+    const second = await follow("did:plc:followed");
+    const intake = await start();
+    await intake.accept(batch(account(2, "did:plc:followed")));
+    intake.unreadable("did:plc:followed");
+    intake.unreadable("did:plc:followed");
+    expect(distrust).not.toHaveBeenCalled();
+    await intake.accept(batch(account(4, "did:plc:stranger")));
+    // Every origin of the publisher, in one write.
+    expect(distrust).toHaveBeenCalledTimes(1);
+    expect(distrust.mock.calls[0]![0]).toHaveLength(2);
+    expect(distrust.mock.calls[0]![0]).toContain(second.originId);
+    await intake.accept(batch(account(5, "did:plc:stranger")));
+    expect(distrust).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds its position at an unreadable message until the distrust lands, which a quiet stream's refresh does", async () => {
+    const intake = await start();
+    await intake.accept(batch(account(2, "did:plc:followed")));
+    intake.unreadable("did:plc:followed");
+    distrust.mockRejectedValueOnce(new Error("database unavailable"));
+    await expect(
+      intake.accept(batch(account(4, "did:plc:stranger"))),
+    ).rejects.toThrow("database unavailable");
+    // No batch follows: the refresh distrusts, and resumes before the message.
+    await intake.refresh();
+    expect(distrust).toHaveBeenCalledTimes(2);
+    expect(distrust.mock.calls[1]![0]).toHaveLength(1);
+    expect(intake.checkpoint()).toBe(2);
+  });
+
+  it("does not vouch for an origin that joins around an unreadable message from a publisher nobody followed", async () => {
+    const intake = await start();
+    intake.unreadable("did:plc:stranger");
+    await intake.refresh();
+    expect(distrust).not.toHaveBeenCalled();
+    const joined = await follow("did:plc:newcomer");
+    intake.unreadable("did:plc:newcomer");
+    time += 10;
+    await intake.refresh();
+    expect(distrust).toHaveBeenCalledExactlyOnceWith([joined.originId]);
+    // The interval after that refresh holds every skipped event again.
+    const later = await follow("did:plc:later");
+    await intake.accept(batch(account(6, "did:plc:later")));
+    await intake.refresh();
+    expect(distrust).toHaveBeenCalledTimes(1);
+    expect(applied()).toEqual([[6]]);
+    expect(later.originId).toBeGreaterThan(joined.originId);
+  });
+
   it("keeps a deleted origin's publisher followed until the next connection rebuilds the set", async () => {
     const gone = await follow("did:plc:gone");
     const intake = await start();
