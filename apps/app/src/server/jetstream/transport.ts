@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket from "ws";
 import {
+  DownloadError,
   Jetstream,
   JetstreamV1,
   parseRawRecord,
@@ -13,7 +14,9 @@ import {
 } from "@serial/standard-site";
 import { captureRecordText, captureRecordValue } from "./document-source";
 import {
+  ArchiveUnreadableError,
   COLLECTIONS,
+  errorChain,
   eventSchema,
   normalizeService,
   retryAfter,
@@ -266,11 +269,15 @@ export function createStreamTransport(input: {
       throw error;
     }
   };
+  // The stream library's strict validation fails a whole read on the first
+  // event it rejects. A live connection ends, and the host sends that frame
+  // again after every reconnect; an archive read stops at the same block every
+  // time. The readers pass such an event over instead, and `eventSchema`
+  // checks the same formats on the fields Serial reads.
   const sdk = new Jetstream({
     service,
     apiKey: input.apiKey,
     fetchImpl,
-    validateWire: true,
     retry: {
       maxAttempts: 1,
       onRetry: (error) => report(error, "replay-download"),
@@ -278,17 +285,23 @@ export function createStreamTransport(input: {
     blockConcurrency: 2,
     snapshotBufferBytes: 4 * 1024 * 1024,
   });
-  // Strict validation ends a live connection on the first frame that fails
-  // it, and the host sends that frame again after every reconnect. The live
-  // readers skip such a frame instead; `eventSchema` checks the same formats.
-  const liveSdk = new Jetstream({ ...sdk.opts, validateWire: false });
-  const liveV1 = new JetstreamV1({ service, validateWire: false });
+  const legacySdk = new JetstreamV1({ service });
   let unreadableReportedAt = Number.NEGATIVE_INFINITY;
   function reportUnreadable(error: unknown) {
     const now = Date.now();
     if (now - unreadableReportedAt < UNREADABLE_REPORT_INTERVAL_MS) return;
     unreadableReportedAt = now;
     report(error, "message-decode");
+  }
+  /**
+   * Passes over an event that cannot be read: it is reported, and
+   * `onUnreadable` hears its publisher when the event still names one.
+   */
+  function passingOver(onUnreadable?: (publisher: string) => void) {
+    return (error: unknown, did: string | undefined) => {
+      reportUnreadable(error);
+      if (did !== undefined) onUnreadable?.(did);
+    };
   }
   const stash = createRecordStash();
   /** Wire JSON comes from the stash; archive CBOR is decoded and serialized losslessly. */
@@ -304,8 +317,7 @@ export function createStreamTransport(input: {
   }
   async function* decode(
     batches: AsyncIterable<EventBatch<RawEvent | RawEventV1>>,
-    /** Passes over an event that cannot be read. Without it, that event fails the read. */
-    skip?: (error: unknown, publisher: string | undefined) => void,
+    skip: ReturnType<typeof passingOver>,
   ): AsyncGenerator<StreamBatch> {
     for await (const batch of batches) {
       const events = batch.events.flatMap((raw) => {
@@ -338,13 +350,12 @@ export function createStreamTransport(input: {
                   commit: { ...raw.commit, record: null },
                 })
               : undefined;
-          if (!invalid?.success && skip) {
+          if (!invalid?.success) {
             skip(error, publisher(raw.did));
             return [];
           }
           report(error, "record-decode");
-          if (invalid?.success) return [invalid.data];
-          throw error;
+          return [invalid.data];
         }
       });
       yield { events, lastCursor: sequence(batch.lastCursor) };
@@ -363,19 +374,31 @@ export function createStreamTransport(input: {
       },
     };
   }
+  /**
+   * A read fails as `ArchiveUnreadableError` when every request was answered
+   * and the data still could not be decoded. A failed request or download
+   * keeps its own failure, which a later read may not meet.
+   */
   async function* archive(
     after: number,
     before: number | undefined,
     signal: AbortSignal,
     dids?: string[],
+    onUnreadable?: (publisher: string) => void,
   ) {
     let plannedThrough = after;
+    let requestFailed = false;
     // The SDK does not yield an empty plan's watermark. Observe it per iterator,
     // and expose it only after every download in that snapshot has completed.
     const snapshot = new Jetstream({
       ...sdk.opts,
       fetchImpl: async (request, init) => {
-        const response = await fetchImpl(request, init);
+        const response = await fetchImpl(request, init).catch(
+          (error: unknown) => {
+            requestFailed = true;
+            throw error;
+          },
+        );
         const url = request instanceof Request ? request.url : String(request);
         if (
           new URL(url).pathname.endsWith("/network.bsky.jetstream.planSnapshot")
@@ -391,23 +414,35 @@ export function createStreamTransport(input: {
         return response;
       },
     });
-    for await (const batch of decode(
-      snapshot.snapshotRawBatches({
-        ...options(signal),
-        afterSeq: after,
-        beforeSeq: before,
-        kinds: [...STREAM_KINDS],
-        maxReplans: 0,
-        dids: dids as Array<`did:${string}:${string}`> | undefined,
-      }),
-    )) {
-      yield {
-        events: batch.events,
-        lastCursor:
-          before === undefined
-            ? batch.lastCursor
-            : Math.min(before, batch.lastCursor),
-      };
+    try {
+      for await (const batch of decode(
+        snapshot.snapshotRawBatches({
+          ...options(signal),
+          afterSeq: after,
+          beforeSeq: before,
+          kinds: [...STREAM_KINDS],
+          maxReplans: 0,
+          dids: dids as Array<`did:${string}:${string}`> | undefined,
+        }),
+        passingOver(onUnreadable),
+      )) {
+        yield {
+          events: batch.events,
+          lastCursor:
+            before === undefined
+              ? batch.lastCursor
+              : Math.min(before, batch.lastCursor),
+        };
+      }
+    } catch (error) {
+      if (
+        signal.aborted ||
+        requestFailed ||
+        errorChain(error).some((entry) => entry instanceof DownloadError)
+      )
+        throw error;
+      report(error, "archive-decode");
+      throw new ArchiveUnreadableError(error);
     }
     if (signal.aborted) throw signal.reason;
     yield {
@@ -432,10 +467,7 @@ export function createStreamTransport(input: {
   ): AsyncGenerator<StreamBatch> {
     // The frame the reader holds, which a decode failure is about.
     let reading: string | undefined;
-    const skip = (error: unknown, did: string | undefined) => {
-      reportUnreadable(error);
-      if (did !== undefined) onUnreadable?.(did);
-    };
+    const skip = passingOver(onUnreadable);
     const opts = {
       ...options(signal),
       liveTransport: liveTransport(legacy, onOpen, stash.note, (frame) => {
@@ -455,14 +487,14 @@ export function createStreamTransport(input: {
     };
     if (!legacy) {
       yield* decode(
-        liveSdk.liveRawBatches({ ...opts, kinds: [...STREAM_KINDS] }),
+        sdk.liveRawBatches({ ...opts, kinds: [...STREAM_KINDS] }),
         skip,
       );
       return;
     }
     // The frozen legacy wire has no kind filter; it sends every kind.
     async function* batches() {
-      for await (const event of liveV1.live({ ...opts, raw: true }))
+      for await (const event of legacySdk.live({ ...opts, raw: true }))
         yield { events: [event], lastCursor: event.seq };
     }
     yield* decode(batches(), skip);
@@ -493,6 +525,7 @@ export function createStreamTransport(input: {
     through: number,
     signal: AbortSignal,
     did?: string,
+    onUnreadable?: (publisher: string) => void,
   ): AsyncGenerator<StreamBatch> {
     const controller = new AbortController();
     const combined = AbortSignal.any([signal, controller.signal]);
@@ -504,13 +537,20 @@ export function createStreamTransport(input: {
           through,
           combined,
           did ? [did] : undefined,
+          onUnreadable,
         )) {
           cursor = batch.lastCursor;
           yield batch;
           if (cursor >= through) return;
         }
       }
-      for await (const batch of live(cursor, combined)) {
+      for await (const batch of live(
+        cursor,
+        combined,
+        undefined,
+        undefined,
+        onUnreadable,
+      )) {
         yield {
           events: batch.events.filter((event) => event.seq <= through),
           lastCursor: Math.min(through, batch.lastCursor),
@@ -554,14 +594,20 @@ export function createStreamTransport(input: {
         controller.abort();
       }
     },
+    /**
+     * The interval's events, from the archive where there is one and the live
+     * stream after it. `onUnreadable` hears the publisher of each event the
+     * read passed over.
+     */
     async *recover(
       after: number,
       through: number,
       signal: AbortSignal,
       did?: string,
+      onUnreadable?: (publisher: string) => void,
     ): AsyncGenerator<StreamBatch> {
       if (after >= through) return;
-      yield* contacting(replayed(after, through, signal, did));
+      yield* contacting(replayed(after, through, signal, did, onUnreadable));
     },
   };
 }

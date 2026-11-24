@@ -26,10 +26,10 @@ export const sequenceSchema = z
 const format = (valid: (value: string) => boolean) =>
   z.string().refine((value) => valid(value));
 /**
- * The live reader skips a message it cannot decode, where the stream
- * library's strict mode would end the connection on it. The formats here are
- * the ones that mode checks on the fields Serial reads, so what Serial
- * accepts is the same either way.
+ * The readers skip an event they cannot decode, where the stream library's
+ * strict mode would fail the whole read on it. The formats here are the ones
+ * that mode checks on the fields Serial reads, so Serial accepts the same
+ * events either way.
  */
 export const eventSchema = z
   .object({
@@ -88,6 +88,12 @@ export class StreamFailure extends Error {
     super(`Jetstream ${operation} failed${status ? ` (${status})` : ""}`);
   }
 }
+/** Archive data this build cannot decode. Another read meets the same bytes. */
+export class ArchiveUnreadableError extends Error {
+  constructor(cause: unknown) {
+    super("Jetstream archive data cannot be decoded", { cause });
+  }
+}
 export function retryAfter(value: string | null, now = Date.now()) {
   if (!value) return undefined;
   const seconds = Number(value);
@@ -110,5 +116,10 @@ export function errorChain(error: unknown): object[] {
 export function streamFailure(error: unknown) {
   return errorChain(error).find(
     (entry): entry is StreamFailure => entry instanceof StreamFailure,
+  );
+}
+export function archiveUnreadable(error: unknown) {
+  return errorChain(error).some(
+    (entry) => entry instanceof ArchiveUnreadableError,
   );
 }

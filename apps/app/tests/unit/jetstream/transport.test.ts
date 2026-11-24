@@ -1,6 +1,9 @@
 import { createServer } from "node:http";
+import { zstdCompressSync } from "node:zlib";
 import { WebSocketServer } from "ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { StreamEvent } from "~/server/jetstream/protocol";
+import type { StreamTransport } from "~/server/jetstream/transport";
 import {
   createStreamTransport,
   liveTransport,
@@ -9,10 +12,12 @@ import {
 import { createStreamReporter } from "~/server/jetstream/report";
 import { forgetOutage } from "~/server/jetstream/reachability";
 import {
+  archiveUnreadable,
   normalizeService,
   retryAfter,
   sequence,
   StreamFailure,
+  streamFailure,
 } from "~/server/jetstream/protocol";
 import { captureException } from "~/server/logger";
 
@@ -21,6 +26,8 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
 });
+const reports = () =>
+  vi.mocked(captureException).mock.calls.map(([, context]) => context);
 const plan = (through: number) => ({
   sealedTipSeq: through,
   plannedThroughSeq: through,
@@ -598,9 +605,6 @@ describe("unreadable live messages", () => {
     }
     return { batches, unreadable };
   }
-  const reports = () =>
-    vi.mocked(captureException).mock.calls.map(([, context]) => context);
-
   it("passes over a message that fails a format check and names its publisher", async () => {
     const host = await hostSending([
       account(11, "did:plc:alice"),
@@ -720,6 +724,28 @@ describe("unreadable live messages", () => {
     }
   });
 
+  it("tells a catch-up about a message its live handoff passed over", async () => {
+    const host = await hostSending([
+      account(11, "did:plc:alice"),
+      account(12, "did:plc:alice", { time: "yesterday" }),
+      account(13, "did:plc:alice"),
+    ]);
+    const controller = new AbortController();
+    const unreadable = vi.fn<(publisher: string) => void>();
+    const seqs: number[] = [];
+    try {
+      for await (const batch of createStreamTransport({
+        service: host.service,
+      }).recover(10, 13, controller.signal, "did:plc:alice", unreadable))
+        seqs.push(...batch.events.map((event) => event.seq));
+      expect(seqs).toEqual([11, 13]);
+      expect(unreadable.mock.calls).toEqual([["did:plc:alice"]]);
+    } finally {
+      controller.abort();
+      await host.close();
+    }
+  });
+
   it.each([
     ["v2", "", { $type: "error" }, "XrpcSubscriptionError"],
     ["legacy", "/subscribe", {}, "MalformedError"],
@@ -740,4 +766,273 @@ describe("unreadable live messages", () => {
       }
     },
   );
+});
+
+describe("archive replay", () => {
+  const ALICE = "did:plc:alice";
+  const KIND = { create: 1, delete: 3, identity: 4, account: 5, sync: 6 };
+  const document = { collection: "site.standard.document", rkey: "post" };
+  type ArchiveRow = {
+    seq: number;
+    kind: number;
+    did?: string;
+    collection?: string;
+    rkey?: string;
+    rev?: string;
+    payload?: Buffer;
+  };
+
+  /** Canonical DAG-CBOR for the maps, strings, booleans and integers these rows carry. */
+  function cbor(value: unknown): Buffer {
+    const head = (major: number, argument: number | bigint) => {
+      const size = BigInt(argument);
+      const type = major << 5;
+      if (size < 24n) return Buffer.from([type | Number(size)]);
+      if (size < 0x100n) return Buffer.from([type | 24, Number(size)]);
+      const wide = Buffer.alloc(9);
+      wide[0] = type | 27;
+      wide.writeBigUInt64BE(size, 1);
+      return wide;
+    };
+    if (typeof value === "string") {
+      const text = Buffer.from(value);
+      return Buffer.concat([head(3, text.length), text]);
+    }
+    if (typeof value === "boolean") return Buffer.from([value ? 0xf5 : 0xf4]);
+    if (typeof value === "bigint") return head(0, value);
+    const entries = Object.entries(value as object).sort(
+      ([left], [right]) =>
+        left.length - right.length || (left < right ? -1 : 1),
+    );
+    return Buffer.concat([
+      head(5, entries.length),
+      ...entries.flatMap(([key, entry]) => [cbor(key), cbor(entry)]),
+    ]);
+  }
+
+  /** One compressed block in the columnar layout the stream library reads. */
+  function archiveBlock(rows: ArchiveRow[]) {
+    const texts = (pick: (row: ArchiveRow) => string | undefined) =>
+      rows.map((row) => Buffer.from(pick(row) ?? ""));
+    const collections = texts((row) => row.collection);
+    const dids = texts((row) => row.did ?? ALICE);
+    const rkeys = texts((row) => row.rkey);
+    const revs = texts((row) => row.rev ?? "2222222222222");
+    const payloads = rows.map((row) => row.payload ?? Buffer.alloc(0));
+    const column = (
+      width: number,
+      write: (cell: Buffer, row: number) => void,
+    ) => {
+      const cells = Buffer.alloc(width * rows.length);
+      rows.forEach((_, row) => write(cells.subarray(row * width), row));
+      return cells;
+    };
+    const witnessed = BigInt(Date.parse("2026-09-18T12:00:00Z")) * 1000n;
+    const count = Buffer.alloc(4);
+    count.writeUInt32LE(rows.length);
+    return zstdCompressSync(
+      Buffer.concat([
+        count,
+        column(8, (cell, row) => cell.writeBigUInt64LE(BigInt(rows[row]!.seq))),
+        column(8, (cell) => cell.writeBigInt64LE(witnessed)),
+        // No imported time, so the witnessed one is the event's time.
+        column(8, (cell) => cell.writeBigInt64LE(0n)),
+        column(1, (cell, row) => cell.writeUInt8(rows[row]!.kind)),
+        column(1, (cell, row) => cell.writeUInt8(collections[row]!.length)),
+        column(2, (cell, row) => cell.writeUInt16LE(dids[row]!.length)),
+        column(1, (cell, row) => cell.writeUInt8(rkeys[row]!.length)),
+        column(1, (cell, row) => cell.writeUInt8(revs[row]!.length)),
+        column(4, (cell, row) => cell.writeUInt32LE(payloads[row]!.length)),
+        ...collections,
+        ...dids,
+        ...rkeys,
+        ...revs,
+        ...payloads,
+      ]),
+    );
+  }
+
+  const downloaded = (body: Buffer) =>
+    new Response(new Uint8Array(body), {
+      headers: { "content-type": "application/octet-stream" },
+    });
+
+  /** A keyed transport whose archive is one block, answered by `block`. */
+  function archive(through: number, block: () => Response) {
+    return createStreamTransport({
+      service: "https://example.com",
+      apiKey: "test-replay-key",
+      fetch: async (request) => {
+        const url = new URL(
+          request instanceof Request ? request.url : String(request),
+        );
+        if (!url.pathname.endsWith("planSnapshot")) return block();
+        return Response.json({
+          ...plan(through),
+          segments: [
+            {
+              name: "segment",
+              index: 0,
+              checksum: "0123456789abcdef",
+              minSeq: 1,
+              maxSeq: through,
+              mode: "blocks",
+              blocks: [{ first: 0, last: 0 }],
+            },
+          ],
+        });
+      },
+    });
+  }
+
+  /** One publisher's catch-up over the archive, to `through`. */
+  async function catchUp(transport: StreamTransport, through: number) {
+    const unreadable = vi.fn<(publisher: string) => void>();
+    const events: StreamEvent[] = [];
+    let lastCursor = 0;
+    for await (const batch of transport.recover(
+      10,
+      through,
+      new AbortController().signal,
+      ALICE,
+      unreadable,
+    )) {
+      events.push(...batch.events);
+      lastCursor = batch.lastCursor;
+    }
+    return { events, lastCursor, unreadable };
+  }
+
+  it("reads a publisher's rows as events and keeps their records whole", async () => {
+    const transport = archive(20, () =>
+      downloaded(
+        archiveBlock([
+          {
+            seq: 11,
+            kind: KIND.create,
+            ...document,
+            payload: cbor({
+              $type: "site.standard.document",
+              title: "Article",
+              views: 9007199254740993n,
+            }),
+          },
+          // Serial asks for no identity events, so a handle the strict
+          // reader refused is never looked at.
+          {
+            seq: 12,
+            kind: KIND.identity,
+            payload: cbor({ handle: "Not A Handle" }),
+          },
+          // The hosted archive holds sync rows whose own time is empty.
+          {
+            seq: 13,
+            kind: KIND.sync,
+            payload: cbor({ rev: "2222222222223", time: "" }),
+          },
+          {
+            seq: 14,
+            kind: KIND.account,
+            payload: cbor({ active: false, status: "deactivated" }),
+          },
+          { seq: 15, kind: KIND.delete, ...document, rev: "2222222222224" },
+          {
+            seq: 16,
+            kind: KIND.create,
+            did: "did:plc:bob",
+            ...document,
+            payload: cbor({ $type: "site.standard.document" }),
+          },
+        ]),
+      ),
+    );
+    const { events, lastCursor, unreadable } = await catchUp(transport, 20);
+    expect(events.map((event) => [event.seq, event.kind])).toEqual([
+      [11, "commit"],
+      [13, "sync"],
+      [14, "account"],
+      [15, "commit"],
+    ]);
+    expect(events[0]).toMatchObject({
+      did: ALICE,
+      time: "2026-09-18T12:00:00.000000Z",
+      commit: {
+        operation: "create",
+        ...document,
+        rev: "2222222222222",
+        recordText:
+          '{"$type":"site.standard.document","title":"Article","views":9007199254740993}',
+      },
+    });
+    expect(events[2]).toMatchObject({
+      account: { active: false, status: "deactivated" },
+    });
+    expect(lastCursor).toBe(20);
+    expect(unreadable).not.toHaveBeenCalled();
+    expect(reports()).toEqual([]);
+  });
+
+  it("passes over rows that fail a format check and names their publisher", async () => {
+    const transport = archive(20, () =>
+      downloaded(
+        archiveBlock([
+          {
+            seq: 11,
+            kind: KIND.create,
+            ...document,
+            payload: cbor({ $type: "site.standard.document" }),
+          },
+          {
+            seq: 12,
+            kind: KIND.create,
+            ...document,
+            rkey: "not/a/key",
+            payload: cbor({ $type: "site.standard.document" }),
+          },
+          // A sync row that names no revision.
+          { seq: 13, kind: KIND.sync, payload: cbor({}) },
+          { seq: 14, kind: KIND.delete, ...document, rev: "2222222222224" },
+        ]),
+      ),
+    );
+    const { events, lastCursor, unreadable } = await catchUp(transport, 20);
+    expect(events.map((event) => event.seq)).toEqual([11, 14]);
+    expect(lastCursor).toBe(20);
+    expect(unreadable.mock.calls).toEqual([[ALICE], [ALICE]]);
+    expect(reports()).toMatchObject([{ operation: "message-decode" }]);
+  });
+
+  it.each([
+    [
+      "a block that does not decompress",
+      () => Buffer.from("not a compressed block"),
+    ],
+    [
+      "an account row without its active flag",
+      () =>
+        archiveBlock([
+          {
+            seq: 11,
+            kind: KIND.account,
+            payload: cbor({ status: "takendown" }),
+          },
+        ]),
+    ],
+  ])("fails as unreadable on %s", async (_data, block) => {
+    const failure = await catchUp(
+      archive(20, () => downloaded(block())),
+      20,
+    ).catch((error: unknown) => error);
+    expect(archiveUnreadable(failure)).toBe(true);
+    expect(reports()).toMatchObject([{ operation: "archive-decode" }]);
+  });
+
+  it("keeps a failed download as a failure a later read may not meet", async () => {
+    const failure = await catchUp(
+      archive(20, () => new Response("busy", { status: 503 })),
+      20,
+    ).catch((error: unknown) => error);
+    expect(archiveUnreadable(failure)).toBe(false);
+    expect(streamFailure(failure)).toMatchObject({ status: 503 });
+  });
 });
