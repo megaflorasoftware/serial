@@ -1,4 +1,4 @@
-import { asc, gt } from "drizzle-orm";
+import { asc, gt, inArray } from "drizzle-orm";
 import { feedOriginAtproto } from "../db/schema";
 import type { StreamEvent } from "./protocol";
 import type { StreamDatabase } from "./store";
@@ -43,6 +43,28 @@ export async function loadPublicationsAfter(
   }
 }
 
+const PUBLISHER_PAGE_SIZE = 200;
+
+/** The origins that follow these publishers. */
+async function originsOf(database: StreamDatabase, dids: string[]) {
+  const originIds: number[] = [];
+  for (let offset = 0; offset < dids.length; offset += PUBLISHER_PAGE_SIZE) {
+    // Bound each statement below SQLite's host-parameter limit.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const rows = await database
+      .select({ originId: feedOriginAtproto.originId })
+      .from(feedOriginAtproto)
+      .where(
+        inArray(
+          feedOriginAtproto.publicationDid,
+          dids.slice(offset, offset + PUBLISHER_PAGE_SIZE),
+        ),
+      );
+    for (const { originId } of rows) originIds.push(originId);
+  }
+  return originIds;
+}
+
 type SkippedEvent = { event: StreamEvent; at: number; bytes: number };
 
 /**
@@ -78,6 +100,10 @@ export function createSkippedEvents(
       entries.push({ event, at: now, bytes: size });
       bytes += size;
       while (bytes > limits.budgetBytes) evictOldest();
+    },
+    /** An event that arrived now could not be read, so it is not held. */
+    lose(now: number) {
+      completeFrom = Math.max(completeFrom, now + 1);
     },
     /** Whether every event skipped since `since` is still held. */
     covers(since: number, now: number) {
@@ -133,6 +159,26 @@ export async function startStreamIntake(input: {
   let applied: number | undefined;
   let checkpoint: number | undefined;
   let replayLost = false;
+  /** Followed publishers with a message the stream could not read. */
+  const unread = new Set<string>();
+
+  /**
+   * A message that could not be read may have changed what its publisher's
+   * origins hold. They leave the stream's coverage and recover at their next
+   * refresh.
+   */
+  async function distrustUnread() {
+    if (!unread.size) return;
+    const dids = [...unread];
+    // A publisher named again during the write waits for the next one.
+    unread.clear();
+    try {
+      await input.distrust(await originsOf(input.database, dids));
+    } catch (error) {
+      for (const did of dids) unread.add(did);
+      throw error;
+    }
+  }
 
   /** Follows publishers of new origins, handing them the events skipped meanwhile. */
   async function followNewPublications() {
@@ -161,6 +207,8 @@ export async function startStreamIntake(input: {
     /** Applies a batch's followed events and skips the rest. */
     accept(batch: { events: StreamEvent[]; lastCursor: number }) {
       return serial(async () => {
+        // Progress passes an unreadable message only once its origins recover.
+        await distrustUnread();
         const events = batch.events.filter((event) => {
           if (followed.has(event.did)) return true;
           skipped.add(event, now());
@@ -171,15 +219,28 @@ export async function startStreamIntake(input: {
       });
     },
     /**
-     * Picks up origins created since the last refresh, then marks the progress
-     * made before it as safe to resume from: every origin older than that
-     * point is followed, so a restart there loses nothing.
+     * The stream passed over a message from this publisher that it could not
+     * read. A followed publisher's origins are distrusted before any later
+     * progress is made; for anyone else the message counts as a skipped event
+     * that is not held, so an origin that joins meanwhile is distrusted too.
+     */
+    unreadable(did: string) {
+      if (followed.has(did)) unread.add(did);
+      else skipped.lose(now());
+    },
+    /**
+     * Distrusts what an unreadable message left waiting and picks up origins
+     * created since the last refresh, then marks the progress made before it
+     * as safe to resume from: every origin older than that point is followed,
+     * so a restart there loses nothing.
      */
     refresh() {
       return serial(async () => {
         // A failed replay lost its events here; only a restart from the
         // checkpoint saved before them brings them back.
         if (replayLost) throw new Error("Stream intake lost a replay");
+        // A quiet stream delivers no batch to do this.
+        await distrustUnread();
         const reached = applied;
         try {
           await followNewPublications();

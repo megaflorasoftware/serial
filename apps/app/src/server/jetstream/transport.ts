@@ -1,6 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket from "ws";
-import { Jetstream, JetstreamV1, parseRawRecord } from "@bsky/jetstream";
+import {
+  Jetstream,
+  JetstreamV1,
+  parseRawRecord,
+  XrpcSubscriptionError,
+} from "@bsky/jetstream";
 import { isCid, toBase64 } from "@atproto/lex";
 import {
   parseLosslessJson,
@@ -38,6 +43,8 @@ const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 /** Past this the socket stops reading, so the host holds what it has not sent. */
 const PAUSE_BUFFER_BYTES = MAX_BUFFER_BYTES / 2;
 const MAX_STASHED_RECORDS = 4096;
+/** A run of unreadable messages reports this often, not once each. */
+const UNREADABLE_REPORT_INTERVAL_MS = 60_000;
 
 /**
  * The SDK parses frames with `JSON.parse`, which rounds 64-bit integers. Each
@@ -92,6 +99,25 @@ function locateCommitRecord(frame: unknown) {
   return { seq: Number(outer.time_us), record: commit.record };
 }
 
+/** A frame as plain JSON, read without the checks it failed. */
+function looseFrame(frame: string | undefined) {
+  if (frame === undefined) return null;
+  try {
+    return asFrame(JSON.parse(frame));
+  } catch {
+    return null;
+  }
+}
+
+/** v2 names the publisher inside `payload`; v1 at the top level. */
+function framePublisher(frame: Frame | null) {
+  return publisher((asFrame(frame?.payload) ?? frame)?.did);
+}
+
+function publisher(did: unknown) {
+  return typeof did === "string" ? did : undefined;
+}
+
 /** Lex values from DAG-CBOR keep integers as bigint and links and bytes as their JSON forms. */
 export function lexToLossless(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;
@@ -108,6 +134,8 @@ export function liveTransport(
   legacy = false,
   onOpen?: () => Promise<void>,
   onFrame?: (frame: string) => void,
+  /** Sees each frame as the reader takes it, after `onFrame` saw it arrive. */
+  onRead?: (frame: string) => void,
 ): LiveTransport {
   return {
     async *stream(getUrl, signal, options) {
@@ -186,6 +214,7 @@ export function liveTransport(
           if (next !== undefined) {
             bytes -= Buffer.byteLength(next);
             if (socket.isPaused && bytes <= PAUSE_BUFFER_BYTES) socket.resume();
+            onRead?.(next);
             yield next;
             continue;
           }
@@ -249,6 +278,18 @@ export function createStreamTransport(input: {
     blockConcurrency: 2,
     snapshotBufferBytes: 4 * 1024 * 1024,
   });
+  // Strict validation ends a live connection on the first frame that fails
+  // it, and the host sends that frame again after every reconnect. The live
+  // readers skip such a frame instead; `eventSchema` checks the same formats.
+  const liveSdk = new Jetstream({ ...sdk.opts, validateWire: false });
+  const liveV1 = new JetstreamV1({ service, validateWire: false });
+  let unreadableReportedAt = Number.NEGATIVE_INFINITY;
+  function reportUnreadable(error: unknown) {
+    const now = Date.now();
+    if (now - unreadableReportedAt < UNREADABLE_REPORT_INTERVAL_MS) return;
+    unreadableReportedAt = now;
+    report(error, "message-decode");
+  }
   const stash = createRecordStash();
   /** Wire JSON comes from the stash; archive CBOR is decoded and serialized losslessly. */
   function captureCommitRecord(seq: number, raw: RawRecord) {
@@ -263,6 +304,8 @@ export function createStreamTransport(input: {
   }
   async function* decode(
     batches: AsyncIterable<EventBatch<RawEvent | RawEventV1>>,
+    /** Passes over an event that cannot be read. Without it, that event fails the read. */
+    skip?: (error: unknown, publisher: string | undefined) => void,
   ): AsyncGenerator<StreamBatch> {
     for await (const batch of batches) {
       const events = batch.events.flatMap((raw) => {
@@ -286,28 +329,31 @@ export function createStreamTransport(input: {
             }),
           ];
         } catch (error) {
-          report(error, "record-decode");
           // Persist an invalid latest version, retiring older pending work for this key.
-          if (raw.kind === "commit") {
-            return [
-              eventSchema.parse({
-                ...raw,
-                time,
-                commit: { ...raw.commit, record: null },
-              }),
-            ];
+          const invalid =
+            raw.kind === "commit"
+              ? eventSchema.safeParse({
+                  ...raw,
+                  time,
+                  commit: { ...raw.commit, record: null },
+                })
+              : undefined;
+          if (!invalid?.success && skip) {
+            skip(error, publisher(raw.did));
+            return [];
           }
+          report(error, "record-decode");
+          if (invalid?.success) return [invalid.data];
           throw error;
         }
       });
       yield { events, lastCursor: sequence(batch.lastCursor) };
     }
   }
-  function options(signal: AbortSignal, onOpen?: () => Promise<void>) {
+  function options(signal: AbortSignal) {
     return {
       collections: COLLECTIONS,
       signal,
-      liveTransport: liveTransport(legacy, onOpen, stash.note),
       onError: (error: Error) => {
         if (!signal.aborted) report(error, "replay-decode");
       },
@@ -372,28 +418,54 @@ export function createStreamTransport(input: {
           : Math.min(before, plannedThrough),
     };
   }
-  const v1 = new JetstreamV1({ service, validateWire: true });
+  /**
+   * A message that cannot be read is reported and passed over, so the
+   * connection outlives it. `onUnreadable` hears its publisher when the
+   * message still names one.
+   */
   async function* live(
     after: number | undefined,
     signal: AbortSignal,
     dids?: string[],
     onOpen?: () => Promise<void>,
+    onUnreadable?: (publisher: string) => void,
   ): AsyncGenerator<StreamBatch> {
+    // The frame the reader holds, which a decode failure is about.
+    let reading: string | undefined;
+    const skip = (error: unknown, did: string | undefined) => {
+      reportUnreadable(error);
+      if (did !== undefined) onUnreadable?.(did);
+    };
     const opts = {
-      ...options(signal, onOpen),
+      ...options(signal),
+      liveTransport: liveTransport(legacy, onOpen, stash.note, (frame) => {
+        reading = frame;
+      }),
+      onError: (error: Error) => {
+        const frame = looseFrame(reading);
+        // The host's own error frame ends the connection, as it always has.
+        // v2's has its own error class; the legacy host's is a frame with
+        // `error` set.
+        if (error instanceof XrpcSubscriptionError || (legacy && frame?.error))
+          throw error;
+        skip(error, framePublisher(frame));
+      },
       dids: dids as Array<`did:${string}:${string}`> | undefined,
       cursor: { load: async () => after, save: async () => {} },
     };
     if (!legacy) {
-      yield* decode(sdk.liveRawBatches({ ...opts, kinds: [...STREAM_KINDS] }));
+      yield* decode(
+        liveSdk.liveRawBatches({ ...opts, kinds: [...STREAM_KINDS] }),
+        skip,
+      );
       return;
     }
     // The frozen legacy wire has no kind filter; it sends every kind.
     async function* batches() {
-      for await (const event of v1.live({ ...opts, raw: true }))
+      for await (const event of liveV1.live({ ...opts, raw: true }))
         yield { events: [event], lastCursor: event.seq };
     }
-    yield* decode(batches());
+    yield* decode(batches(), skip);
   }
   /**
    * How a contact goes tells whether the host can be reached. A delivered
@@ -459,9 +531,10 @@ export function createStreamTransport(input: {
       signal: AbortSignal,
       dids?: string[],
       onOpen?: () => Promise<void>,
+      onUnreadable?: (publisher: string) => void,
     ): AsyncGenerator<StreamBatch> {
       // Archive recovery belongs to normal Feed fetching, never worker reconnect.
-      yield* contacting(live(after, signal, dids, onOpen));
+      yield* contacting(live(after, signal, dids, onOpen, onUnreadable));
     },
     /**
      * The host's newest position. While an outage is remembered this fails

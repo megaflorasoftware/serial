@@ -392,6 +392,8 @@ export async function startStreamWorker(
                 throw new StreamFailure("connection-ownership");
               await openedIntake();
             },
+            // The intake opens before the connection delivers its first frame.
+            (did) => intake?.unreadable(did),
           )) {
             await (await openedIntake()).accept(batch);
             // A delivered batch starts the reconnect backoff over.

@@ -506,6 +506,59 @@ it("keeps running when the database fails between connections", async () => {
   }
 });
 
+it.each([
+  ["a followed Publication through recovery", "did:plc:alice", true],
+  ["nothing through recovery for a stranger", "did:plc:stranger", false],
+])(
+  "sends %s when the stream passes over a message it cannot read",
+  async (_outcome, publisher, recovers) => {
+    fixture = await createBookmarkTestDatabase();
+    const database = fixture.database;
+    const service = "https://jetstream.example.com";
+    const shutdown = new AbortController();
+    const { originId } = await liveReader(database, service, "did:plc:alice");
+    const covered = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    await database.update(feedOrigins).set({ nextFetchAt: covered });
+    const before = await database.select().from(feedOriginAtproto);
+    const schedules = await database.select().from(feedOrigins);
+    state.transport = {
+      service,
+      hasReplay: false,
+      recover: vi.fn(),
+      tip: vi.fn(async () => 1),
+      report: vi.fn(),
+      async *stream(_after, _signal, _dids, onOpen, onUnreadable) {
+        await onOpen?.();
+        onUnreadable?.(publisher);
+        yield { events: [], lastCursor: 2 };
+        shutdown.abort();
+      },
+    };
+    try {
+      await startStreamWorker(database, shutdown.signal);
+      const scheduled = await database.select().from(feedOrigins);
+      if (recovers) {
+        // Outside every stream generation, and due for its refresh now.
+        expect(await database.select().from(feedOriginAtproto)).toMatchObject([
+          { originId, streamGeneration: -1 },
+        ]);
+        expect(scheduled[0]!.nextFetchAt!.getTime()).toBeLessThan(
+          schedules[0]!.nextFetchAt!.getTime(),
+        );
+      } else {
+        expect(await database.select().from(feedOriginAtproto)).toEqual(before);
+        expect(scheduled).toEqual(schedules);
+      }
+      // Either way the position moves past the message.
+      expect(
+        (await database.select().from(atprotoStreamState))[0],
+      ).toMatchObject({ seq: "2" });
+    } finally {
+      shutdown.abort();
+    }
+  },
+);
+
 it("contacts no stream host and holds no lease while nothing follows the Atmosphere", async () => {
   fixture = await createBookmarkTestDatabase();
   const database = fixture.database;

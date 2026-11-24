@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  isCidString,
+  isDatetimeString,
+  isDidString,
+  isNsidString,
+  isRecordKeyString,
+  isTidString,
+} from "@atproto/lex";
 
 export const COLLECTIONS = [
   "site.standard.document",
@@ -14,11 +22,20 @@ export const sequenceSchema = z
   .int()
   .nonnegative()
   .max(Number.MAX_SAFE_INTEGER);
+/** A string in a format the stream library's strict mode checks. */
+const format = (valid: (value: string) => boolean) =>
+  z.string().refine((value) => valid(value));
+/**
+ * The live reader skips a message it cannot decode, where the stream
+ * library's strict mode would end the connection on it. The formats here are
+ * the ones that mode checks on the fields Serial reads, so what Serial
+ * accepts is the same either way.
+ */
 export const eventSchema = z
   .object({
     seq: sequenceSchema,
-    did: z.string().startsWith("did:"),
-    time: z.string(),
+    did: format(isDidString),
+    time: format(isDatetimeString),
   })
   .and(
     z.discriminatedUnion("kind", [
@@ -26,10 +43,10 @@ export const eventSchema = z
         kind: z.literal("commit"),
         commit: z.object({
           operation: z.enum(["create", "update", "delete"]),
-          collection: z.string(),
-          rkey: z.string(),
-          rev: z.string(),
-          cid: z.string().optional(),
+          collection: format(isNsidString),
+          rkey: format(isRecordKeyString),
+          rev: format(isTidString),
+          cid: format(isCidString).optional(),
           record: z.unknown().optional(),
           /** Lossless JSON of `record`, captured before any rounding parse. */
           recordText: z.string().optional(),
@@ -45,7 +62,7 @@ export const eventSchema = z
       z.object({ kind: z.literal("identity"), identity: z.unknown() }),
       z.object({
         kind: z.literal("sync"),
-        sync: z.object({ rev: z.string() }),
+        sync: z.object({ rev: format(isTidString) }),
       }),
     ]),
   );
