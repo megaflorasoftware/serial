@@ -375,9 +375,9 @@ export function createStreamTransport(input: {
     };
   }
   /**
-   * A read fails as `ArchiveUnreadableError` when every request was answered
-   * and the data still could not be decoded. A failed request or download
-   * keeps its own failure, which a later read may not meet.
+   * A read fails as `ArchiveUnreadableError` when downloaded blocks could not
+   * be decoded. A failed plan or download keeps its own failure, which a
+   * later read may not meet.
    */
   async function* archive(
     after: number,
@@ -387,22 +387,22 @@ export function createStreamTransport(input: {
     onUnreadable?: (publisher: string) => void,
   ) {
     let plannedThrough = after;
-    let requestFailed = false;
+    // Whether the newest request asked for a plan. The SDK asks for blocks
+    // only once it has read their plan, and for the next plan only once those
+    // blocks are done, so a failure while this holds is about the plan.
+    let planning = false;
     // The SDK does not yield an empty plan's watermark. Observe it per iterator,
     // and expose it only after every download in that snapshot has completed.
     const snapshot = new Jetstream({
       ...sdk.opts,
       fetchImpl: async (request, init) => {
-        const response = await fetchImpl(request, init).catch(
-          (error: unknown) => {
-            requestFailed = true;
-            throw error;
-          },
-        );
         const url = request instanceof Request ? request.url : String(request);
-        if (
-          new URL(url).pathname.endsWith("/network.bsky.jetstream.planSnapshot")
-        ) {
+        const plans = new URL(url).pathname.endsWith(
+          "/network.bsky.jetstream.planSnapshot",
+        );
+        planning = plans;
+        const response = await fetchImpl(request, init);
+        if (plans) {
           const plan = (await response.clone().json()) as {
             plannedThroughSeq: unknown;
           };
@@ -437,7 +437,7 @@ export function createStreamTransport(input: {
     } catch (error) {
       if (
         signal.aborted ||
-        requestFailed ||
+        planning ||
         errorChain(error).some((entry) => entry instanceof DownloadError)
       )
         throw error;

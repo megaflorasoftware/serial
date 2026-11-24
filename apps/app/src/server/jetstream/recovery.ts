@@ -321,16 +321,19 @@ export async function recoverOrigin(
           .where(owned),
       );
       state = await ensureStream(database, settings.service);
-      // No scan follows the catch-up of an initialized origin. The worker's
-      // checkpoint trails its position, so an event the worker passed while
-      // the origin could not receive it may lie beyond that checkpoint. Only
-      // the transport's tip is past every such event.
+      // A catch-up of an initialized origin that reads every event ends
+      // without a scan. The worker's checkpoint trails its position, so an
+      // event the worker passed while the origin could not receive it may lie
+      // beyond that checkpoint. Only the transport's tip is past every such
+      // event.
       const through = Math.max(
         sequence(row.atproto.streamSeq!),
         bootstrap ? await bootstrapBoundary(state, tip, settings) : await tip(),
       );
       // Publishers of the events this catch-up could not read.
       const unread = new Set<string>();
+      const inMode = (mode: "catchup" | "direct") =>
+        and(owned, eq(feedOriginAtproto.streamMode, mode));
       {
         for await (const batch of transport.recover(
           sequence(row.atproto.streamSeq!),
@@ -349,14 +352,12 @@ export async function recoverOrigin(
             database
               .update(feedOriginAtproto)
               .set({ streamSeq: String(batch.lastCursor) })
-              .where(and(owned, eq(feedOriginAtproto.streamMode, "catchup"))),
+              .where(inMode("catchup")),
           );
           if (combined.aborted) throw combined.reason;
         }
       }
       if (combined.aborted) throw combined.reason;
-      const inMode = (mode: "catchup" | "direct") =>
-        and(owned, eq(feedOriginAtproto.streamMode, mode));
       // The stream cannot deliver an event of this origin's publisher that
       // the catch-up could not read; only the repository has what it carried.
       // The origin is marked first, so an attempt that ends during the scan

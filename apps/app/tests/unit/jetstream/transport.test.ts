@@ -857,8 +857,28 @@ describe("archive replay", () => {
       headers: { "content-type": "application/octet-stream" },
     });
 
-  /** A keyed transport whose archive is one block, answered by `block`. */
-  function archive(through: number, block: () => Response) {
+  const planOf = (through: number, blocks: number) =>
+    Response.json({
+      ...plan(through),
+      segments: [
+        {
+          name: "segment",
+          index: 0,
+          checksum: "0123456789abcdef",
+          minSeq: 1,
+          maxSeq: through,
+          mode: "blocks",
+          blocks: [{ first: 0, last: blocks - 1 }],
+        },
+      ],
+    });
+
+  /** A keyed transport whose archive answers each block request with `block`. */
+  function archive(
+    through: number,
+    block: (index: number) => Response,
+    planned = () => planOf(through, 1),
+  ) {
     return createStreamTransport({
       service: "https://example.com",
       apiKey: "test-replay-key",
@@ -866,21 +886,9 @@ describe("archive replay", () => {
         const url = new URL(
           request instanceof Request ? request.url : String(request),
         );
-        if (!url.pathname.endsWith("planSnapshot")) return block();
-        return Response.json({
-          ...plan(through),
-          segments: [
-            {
-              name: "segment",
-              index: 0,
-              checksum: "0123456789abcdef",
-              minSeq: 1,
-              maxSeq: through,
-              mode: "blocks",
-              blocks: [{ first: 0, last: 0 }],
-            },
-          ],
-        });
+        return url.pathname.endsWith("planSnapshot")
+          ? planned()
+          : block(Number(url.searchParams.get("blockIndex")));
       },
     });
   }
@@ -1034,5 +1042,33 @@ describe("archive replay", () => {
     ).catch((error: unknown) => error);
     expect(archiveUnreadable(failure)).toBe(false);
     expect(streamFailure(failure)).toMatchObject({ status: 503 });
+  });
+
+  it.each([
+    ["is refused", () => new Response("busy", { status: 503 })],
+    ["is not JSON", () => new Response("<html>", { status: 200 })],
+    ["has another shape", () => Response.json({ segments: "none" })],
+  ])("keeps a plan that %s as such a failure too", async (_plan, planned) => {
+    const failure = await catchUp(
+      archive(20, () => downloaded(archiveBlock([])), planned),
+      20,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(archiveUnreadable(failure)).toBe(false);
+  });
+
+  it("fails as unreadable on a block that does not decode while a later download fails", async () => {
+    const failure = await catchUp(
+      archive(
+        20,
+        (index) =>
+          index === 0
+            ? downloaded(Buffer.from("not a compressed block"))
+            : new Response("busy", { status: 503 }),
+        () => planOf(20, 2),
+      ),
+      20,
+    ).catch((error: unknown) => error);
+    expect(archiveUnreadable(failure)).toBe(true);
   });
 });

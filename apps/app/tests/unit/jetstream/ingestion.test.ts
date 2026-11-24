@@ -870,11 +870,11 @@ describe("a catch-up that could not read everything", () => {
     });
   });
 
-  it("scans again after a handoff that passed over an event, with or without replay", async () => {
+  it("scans again when a visit that scanned already passed over an event", async () => {
     await pause(20);
     const list = vi.mocked(client.list);
     list.mockClear();
-    // Without replay this visit scans before its handoff as well.
+    // Without replay this visit scans before its catch-up as well.
     await visit({ ...passingOver(DID, replay([], 22)), hasReplay: false });
     expect(vi.mocked(client.latestRev)).toHaveBeenCalledTimes(2);
     expect(await state()).toMatchObject({
@@ -920,6 +920,89 @@ describe("a catch-up that could not read everything", () => {
       streamSeq: "30",
       streamMode: "live",
       recoveryAttempts: 0,
+    });
+  });
+
+  it("continues a scan that did not finish in the visit that owed it", async () => {
+    await pause(20);
+    // Four pages of documents, more than one visit stages.
+    const remote: PublicationClient = {
+      ...client,
+      list: async (_did, cursor) => {
+        const offset = Number(cursor ?? 0);
+        return {
+          notModified: false as const,
+          etag: null,
+          cursor: offset + 100 < 400 ? String(offset + 100) : undefined,
+          records: Array.from({ length: 100 }, (_, index) => {
+            const key = String(999 - offset - index);
+            return {
+              uri: uri(key),
+              cid: "listed",
+              value: (event(1, key) as { commit: { record: unknown } }).commit
+                .record,
+            };
+          }),
+        };
+      },
+    };
+    const transport = passingOver(DID, replay([], 20));
+    const visitRemote = () =>
+      recoverOrigin(
+        fixture.database,
+        originId,
+        settings,
+        transport,
+        new AbortController().signal,
+        { client: remote, readPage },
+      );
+    expect(await visitRemote()).toEqual({ status: "unfinished" });
+    expect(await state()).toMatchObject({
+      streamSeq: "20",
+      streamMode: "direct",
+    });
+    expect((await state()).cursor).toBeTruthy();
+    for (
+      let index = 0;
+      index < 6 && (await state()).streamMode !== "live";
+      index++
+    )
+      await visitRemote();
+    expect((await state()).streamMode).toBe("live");
+    expect(
+      await fixture.database.select().from(feedOriginAtprotoDocuments),
+    ).toHaveLength(400);
+  }, 30_000);
+
+  it("takes a connected worker's checkpoint as the new boundary, whatever failed the attempt before", async () => {
+    await pause(20);
+    await expect(
+      visit(replay([], 20, new StreamFailure("download", 503))),
+    ).rejects.toThrow();
+    await retryNow();
+    await expect(
+      visit(replay([], 20, new ArchiveUnreadableError(new Error("bad block")))),
+    ).rejects.toThrow();
+    expect(await state()).toMatchObject({
+      streamSeq: null,
+      streamMode: "direct",
+    });
+    await retryNow();
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "40",
+      connected: true,
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+    const healthy = replay([], 50);
+    const recover = vi.spyOn(healthy, "recover");
+    await visit(healthy);
+    expect(healthy.tip).not.toHaveBeenCalled();
+    expect(
+      recover.mock.calls.map(([after, through]) => [after, through]),
+    ).toEqual([[40, 40]]);
+    expect(await state()).toMatchObject({
+      streamSeq: "40",
+      streamMode: "live",
     });
   });
 
