@@ -1,9 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises";
+import * as zlib from "node:zlib";
 import WebSocket from "ws";
 import {
-  DownloadError,
   Jetstream,
   JetstreamV1,
+  MalformedError,
   parseRawRecord,
   XrpcSubscriptionError,
 } from "@bsky/jetstream";
@@ -33,6 +34,7 @@ import {
   rememberOutage,
 } from "./reachability";
 import type {
+  Decompressor,
   EventBatch,
   LiveTransport,
   RawEvent,
@@ -120,6 +122,25 @@ function framePublisher(frame: Frame | null) {
 function publisher(did: unknown) {
   return typeof did === "string" ? did : undefined;
 }
+
+/**
+ * The stream library names archive bytes it cannot decode `MalformedError`,
+ * except a block that fails to decompress, which keeps zlib's own error. Here
+ * that block gets the same name.
+ */
+const blockDecompressor: Decompressor = {
+  decompress(frame, maxDecodedBytes) {
+    try {
+      const block = zlib.zstdDecompressSync(frame, {
+        maxOutputLength: maxDecodedBytes,
+      });
+      // A plain view, as the library's own reader hands over.
+      return new Uint8Array(block.buffer, block.byteOffset, block.byteLength);
+    } catch (cause) {
+      throw new MalformedError("decompress archive block", { cause });
+    }
+  },
+};
 
 /** Lex values from DAG-CBOR keep integers as bigint and links and bytes as their JSON forms. */
 export function lexToLossless(value: unknown): unknown {
@@ -284,6 +305,7 @@ export function createStreamTransport(input: {
     },
     blockConcurrency: 2,
     snapshotBufferBytes: 4 * 1024 * 1024,
+    decompressor: blockDecompressor,
   });
   const legacySdk = new JetstreamV1({ service });
   let unreadableReportedAt = Number.NEGATIVE_INFINITY;
@@ -375,9 +397,9 @@ export function createStreamTransport(input: {
     };
   }
   /**
-   * A read fails as `ArchiveUnreadableError` when downloaded blocks could not
-   * be decoded. A failed plan or download keeps its own failure, which a
-   * later read may not meet.
+   * A read fails as `ArchiveUnreadableError` when the stream library could
+   * not decode bytes it had downloaded. A failed plan or download keeps its
+   * own failure, which a later read may not meet.
    */
   async function* archive(
     after: number,
@@ -387,22 +409,16 @@ export function createStreamTransport(input: {
     onUnreadable?: (publisher: string) => void,
   ) {
     let plannedThrough = after;
-    // Whether the newest request asked for a plan. The SDK asks for blocks
-    // only once it has read their plan, and for the next plan only once those
-    // blocks are done, so a failure while this holds is about the plan.
-    let planning = false;
     // The SDK does not yield an empty plan's watermark. Observe it per iterator,
     // and expose it only after every download in that snapshot has completed.
     const snapshot = new Jetstream({
       ...sdk.opts,
       fetchImpl: async (request, init) => {
-        const url = request instanceof Request ? request.url : String(request);
-        const plans = new URL(url).pathname.endsWith(
-          "/network.bsky.jetstream.planSnapshot",
-        );
-        planning = plans;
         const response = await fetchImpl(request, init);
-        if (plans) {
+        const url = request instanceof Request ? request.url : String(request);
+        if (
+          new URL(url).pathname.endsWith("/network.bsky.jetstream.planSnapshot")
+        ) {
           const plan = (await response.clone().json()) as {
             plannedThroughSeq: unknown;
           };
@@ -435,11 +451,8 @@ export function createStreamTransport(input: {
         };
       }
     } catch (error) {
-      if (
-        signal.aborted ||
-        planning ||
-        errorChain(error).some((entry) => entry instanceof DownloadError)
-      )
+      // The stream library's name for bytes it downloaded and cannot decode.
+      if (!errorChain(error).some((entry) => entry instanceof MalformedError))
         throw error;
       report(error, "archive-decode");
       throw new ArchiveUnreadableError(error);

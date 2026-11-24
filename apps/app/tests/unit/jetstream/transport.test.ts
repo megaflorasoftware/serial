@@ -857,7 +857,7 @@ describe("archive replay", () => {
       headers: { "content-type": "application/octet-stream" },
     });
 
-  const planOf = (through: number, blocks: number) =>
+  const planOf = (through: number, blocks: number, changes: object = {}) =>
     Response.json({
       ...plan(through),
       segments: [
@@ -871,6 +871,7 @@ describe("archive replay", () => {
           blocks: [{ first: 0, last: blocks - 1 }],
         },
       ],
+      ...changes,
     });
 
   /** A keyed transport whose archive answers each block request with `block`. */
@@ -1051,6 +1052,23 @@ describe("archive replay", () => {
   ])("keeps a plan that %s as such a failure too", async (_plan, planned) => {
     const failure = await catchUp(
       archive(20, () => downloaded(archiveBlock([])), planned),
+      20,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(archiveUnreadable(failure)).toBe(false);
+  });
+
+  it("keeps a plan that stops advancing after its blocks were read as such a failure too", async () => {
+    const failure = await catchUp(
+      archive(
+        20,
+        () =>
+          downloaded(
+            archiveBlock([{ seq: 11, kind: KIND.delete, ...document }]),
+          ),
+        // The plan covers nothing past where the read began.
+        () => planOf(20, 1, { plannedThroughSeq: 10 }),
+      ),
       20,
     ).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
