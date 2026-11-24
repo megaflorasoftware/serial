@@ -553,13 +553,34 @@ describe("unreadable live messages", () => {
         ...changes,
       },
     });
+  const commit = (seq: number, did: string, changes: object = {}) =>
+    JSON.stringify({
+      $type: "message",
+      payload: {
+        $type: "network.bsky.jetstream.subscribeEvents#commit",
+        seq,
+        did,
+        time: "2026-09-18T12:00:00Z",
+        rev: "2222222222222",
+        operation: "create",
+        collection: "site.standard.document",
+        rkey: "post",
+        cid: "bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku",
+        record: { $type: "site.standard.document", title: "Article" },
+        ...changes,
+      },
+    });
   /** Reads one connection until it delivers `through`. */
-  async function read(service: string, through: number) {
+  async function read(
+    service: string,
+    through: number,
+    transport = createStreamTransport({ service }),
+  ) {
     const controller = new AbortController();
     const unreadable = vi.fn<(publisher: string) => void>();
     const batches: Array<{ seqs: number[]; lastCursor: number }> = [];
     try {
-      for await (const batch of createStreamTransport({ service }).stream(
+      for await (const batch of transport.stream(
         10,
         controller.signal,
         undefined,
@@ -598,6 +619,50 @@ describe("unreadable live messages", () => {
       expect(host.connections()).toBe(1);
       expect(reports()).toMatchObject([{ operation: "message-decode" }]);
     } finally {
+      await host.close();
+    }
+  });
+
+  it("passes over a commit whose record key Serial does not accept", async () => {
+    const host = await hostSending([
+      commit(11, "did:plc:alice"),
+      // The library reads this one; the event schema turns it away.
+      commit(12, "did:plc:bob", { rkey: "not/a/key" }),
+      commit(13, "did:plc:alice"),
+    ]);
+    try {
+      const { batches, unreadable } = await read(host.service, 13);
+      expect(batches).toEqual([
+        { seqs: [11], lastCursor: 11 },
+        { seqs: [], lastCursor: 12 },
+        { seqs: [13], lastCursor: 13 },
+      ]);
+      expect(unreadable.mock.calls).toEqual([["did:plc:bob"]]);
+      expect(host.connections()).toBe(1);
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("reports a later unreadable message once a minute has passed", async () => {
+    const host = await hostSending([
+      account(11, "did:plc:bob", { time: "yesterday" }),
+      account(12, "did:plc:alice"),
+    ]);
+    const now = vi.spyOn(Date, "now");
+    try {
+      const transport = createStreamTransport({ service: host.service });
+      const start = 1_800_000_000_000;
+      now.mockReturnValue(start);
+      await read(host.service, 12, transport);
+      now.mockReturnValue(start + 59_000);
+      await read(host.service, 12, transport);
+      expect(reports()).toHaveLength(1);
+      now.mockReturnValue(start + 60_000);
+      await read(host.service, 12, transport);
+      expect(reports()).toHaveLength(2);
+    } finally {
+      now.mockRestore();
       await host.close();
     }
   });
@@ -655,20 +720,24 @@ describe("unreadable live messages", () => {
     }
   });
 
-  it("still ends the connection on the host's own error frame", async () => {
-    const host = await hostSending([
-      JSON.stringify({
-        $type: "error",
-        error: "ConsumerTooSlow",
-        message: "slow",
-      }),
-    ]);
-    try {
-      await expect(read(host.service, 11)).rejects.toMatchObject({
-        name: "XrpcSubscriptionError",
-      });
-    } finally {
-      await host.close();
-    }
-  });
+  it.each([
+    ["v2", "", { $type: "error" }, "XrpcSubscriptionError"],
+    ["legacy", "/subscribe", {}, "MalformedError"],
+  ])(
+    "still ends the connection on the %s host's own error frame",
+    async (_version, path, shape, name) => {
+      const host = await hostSending([
+        JSON.stringify({ ...shape, error: "ConsumerTooSlow", message: "slow" }),
+        account(11, "did:plc:alice"),
+      ]);
+      try {
+        await expect(read(`${host.service}${path}`, 11)).rejects.toMatchObject({
+          name,
+        });
+        expect(reports()).toEqual([]);
+      } finally {
+        await host.close();
+      }
+    },
+  );
 });

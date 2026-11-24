@@ -280,9 +280,11 @@ describe("stream intake", () => {
   it("does not vouch for an origin that joins around an unreadable message from a publisher nobody followed", async () => {
     const intake = await start();
     intake.unreadable("did:plc:stranger");
+    time += 10;
     await intake.refresh();
     expect(distrust).not.toHaveBeenCalled();
     const joined = await follow("did:plc:newcomer");
+    time += 10;
     intake.unreadable("did:plc:newcomer");
     time += 10;
     await intake.refresh();

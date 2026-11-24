@@ -99,17 +99,19 @@ function locateCommitRecord(frame: unknown) {
   return { seq: Number(outer.time_us), record: commit.record };
 }
 
-/** The publisher a frame names, read without the checks the frame failed. */
-export function framePublisher(frame: string) {
-  let parsed: unknown;
+/** A frame as plain JSON, read without the checks it failed. */
+function looseFrame(frame: string | undefined) {
+  if (frame === undefined) return null;
   try {
-    parsed = JSON.parse(frame);
+    return asFrame(JSON.parse(frame));
   } catch {
-    return undefined;
+    return null;
   }
-  const outer = asFrame(parsed);
-  // v2 names the publisher inside `payload`; v1 at the top level.
-  return publisher((asFrame(outer?.payload) ?? outer)?.did);
+}
+
+/** v2 names the publisher inside `payload`; v1 at the top level. */
+function framePublisher(frame: Frame | null) {
+  return publisher((asFrame(frame?.payload) ?? frame)?.did);
 }
 
 function publisher(did: unknown) {
@@ -440,12 +442,13 @@ export function createStreamTransport(input: {
         reading = frame;
       }),
       onError: (error: Error) => {
+        const frame = looseFrame(reading);
         // The host's own error frame ends the connection, as it always has.
-        if (error instanceof XrpcSubscriptionError) throw error;
-        skip(
-          error,
-          reading === undefined ? undefined : framePublisher(reading),
-        );
+        // v2's has its own error class; the legacy host's is a frame with
+        // `error` set.
+        if (error instanceof XrpcSubscriptionError || (legacy && frame?.error))
+          throw error;
+        skip(error, framePublisher(frame));
       },
       dids: dids as Array<`did:${string}:${string}`> | undefined,
       cursor: { load: async () => after, save: async () => {} },

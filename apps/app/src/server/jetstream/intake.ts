@@ -229,9 +229,10 @@ export async function startStreamIntake(input: {
       else skipped.lose(now());
     },
     /**
-     * Picks up origins created since the last refresh, then marks the progress
-     * made before it as safe to resume from: every origin older than that
-     * point is followed, so a restart there loses nothing.
+     * Distrusts what an unreadable message left waiting and picks up origins
+     * created since the last refresh, then marks the progress made before it
+     * as safe to resume from: every origin older than that point is followed,
+     * so a restart there loses nothing.
      */
     refresh() {
       return serial(async () => {
