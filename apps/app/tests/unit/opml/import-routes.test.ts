@@ -263,7 +263,8 @@ it("streaming OPML treats a second address of a new Feed as already added", asyn
       events.push(event);
   })();
   try {
-    // Both addresses finish preparing before either commits.
+    // The held write, then one queued commit per address: both addresses
+    // have finished preparing before either commits.
     await vi.waitFor(() => expect(runDatabaseWrite).toHaveBeenCalledTimes(3), {
       timeout: 5000,
     });
