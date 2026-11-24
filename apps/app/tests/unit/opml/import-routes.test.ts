@@ -226,6 +226,72 @@ it.each(["bulk", "streaming"] as const)(
   },
 );
 
+it("streaming OPML treats a second address of a new Feed as already added", async () => {
+  vi.mocked(fetchNewFeedDetails).mockResolvedValue([
+    newRssFeedDetails({
+      name: "Other",
+      url: "https://other.example/feed",
+      platform: "website",
+      siteUrl: "https://other.example",
+    }),
+  ]);
+  let release = () => {};
+  vi.mocked(runDatabaseWrite).mockClear();
+  const held = runDatabaseWrite(
+    fixture.database,
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const events: Array<{ type: string; feedId?: number; status?: string }> = [];
+  const importing = (async () => {
+    for await (const event of await api().streaming({
+      feeds: [
+        {
+          feedUrl: "https://other.example/feed",
+          categories: ["First"],
+          tagNames: ["One"],
+        },
+        {
+          feedUrl: "https://other.example/rss",
+          categories: ["Second"],
+          tagNames: ["Two"],
+        },
+      ],
+    }))
+      events.push(event);
+  })();
+  try {
+    // Both addresses finish preparing before either commits.
+    await vi.waitFor(() => expect(runDatabaseWrite).toHaveBeenCalledTimes(3), {
+      timeout: 5000,
+    });
+  } finally {
+    release();
+    await held;
+    await importing;
+  }
+  expect(events.filter((event) => event.type === "import-feed-error")).toEqual(
+    [],
+  );
+  const inserted = events.filter(
+    (event) => event.type === "import-feed-inserted",
+  );
+  expect(inserted).toHaveLength(1);
+  expect(events).toContainEqual({
+    type: "feed-status",
+    feedId: inserted[0]!.feedId,
+    status: "skipped",
+  });
+  // Both entries' sections and tags are on the one Feed.
+  expect(await fixture.database.select().from(viewFeeds)).toMatchObject([
+    { feedId: inserted[0]!.feedId },
+    { feedId: inserted[0]!.feedId },
+  ]);
+  expect(await fixture.database.select().from(feedCategories)).toHaveLength(2);
+});
+
 it.each(["bulk", "streaming"] as const)(
   "%s OPML waits for the write queue without holding a connection slot",
   async (route) => {
