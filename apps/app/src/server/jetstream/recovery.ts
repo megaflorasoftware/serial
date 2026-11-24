@@ -4,7 +4,12 @@ import { feedOriginAtproto } from "../db/schema";
 import { runDatabaseWrite } from "../db/retry-write";
 import { scanAtmosphere } from "../rss/scanAtmosphere";
 import { createPublicationClient } from "../rss/atprotoClient";
-import { CheckpointHostError, sequence, streamFailure } from "./protocol";
+import {
+  archiveUnreadable,
+  CheckpointHostError,
+  sequence,
+  streamFailure,
+} from "./protocol";
 import {
   acceptBatch,
   eligible,
@@ -22,7 +27,7 @@ import { captureRecordValue } from "./document-source";
 import { forgetOutage, hostUnreachable, recentOutage } from "./reachability";
 import type { atprotoStreamState } from "../db/schema";
 import type { StreamTransport } from "./transport";
-import type { StreamDatabase, StreamSettings } from "./store";
+import type { StreamDatabase, StreamOrigin, StreamSettings } from "./store";
 import type { ProcessingOptions } from "./process";
 
 /**
@@ -212,9 +217,12 @@ export async function recoverOrigin(
       (!transport.hasReplay && !continuing) ||
       row.atproto.streamMode === "direct";
     if (!continuing) {
-      // With replay, the checkpoint is a safe lower bound: the archive fills the rest.
+      // With replay, a new origin's checkpoint is a safe lower bound: the
+      // archive fills the rest. An origin that has its documents bootstraps
+      // again only after its archive could not be read, and takes the
+      // boundary of an instance without replay, past that data.
       const boundary = bootstrap
-        ? transport.hasReplay
+        ? transport.hasReplay && !row.atproto.initialized
           ? sequence(state.seq)
           : await bootstrapBoundary(state, tip, settings)
         : sequence(row.atproto.streamSeq ?? state.seq);
@@ -231,11 +239,14 @@ export async function recoverOrigin(
       );
       row = (await loadOrigin(database, originId))!;
     }
-    if (bootstrap) {
-      const boundary = sequence(row.atproto.streamSeq!);
+    /**
+     * Stages the repository as it stands, which holds every change up to
+     * `boundary`, and returns the origin as the scan left it.
+     */
+    const scan = async (origin: StreamOrigin, boundary: number) => {
       const client = options.client ?? createPublicationClient();
-      const currentPlan = await planFor(row, settings);
-      await scanAtmosphere(database, row, client, {
+      const currentPlan = await planFor(origin, settings);
+      await scanAtmosphere(database, origin, client, {
         guard: owned,
         signal: combined,
         publication: async (publication) => {
@@ -292,12 +303,17 @@ export async function recoverOrigin(
           );
         },
       });
-      row = (await loadOrigin(database, originId))!;
-      // The bounded scan kept its cursor; the next visit continues it.
-      if (!row.atproto.initialized || row.atproto.cursor)
-        return { status: "unfinished" };
+      return (await loadOrigin(database, originId))!;
+    };
+    /** The bounded scan kept its cursor; the next visit continues it. */
+    const scanUnfinished = (origin: StreamOrigin) =>
+      !origin.atproto.initialized || Boolean(origin.atproto.cursor);
+    if (bootstrap) {
+      row = await scan(row, sequence(row.atproto.streamSeq!));
+      if (scanUnfinished(row)) return { status: "unfinished" };
     }
     if (row.atproto.streamMode !== "live" || options.manual) {
+      const publisher = row.atproto.publicationDid;
       await runDatabaseWrite(database, () =>
         database
           .update(feedOriginAtproto)
@@ -305,20 +321,26 @@ export async function recoverOrigin(
           .where(owned),
       );
       state = await ensureStream(database, settings.service);
-      // No scan follows the catch-up of an initialized origin. The worker's
-      // checkpoint trails its position, so an event the worker passed while
-      // the origin could not receive it may lie beyond that checkpoint. Only
-      // the transport's tip is past every such event.
+      // A catch-up of an initialized origin that reads every event ends
+      // without a scan. The worker's checkpoint trails its position, so an
+      // event the worker passed while the origin could not receive it may lie
+      // beyond that checkpoint. Only the transport's tip is past every such
+      // event.
       const through = Math.max(
         sequence(row.atproto.streamSeq!),
         bootstrap ? await bootstrapBoundary(state, tip, settings) : await tip(),
       );
+      // Publishers of the events this catch-up could not read.
+      const unread = new Set<string>();
+      const inMode = (mode: "catchup" | "direct") =>
+        and(owned, eq(feedOriginAtproto.streamMode, mode));
       {
         for await (const batch of transport.recover(
           sequence(row.atproto.streamSeq!),
           through,
           combined,
-          row.atproto.publicationDid,
+          publisher,
+          (did) => unread.add(did),
         )) {
           reachedHost = true;
           combined.throwIfAborted();
@@ -330,18 +352,33 @@ export async function recoverOrigin(
             database
               .update(feedOriginAtproto)
               .set({ streamSeq: String(batch.lastCursor) })
-              .where(and(owned, eq(feedOriginAtproto.streamMode, "catchup"))),
+              .where(inMode("catchup")),
           );
           if (combined.aborted) throw combined.reason;
         }
       }
       if (combined.aborted) throw combined.reason;
+      // The stream cannot deliver an event of this origin's publisher that
+      // the catch-up could not read; only the repository has what it carried.
+      // The origin is marked first, so an attempt that ends during the scan
+      // still owes it at the next visit.
+      const rescans = unread.has(publisher);
+      if (rescans) {
+        await runDatabaseWrite(database, () =>
+          database
+            .update(feedOriginAtproto)
+            .set({ streamSeq: String(through), streamMode: "direct" })
+            .where(inMode("catchup")),
+        );
+        row = await scan((await loadOrigin(database, originId))!, through);
+        if (scanUnfinished(row)) return { status: "unfinished" };
+      }
       // Only complete, durably staged intervals can join live application.
       await runDatabaseWrite(database, () =>
         database
           .update(feedOriginAtproto)
           .set({ streamSeq: String(through), streamMode: "live" })
-          .where(and(owned, eq(feedOriginAtproto.streamMode, "catchup"))),
+          .where(inMode(rescans ? "direct" : "catchup")),
       );
     }
     combined.throwIfAborted();
@@ -371,6 +408,14 @@ export async function recoverOrigin(
           .set({
             ...(!transport.hasReplay && streamFailure(error)?.status === 400
               ? { streamMode: "paused" as const, cursor: null }
+              : {}),
+            // Archive data that could not be decoded after an attempt that
+            // failed too will not decode on another read. The origin gives
+            // that stretch up: its next visit takes a new boundary and scans
+            // the repository.
+            ...(archiveUnreadable(error) &&
+            candidate.atproto.recoveryAttempts > 0
+              ? { streamMode: "direct" as const, streamSeq: null }
               : {}),
             recoveryAttempts: candidate.atproto.recoveryAttempts + 1,
             recoveryRetryAt: new Date(

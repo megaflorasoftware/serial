@@ -8,6 +8,7 @@ import type { PublicationClient } from "~/server/rss/atprotoClient";
 import { recordUserActivity } from "~/server/jetstream/activity";
 import { recoverOrigin } from "~/server/jetstream/recovery";
 import {
+  ArchiveUnreadableError,
   CheckpointHostError,
   StreamFailure,
 } from "~/server/jetstream/protocol";
@@ -777,6 +778,246 @@ describe("Feed recovery", () => {
       { client, readPage, manual: true },
     );
     expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+  });
+});
+
+describe("a catch-up that could not read everything", () => {
+  /** A transport whose first `times` catch-ups pass over an event of `publisher`. */
+  function passingOver(
+    publisher: string,
+    transport: StreamTransport,
+    times = 1,
+  ): StreamTransport {
+    let left = times;
+    return {
+      ...transport,
+      async *recover(after, through, signal, did, onUnreadable) {
+        if (left-- > 0) onUnreadable?.(publisher);
+        yield* transport.recover(after, through, signal, did, onUnreadable);
+      },
+    };
+  }
+  const visit = (transport: StreamTransport) =>
+    recoverOrigin(
+      fixture.database,
+      originId,
+      settings,
+      transport,
+      new AbortController().signal,
+      { client, readPage },
+    );
+  const retryNow = () =>
+    fixture.database.update(feedOriginAtproto).set({ recoveryRetryAt: null });
+
+  /** A listing page holding one document the stream never delivered. */
+  const listing = (key: string) => ({
+    records: [
+      {
+        uri: uri(key),
+        cid: `cid-${key}`,
+        value: (event(1, key, "Listed") as { commit: { record: unknown } })
+          .commit.record,
+      },
+    ],
+    notModified: false as const,
+    cursor: undefined,
+    etag: null,
+  });
+
+  it("scans the repository after passing over an event of its own publisher", async () => {
+    await pause(20);
+    const list = vi.mocked(client.list);
+    list.mockClear();
+    list.mockResolvedValueOnce(listing("unread"));
+    await visit(passingOver(DID, replay([event(10)], 20)));
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(await state()).toMatchObject({
+      streamSeq: "20",
+      streamMode: "live",
+    });
+    // The event it could read, and the document only the repository had.
+    expect(
+      (await fixture.database.select().from(feedItems)).map(
+        (item) => item.title,
+      ),
+    ).toEqual(expect.arrayContaining(["Title", "Listed"]));
+  });
+
+  it("still owes the scan when the attempt ends during it", async () => {
+    await pause(20);
+    const transport = passingOver(DID, replay([], 20));
+    const list = vi.mocked(client.list);
+    list.mockClear();
+    list.mockRejectedValueOnce(new Error("repository unavailable"));
+    await expect(visit(transport)).rejects.toThrow("repository unavailable");
+    expect(await state()).toMatchObject({
+      streamSeq: "20",
+      streamMode: "direct",
+    });
+    await retryNow();
+    list.mockResolvedValueOnce(listing("unread"));
+    await visit(transport);
+    expect(await state()).toMatchObject({ streamMode: "live" });
+    expect(await fixture.database.select().from(feedItems)).toHaveLength(1);
+  });
+
+  it("joins the stream when the event passed over was another publisher's", async () => {
+    await pause(20);
+    await visit(passingOver("did:plc:bob", replay([], 20)));
+    expect(await state()).toMatchObject({
+      streamSeq: "20",
+      streamMode: "live",
+    });
+  });
+
+  it("scans again when a visit that scanned already passed over an event", async () => {
+    await pause(20);
+    const list = vi.mocked(client.list);
+    list.mockClear();
+    // Without replay this visit scans before its catch-up as well.
+    await visit({ ...passingOver(DID, replay([], 22)), hasReplay: false });
+    expect(vi.mocked(client.latestRev)).toHaveBeenCalledTimes(2);
+    expect(await state()).toMatchObject({
+      streamSeq: "22",
+      streamMode: "live",
+    });
+  });
+
+  it("gives up a stretch of archive that would not decode after an attempt that failed too", async () => {
+    await pause(20);
+    const broken = replay(
+      [event(10)],
+      20,
+      new ArchiveUnreadableError(new Error("bad block")),
+    );
+    await expect(visit(broken)).rejects.toThrow();
+    // One failure may be a bad download, so the origin keeps its place.
+    expect(await state()).toMatchObject({
+      streamSeq: "10",
+      streamMode: "catchup",
+      recoveryAttempts: 1,
+    });
+    await retryNow();
+    await expect(visit(broken)).rejects.toThrow();
+    expect(await state()).toMatchObject({
+      streamSeq: null,
+      streamMode: "direct",
+      recoveryAttempts: 2,
+    });
+    await retryNow();
+    const healthy = replay([], 30);
+    const recover = vi.spyOn(healthy, "recover");
+    const list = vi.mocked(client.list);
+    list.mockClear();
+    await visit(healthy);
+    // The new boundary is the host's tip, so the stretch that would not
+    // decode is never asked for again.
+    expect(
+      recover.mock.calls.map(([after, through]) => [after, through]),
+    ).toEqual([[30, 30]]);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(await state()).toMatchObject({
+      streamSeq: "30",
+      streamMode: "live",
+      recoveryAttempts: 0,
+    });
+  });
+
+  it("continues a scan that did not finish in the visit that owed it", async () => {
+    await pause(20);
+    // Four pages of documents, more than one visit stages.
+    const remote: PublicationClient = {
+      ...client,
+      list: async (_did, cursor) => {
+        const offset = Number(cursor ?? 0);
+        return {
+          notModified: false as const,
+          etag: null,
+          cursor: offset + 100 < 400 ? String(offset + 100) : undefined,
+          records: Array.from({ length: 100 }, (_, index) => {
+            const key = String(999 - offset - index);
+            return {
+              uri: uri(key),
+              cid: "listed",
+              value: (event(1, key) as { commit: { record: unknown } }).commit
+                .record,
+            };
+          }),
+        };
+      },
+    };
+    const transport = passingOver(DID, replay([], 20));
+    const visitRemote = () =>
+      recoverOrigin(
+        fixture.database,
+        originId,
+        settings,
+        transport,
+        new AbortController().signal,
+        { client: remote, readPage },
+      );
+    expect(await visitRemote()).toEqual({ status: "unfinished" });
+    expect(await state()).toMatchObject({
+      streamSeq: "20",
+      streamMode: "direct",
+    });
+    expect((await state()).cursor).toBeTruthy();
+    for (
+      let index = 0;
+      index < 6 && (await state()).streamMode !== "live";
+      index++
+    )
+      await visitRemote();
+    expect((await state()).streamMode).toBe("live");
+    expect(
+      await fixture.database.select().from(feedOriginAtprotoDocuments),
+    ).toHaveLength(400);
+  }, 30_000);
+
+  it("takes a connected worker's checkpoint as the new boundary, whatever failed the attempt before", async () => {
+    await pause(20);
+    await expect(
+      visit(replay([], 20, new StreamFailure("download", 503))),
+    ).rejects.toThrow();
+    await retryNow();
+    await expect(
+      visit(replay([], 20, new ArchiveUnreadableError(new Error("bad block")))),
+    ).rejects.toThrow();
+    expect(await state()).toMatchObject({
+      streamSeq: null,
+      streamMode: "direct",
+    });
+    await retryNow();
+    await fixture.database.update(atprotoStreamState).set({
+      seq: "40",
+      connected: true,
+      leaseUntil: new Date(NOW.getTime() + 60_000),
+    });
+    const healthy = replay([], 50);
+    const recover = vi.spyOn(healthy, "recover");
+    await visit(healthy);
+    expect(healthy.tip).not.toHaveBeenCalled();
+    expect(
+      recover.mock.calls.map(([after, through]) => [after, through]),
+    ).toEqual([[40, 40]]);
+    expect(await state()).toMatchObject({
+      streamSeq: "40",
+      streamMode: "live",
+    });
+  });
+
+  it("keeps retrying the archive after a temporary failure, however often it repeats", async () => {
+    await pause(20);
+    const failing = replay([], 20, new StreamFailure("download", 503));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await expect(visit(failing)).rejects.toThrow();
+      await retryNow();
+    }
+    expect(await state()).toMatchObject({
+      streamSeq: "1",
+      streamMode: "catchup",
+      recoveryAttempts: 3,
+    });
   });
 });
 
