@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { zstdCompressSync } from "node:zlib";
+import zlib from "node:zlib";
 import { WebSocketServer } from "ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StreamEvent } from "~/server/jetstream/protocol";
@@ -830,7 +830,7 @@ describe("archive replay", () => {
     const witnessed = BigInt(Date.parse("2026-09-18T12:00:00Z")) * 1000n;
     const count = Buffer.alloc(4);
     count.writeUInt32LE(rows.length);
-    return zstdCompressSync(
+    return zlib.zstdCompressSync(
       Buffer.concat([
         count,
         column(8, (cell, row) => cell.writeBigUInt64LE(BigInt(rows[row]!.seq))),
@@ -1073,6 +1073,29 @@ describe("archive replay", () => {
     ).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
     expect(archiveUnreadable(failure)).toBe(false);
+  });
+
+  it("keeps a block that could not be decompressed for a reason other than its bytes as such a failure too", async () => {
+    const decompress = vi
+      .spyOn(zlib, "zstdDecompressSync")
+      .mockImplementationOnce(() => {
+        throw new RangeError("Array buffer allocation failed");
+      });
+    try {
+      const failure = await catchUp(
+        archive(20, () =>
+          downloaded(
+            archiveBlock([{ seq: 11, kind: KIND.delete, ...document }]),
+          ),
+        ),
+        20,
+      ).catch((error: unknown) => error);
+      expect(decompress).toHaveBeenCalled();
+      expect(failure).toBeInstanceOf(RangeError);
+      expect(archiveUnreadable(failure)).toBe(false);
+    } finally {
+      decompress.mockRestore();
+    }
   });
 
   it("fails as unreadable on a block that does not decode while a later download fails", async () => {

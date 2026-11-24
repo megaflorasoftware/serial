@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import * as zlib from "node:zlib";
+import zlib from "node:zlib";
 import WebSocket from "ws";
 import {
   Jetstream,
@@ -123,10 +123,22 @@ function publisher(did: unknown) {
   return typeof did === "string" ? did : undefined;
 }
 
+/** zlib's codes for a block that is not zstd, is cut short or damaged, or inflates past its cap. */
+function blockIsCorrupt(error: unknown) {
+  const code =
+    error instanceof Error && "code" in error ? error.code : undefined;
+  return (
+    typeof code === "string" &&
+    code !== "ZSTD_error_memory_allocation" &&
+    /^(ZSTD_error_|Z_BUF_ERROR$|Z_DATA_ERROR$|ERR_BUFFER_TOO_LARGE$)/.test(code)
+  );
+}
+
 /**
  * The stream library names archive bytes it cannot decode `MalformedError`,
  * except a block that fails to decompress, which keeps zlib's own error. Here
- * that block gets the same name.
+ * a corrupt block gets the same name. Any other failure, such as a runtime
+ * without zstd, stays what it was.
  */
 const blockDecompressor: Decompressor = {
   decompress(frame, maxDecodedBytes) {
@@ -136,8 +148,9 @@ const blockDecompressor: Decompressor = {
       });
       // A plain view, as the library's own reader hands over.
       return new Uint8Array(block.buffer, block.byteOffset, block.byteLength);
-    } catch (cause) {
-      throw new MalformedError("decompress archive block", { cause });
+    } catch (error) {
+      if (!blockIsCorrupt(error)) throw error;
+      throw new MalformedError("decompress archive block", { cause: error });
     }
   },
 };
