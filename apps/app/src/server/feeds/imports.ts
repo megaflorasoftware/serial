@@ -95,6 +95,16 @@ async function matchingFeed(
   }
 }
 
+/** A matching Feed with an origin of every kind gains nothing from the import, so it needs no proof. */
+function holdsEveryKind(
+  feed: DatabaseFeedWithOrigins,
+  origins: NewFeedOriginDetails[],
+) {
+  return origins.every((origin) =>
+    feed.origins.some((existing) => existing.kind === origin.kind),
+  );
+}
+
 /** Finish all network verification before a caller begins its write transaction. */
 export async function prepareFeedImport(
   database: FeedDatabase,
@@ -107,12 +117,7 @@ export async function prepareFeedImport(
     ? [exact]
     : await siteCandidates(database, userId, details);
   const siteSnapshot = exact ? "" : candidateIdentity(candidates);
-  if (
-    exact &&
-    details.origins.every((origin) =>
-      exact.origins.some((existing) => existing.kind === origin.kind),
-    )
-  ) {
+  if (exact && holdsEveryKind(exact, details.origins)) {
     return {
       details,
       target: { id: exact.id, origins: originIdentity(exact.origins) },
@@ -220,10 +225,13 @@ export async function commitFeedImport(
       }
     }
   } else if (
-    current ||
-    candidateIdentity(
-      await siteCandidates(database, userId, prepared.details),
-    ) !== prepared.siteCandidates
+    current
+      ? // Another import created this Feed since the preparation, as a second
+        // address of one Feed in an import file does. Reusing it joins nothing.
+        !holdsEveryKind(current, prepared.details.origins)
+      : candidateIdentity(
+          await siteCandidates(database, userId, prepared.details),
+        ) !== prepared.siteCandidates
   ) {
     throw new FeedImportDeferredError(
       "Feed sources changed during import. Please try again.",

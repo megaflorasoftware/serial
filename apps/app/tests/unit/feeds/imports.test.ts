@@ -206,6 +206,46 @@ it("rechecks a new same-site Feed inserted after verification", async () => {
   expect(await fixture.database.select().from(feeds)).toHaveLength(1);
 });
 
+it("reuses a Feed that another address of it created after preparation", async () => {
+  // An import file lists two addresses of one new Feed, prepared together.
+  const first = await prepare();
+  const second = await prepare({
+    ...rss,
+    origins: [
+      {
+        kind: "rss",
+        locator: `${site}/atom`,
+        alternateLocators: [`${site}/rss`],
+      },
+    ],
+  });
+  const created = await commit(first);
+  expect(created).toMatchObject({ created: true });
+  expect(await commit(second)).toMatchObject({
+    created: false,
+    attached: false,
+    feed: { id: created.feed.id },
+  });
+  expect(await fixture.database.select().from(feeds)).toHaveLength(1);
+  expect(await fixture.database.select().from(feedOrigins)).toHaveLength(1);
+});
+
+it("defers when the Feed created after preparation lacks a prepared origin", async () => {
+  const prepared = await prepare({
+    ...publication,
+    origins: [...rss.origins, atproto],
+  });
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "owner",
+    details: rss,
+    isActive: true,
+  });
+  await expect(commit(prepared)).rejects.toBeInstanceOf(
+    FeedImportDeferredError,
+  );
+  expect(await fixture.database.select().from(feedOrigins)).toHaveLength(1);
+});
+
 it("preserves a concurrent rename but rejects a changed origin", async () => {
   const original = await insertFeedWithOrigins(fixture.database, {
     userId: "owner",
