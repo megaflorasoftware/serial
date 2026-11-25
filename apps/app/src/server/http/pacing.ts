@@ -5,8 +5,10 @@ import { errorChain } from "~/server/errorChain";
 
 /** Discovery-side requests in flight to one registrable domain, per process. */
 const SITE_REQUESTS_PER_DOMAIN = 6;
-/** How long a 429 or 503 that names no wait pauses discovery. */
+/** How long a 429 or 503 pauses discovery when it names no usable wait. */
 const DEFAULT_PAUSE_MS = 60_000;
+/** The longest pause, whatever wait a site or service names. */
+const LONGEST_PAUSE_MS = 60 * 60_000;
 /** The most pauses remembered at once. */
 const REMEMBERED_PAUSES = 1024;
 
@@ -20,12 +22,27 @@ export class DiscoveryPausedError extends Error {
   }
 }
 
+/** A pause for `waitMs`: at most an hour, and a minute when it is unusable. */
+function boundedPause(waitMs: number | undefined) {
+  return waitMs === undefined || !Number.isFinite(waitMs)
+    ? DEFAULT_PAUSE_MS
+    : Math.min(Math.max(0, waitMs), LONGEST_PAUSE_MS);
+}
+
+/** How long a response's Retry-After header pauses discovery. */
+export function pauseLength(retryAfterValue: string | null) {
+  return boundedPause(retryAfter(retryAfterValue));
+}
+
 /** The end of the pause that held up work failing with `error`, if one did. */
 export function pauseEnd(error: unknown) {
-  return errorChain(error).find(
+  const paused = errorChain(error).find(
     (entry): entry is DiscoveryPausedError =>
       entry instanceof DiscoveryPausedError,
-  )?.retryAt;
+  );
+  if (!paused) return undefined;
+  const now = Date.now();
+  return new Date(now + boundedPause(paused.retryAt.getTime() - now));
 }
 
 /**
@@ -134,12 +151,10 @@ type Answer = {
   headers: { get: (name: string) => string | null };
 };
 
-/** A 429 or 503 pauses `key` for its Retry-After, or for a minute. */
+/** A 429 or 503 pauses `key` for its Retry-After, up to an hour, or a minute. */
 function pauseOnRefusal(key: string, response: Answer) {
   if (response.status !== 429 && response.status !== 503) return;
-  const until =
-    Date.now() +
-    (retryAfter(response.headers.get("retry-after")) ?? DEFAULT_PAUSE_MS);
+  const until = Date.now() + pauseLength(response.headers.get("retry-after"));
   if (!pauses.has(key) && pauses.size >= REMEMBERED_PAUSES)
     pauses.delete(pauses.keys().next().value!);
   pauses.set(key, Math.max(until, pauses.get(key) ?? 0));

@@ -34,7 +34,7 @@ import type { FeedGuessing } from "./discoverRss";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { captureException } from "~/server/logger";
 import { readFeedHttp } from "~/server/rss/feedHttp";
-import { pauseEnd } from "~/server/http/pacing";
+import { pauseEnd, pauseLength } from "~/server/http/pacing";
 import { createPinnedPool } from "~/server/http/publicHttp";
 
 import { parseSyndicationFeed } from "~/server/rss/syndication";
@@ -598,6 +598,13 @@ export async function discoverFeedOriginsForImport(
         ? Promise.resolve(publication)
         : resolvePublication(uri, ...rest);
     let incomplete: FeedImportDeferredError | undefined;
+    /** Leaves discovery incomplete until `time`, or later if a failure asked. */
+    const deferUntil = (time: number) => {
+      incomplete = new FeedImportDeferredError(
+        undefined,
+        new Date(Math.max(time, incomplete?.retryAt.getTime() ?? 0)),
+      );
+    };
     const read: typeof readFeedHttp = async (target, options) => {
       try {
         const response = await request(target, options);
@@ -607,25 +614,12 @@ export async function discoverFeedOriginsForImport(
           response.status !== 404 &&
           response.status !== 410
         ) {
-          const retryAfter = response.headers.get("retry-after");
-          const seconds = retryAfter === null ? NaN : Number(retryAfter);
-          const retryAt = Number.isFinite(seconds)
-            ? Date.now() + Math.max(0, seconds) * 1000
-            : Date.parse(retryAfter ?? "");
-          incomplete = new FeedImportDeferredError(
-            undefined,
-            new Date(
-              Math.max(
-                Date.now() + 60_000,
-                Number.isFinite(retryAt) ? retryAt : 0,
-                incomplete?.retryAt.getTime() ?? 0,
-              ),
-            ),
-          );
+          const wait = pauseLength(response.headers.get("retry-after"));
+          deferUntil(Date.now() + Math.max(60_000, wait));
         }
         return response;
       } catch (error) {
-        incomplete ??= new FeedImportDeferredError(undefined, pauseEnd(error));
+        deferUntil(pauseEnd(error)?.getTime() ?? Date.now() + 60_000);
         throw error;
       }
     };

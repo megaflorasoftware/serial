@@ -1,5 +1,6 @@
 import { captureException } from "../logger";
-import { errorChain, streamFailure } from "./protocol";
+import { streamFailure } from "./protocol";
+import { errorChain } from "~/server/errorChain";
 
 const reported = new WeakSet<object>();
 

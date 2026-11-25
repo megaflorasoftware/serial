@@ -14,13 +14,13 @@ import { forgetOutage } from "~/server/jetstream/reachability";
 import {
   archiveUnreadable,
   normalizeService,
-  retryAfter,
   sequence,
   StreamFailure,
   streamFailure,
 } from "~/server/jetstream/protocol";
 import { captureException } from "~/server/logger";
 import { SERIAL_USER_AGENT } from "~/server/http/publicHttp";
+import { retryAfter } from "~/server/http/retryAfter";
 
 vi.mock("~/server/logger", () => ({ captureException: vi.fn() }));
 afterEach(() => {

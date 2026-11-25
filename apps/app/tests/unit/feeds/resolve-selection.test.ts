@@ -41,7 +41,7 @@ vi.mock("~/server/rss/fetchFeeds", () => ({ fetchNewFeedDetails: vi.fn() }));
 
 const publicationUri =
   "at://did:plc:example/site.standard.publication/publication";
-const later = new Date(Date.now() + 2 * 60 * 60_000);
+const later = new Date(Date.now() + 30 * 60_000);
 const publication = {
   uri: publicationUri,
   did: "did:plc:example",

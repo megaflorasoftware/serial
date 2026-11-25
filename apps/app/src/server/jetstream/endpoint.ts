@@ -1,7 +1,8 @@
 import WebSocket from "ws";
-import { normalizeService, retryAfter, StreamFailure } from "./protocol";
+import { normalizeService, StreamFailure } from "./protocol";
 import { isLegacyJetstream } from "~/lib/jetstream-endpoint";
 import { serialHeaders } from "~/server/http/publicHttp";
+import { retryAfter } from "~/server/http/retryAfter";
 
 const services = new Map<string, Promise<string>>();
 

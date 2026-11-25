@@ -95,8 +95,6 @@ export class ArchiveUnreadableError extends Error {
     super("Jetstream archive data cannot be decoded", { cause });
   }
 }
-export { retryAfter } from "~/server/http/retryAfter";
-export { errorChain };
 export function streamFailure(error: unknown) {
   return errorChain(error).find(
     (entry): entry is StreamFailure => entry instanceof StreamFailure,

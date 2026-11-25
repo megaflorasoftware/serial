@@ -182,7 +182,7 @@ describe("Publication backfill", () => {
 
   it("waits for a paused site before trying again", async () => {
     await addFeed(1);
-    const pausedUntil = new Date(Date.now() + 2 * 60 * 60_000);
+    const pausedUntil = new Date(Date.now() + 30 * 60_000);
     publication.mockRejectedValueOnce(
       new Error("Publication discovery unavailable", {
         cause: new DiscoveryPausedError(pausedUntil),
@@ -456,7 +456,7 @@ describe("Feed revalidation", () => {
 
   it("runs again once a paused site resumes, and finishes after that", async () => {
     const feed = await addFeed(1);
-    const pausedUntil = new Date(Date.now() + 2 * 60 * 60_000);
+    const pausedUntil = new Date(Date.now() + 30 * 60_000);
     revalidate.mockRejectedValueOnce(new DiscoveryPausedError(pausedUntil));
     await queueFeedRevalidation(fixture.database, "owner", [feed.id]);
     await run();

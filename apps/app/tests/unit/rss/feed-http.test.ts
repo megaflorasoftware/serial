@@ -221,10 +221,23 @@ describe("readFeedHttp", () => {
     ).rejects.toThrow("Feed request exceeded 20ms total duration");
   });
 
-  it("rejects response headers beyond the configured budget", async () => {
+  it("rejects response headers beyond the configured budget, cancelling the body", async () => {
+    const responses: Array<{ bodyUsed: boolean }> = [];
     await expect(
-      readLocalFeedHttp(`${baseUrl}/large-headers`, { maxHeaderBytes: 64 }),
+      readFeedHttp(
+        `${baseUrl}/large-headers`,
+        { maxHeaderBytes: 64 },
+        {
+          ...LOCAL_HTTP_DEPENDENCIES,
+          fetch: async (...args) => {
+            const response = await undiciFetch(...args);
+            responses.push(response);
+            return response;
+          },
+        },
+      ),
     ).rejects.toThrow("Feed response headers exceed 64 bytes");
+    expect(responses[0]?.bodyUsed).toBe(true);
   });
 
   it("preserves a bodyless 304 with a representation Content-Length", async () => {

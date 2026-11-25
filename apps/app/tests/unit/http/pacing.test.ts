@@ -162,6 +162,37 @@ describe("pauses", () => {
     });
   });
 
+  it.each([
+    ["a huge wait", "1000000000000000", 60 * 60_000],
+    ["a far-future date", "Fri, 31 Dec 9999 23:59:59 GMT", 60 * 60_000],
+    ["an overflowing wait", "1e400", 60_000],
+    ["an unreadable wait", "soon", 60_000],
+  ])(
+    "last at most an hour, and a minute for an unusable wait: %s",
+    async (_wait, retryAfter, pauseMs) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const domain = `${retryAfter.replace(/\W/g, "")}-bound-test.com`;
+      await withDiscoveryPacing(async () => {
+        const request = await startSiteRequest(domain);
+        request.answered(answer(429, { "Retry-After": retryAfter }));
+        request.release();
+        expect(
+          (await refusal(startSiteRequest(domain))).retryAt.getTime(),
+        ).toBe(Date.now() + pauseMs);
+      });
+    },
+  );
+
+  it("end no later than an hour from now, whatever an error claims", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    expect(
+      pauseEnd(new DiscoveryPausedError(new Date(8.64e15)))?.getTime(),
+    ).toBe(Date.now() + 60 * 60_000);
+    expect(
+      pauseEnd(new DiscoveryPausedError(new Date(Number.NaN)))?.getTime(),
+    ).toBe(Date.now() + 60_000);
+  });
+
   it("start on no other status", async () => {
     await withDiscoveryPacing(async () => {
       for (const status of [200, 404, 410, 500, 502]) {
@@ -212,7 +243,7 @@ describe("pauses", () => {
         cause: new DiscoveryPausedError(retryAt),
       }),
     });
-    expect(pauseEnd(wrapped)).toBe(retryAt);
+    expect(pauseEnd(wrapped)).toEqual(retryAt);
     expect(pauseEnd(new Error("Site unavailable"))).toBeUndefined();
   });
 });

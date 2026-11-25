@@ -493,24 +493,72 @@ describe("import discovery completeness", () => {
   it.each(["the website", "its publication declaration"])(
     "waits for the pause that kept discovery from reading %s",
     async (paused) => {
-      const pausedUntil = new Date(Date.now() + 2 * 60 * 60_000);
-      vi.mocked(readFeedHttp).mockImplementation(async (url) => {
-        if (
+      const pausedUntil = new Date(Date.now() + 30 * 60_000);
+      vi.mocked(readFeedHttp).mockImplementation((url) =>
+        (
           paused === "the website"
             ? url === "https://example.com"
             : url.includes("/.well-known/")
         )
-          throw new DiscoveryPausedError(pausedUntil);
-        return response(url, "<html></html>");
-      });
-      const error = await discoverFeedOriginsForImport(
+          ? Promise.reject(new DiscoveryPausedError(pausedUntil))
+          : Promise.resolve(response(url, "<html></html>")),
+      );
+      const deferred = await discoverFeedOriginsForImport(
         `paused-${paused}`,
         "https://example.com",
       ).catch((error: unknown) => error);
-      expect(error).toBeInstanceOf(FeedImportDeferredError);
-      expect((error as FeedImportDeferredError).retryAt).toEqual(pausedUntil);
+      expect(deferred).toBeInstanceOf(FeedImportDeferredError);
+      expect((deferred as FeedImportDeferredError).retryAt).toEqual(
+        pausedUntil,
+      );
     },
   );
+  it.each([
+    ["a huge Retry-After", "1000000000000000"],
+    ["a far-future Retry-After", "Fri, 31 Dec 9999 23:59:59 GMT"],
+  ])("waits no more than an hour for %s", async (_wait, retryAfter) => {
+    vi.mocked(readFeedHttp).mockResolvedValue({
+      ...response("https://example.com", "", false),
+      status: 429,
+      headers: new Headers({ "retry-after": retryAfter }),
+    });
+    const before = Date.now();
+    const deferred = await discoverFeedOriginsForImport(
+      `bounded-${retryAfter}`,
+      "https://example.com",
+    ).catch((error: unknown) => error);
+    const retryAt = (deferred as FeedImportDeferredError).retryAt.getTime();
+    expect(retryAt).toBeGreaterThanOrEqual(before + 60 * 60_000);
+    expect(retryAt).toBeLessThanOrEqual(Date.now() + 60 * 60_000);
+  });
+  it("waits for a pause that ends after an earlier failure's retry", async () => {
+    const pausedUntil = new Date(Date.now() + 30 * 60_000);
+    vi.mocked(scoutFeeds).mockImplementation(async (_url, options) => {
+      // Each fails, and discovery carries on to the next.
+      for (const url of [
+        "https://example.com/busy",
+        "https://example.com/paused",
+      ])
+        // oxlint-disable-next-line react-doctor/async-await-in-loop
+        await Promise.resolve(options!.fetchFn!(url)).catch(() => {});
+      return [];
+    });
+    vi.mocked(readFeedHttp).mockImplementation((url) =>
+      url.endsWith("/paused")
+        ? Promise.reject(new DiscoveryPausedError(pausedUntil))
+        : Promise.resolve(
+            url.endsWith("/busy")
+              ? statusResponse(url, 503)
+              : response(url, "<html></html>"),
+          ),
+    );
+    const deferred = await discoverFeedOriginsForImport(
+      "later-pause",
+      "https://example.com",
+    ).catch((error: unknown) => error);
+    expect(deferred).toBeInstanceOf(FeedImportDeferredError);
+    expect((deferred as FeedImportDeferredError).retryAt).toEqual(pausedUntil);
+  });
   it("allows completed empty discovery when optional endpoints do not exist", async () => {
     vi.mocked(readFeedHttp).mockImplementation(async (url) =>
       response(url, "<html></html>", !url.includes("/.well-known/")),
@@ -751,10 +799,12 @@ describe("connections", () => {
   ])(
     "are shared across one %s discovery and closed when it ends",
     async (_discovery, discover) => {
-      vi.mocked(readFeedHttp).mockImplementation(async (url) =>
-        url.includes("/.well-known/")
-          ? statusResponse(url, 404)
-          : response(url, "<html></html>"),
+      vi.mocked(readFeedHttp).mockImplementation((url) =>
+        Promise.resolve(
+          url.includes("/.well-known/")
+            ? statusResponse(url, 404)
+            : response(url, "<html></html>"),
+        ),
       );
       await discover();
       expect(vi.mocked(readFeedHttp).mock.calls.length).toBeGreaterThan(1);
@@ -766,8 +816,8 @@ describe("connections", () => {
   );
 
   it("are separate for each discovery", async () => {
-    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
-      response(url, "<html></html>"),
+    vi.mocked(readFeedHttp).mockImplementation((url) =>
+      Promise.resolve(response(url, "<html></html>")),
     );
     await Promise.all([
       discoverFeedOriginsForRevalidation("https://example.com"),

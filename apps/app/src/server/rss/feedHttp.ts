@@ -78,14 +78,13 @@ const DEFAULT_FEED_HTTP_DEPENDENCIES: FeedHttpDependencies = {
   fetch,
 };
 
-function assertHeadersWithinBudget(headers: Headers, maxHeaderBytes: number) {
+function headersWithinBudget(headers: Headers, maxHeaderBytes: number) {
   let headerBytes = 0;
   for (const [name, value] of headers) {
     headerBytes += Buffer.byteLength(name) + Buffer.byteLength(value);
-    if (headerBytes > maxHeaderBytes) {
-      throw new Error(`Feed response headers exceed ${maxHeaderBytes} bytes`);
-    }
+    if (headerBytes > maxHeaderBytes) return false;
   }
+  return true;
 }
 
 export async function readFeedHttp(
@@ -146,7 +145,12 @@ export async function readFeedHttp(
         const responseHeaders = new Headers(
           Array.from(response.headers.entries()),
         );
-        assertHeadersWithinBudget(responseHeaders, maxHeaderBytes);
+        if (!headersWithinBudget(responseHeaders, maxHeaderBytes)) {
+          await response.body?.cancel();
+          throw new Error(
+            `Feed response headers exceed ${maxHeaderBytes} bytes`,
+          );
+        }
 
         if (REDIRECT_STATUSES.has(response.status)) {
           if (redirectCount >= maxRedirects) {
