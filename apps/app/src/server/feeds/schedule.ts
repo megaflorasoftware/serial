@@ -24,6 +24,16 @@ export function originIsDue(now: Date) {
 
 export const originIsScheduled = isNotNull(feedOrigins.nextFetchAt);
 
+/**
+ * No fetch has visited the origin since it was created due: a fetch moves the
+ * schedule on from that moment, whatever it finds. An origin created on an
+ * inactive Feed rests unscheduled and never waits.
+ */
+export const originAwaitsFirstFetch = and(
+  originIsScheduled,
+  lte(feedOrigins.nextFetchAt, feedOrigins.createdAt),
+)!;
+
 function originsOfFeeds(userId: string, feedIds: number[]) {
   return and(
     eq(feedOrigins.userId, userId),

@@ -9,7 +9,10 @@ import type { ORPCContext } from "~/server/orpc/base";
 import { createFromSubscriptionImport } from "~/server/api/routers/feed-router";
 import { streamingImport } from "~/server/api/routers/initialRouter";
 import { readOriginEvidence } from "~/server/feeds/revalidationEvidence";
-import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
+import {
+  fetchAndInsertFeedData,
+  fetchNewFeedDetails,
+} from "~/server/rss/fetchFeeds";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   feedCategories,
@@ -46,9 +49,9 @@ vi.mock("~/server/subscriptions/helpers", async (original) => ({
 }));
 vi.mock("~/server/rss/fetchFeeds", () => ({
   fetchNewFeedDetails: vi.fn(),
-  fetchAndInsertFeedData: async function* () {
+  fetchAndInsertFeedData: vi.fn(async function* () {
     yield* [];
-  },
+  }),
 }));
 vi.mock("~/server/feeds/revalidationEvidence", async (original) => ({
   ...(await original<typeof Evidence>()),
@@ -331,3 +334,65 @@ it.each(["bulk", "streaming"] as const)(
     }
   },
 );
+
+it("streaming OPML counts every entry while finding, and each Feed once while fetching", async () => {
+  const owned = "https://owned.example/feed";
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "owner",
+    isActive: true,
+    details: newRssFeedDetails({
+      name: "Owned",
+      url: owned,
+      platform: "website",
+      siteUrl: "https://owned.example",
+    }),
+  });
+  vi.mocked(fetchNewFeedDetails).mockImplementation(async (url) =>
+    url === "https://new.example/feed"
+      ? [
+          newRssFeedDetails({
+            name: "New",
+            url,
+            platform: "website",
+            siteUrl: "https://new.example",
+          }),
+        ]
+      : [],
+  );
+  // The new Feed reads two origins; it is still one Feed fetched.
+  vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* (
+    _context,
+    origins,
+  ) {
+    for (const { feed, origin } of origins)
+      for (let read = 0; read < 2; read++)
+        yield { status: "success", id: feed.id, originId: origin.id };
+  } as typeof fetchAndInsertFeedData);
+  const events = [];
+  for await (const event of await api().streaming({
+    feeds: [
+      { feedUrl: owned, categories: [] },
+      { feedUrl: "https://new.example/feed", categories: [] },
+      { feedUrl: "https://broken.example/feed", categories: [] },
+    ],
+  }))
+    events.push(event);
+  const counts = events.flatMap((event) =>
+    event.type === "import-progress" ? [event.progress] : [],
+  );
+  // Added, already present and failed all count toward finding.
+  expect(counts.filter((count) => count.stage === "finding")).toEqual([
+    { stage: "finding", completed: 1, total: 3 },
+    { stage: "finding", completed: 2, total: 3 },
+    { stage: "finding", completed: 3, total: 3 },
+  ]);
+  expect(counts.filter((count) => count.stage === "fetching")).toEqual([
+    { stage: "fetching", completed: 0, total: 1 },
+    { stage: "fetching", completed: 1, total: 1 },
+  ]);
+  expect(
+    events.filter(
+      (event) => event.type === "feed-status" && event.status === "success",
+    ),
+  ).toHaveLength(2);
+});

@@ -11,7 +11,10 @@ import type {
   PublicationSyncJobStatus,
   PublicationSyncResult,
 } from "~/lib/auth/publication-sync";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
+import { findingProgress } from "~/lib/two-stage-progress";
+import { withIdentityCache } from "~/server/auth/atproto/did-resolver";
 import { atprotoConnections as connections, user } from "~/server/db/schema";
 import { automaticRssOwnerForAccount } from "~/server/rss/automaticOwnership";
 import { workerPool } from "~/lib/workerPool";
@@ -35,7 +38,7 @@ const CONTINUATION_WINDOW_MS = 1000;
 const PROGRESS_ANNOUNCEMENT_INTERVAL_MS = 1000;
 
 type JobState = {
-  progress: { completed: number; total: number } | null;
+  progress: TwoStageProgress | null;
   result: PublicationSyncResult | null;
 };
 
@@ -111,7 +114,7 @@ function scheduleUnlessRequested(claimedAt: Date | null, next: Date | null) {
  * run's own continuation, or a request made while it ran.
  */
 function progressUnlessSettled(claimedAt: Date | null, continues: boolean) {
-  const kept = sql`coalesce(${connections.subscriptionJobProgress}, ${JSON.stringify({ completed: 0, total: 0 })})`;
+  const kept = sql`coalesce(${connections.subscriptionJobProgress}, ${JSON.stringify(findingProgress(0))})`;
   return continues
     ? kept
     : sql`case when ${scheduleUnchangedSince(claimedAt)} then null else ${kept} end`;
@@ -123,6 +126,33 @@ function continuesAtOnce(result: PublicationSyncResult, retry: Date | null) {
     result.status === "busy" ||
     (retry !== null && retry.getTime() <= Date.now() + CONTINUATION_WINDOW_MS)
   );
+}
+
+/**
+ * The request's count once a run reports its own. A run that continues a
+ * request picks up where the last one left off, and the count never moves
+ * back to an earlier stage. Each finding pass goes over every publication
+ * again, so its count stops at the total. Fetching sees only the Feeds that
+ * still wait, so the ones earlier runs fetched stay counted.
+ */
+function requestProgress(
+  previous: TwoStageProgress | null,
+  run: TwoStageProgress,
+): TwoStageProgress {
+  if (!previous?.total) return run;
+  if (!run.total || (run.stage === "finding" && previous.stage === "fetching"))
+    return previous;
+  if (run.stage !== previous.stage) return run;
+  return run.stage === "finding"
+    ? {
+        ...run,
+        completed: Math.min(run.total, previous.completed + run.completed),
+      }
+    : {
+        ...run,
+        completed: previous.completed + run.completed,
+        total: previous.completed + run.total,
+      };
 }
 
 /**
@@ -227,7 +257,9 @@ export async function runPublicationSyncJobs(
       await announce(job.userId);
   };
   let continued = false;
-  for await (const again of workerPool(rows, JOB_CONCURRENCY, async (row) => {
+  // One connection's check and run share their identity lookups.
+  const runJob = (row: DueJob) => withIdentityCache(() => runDueJob(row));
+  const runDueJob = async (row: DueJob) => {
     // A check that cannot decide must not hold up the rest of the page.
     const check = await checkPublicationSync(row, dependencies.remote).catch(
       (error: unknown) => {
@@ -288,17 +320,17 @@ export async function runPublicationSyncJobs(
             userId: job.userId,
             runId: job.subscriptionRequestId ?? token,
             check,
-            onProgress: async (progress) => {
+            onProgress: async ({ stage, completed, total }) => {
               await database
                 .update(connections)
                 .set({
                   subscriptionJobExpiresAt: new Date(Date.now() + JOB_LEASE_MS),
                   ...(visible
                     ? {
-                        subscriptionJobProgress: {
-                          completed: progress.completed,
-                          total: progress.total,
-                        },
+                        subscriptionJobProgress: requestProgress(
+                          job.subscriptionJobProgress,
+                          { stage, completed, total },
+                        ),
                       }
                     : {}),
                 })
@@ -367,7 +399,8 @@ export async function runPublicationSyncJobs(
       scheduled !== null &&
       scheduled.getTime() <= Date.now() + CONTINUATION_WINDOW_MS
     );
-  }))
+  };
+  for await (const again of workerPool(rows, JOB_CONCURRENCY, runJob))
     continued ||= again;
   return continued || rows.length === JOB_PAGE_SIZE;
 }

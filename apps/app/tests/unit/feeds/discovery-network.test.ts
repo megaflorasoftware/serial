@@ -366,13 +366,60 @@ describe("import discovery completeness", () => {
         return response(url, "<html><title>About RSS readers</title></html>");
       return statusResponse(url, 404);
     });
-    const rows = await discoverFeedOriginsForImport(
+    const { rows } = await discoverFeedOriginsForImport(
       "non-feed-anchor",
       "https://example.com/",
     );
     expect(rows).toEqual([
       expect.objectContaining({ url: "https://example.com/feed.xml" }),
     ]);
+  });
+
+  it("reuses the publication its caller read, and hands back what it read", async () => {
+    const actual = await vi.importActual<{ discoverFeeds: typeof scoutFeeds }>(
+      "feedscout",
+    );
+    vi.mocked(scoutFeeds).mockImplementationOnce(actual.discoverFeeds);
+    const rss =
+      '<rss version="2.0"><channel><title>Example</title><link>https://www.example.com/</link><description>News</description><item><title>Post</title><link>https://www.example.com/post</link></item></channel></rss>';
+    vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+      if (url === "https://www.example.com")
+        return response(
+          url,
+          `<link rel="alternate" type="application/rss+xml" href="/feed.xml"><link rel="site.standard.publication" href="${uri}">`,
+        );
+      if (url === "https://www.example.com/feed.xml") return response(url, rss);
+      if (url.includes("/.well-known/")) return response(url, uri);
+      return statusResponse(url, 404);
+    });
+    const { rows, read } = await discoverFeedOriginsForImport(
+      "known-publication",
+      publication.siteUrl,
+      { publication },
+    );
+    expect(resolvePublication).not.toHaveBeenCalled();
+    expect(rows).toEqual([
+      expect.objectContaining({
+        origins: expect.arrayContaining([
+          expect.objectContaining({ kind: "atproto", locator: uri }),
+        ]),
+      }),
+    ]);
+    const feedReads = () =>
+      vi
+        .mocked(readFeedHttp)
+        .mock.calls.filter(
+          ([url]) => url === "https://www.example.com/feed.xml",
+        ).length;
+    const before = feedReads();
+    expect((await read("https://www.example.com/feed.xml")).text).toBe(rss);
+    expect(feedReads()).toBe(before);
+    // Anything discovery did not read is read afresh.
+    await read("https://www.example.com/other.xml");
+    expect(readFeedHttp).toHaveBeenLastCalledWith(
+      "https://www.example.com/other.xml",
+      undefined,
+    );
   });
 
   it.each(["html", "headers"] as const)(
@@ -447,7 +494,7 @@ describe("import discovery completeness", () => {
         "complete-empty",
         "https://example.com",
       ),
-    ).toEqual([]);
+    ).toMatchObject({ rows: [] });
   });
   it("reports a site that answers 410 as gone, apart from incomplete discovery", async () => {
     vi.mocked(readFeedHttp).mockImplementation(async (url) =>
@@ -476,8 +523,8 @@ describe("import discovery completeness", () => {
   });
   it("propagates a discovery denial with a retry time", async () => {
     const acquire = vi
-      .spyOn(captureLimiter, "acquire")
-      .mockReturnValueOnce({ ok: false, reason: "rate_limited" });
+      .spyOn(captureLimiter, "acquireInBackground")
+      .mockResolvedValueOnce({ ok: false, reason: "rate_limited" });
     await expect(
       discoverFeedOriginsForImport("limited", "https://example.com"),
     ).rejects.toMatchObject({ retryAt: expect.any(Date) });

@@ -17,6 +17,8 @@ export async function syncBeforeFeedRefresh(input: {
     await (input.sync ?? syncPublicationSubscriptions)({
       database: input.database,
       userId: input.userId,
+      // The refresh fetches every due origin next, new Feeds' included.
+      skipFetching: true,
       onProgress: async (progress) => {
         if (!started) {
           await input.publish(input.channel, {

@@ -44,6 +44,8 @@ const publication = {
   siteUrl: "https://example.com/",
   name: "Example publication",
 };
+/** The reader import discovery hands back, holding the responses it read. */
+const discoveryRead = vi.fn();
 const selection = (rssUrl: string): DiscoveredFeed => ({
   url: rssUrl,
   siteUrl: publication.siteUrl,
@@ -57,7 +59,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(resolvePublication).mockResolvedValue(publication);
   vi.mocked(discoverFeeds).mockResolvedValue([]);
-  vi.mocked(discoverFeedOriginsForImport).mockResolvedValue([]);
+  vi.mocked(discoverFeedOriginsForImport).mockResolvedValue({
+    rows: [],
+    read: discoveryRead,
+  });
 });
 
 describe("resolving a selected publication", () => {
@@ -172,21 +177,26 @@ it("resolves a subscription URI once before discovering the publication's RSS or
     expect.objectContaining({ kind: "atproto", locator: publicationUri }),
   ]);
   expect(resolvePublication).toHaveBeenCalledExactlyOnceWith(publicationUri);
+  // Discovery reuses the record read above rather than reading it again.
   expect(discoverFeedOriginsForImport).toHaveBeenCalledExactlyOnceWith(
     "user",
     publication.siteUrl,
+    { publication, signal: undefined },
   );
 });
 
 it("combines a known imported publication with RSS without requiring a website publication backlink", async () => {
   const rssUrl = "https://example.com/rss";
-  vi.mocked(discoverFeedOriginsForImport).mockResolvedValue([
-    {
-      url: rssUrl,
-      siteUrl: publication.siteUrl,
-      origins: [{ kind: "rss", locator: rssUrl }],
-    },
-  ]);
+  vi.mocked(discoverFeedOriginsForImport).mockResolvedValue({
+    rows: [
+      {
+        url: rssUrl,
+        siteUrl: publication.siteUrl,
+        origins: [{ kind: "rss", locator: rssUrl }],
+      },
+    ],
+    read: discoveryRead,
+  });
   vi.mocked(fetchNewFeedDetails).mockResolvedValue([
     newRssFeedDetails({
       name: "RSS",
@@ -200,6 +210,11 @@ it("combines a known imported publication with RSS without requiring a website p
     "rss",
     "atproto",
   ]);
+  // The RSS Feed is read from the response discovery already holds.
+  expect(fetchNewFeedDetails).toHaveBeenCalledExactlyOnceWith(
+    rssUrl,
+    discoveryRead,
+  );
 });
 it("reports a record that does not describe the publication as gone", async () => {
   vi.mocked(resolvePublication).mockResolvedValue(null);

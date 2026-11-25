@@ -12,6 +12,7 @@ import type { ChannelMessage } from "../publisher";
 import type { InsertFeedWithCategoriesResult } from "./feed-router/utils";
 import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
 import type { FetchFeedsStatus } from "~/server/rss/fetchFeeds";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import type {
   ReconciliationScopeTarget,
   ReconciliationStreamEvent,
@@ -157,7 +158,9 @@ export type ImportProgressChunk =
     }
   | { type: "import-feed-error"; feedUrl: string; error: string }
   | { type: "feed-status"; feedId: number; status: FetchFeedsStatus }
-  | { type: "import-views-updated"; views: ApplicationView[] };
+  | { type: "import-views-updated"; views: ApplicationView[] }
+  /** The import's own count, which the overlay shows as it stands. */
+  | { type: "import-progress"; progress: TwoStageProgress };
 
 type RouterPublishedChunk = ChannelMessage;
 
@@ -338,8 +341,9 @@ function getUniqueNames(names: string[]) {
 
 /**
  * Combined streaming import endpoint that inserts feeds and fetches RSS content
- * in a single operation using a worker pool for maximum parallelism.
- * Each feed is processed completely (insert + RSS fetch) before being considered done.
+ * in a single operation using a worker pool for maximum parallelism. It runs
+ * in two stages and reports each one's count: finding inserts every entry's
+ * Feed, then fetching reads the content of the Feeds it added.
  */
 export const streamingImport = protectedProcedure
   .input(
@@ -429,6 +433,17 @@ export const streamingImport = protectedProcedure
         source: "invalidation",
         chunk: organizationInvalidationSummary(),
       });
+    const importProgress = (
+      stage: TwoStageProgress["stage"],
+      completed: number,
+      total: number,
+    ) =>
+      ({
+        type: "import-progress",
+        progress: { stage, completed, total },
+      }) satisfies ImportProgressChunk;
+    // Finding counts every entry handled: added, already present or failed.
+    let found = 0;
 
     // Create (or reuse) views from the top-level OPML folders — plus the tag
     // categories backing nested tag sections — before any feed work, so views
@@ -682,6 +697,8 @@ export const streamingImport = protectedProcedure
           error: "Couldn't read the existing feed",
         } satisfies ImportProgressChunk;
       }
+      found += ownedImportFeeds.length;
+      yield importProgress("finding", found, input.feeds.length);
     }
 
     // Worker function: insert feed and link it into its imported views
@@ -841,6 +858,8 @@ export const streamingImport = protectedProcedure
       insertFeed,
     )) {
       for (const chunk of chunks) yield chunk;
+      // Each worker reports one entry.
+      yield importProgress("finding", ++found, input.feeds.length);
       if (
         viewLinking &&
         Date.now() - lastMembershipPublishAt >= MEMBERSHIP_PUBLISH_INTERVAL_MS
@@ -1035,12 +1054,17 @@ export const streamingImport = protectedProcedure
       }
     }
 
+    // Fetching counts each Feed once, however many origins it reads.
+    let fetched = 0;
+    if (insertedFeeds.length)
+      yield importProgress("fetching", fetched, insertedFeeds.length);
     for await (const chunks of workerPool(
       insertedFeeds,
       BATCH_SIZE,
       fetchInsertedFeed,
     )) {
       for (const chunk of chunks) yield chunk;
+      yield importProgress("fetching", ++fetched, insertedFeeds.length);
     }
 
     await publishOrganizationInvalidation();

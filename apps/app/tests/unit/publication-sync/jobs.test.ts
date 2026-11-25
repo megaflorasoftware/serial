@@ -121,7 +121,12 @@ it("persists work atomically with settings and runs without a browser", async ()
         running: true,
         progress: null,
       });
-      await onProgress?.({ runId: runId!, completed: 1, total: 1 });
+      await onProgress?.({
+        runId: runId!,
+        stage: "finding",
+        completed: 1,
+        total: 1,
+      });
       return completed();
     },
   );
@@ -183,7 +188,12 @@ it("keeps a request in flight across an immediate continuation and totals its ru
   await save();
   // A run that stops at its deadline leaves work for a continuation due now.
   const continued = await runJobs(async ({ onProgress, runId }) => {
-    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 1,
+      total: 2,
+    });
     return {
       ...completed(),
       status: "partial",
@@ -195,7 +205,7 @@ it("keeps a request in flight across an immediate continuation and totals its ru
   expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
     pending: true,
     running: false,
-    progress: { completed: 1, total: 2 },
+    progress: { stage: "finding", completed: 1, total: 2 },
     result: { exported: 1, deferred: 1 },
   });
   await fixture.database
@@ -207,6 +217,98 @@ it("keeps a request in flight across an immediate continuation and totals its ru
     pending: false,
     progress: null,
     result: { exported: 2, deferred: 0 },
+  });
+});
+it("counts across the runs of a request and never moves back a stage", async () => {
+  await save();
+  const progress = async () =>
+    (await getPublicationSyncJob(fixture.database, "owner"))?.progress;
+  const due = () =>
+    fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: new Date(0) })
+      .where(eq(atprotoConnections.id, "connection"));
+  // The first run finds 4 of 13 publications before its deadline.
+  await runJobs(async ({ onProgress, runId }) => {
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 0,
+      total: 13,
+    });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 4,
+      total: 13,
+    });
+    return { ...completed(), status: "partial", deferred: 9 };
+  });
+  expect(await progress()).toEqual({
+    stage: "finding",
+    completed: 4,
+    total: 13,
+  });
+  await due();
+  // The next run passes over every publication again; the count goes on from 4.
+  await runJobs(async ({ onProgress, runId }) => {
+    const report = (
+      stage: "finding" | "fetching",
+      done: number,
+      total: number,
+    ) => onProgress?.({ runId: runId!, stage, completed: done, total });
+    await report("finding", 0, 0);
+    expect(await progress()).toEqual({
+      stage: "finding",
+      completed: 4,
+      total: 13,
+    });
+    await report("finding", 5, 13);
+    expect(await progress()).toEqual({
+      stage: "finding",
+      completed: 9,
+      total: 13,
+    });
+    await report("finding", 13, 13);
+    expect(await progress()).toEqual({
+      stage: "finding",
+      completed: 13,
+      total: 13,
+    });
+    await report("fetching", 5, 12);
+    // Fetching ran out of time; the rest follows at once.
+    return { ...completed(), retryAt: new Date() };
+  });
+  expect(await progress()).toEqual({
+    stage: "fetching",
+    completed: 5,
+    total: 12,
+  });
+  await due();
+  // A run that continues fetching finds first, which the count passes over.
+  await runJobs(async ({ onProgress, runId }) => {
+    const report = (
+      stage: "finding" | "fetching",
+      done: number,
+      total: number,
+    ) => onProgress?.({ runId: runId!, stage, completed: done, total });
+    await report("finding", 13, 13);
+    expect(await progress()).toEqual({
+      stage: "fetching",
+      completed: 5,
+      total: 12,
+    });
+    await report("fetching", 7, 7);
+    expect(await progress()).toEqual({
+      stage: "fetching",
+      completed: 12,
+      total: 12,
+    });
+    return completed();
+  });
+  expect(await getPublicationSyncJob(fixture.database, "owner")).toMatchObject({
+    pending: false,
+    progress: null,
   });
 });
 it("keeps the failures an earlier run of the same request saw, without counting them twice", async () => {
@@ -285,7 +387,12 @@ it("runs a retry in the background once its request has settled", async () => {
     .set({ subscriptionNextAttemptAt: new Date(0) })
     .where(eq(atprotoConnections.id, "connection"));
   await runJobs(async ({ onProgress, runId }) => {
-    await onProgress?.({ runId: runId!, completed: 1, total: 1 });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 1,
+      total: 1,
+    });
     // While it runs, the interface has nothing to watch.
     expect(
       await getPublicationSyncJob(fixture.database, "owner"),
@@ -301,9 +408,19 @@ it("runs a retry in the background once its request has settled", async () => {
 it("announces a run the user started while it progresses and when it settles", async () => {
   await save();
   await runJobs(async ({ onProgress, runId }) => {
-    await onProgress?.({ runId: runId!, completed: 0, total: 2 });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 0,
+      total: 2,
+    });
     // A second change inside the announcement interval waits for the next one.
-    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 1,
+      total: 2,
+    });
     expect(announce).toHaveBeenCalledExactlyOnceWith("owner");
     return completed();
   });
@@ -316,8 +433,18 @@ it("announces a run the user started while it progresses and when it settles", a
 it("announces a change held back by the interval once the interval ends", async () => {
   await save();
   await runJobs(async ({ onProgress, runId }) => {
-    await onProgress?.({ runId: runId!, completed: 0, total: 2 });
-    await onProgress?.({ runId: runId!, completed: 1, total: 2 });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 0,
+      total: 2,
+    });
+    await onProgress?.({
+      runId: runId!,
+      stage: "finding",
+      completed: 1,
+      total: 2,
+    });
     expect(announce).toHaveBeenCalledTimes(1);
     // The run goes quiet, as during a slow import, and the held change still goes out.
     await vi.waitFor(() => expect(announce).toHaveBeenCalledTimes(2), {
@@ -584,7 +711,7 @@ it("reports pending only for a request the user started and has not seen finish"
   await set({
     subscriptionNextAttemptAt: new Date(Date.now() + 1000),
     subscriptionJobExpiresAt: null,
-    subscriptionJobProgress: { completed: 1, total: 3 },
+    subscriptionJobProgress: { stage: "finding", completed: 1, total: 3 },
   });
   expect(await status()).toBe(true);
 });

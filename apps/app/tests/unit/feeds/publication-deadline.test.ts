@@ -10,6 +10,7 @@ vi.mock("~/server/auth/atproto/typeahead", () => ({
   searchAtprotoActorsTypeahead: vi.fn(),
 }));
 vi.mock("~/server/auth/atproto/hardened-fetch", () => ({
+  ALLOW_INSECURE_PDS: false,
   createHardenedFetch: () => vi.fn(),
 }));
 beforeEach(() => vi.clearAllMocks());

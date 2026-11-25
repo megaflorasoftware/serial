@@ -30,7 +30,7 @@ export function PublicationSyncProgress() {
   useEffect(() => {
     const job = status.data;
     if (job?.pending) {
-      // Polling a deferred retry must not keep extending its result toast.
+      // Polling an unchanged status must not show its toast again.
       const notification = JSON.stringify(job);
       if (observed.current !== notification) showPublicationSyncProgress(job);
       observed.current = notification;

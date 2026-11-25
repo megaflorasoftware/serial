@@ -16,6 +16,7 @@ import { feedItemsStore } from "./store";
 import { viewsStore } from "./views/store";
 import type { ContentStatusFilter } from "~/lib/content-status";
 import type { ImportProgressChunk } from "~/server/api/routers/initialRouter";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import type { ApplicationFeed, ApplicationView } from "~/server/db/schema";
 
 type FeedStatusChunk = Extract<ImportProgressChunk, { type: "feed-status" }>;
@@ -25,7 +26,10 @@ function applyFeedStatusChunks(chunks: FeedStatusChunk[]) {
   const feedStatusDict = { ...feedItemsStore.getState().feedStatusDict };
   for (const chunk of chunks) feedStatusDict[chunk.feedId] = chunk.status;
   feedItemsStore.setState({ feedStatusDict });
-  loadingActor.send({ type: "FEED_STATUS_BATCH", count: chunks.length });
+}
+
+function applyImportProgress(progress: TwoStageProgress | undefined) {
+  if (progress) loadingActor.send({ type: "IMPORT_PROGRESS", progress });
 }
 
 function applyImportedFeeds(feeds: ApplicationFeed[]) {
@@ -45,22 +49,26 @@ function applyImportedViews(views: ApplicationView[] | undefined) {
 
 /**
  * Applies a burst of import chunks as one store write per store. Feeds and
- * statuses are coalesced, only the last views chunk is kept, and every control
- * chunk (start, warning, error) first flushes what came before it so the
- * loading machine sees events in the order the server emitted them.
+ * statuses are coalesced, only the last views and progress chunks are kept,
+ * and every control chunk (start, warning, error) first flushes what came
+ * before it so the loading machine sees events in the order the server
+ * emitted them.
  */
 export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
   let feeds: ApplicationFeed[] = [];
   let statuses: FeedStatusChunk[] = [];
   let views: ApplicationView[] | undefined;
+  let progress: TwoStageProgress | undefined;
 
   const flushCoalesced = () => {
     applyImportedFeeds(feeds);
     applyImportedViews(views);
     applyFeedStatusChunks(statuses);
+    applyImportProgress(progress);
     feeds = [];
     statuses = [];
     views = undefined;
+    progress = undefined;
   };
 
   unstable_batchedUpdates(() => {
@@ -74,6 +82,9 @@ export function applyImportProgressChunks(chunks: ImportProgressChunk[]) {
           break;
         case "feed-status":
           statuses.push(chunk);
+          break;
+        case "import-progress":
+          progress = chunk.progress;
           break;
         case "import-start":
           flushCoalesced();

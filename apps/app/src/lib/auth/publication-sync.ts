@@ -1,3 +1,5 @@
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
+
 export type PublicationSyncCounts = {
   imported: number;
   exported: number;
@@ -11,11 +13,8 @@ export type PublicationSyncResult = PublicationSyncCounts & {
   retryAt?: Date;
   status: "completed" | "partial" | "skipped" | "busy";
 };
-export type PublicationSyncProgress = {
-  runId: string;
-  completed: number;
-  total: number;
-};
+/** One run's count in its current stage. */
+export type PublicationSyncProgress = TwoStageProgress & { runId: string };
 export const emptyPublicationSyncCounts = (): PublicationSyncCounts => ({
   imported: 0,
   exported: 0,
@@ -30,6 +29,7 @@ export type PublicationSyncJobStatus = {
   runId: string;
   pending: boolean;
   running: boolean;
-  progress: { completed: number; total: number } | null;
+  /** The request's count across its runs. */
+  progress: TwoStageProgress | null;
   result: PublicationSyncResult | null;
 };

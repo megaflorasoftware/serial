@@ -149,7 +149,7 @@ it.each(["import", "revalidation"])(
     );
     const result = await measure(() =>
       mode === "import"
-        ? discoverFeedOriginsForImport("strict", rss)
+        ? discoverFeedOriginsForImport("strict", rss).then(({ rows }) => rows)
         : discoverFeedOriginsForRevalidation(rss),
     );
     expect(result.rows.map((row) => row.url)).toEqual([rss]);
@@ -165,7 +165,9 @@ it.each(["import", "revalidation"])(
     );
     const pending = (
       mode === "import"
-        ? discoverFeedOriginsForImport("strict-timeout", rss)
+        ? discoverFeedOriginsForImport("strict-timeout", rss).then(
+            ({ rows }) => rows,
+          )
         : discoverFeedOriginsForRevalidation(rss)
     ).catch((error: unknown) => error);
     await vi.runAllTimersAsync();
