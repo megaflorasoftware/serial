@@ -29,6 +29,10 @@ async function ownedFeed(
   return feed;
 }
 
+/**
+ * Feed revalidation. Resolves to the Feed as it stands after the pass, and
+ * whether the pass changed its origins or what they say about themselves.
+ */
 export async function revalidateFeed(
   database: typeof db,
   userId: string,
@@ -78,6 +82,7 @@ export async function revalidateFeed(
     database.transaction(
       async (tx) => {
         let syncRequested = false;
+        let changed = false;
         let current = await ownedFeed(tx, userId, feedId);
         for (const addition of additions) {
           const existing = current.origins.find(
@@ -90,6 +95,7 @@ export async function revalidateFeed(
           current = await attachMissingFeedOrigins(tx, current, [
             addition.origin,
           ]);
+          changed = true;
           // Only a publication joining the Feed changes a subscription.
           if (addition.origin.kind === "atproto")
             syncRequested = await requestSyncForFeedChange(tx, userId, [
@@ -105,7 +111,7 @@ export async function revalidateFeed(
           if (!origin) continue;
           // Each derivation must see the preceding origin update in this transaction.
           // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await applyOriginMetadata(
+          const presented = await applyOriginMetadata(
             tx,
             { origin, feed: current },
             {
@@ -115,9 +121,11 @@ export async function revalidateFeed(
               siteUrl: observed.siteUrl,
             },
           );
+          changed ||= presented;
         }
         return {
           feed: feedsSchema.parse(await ownedFeed(tx, userId, feedId)),
+          changed,
           syncRequested,
         };
       },
@@ -125,5 +133,5 @@ export async function revalidateFeed(
     ),
   );
   wakeRequestedSync(database, revalidated.syncRequested);
-  return revalidated.feed;
+  return { feed: revalidated.feed, changed: revalidated.changed };
 }

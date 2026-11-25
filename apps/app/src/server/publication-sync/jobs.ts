@@ -19,6 +19,7 @@ import { atprotoConnections as connections, user } from "~/server/db/schema";
 import { automaticRssOwnerForAccount } from "~/server/rss/automaticOwnership";
 import { workerPool } from "~/lib/workerPool";
 import { logError } from "~/server/logger";
+import { createInProcessWake } from "~/server/inProcessWake";
 
 const JOB_LEASE_MS = 300_000;
 const JOB_PAGE_SIZE = 4;
@@ -405,18 +406,8 @@ export async function runPublicationSyncJobs(
   return continued || rows.length === JOB_PAGE_SIZE;
 }
 
-const running = new WeakSet<typeof db>();
 /** Best-effort immediate wakeup; the scheduled task recovers persisted work after restart. */
-export function wakePublicationSyncJobs(database: typeof db) {
-  if (running.has(database)) return;
-  running.add(database);
-  void runPublicationSyncJobs(database)
-    .then((continued) => {
-      if (continued)
-        setTimeout(() => wakePublicationSyncJobs(database), 1100).unref();
-    })
-    .catch((error: unknown) =>
-      logError("[publication-sync] worker failed", error),
-    )
-    .finally(() => running.delete(database));
-}
+export const wakePublicationSyncJobs = createInProcessWake(
+  "publication-sync",
+  (database: typeof db) => runPublicationSyncJobs(database),
+);

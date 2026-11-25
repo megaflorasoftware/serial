@@ -45,7 +45,7 @@ const readOriginEvidence = vi.fn(() =>
   }),
 );
 const publication = vi.fn<() => Promise<ReturnType<typeof evidence> | null>>();
-const revalidate = vi.fn<() => Promise<unknown>>();
+const revalidate = vi.fn<() => Promise<{ changed: boolean }>>();
 const release = vi.fn();
 const acquireDiscovery = vi.fn(() => ({ ok: true as const, release }));
 const publish = vi.fn(async () => {});
@@ -90,7 +90,7 @@ beforeEach(async () => {
   // Each mock goes back to the implementation it was created with.
   vi.resetAllMocks();
   publication.mockResolvedValue(evidence());
-  revalidate.mockResolvedValue(undefined);
+  revalidate.mockResolvedValue({ changed: false });
   fixture = await createBookmarkTestDatabase();
   await fixture.database.insert(user).values(
     ["owner", "other"].map((id) => ({
@@ -398,25 +398,53 @@ describe("Feed revalidation", () => {
     expect(backfill).not.toHaveBeenCalled();
   });
 
-  it("waits for a discovery slot without spending its attempt", async () => {
-    const feed = await addFeed(1);
+  it("stays due without a discovery slot while backfill carries on", async () => {
+    const full = [(await addFeed(1)).id, (await addFeed(2)).id];
+    const light = await addFeed(3);
+    await queueFeedRevalidation(fixture.database, "owner", full);
+    await queuePublicationBackfill(fixture.database, "owner");
+    acquireDiscovery.mockReturnValue({
+      ok: false,
+      reason: "capacity_limited",
+    } as never);
+    await run();
+    expect(revalidate).not.toHaveBeenCalled();
+    // Each worker meets the missing slot once, then claims only backfill.
+    expect(acquireDiscovery.mock.calls.length).toBeLessThanOrEqual(
+      CHECKS_PER_USER,
+    );
+    expect(backfill).toHaveBeenCalledExactlyOnceWith(
+      fixture.database,
+      "owner",
+      light.id,
+    );
+    const waiting = await checks();
+    expect(waiting).toEqual(
+      full.map((feedId) =>
+        expect.objectContaining({ feedId, type: "full", attempts: 0 }),
+      ),
+    );
+    for (const check of waiting)
+      expect(check.nextAttemptAt.getTime()).toBeLessThanOrEqual(Date.now());
+    acquireDiscovery.mockReturnValue({ ok: true, release });
+    await run();
+    expect(revalidate).toHaveBeenCalledTimes(2);
+    expect(await checks()).toEqual([]);
+  });
+  it("revalidates a Feed another worker could not take a slot for", async () => {
+    const one = await addFeed(1);
+    const two = await addFeed(2);
+    await queueFeedRevalidation(fixture.database, "owner", [one.id, two.id]);
     acquireDiscovery.mockReturnValueOnce({
       ok: false,
       reason: "capacity_limited",
     } as never);
-    await queueFeedRevalidation(fixture.database, "owner", [feed.id]);
     await run();
-    expect(revalidate).not.toHaveBeenCalled();
-    const [waiting] = await checks();
-    expect(waiting).toMatchObject({ type: "full", attempts: 0 });
-    expect(waiting!.nextAttemptAt.getTime()).toBeGreaterThan(Date.now());
-    await makeDue();
-    await run();
-    expect(revalidate).toHaveBeenCalledTimes(1);
+    expect(revalidate).toHaveBeenCalledTimes(2);
     expect(await checks()).toEqual([]);
   });
-
   it("tells open clients about changed Feeds in batches", async () => {
+    revalidate.mockResolvedValue({ changed: true });
     const feedIds = [];
     for (let i = 0; i < 6; i++) feedIds.push((await addFeed(i)).id);
     await queueFeedRevalidation(fixture.database, "owner", feedIds);
@@ -425,5 +453,13 @@ describe("Feed revalidation", () => {
     // The first change at once, and the rest together when the run ends.
     expect(publish).toHaveBeenCalledTimes(2);
     expect(publish).toHaveBeenCalledWith("owner");
+  });
+  it("tells open clients nothing when revalidation changed no Feed", async () => {
+    const feedIds = [];
+    for (let i = 0; i < 3; i++) feedIds.push((await addFeed(i)).id);
+    await queueFeedRevalidation(fixture.database, "owner", feedIds);
+    await run();
+    expect(revalidate).toHaveBeenCalledTimes(3);
+    expect(publish).not.toHaveBeenCalled();
   });
 });

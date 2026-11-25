@@ -128,7 +128,8 @@ export function useBulkFeedEditing({
   };
 
   const handleRevalidate = () => {
-    if (!canMutate) return;
+    // The button and its shortcut queue one selection at a time.
+    if (!canMutate || isRevalidating) return;
     const feedIds = Array.from(selectedFeedIds);
     const count = feedIds.length;
 

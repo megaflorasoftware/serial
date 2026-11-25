@@ -19,7 +19,9 @@ it.each([1000, 10000, 50000])(
         size,
       );
       session.instrumentation.reset();
-      expect((await workload.run()).origins).toHaveLength(2);
+      const result = await workload.run();
+      expect(result.changed).toBe(true);
+      expect(result.feed.origins).toHaveLength(2);
       const evidence = session.instrumentation.snapshot();
       expect(evidence.statementCount).toBeLessThanOrEqual(
         feedRevalidationBudget.statements,

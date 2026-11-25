@@ -53,11 +53,13 @@ const discover = vi.fn(async () => [
     })),
   },
 ]);
-const run = (feedId: number, owner = "owner") =>
+const revalidate = (feedId: number, owner = "owner") =>
   revalidateFeed(fixture.database, owner, feedId, {
     readOriginEvidence: read,
     discoverFeedOriginsForRevalidation: discover,
   });
+const run = async (feedId: number, owner = "owner") =>
+  (await revalidate(feedId, owner)).feed;
 const seed = (origins = [rss.origin]) =>
   insertFeedWithOrigins(fixture.database, {
     userId: "owner",
@@ -204,6 +206,11 @@ describe("Feed revalidation", () => {
     });
     await expect(run(feed.id)).rejects.toThrow("Feed not found");
     expect(await fixture.database.select().from(feedOrigins)).toHaveLength(0);
+  });
+  it("reports a change only when the pass changed the Feed", async () => {
+    const feed = await seed();
+    expect(await revalidate(feed.id)).toMatchObject({ changed: true });
+    expect(await revalidate(feed.id)).toMatchObject({ changed: false });
   });
   it("repeated and concurrent passes never duplicate an origin", async () => {
     const feed = await seed();

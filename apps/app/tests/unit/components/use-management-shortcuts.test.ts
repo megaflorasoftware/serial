@@ -97,6 +97,8 @@ describe("useFeedManagementShortcuts", () => {
 
   it("revalidates with r only where the page offers it", () => {
     pressKey({ key: "r", code: "KeyR" });
+    for (const handler of Object.values(mocks))
+      expect(handler).not.toHaveBeenCalled();
     act(() => {
       for (const root of roots.splice(0)) root.unmount();
     });

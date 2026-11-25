@@ -268,6 +268,25 @@ it.each(["bulk", "streaming"] as const)(
   },
 );
 
+it("streaming OPML starts the checks for the Feeds it created when the client stops reading", async () => {
+  vi.mocked(fetchNewFeedDetails).mockResolvedValue([
+    newRssFeedDetails({
+      name: "Other",
+      url: "https://other.example/feed",
+      platform: "website",
+      siteUrl: "https://other.example",
+    }),
+  ]);
+  for await (const event of await api().streaming({
+    feeds: [{ feedUrl: "https://other.example/feed", categories: [] }],
+  }))
+    if (event.type === "import-feed-inserted") break;
+  expect(await fixture.database.select().from(feedOriginChecks)).toHaveLength(
+    1,
+  );
+  expect(wakeFeedOriginChecks).toHaveBeenCalledWith(fixture.database);
+});
+
 it("streaming OPML treats a second address of a new Feed as already added", async () => {
   vi.mocked(fetchNewFeedDetails).mockResolvedValue([
     newRssFeedDetails({

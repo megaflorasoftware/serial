@@ -28,8 +28,10 @@ export async function persistAtprotoSyncSettings(
       : eq(atprotoConnections.syncSettingsVersion, input.expectedVersion),
   );
   // Export enabled for the first time since the link queues Publication
-  // backfill for the Feeds that existed before it. Queueing twice is
-  // harmless, so the two writes need no transaction of their own.
+  // backfill for the Feeds that existed before it. The two writes need no
+  // transaction only because a repeated queue insert is ignored: a save that
+  // loses its version race may still have queued light checks, which is
+  // harmless.
   if (preferences.exportSubscriptions)
     await queuePublicationBackfill(
       database,

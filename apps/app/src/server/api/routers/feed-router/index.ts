@@ -458,7 +458,7 @@ export const revalidate = protectedProcedure
     if (!lease.ok)
       throw new Error("Please wait before revalidating a Feed again");
     try {
-      const result = await revalidateFeed(
+      const { feed } = await revalidateFeed(
         context.db,
         context.user.id,
         input.feedId,
@@ -467,7 +467,7 @@ export const revalidate = protectedProcedure
         context.user.id,
         organizationInvalidationSummary(),
       );
-      return result;
+      return feed;
     } finally {
       lease.release();
     }

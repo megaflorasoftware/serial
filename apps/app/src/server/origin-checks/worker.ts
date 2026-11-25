@@ -14,11 +14,10 @@ import {
 } from "~/server/reconciliation/invalidation";
 import { workerPool } from "~/lib/workerPool";
 import { logError } from "~/server/logger";
+import { createInProcessWake } from "~/server/inProcessWake";
 
 /** How far a claim moves a row's next attempt. A row whose run stopped is due again after it. */
 const CLAIM_MS = 5 * 60_000;
-/** How long a revalidation waits when its user has no discovery slot free. */
-const SLOT_WAIT_MS = 60_000;
 export const CHECKS_PER_USER = 2;
 const USER_PAGE_SIZE = 8;
 const USERS_AT_ONCE = 4;
@@ -26,11 +25,6 @@ const USERS_AT_ONCE = 4;
 const PUBLISH_INTERVAL_MS = 3_000;
 
 type Claim = typeof checks.$inferSelect;
-type CheckFeed = (
-  database: typeof db,
-  userId: string,
-  feedId: number,
-) => Promise<unknown>;
 type Dependencies = {
   /** Publication backfill. Resolves to whether an origin joined the Feed. */
   backfill?: (
@@ -38,13 +32,20 @@ type Dependencies = {
     userId: string,
     feedId: number,
   ) => Promise<boolean>;
-  revalidate?: CheckFeed;
+  /** Feed revalidation. Resolves to whether it changed the Feed. */
+  revalidate?: (
+    database: typeof db,
+    userId: string,
+    feedId: number,
+  ) => Promise<{ changed: boolean }>;
   acquireDiscovery?: (userId: string) => CaptureLease;
   /** Tells the user's open clients that their Feeds changed. */
   publish?: (userId: string) => Promise<void>;
 };
 /** A check changed the Feed, finished without changing it, or found no discovery slot. */
 type Outcome = "changed" | "unchanged" | "waiting";
+/** Which checks a worker claims: any, or only backfill once no discovery slot is free. */
+type Claimable = "any" | "light";
 
 function publishFeedChanges(userId: string) {
   return publishReconciliationInvalidation(
@@ -61,7 +62,11 @@ function held(claim: Claim) {
   );
 }
 
-async function claimDueCheck(database: typeof db, userId: string) {
+async function claimDueCheck(
+  database: typeof db,
+  userId: string,
+  claimable: Claimable,
+) {
   const now = new Date();
   const [claim] = await database
     .update(checks)
@@ -72,7 +77,13 @@ async function claimDueCheck(database: typeof db, userId: string) {
         database
           .select({ feedId: checks.feedId })
           .from(checks)
-          .where(and(eq(checks.userId, userId), lte(checks.nextAttemptAt, now)))
+          .where(
+            and(
+              eq(checks.userId, userId),
+              lte(checks.nextAttemptAt, now),
+              claimable === "light" ? eq(checks.type, "light") : undefined,
+            ),
+          )
           .orderBy(asc(checks.nextAttemptAt))
           .limit(1),
       ),
@@ -109,24 +120,27 @@ async function runBackfill(
   return attached ? "changed" : "unchanged";
 }
 
-/** Revalidation runs discovery, so it takes one of the user's discovery slots. It gets one attempt. */
+/**
+ * Revalidation runs discovery, so it takes one of the user's discovery slots.
+ * It gets one attempt. Without a free slot it stays due, unattempted.
+ */
 async function runRevalidation(
   database: typeof db,
   claim: Claim,
-  revalidate: CheckFeed,
+  revalidate: NonNullable<Dependencies["revalidate"]>,
   acquireDiscovery: NonNullable<Dependencies["acquireDiscovery"]>,
 ): Promise<Outcome> {
   const lease = acquireDiscovery(claim.userId);
   if (!lease.ok) {
     await database
       .update(checks)
-      .set({ nextAttemptAt: new Date(Date.now() + SLOT_WAIT_MS) })
+      .set({ nextAttemptAt: new Date() })
       .where(held(claim));
     return "waiting";
   }
   try {
-    await revalidate(database, claim.userId, claim.feedId);
-    return "changed";
+    const { changed } = await revalidate(database, claim.userId, claim.feedId);
+    return changed ? "changed" : "unchanged";
   } catch (error) {
     logError("[origin-checks] revalidation failed", claim.feedId, error);
     return "unchanged";
@@ -176,15 +190,17 @@ async function checkUserFeeds(
   };
   const batched = throttleWithTrailing(publish, PUBLISH_INTERVAL_MS, () => {});
   const checkUntilNothingDue = async () => {
+    // Backfill needs no discovery slot, so it carries on once none is free.
+    let claimable: Claimable = "any";
     for (;;) {
       // Each claim waits for the previous check, so a user never has more
       // than CHECKS_PER_USER at once.
       // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      const claim = await claimDueCheck(database, userId);
+      const claim = await claimDueCheck(database, userId, claimable);
       if (!claim) return;
       // react-doctor-disable-next-line react-doctor/async-await-in-loop
       const outcome = await runCheck(database, claim, dependencies);
-      if (outcome === "waiting") return;
+      if (outcome === "waiting") claimable = "light";
       if (outcome === "changed") {
         unpublished = true;
         // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -227,25 +243,11 @@ export async function runFeedOriginChecks(
   return due.length === USER_PAGE_SIZE;
 }
 
-const runs = new WeakMap<typeof db, { again: boolean }>();
 /**
- * Best-effort immediate start after checks are queued. A wake during a run
- * starts another once it ends; the per-minute task recovers persisted checks
- * after a restart.
+ * Best-effort immediate start after checks are queued; the per-minute task
+ * recovers persisted checks after a restart.
  */
-export function wakeFeedOriginChecks(database: typeof db) {
-  const current = runs.get(database);
-  if (current) {
-    current.again = true;
-    return;
-  }
-  const run = { again: false };
-  runs.set(database, run);
-  void runFeedOriginChecks(database)
-    .then((more) => {
-      if (more || run.again)
-        setTimeout(() => wakeFeedOriginChecks(database), 1100).unref();
-    })
-    .catch((error: unknown) => logError("[origin-checks] worker failed", error))
-    .finally(() => runs.delete(database));
-}
+export const wakeFeedOriginChecks = createInProcessWake(
+  "origin-checks",
+  (database: typeof db) => runFeedOriginChecks(database),
+);
