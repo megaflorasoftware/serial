@@ -1,7 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { BACKFILL_BATCH_SIZE } from "../../src/server/publication-sync/backfill";
-import { createPublicationBackfillWorkload } from "./publication-backfill-workload";
+import {
+  BACKFILL_BENCHMARK_CHECKS,
+  createPublicationBackfillWorkload,
+} from "./publication-backfill-workload";
 import {
   applyMigrations,
   createLocalBenchmarkTarget,
@@ -51,7 +53,7 @@ async function measure(operation: PublicationSyncOperation | "backfill") {
           );
     const budget =
       operation === "backfill"
-        ? { requests: BACKFILL_BATCH_SIZE * 2, statements: 75, rows: 75 }
+        ? { requests: BACKFILL_BENCHMARK_CHECKS * 2, statements: 75, rows: 75 }
         : publicationSyncBudget(operation, count);
     if ("prepare" in workload) await workload.prepare();
     await workload.run();

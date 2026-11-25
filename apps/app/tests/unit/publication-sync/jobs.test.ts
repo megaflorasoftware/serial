@@ -68,8 +68,8 @@ const connection = async () =>
     .where(eq(atprotoConnections.id, "connection"))
     .get())!;
 /**
- * A connection whose last run and backfill finished cleanly against `rev` and
- * the given listing, due for a check.
+ * A connection whose last run finished cleanly against `rev` and the given
+ * listing, due for a check.
  */
 const dueWithCleanRun = async (rev = "rev-1", listing = listed()) => {
   await save();
@@ -79,7 +79,6 @@ const dueWithCleanRun = async (rev = "rev-1", listing = listed()) => {
     .set({
       subscriptionRepoRev: rev,
       subscriptionListingDigest: listingDigest(listing),
-      subscriptionBackfillStarted: true,
       subscriptionNextAttemptAt: new Date(0),
     })
     .where(eq(atprotoConnections.id, "connection"));
@@ -352,7 +351,6 @@ it("keeps what an in-flight request already did when a check finds nothing left"
   // An inline run finished the rest before the continuation started.
   await fixture.database.update(atprotoConnections).set({
     subscriptionRepoRev: "rev-1",
-    subscriptionBackfillStarted: true,
     subscriptionNextAttemptAt: new Date(0),
   });
   const sync = vi.fn<typeof syncPublicationSubscriptions>();
@@ -782,27 +780,6 @@ it("schedules a missing check only for a connection that syncs and has none", as
   await schedule();
   expect((await connection()).subscriptionNextAttemptAt).toEqual(later);
 });
-it("runs when backfill has work, and waits for a backfill retry that is not due", async () => {
-  await dueWithCleanRun();
-  await fixture.database
-    .update(atprotoConnections)
-    .set({ subscriptionBackfillStarted: false });
-  const sync = vi
-    .fn<typeof syncPublicationSubscriptions>()
-    .mockResolvedValue(completed());
-  await runJobs(sync, { latestRev: async () => "rev-1" });
-  expect(sync).toHaveBeenCalledTimes(1);
-  const backfillRetry = new Date(Date.now() + 120_000);
-  await fixture.database.update(atprotoConnections).set({
-    subscriptionBackfillStarted: true,
-    subscriptionBackfillNextAttemptAt: backfillRetry,
-    subscriptionRepoRev: "rev-1",
-    subscriptionNextAttemptAt: new Date(0),
-  });
-  await runJobs(sync, { background: true, latestRev: async () => "rev-1" });
-  expect(sync).toHaveBeenCalledTimes(1);
-  expect((await connection()).subscriptionNextAttemptAt).toEqual(backfillRetry);
-});
 it("stays idle while an import retry waits, with one write, and runs once it is due", async () => {
   await dueWithCleanRun();
   const importRetry = new Date(Date.now() + 86_400_000);
@@ -847,7 +824,6 @@ it("ends a request the user started when a check finds nothing left to do", asyn
   // An inline run finished the work before the queued one started.
   await fixture.database.update(atprotoConnections).set({
     subscriptionRepoRev: "rev-1",
-    subscriptionBackfillStarted: true,
   });
   const sync = vi.fn<typeof syncPublicationSubscriptions>();
   await runJobs(sync, { latestRev: async () => "rev-1" });

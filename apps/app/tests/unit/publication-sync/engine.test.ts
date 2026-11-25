@@ -5,7 +5,6 @@ import type {
   SubscriptionRecord,
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
-import type { backfillPublicationOrigins } from "~/server/publication-sync/backfill";
 import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import { runPublicationSyncJobs } from "~/server/publication-sync/jobs";
@@ -64,10 +63,7 @@ let fetchCreatedFeed: ReturnType<
   typeof vi.fn<(database: unknown, feed: { id: number }) => Promise<void>>
 >;
 let maxActiveFeeds: number;
-const run = (
-  backfill?: typeof backfillPublicationOrigins,
-  onProgress?: (progress: TwoStageProgress) => void,
-) =>
+const run = (onProgress?: (progress: TwoStageProgress) => void) =>
   syncPublicationSubscriptions({
     database: fixture.database,
     userId: "owner",
@@ -76,7 +72,6 @@ const run = (
       return Promise.resolve();
     },
     dependencies: {
-      ...(backfill ? { backfill } : {}),
       store,
       resolveFeed: (userId, uri, signal) => resolveFeed(userId, uri, signal),
       fetchCreatedFeed: (database, feed) => fetchCreatedFeed(database, feed),
@@ -639,64 +634,6 @@ it("retains normal upstream-deletion semantics after a deferred import succeeds"
   expect(await fixture.database.select().from(feeds)).toHaveLength(0);
 });
 
-it("persists continuation when a legacy enabled connection starts backfill during refresh", async () => {
-  const { backfillPublicationOrigins, BACKFILL_BATCH_SIZE } =
-    await import("~/server/publication-sync/backfill");
-  await method("export");
-  await fixture.database
-    .update(atprotoConnections)
-    .set({ subscriptionRequestId: null, subscriptionNextAttemptAt: null });
-  for (let i = 0; i < BACKFILL_BATCH_SIZE + 1; i++) {
-    await insertFeedWithOrigins(fixture.database, {
-      userId: "owner",
-      details: {
-        name: `Old feed ${i}`,
-        platform: "website",
-        siteUrl: "https://example.com",
-        origins: [{ kind: "rss", locator: `https://example.com/rss/${i}` }],
-      },
-      isActive: false,
-    });
-  }
-  const probe = vi.fn(() => Promise.resolve(null));
-  const sync: typeof syncPublicationSubscriptions = (input) =>
-    syncPublicationSubscriptions({
-      ...input,
-      dependencies: {
-        store,
-        invalidate,
-        backfill: (database, connection) =>
-          backfillPublicationOrigins(database, connection, {
-            readOriginEvidence: (origin) =>
-              Promise.resolve({
-                origin: { ...origin },
-                siteUrl: "https://example.com",
-                itemUrls: new Set(["https://example.com/article"]),
-              }),
-            readBackfillPublication: probe,
-          }),
-      },
-    });
-  await sync({ database: fixture.database, userId: "owner" });
-  expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE);
-  const pending = await fixture.database
-    .select()
-    .from(atprotoConnections)
-    .get();
-  // The continuation is scheduled without opening a request to announce.
-  expect(pending?.subscriptionRequestId).toBeNull();
-  expect(pending?.subscriptionNextAttemptAt).toBeInstanceOf(Date);
-  await fixture.database
-    .update(atprotoConnections)
-    .set({ subscriptionNextAttemptAt: new Date(0) });
-  await runJobs(sync);
-  expect(probe).toHaveBeenCalledTimes(BACKFILL_BATCH_SIZE + 1);
-  expect(
-    (await fixture.database.select().from(atprotoConnections).get())
-      ?.subscriptionNextAttemptAt,
-  ).toBeNull();
-});
-
 describe("deciding before a run", () => {
   const writes = () => {
     const spies = (["update", "insert", "delete", "transaction"] as const).map(
@@ -777,19 +714,13 @@ describe("deciding before a run", () => {
     records = [record("one")];
     await method("import");
     await run();
-    await fixture.database
-      .update(atprotoConnections)
-      .set({ subscriptionBackfillStarted: false, exportSubscriptions: true });
     const before = await stored();
     const update = vi.spyOn(fixture.database, "update");
     await syncPublicationSubscriptions({
       database: fixture.database,
       userId: "owner",
-      dependencies: {
-        store,
-        invalidate,
-        backfill: async () => ({ attached: 0 }),
-      },
+      check: { state: "due" },
+      dependencies: { store, invalidate },
     });
     // The claim and its release are the only connection writes.
     expect(update).toHaveBeenCalledTimes(2);
@@ -1296,14 +1227,6 @@ describe("failures that end or wait", () => {
       expect(store.list).toHaveBeenCalledTimes(1);
     });
 
-    it("is left alone when backfill falls due and attaches nothing", async () => {
-      const waiting = await refuseExport("export");
-      await fixture.database
-        .update(atprotoConnections)
-        .set({ subscriptionBackfillNextAttemptAt: new Date(0) });
-      await expectExportLeftWaiting(waiting);
-    });
-
     it("is left alone after a pass that ran out of time", async () => {
       const waiting = await refuseExport("bidirectional");
       records.push(record("two"));
@@ -1376,37 +1299,6 @@ describe("failures that end or wait", () => {
       });
     });
   });
-
-  it("resumes stopped writes when backfill attaches an origin", async () => {
-    await addLocal("one");
-    await method("export");
-    // The PDS refused the export of "one" for 14 days.
-    await fixture.database.update(atprotoConnections).set({
-      subscriptionRepoRev: "1",
-      subscriptionWriteFailures: 25,
-      subscriptionWriteRetryAt: null,
-      subscriptionBackfillStarted: true,
-      subscriptionBackfillNextAttemptAt: new Date(0),
-    });
-    // Backfill that attaches nothing leaves the stopped export alone.
-    expect(await run(() => Promise.resolve({ attached: 0 }))).toMatchObject({
-      skipped: 1,
-      exported: 0,
-    });
-    expect(store.create).not.toHaveBeenCalled();
-    expect((await stored()).subscriptionWriteFailures).toBe(25);
-    // An origin it attaches is a new export to make, so the retries start over.
-    expect(
-      await run(async () => {
-        await addLocal("two");
-        return { attached: 1 };
-      }),
-    ).toMatchObject({ exported: 2, skipped: 0 });
-    expect(await stored()).toMatchObject({
-      subscriptionWriteFailures: 0,
-      subscriptionWriteRetryAt: null,
-    });
-  });
 });
 
 describe("finding, then fetching", () => {
@@ -1444,7 +1336,7 @@ describe("finding, then fetching", () => {
     });
     const progress: TwoStageProgress[] = [];
     expect(
-      await run(undefined, (update) => {
+      await run((update) => {
         progress.push(update);
       }),
     ).toMatchObject({ status: "completed", imported: 3 });
@@ -1553,7 +1445,7 @@ describe("finding, then fetching", () => {
     expect((await stored()).subscriptionRepoRev).toBeNull();
     const progress: TwoStageProgress[] = [];
     expect(
-      await run(undefined, (update) => {
+      await run((update) => {
         progress.push(update);
       }),
     ).toMatchObject({ imported: 0 });
@@ -1606,7 +1498,7 @@ describe("finding, then fetching", () => {
       .update(atprotoConnections)
       .set({ subscriptionRepoRev: null });
     const progress: TwoStageProgress[] = [];
-    await run(undefined, (update) => {
+    await run((update) => {
       progress.push(update);
     });
     expect(fetchCreatedFeed).toHaveBeenCalledTimes(2);

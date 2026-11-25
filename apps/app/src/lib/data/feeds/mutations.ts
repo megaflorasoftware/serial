@@ -261,6 +261,11 @@ export function useBulkSetActiveMutation() {
   );
 }
 
+/** Queues revalidation. Feeds change in place as their checks finish. */
+export function useBulkRevalidateFeedsMutation() {
+  return useMutation(orpc.feed.bulkRevalidate.mutationOptions());
+}
+
 export function useRevalidateFeedMutation() {
   const updateFeed = useUpdateFeed();
   const mutationOptions = orpc.feed.revalidate.mutationOptions({

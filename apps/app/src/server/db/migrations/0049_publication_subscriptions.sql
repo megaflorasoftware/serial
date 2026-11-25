@@ -230,18 +230,18 @@ UPDATE serial_feed
 SET name_edited_at = unixepoch()
 WHERE name_edited_at IS NULL AND name <> '';
 --> statement-breakpoint
-CREATE TABLE `serial_publication_backfill_probes` (
+CREATE TABLE `serial_feed_origin_checks` (
 	`feed_id` integer PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
+	`type` text NOT NULL,
 	`attempts` integer DEFAULT 0 NOT NULL,
-	`next_attempt_at` integer,
+	`next_attempt_at` integer NOT NULL,
 	FOREIGN KEY (`feed_id`) REFERENCES `serial_feed`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`user_id`) REFERENCES `serial_user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `publication_backfill_due_idx` ON `serial_publication_backfill_probes` (`user_id`,`next_attempt_at`,`feed_id`);--> statement-breakpoint
+CREATE INDEX `feed_origin_check_due_idx` ON `serial_feed_origin_checks` (`next_attempt_at`,`user_id`);--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_backfill_started` integer DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE `serial_atproto_connections` ADD `subscription_backfill_next_attempt_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_request_id` text;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_next_attempt_at` integer;--> statement-breakpoint
 ALTER TABLE `serial_atproto_connections` ADD `subscription_retry_at` integer;--> statement-breakpoint

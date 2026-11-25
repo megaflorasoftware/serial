@@ -8,6 +8,8 @@ import {
   verifyViewsOwnedByUser,
 } from "./utils";
 import { revalidateFeed } from "~/server/feeds/revalidate";
+import { queueFeedRevalidation } from "~/server/origin-checks/queue";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 import { setFeedsActive } from "~/server/feeds/activation";
@@ -178,6 +180,7 @@ export const createFromSubscriptionImport = protectedProcedure
         context.user.id,
         organizationInvalidationSummary(),
       );
+      wakeFeedOriginChecks(context.db);
     }
     return allResults;
   });
@@ -438,6 +441,16 @@ export const discoverFeedsStream = protectedProcedure
     yield* streamDiscoverFeeds(context.user.id, input.url, signal);
   });
 
+/** Queues revalidation for the selected Feeds and returns before it runs. */
+export const bulkRevalidate = protectedProcedure
+  .input(z.object({ feedIds: boundedNumberIdsSchema }))
+  .handler(async ({ context, input }) => {
+    if (input.feedIds.length === 0) return;
+
+    await queueFeedRevalidation(context.db, context.user.id, input.feedIds);
+    wakeFeedOriginChecks(context.db);
+  });
+
 export const revalidate = protectedProcedure
   .input(z.object({ feedId: z.number().int().positive() }))
   .handler(async ({ context, input }) => {
@@ -445,7 +458,7 @@ export const revalidate = protectedProcedure
     if (!lease.ok)
       throw new Error("Please wait before revalidating a Feed again");
     try {
-      const result = await revalidateFeed(
+      const { feed } = await revalidateFeed(
         context.db,
         context.user.id,
         input.feedId,
@@ -454,7 +467,7 @@ export const revalidate = protectedProcedure
         context.user.id,
         organizationInvalidationSummary(),
       );
-      return result;
+      return feed;
     } finally {
       lease.release();
     }

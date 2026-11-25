@@ -278,6 +278,20 @@ export async function withOrigins<TFeed extends DatabaseFeed>(
   return attachOrigins(feedRows, originRows);
 }
 
+/** One of the user's Feeds with its origins, or undefined when they have no such Feed. */
+export async function loadUserFeedWithOrigins(
+  database: FeedDatabase,
+  userId: string,
+  feedId: number,
+) {
+  const rows = await database
+    .select()
+    .from(feeds)
+    .where(and(eq(feeds.id, feedId), eq(feeds.userId, userId)));
+  const [feed] = await withOrigins(database, rows);
+  return feed;
+}
+
 export async function loadApplicationFeeds(
   database: FeedDatabase,
   feedRows: DatabaseFeed[],

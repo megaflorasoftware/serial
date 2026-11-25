@@ -8,7 +8,7 @@ import {
 export default defineTask({
   meta: {
     name: "publications:sync",
-    description: "Resume requested publication sync and backfill",
+    description: "Resume requested publication sync",
   },
   async run() {
     if (await runPublicationSyncJobs(db)) wakePublicationSyncJobs(db);

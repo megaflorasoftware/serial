@@ -1,7 +1,6 @@
 import { and, asc, eq, inArray, isNull, not, notExists } from "drizzle-orm";
 import { nextPublicationSyncAttempt, RETRY_REFUSED_WRITES } from "./requests";
 import { nextRetryAt } from "./retry";
-import { backfillPublicationOrigins } from "./backfill";
 import {
   checkPublicationSync,
   earliest,
@@ -311,7 +310,6 @@ type SyncInput = {
    */
   skipFetching?: boolean;
   dependencies?: {
-    backfill?: typeof backfillPublicationOrigins;
     store?: SubscriptionRecordStore;
     resolveFeed?: typeof resolveImportedFeed;
     fetchCreatedFeed?: typeof fetchCreatedFeed;
@@ -452,15 +450,7 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
   };
   try {
     await progress("finding", 0, 0);
-    const backfill = await (
-      input.dependencies?.backfill ?? backfillPublicationOrigins
-    )(database, connection);
-    changedFeeds = backfill.attached > 0;
-    retryAt = backfill.retryAt ?? null;
-    // An origin backfill attached is a new export to make, like a Feed change.
-    const writeRetries = refusedWriteRetries(
-      backfill.attached > 0 ? RETRY_REFUSED_WRITES : connection,
-    );
+    const writeRetries = refusedWriteRetries(connection);
     const [previous, localOrigins, rev] = await Promise.all([
       database
         .select()

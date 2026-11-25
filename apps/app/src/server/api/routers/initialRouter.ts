@@ -31,6 +31,7 @@ import { dbSemaphore } from "~/lib/semaphore";
 import { prepareRssFeedImport } from "~/server/feeds/imports";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { workerPool } from "~/lib/workerPool";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 import {
   contentCategories,
   feedCategories,
@@ -852,21 +853,27 @@ export const streamingImport = protectedProcedure
     // Insert all feeds through the worker pool, surfacing view memberships
     // periodically as they land.
     let lastMembershipPublishAt = Date.now();
-    for await (const chunks of workerPool(
-      feedsWithActivation,
-      BATCH_SIZE,
-      insertFeed,
-    )) {
-      for (const chunk of chunks) yield chunk;
-      // Each worker reports one entry.
-      yield importProgress("finding", ++found, input.feeds.length);
-      if (
-        viewLinking &&
-        Date.now() - lastMembershipPublishAt >= MEMBERSHIP_PUBLISH_INTERVAL_MS
-      ) {
-        lastMembershipPublishAt = Date.now();
-        await publishOrganizationInvalidation();
+    try {
+      for await (const chunks of workerPool(
+        feedsWithActivation,
+        BATCH_SIZE,
+        insertFeed,
+      )) {
+        for (const chunk of chunks) yield chunk;
+        // Each worker reports one entry.
+        yield importProgress("finding", ++found, input.feeds.length);
+        if (
+          viewLinking &&
+          Date.now() - lastMembershipPublishAt >= MEMBERSHIP_PUBLISH_INTERVAL_MS
+        ) {
+          lastMembershipPublishAt = Date.now();
+          await publishOrganizationInvalidation();
+        }
       }
+    } finally {
+      // Checks for the created Feeds start even when the client stops
+      // reading the stream.
+      wakeFeedOriginChecks(context.db);
     }
 
     if (deactivatedCount > 0) {

@@ -1,10 +1,9 @@
-import { and, eq } from "drizzle-orm";
 import { discoverFeedOriginsForRevalidation } from "./discovery";
 import {
   attachMissingFeedOrigins,
   FEED_ORIGIN_CONFLICT,
   findFeedForOrigins,
-  withOrigins,
+  loadUserFeedWithOrigins,
 } from "./origins";
 import {
   originsShareArticles,
@@ -14,7 +13,7 @@ import {
 import type { FeedDatabase } from "./origins";
 import type { OriginEvidence } from "./revalidationEvidence";
 import type { db } from "~/server/db";
-import { feeds, feedsSchema } from "~/server/db/schema";
+import { feedsSchema } from "~/server/db/schema";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { applyOriginMetadata } from "~/server/rss/originMetadata";
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
@@ -25,15 +24,15 @@ async function ownedFeed(
   userId: string,
   feedId: number,
 ) {
-  const rows = await database
-    .select()
-    .from(feeds)
-    .where(and(eq(feeds.id, feedId), eq(feeds.userId, userId)));
-  const [feed] = await withOrigins(database, rows);
+  const feed = await loadUserFeedWithOrigins(database, userId, feedId);
   if (!feed) throw new Error("Feed not found");
   return feed;
 }
 
+/**
+ * Feed revalidation. Resolves to the Feed as it stands after the pass, and
+ * whether the pass changed its origins or what they say about themselves.
+ */
 export async function revalidateFeed(
   database: typeof db,
   userId: string,
@@ -83,6 +82,7 @@ export async function revalidateFeed(
     database.transaction(
       async (tx) => {
         let syncRequested = false;
+        let changed = false;
         let current = await ownedFeed(tx, userId, feedId);
         for (const addition of additions) {
           const existing = current.origins.find(
@@ -95,6 +95,7 @@ export async function revalidateFeed(
           current = await attachMissingFeedOrigins(tx, current, [
             addition.origin,
           ]);
+          changed = true;
           // Only a publication joining the Feed changes a subscription.
           if (addition.origin.kind === "atproto")
             syncRequested = await requestSyncForFeedChange(tx, userId, [
@@ -110,7 +111,7 @@ export async function revalidateFeed(
           if (!origin) continue;
           // Each derivation must see the preceding origin update in this transaction.
           // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await applyOriginMetadata(
+          const presented = await applyOriginMetadata(
             tx,
             { origin, feed: current },
             {
@@ -120,9 +121,11 @@ export async function revalidateFeed(
               siteUrl: observed.siteUrl,
             },
           );
+          changed ||= presented;
         }
         return {
           feed: feedsSchema.parse(await ownedFeed(tx, userId, feedId)),
+          changed,
           syncRequested,
         };
       },
@@ -130,5 +133,5 @@ export async function revalidateFeed(
     ),
   );
   wakeRequestedSync(database, revalidated.syncRequested);
-  return revalidated.feed;
+  return { feed: revalidated.feed, changed: revalidated.changed };
 }

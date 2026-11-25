@@ -7,6 +7,7 @@ import {
   getPublicationSyncJob,
   wakePublicationSyncJobs,
 } from "~/server/publication-sync/jobs";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 import {
   ATPROTO_PROVIDER_ID,
   getAdminSigninMethods,
@@ -167,6 +168,7 @@ export const saveSyncSettings = protectedProcedure
       });
     }
     wakePublicationSyncJobs(context.db);
+    wakeFeedOriginChecks(context.db);
     return { saved: true as const, consentUrl: null };
   });
 
