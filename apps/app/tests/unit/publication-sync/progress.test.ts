@@ -43,7 +43,7 @@ const inFlight: PublicationSyncJobStatus = {
   runId: "request",
   pending: true,
   running: true,
-  progress: { completed: 1, total: 4 },
+  progress: { stage: "finding", completed: 1, total: 4 },
   result: null,
 };
 let root: ReturnType<typeof createRoot>;
@@ -108,7 +108,7 @@ it("reads the status again when the server announces a change", async () => {
   mocks.status.mockResolvedValue(inFlight);
   await mount();
   expect(mocks.loading).toHaveBeenCalledWith(
-    "Syncing subscriptions: 1 of 4",
+    "Step 1 of 2 · Finding feeds: 1 of 4",
     expect.anything(),
   );
   mocks.status.mockResolvedValue(settled);

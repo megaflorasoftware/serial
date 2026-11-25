@@ -104,12 +104,12 @@ it("tracks server work without blocking a concurrent Feed import", () => {
     runId: "run",
     pending: true,
     running: true,
-    progress: { completed: 2, total: 8 },
+    progress: { stage: "finding", completed: 2, total: 8 },
     result: null,
   });
-  expect(loadingActor.getSnapshot().context.totalFeeds).toBe(9);
+  expect(loadingActor.getSnapshot().context.importProgress.total).toBe(9);
   expect(mocks.loading).toHaveBeenCalledWith(
-    "Syncing subscriptions: 2 of 8",
+    "Step 1 of 2 · Finding feeds: 2 of 8",
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
   showPublicationSyncProgress({
@@ -128,15 +128,58 @@ it("tracks server work without blocking a concurrent Feed import", () => {
     expect.stringContaining("2 imported"),
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
-  expect(loadingActor.getSnapshot().context.totalFeeds).toBe(9);
+  expect(loadingActor.getSnapshot().context.importProgress.total).toBe(9);
 });
 
-it("reports a deferred result instead of spinning on completed progress", () => {
+it("keeps the loading toast between the runs of a request, and shows each stage", () => {
+  // The first run stopped at its deadline; the next one is due at once.
   showPublicationSyncProgress({
-    runId: "retry",
+    runId: "request",
     pending: true,
     running: false,
-    progress: { completed: 7, total: 7 },
+    progress: { stage: "finding", completed: 4, total: 13 },
+    result: {
+      ...emptyPublicationSyncCounts(),
+      status: "partial",
+      imported: 4,
+      deferred: 9,
+    },
+  });
+  expect(mocks.warning).not.toHaveBeenCalled();
+  expect(mocks.loading).toHaveBeenLastCalledWith(
+    "Step 1 of 2 · Finding feeds: 4 of 13",
+    expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
+  );
+  showPublicationSyncProgress({
+    runId: "request",
+    pending: true,
+    running: true,
+    progress: { stage: "fetching", completed: 3, total: 12 },
+    result: null,
+  });
+  expect(mocks.loading).toHaveBeenLastCalledWith(
+    "Step 2 of 2 · Fetching content: 3 of 12",
+    expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
+  );
+  showPublicationSyncProgress({
+    runId: "request",
+    pending: true,
+    running: true,
+    progress: null,
+    result: null,
+  });
+  expect(mocks.loading).toHaveBeenLastCalledWith(
+    "Syncing subscriptions…",
+    expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
+  );
+});
+
+it("reports the result once a request waits for a retry further off", () => {
+  showPublicationSyncProgress({
+    runId: "retry",
+    pending: false,
+    running: false,
+    progress: null,
     result: {
       ...emptyPublicationSyncCounts(),
       status: "partial",
@@ -149,17 +192,6 @@ it("reports a deferred result instead of spinning on completed progress", () => 
     expect.stringContaining(
       "5 imported, 0 exported, 0 added inactive, 0 removed, 1 pending the next sync",
     ),
-    expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
-  );
-  showPublicationSyncProgress({
-    runId: "retry",
-    pending: true,
-    running: true,
-    progress: null,
-    result: { ...emptyPublicationSyncCounts(), status: "partial", deferred: 1 },
-  });
-  expect(mocks.loading).toHaveBeenCalledWith(
-    "Syncing subscriptions…",
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
 });

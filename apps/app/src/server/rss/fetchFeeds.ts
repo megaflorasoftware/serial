@@ -97,8 +97,10 @@ function assertValidFeedUrl(url: string) {
   }
 }
 
+/** `read` may answer from responses a caller already holds, such as discovery's. */
 export async function fetchNewFeedDetails(
   url: string,
+  read: typeof readFeedHttp = readFeedHttp,
 ): Promise<NewFeedDetails[]> {
   assertValidFeedUrl(url);
 
@@ -116,7 +118,7 @@ export async function fetchNewFeedDetails(
     isYouTubeHost &&
     (url.includes("youtube.com/@") || url.includes("youtube.com/channel/"))
   ) {
-    const feed = await readFeedHttp(url);
+    const feed = await read(url);
     if (!feed.ok) {
       throw new Error(
         `Failed to fetch YouTube channel page: ${feed.status} ${feed.statusText}`,
@@ -155,7 +157,7 @@ export async function fetchNewFeedDetails(
       ) {
         return fetchNebulaFeedDetails(feedUrl);
       }
-      return fetchUnknownRssFeed(feedUrl);
+      return fetchUnknownRssFeed(feedUrl, read);
     },
   )) {
     if (feedDetails) feedDetailList.push(feedDetails);

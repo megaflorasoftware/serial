@@ -18,6 +18,9 @@ export async function syncBeforeFeedRefresh(input: {
       database: input.database,
       userId: input.userId,
       onProgress: async (progress) => {
+        // The refresh shows one bar, so it follows finding alone; the
+        // refresh's own fetches come right after.
+        if (progress.stage !== "finding") return;
         if (!started) {
           await input.publish(input.channel, {
             type: "refresh-start",

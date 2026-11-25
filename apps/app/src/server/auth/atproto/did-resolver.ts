@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createDidResolver } from "@atproto-labs/did-resolver";
 import { ALLOW_INSECURE_PDS, createHardenedFetch } from "./hardened-fetch";
 import { env } from "~/env";
@@ -18,25 +19,51 @@ export class UnsupportedDidError extends Error {
   }
 }
 
-/** The DID document as published, for handles and service endpoints. */
+type DidDocument = Awaited<ReturnType<typeof publicDidResolver.resolve>>;
+const runDocuments = new AsyncLocalStorage<Map<string, Promise<DidDocument>>>();
+
+/**
+ * Runs `work` with one lookup per DID: inside it, every resolution of a DID
+ * shares the first one's answer. A failed lookup is not kept. A run nested in
+ * another shares the outer run's lookups.
+ */
+export function withIdentityCache<T>(work: () => Promise<T>) {
+  return runDocuments.getStore() ? work() : runDocuments.run(new Map(), work);
+}
+
+/**
+ * The DID document as published, for handles and service endpoints. It is
+ * read afresh each time, except within one `withIdentityCache` run.
+ */
 export async function resolvePublicDidDocument(
   did: string,
   options: { deadline?: number } = {},
 ) {
   if (!did.startsWith("did:plc:") && !did.startsWith("did:web:"))
     throw new UnsupportedDidError();
+  const documents = runDocuments.getStore();
+  const known = documents?.get(did);
+  if (known) return known;
   const signal =
     options.deadline === undefined
       ? undefined
       : AbortSignal.timeout(Math.max(0, options.deadline - Date.now()));
-  return publicDidResolver.resolve(did as `did:${string}:${string}`, {
+  const document = publicDidResolver.resolve(did as `did:${string}:${string}`, {
     noCache: true,
     signal,
   });
+  if (documents) {
+    documents.set(did, document);
+    document.catch(() => documents.delete(did));
+  }
+  return document;
 }
 
-export async function resolvePublicPds(did: string) {
-  const document = await resolvePublicDidDocument(did);
+export async function resolvePublicPds(
+  did: string,
+  options: { deadline?: number } = {},
+) {
+  const document = await resolvePublicDidDocument(did, options);
   const service = document.service?.find(
     (entry) =>
       (entry.id === "#atproto_pds" || entry.id === `${did}#atproto_pds`) &&

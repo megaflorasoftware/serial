@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, not, notExists } from "drizzle-orm";
 import { nextPublicationSyncAttempt, RETRY_REFUSED_WRITES } from "./requests";
 import { nextRetryAt } from "./retry";
 import { backfillPublicationOrigins } from "./backfill";
@@ -37,11 +37,13 @@ import type {
   PublicationSyncProgress,
   PublicationSyncResult,
 } from "~/lib/auth/publication-sync";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import type { PreparedFeedImport } from "~/server/feeds/imports";
 import { emptyPublicationSyncCounts } from "~/lib/auth/publication-sync";
 import {
   atprotoConnections,
   feedOrigins,
+  feeds,
   atprotoSubscriptionMirror as mirror,
 } from "~/server/db/schema";
 import { commitFeedImport, prepareFeedImport } from "~/server/feeds/imports";
@@ -52,7 +54,10 @@ import {
 } from "~/server/feeds/importErrors";
 import { deleteUserFeeds } from "~/server/feeds/delete";
 import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
-import { fetchableOriginsOf } from "~/server/feeds/origins";
+import { fetchableOriginsOf, withOrigins } from "~/server/feeds/origins";
+import { originAwaitsFirstFetch, originIsDue } from "~/server/feeds/schedule";
+import { withIdentityCache } from "~/server/auth/atproto/did-resolver";
+import { orderedWorkerPool, workerPool } from "~/lib/workerPool";
 import { getUserChannel } from "~/server/api/channels";
 import {
   getActiveFeedCount,
@@ -75,6 +80,12 @@ function groupByPublication<T extends { publicationUri: string }>(rows: T[]) {
 }
 /** The same bound Add gives a new Feed's first fetch. */
 const FIRST_FETCH_TIMEOUT_MS = 15_000;
+/** Publications found at once. Their commits still land one at a time, in order. */
+const FIND_CONCURRENCY = 2;
+/** First fetches at once, as an OPML import runs them. */
+const FETCH_CONCURRENCY = 4;
+/** A run starts no work after this. The next run continues at once. */
+const RUN_DEADLINE_MS = 60_000;
 
 /** The PDS did not take a subscription write. The write is still owed. */
 class SubscriptionWriteError extends Error {}
@@ -126,6 +137,51 @@ async function resolveImportedFeed(userId: string, publicationUri: string) {
   const [details] = await resolvePublicationFeed(userId, publicationUri);
   if (!details) throw new Error("Unable to resolve publication");
   return details;
+}
+
+/**
+ * Feeds with an Atmosphere origin whose content has not arrived: no fetch has
+ * visited any of their origins. Finding creates them, in this run or in an
+ * earlier run of the same request, and fetching gives them their content.
+ */
+async function feedsAwaitingFirstFetch(
+  database: typeof Database,
+  userId: string,
+) {
+  const rows = await database
+    .select()
+    .from(feeds)
+    .where(
+      and(
+        inArray(
+          feeds.id,
+          database
+            .select({ feedId: feedOrigins.feedId })
+            .from(feedOrigins)
+            .where(
+              and(
+                eq(feedOrigins.userId, userId),
+                originIsDue(new Date()),
+                eq(feedOrigins.kind, "atproto"),
+                originAwaitsFirstFetch,
+              ),
+            ),
+        ),
+        notExists(
+          database
+            .select({ id: feedOrigins.id })
+            .from(feedOrigins)
+            .where(
+              and(
+                eq(feedOrigins.feedId, feeds.id),
+                not(originAwaitsFirstFetch),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(asc(feeds.id));
+  return rows.length ? withOrigins(database, rows) : [];
 }
 
 type WriteRetries = Pick<
@@ -206,7 +262,7 @@ async function saveCheckedRev(
     );
 }
 
-export async function syncPublicationSubscriptions(input: {
+type SyncInput = {
   database: typeof Database;
   userId: string;
   runId?: string;
@@ -221,7 +277,20 @@ export async function syncPublicationSubscriptions(input: {
     activationBudget?: typeof getFeedsActivationBudget;
     invalidate?: typeof publishReconciliationInvalidation;
   };
-}): Promise<PublicationSyncResult> {
+};
+
+/**
+ * One run in two stages. Finding resolves every publication and creates its
+ * Feed, two at a time. Fetching then gives the new Feeds their first content.
+ * A run that reaches its deadline stops and the next one continues the work.
+ */
+export function syncPublicationSubscriptions(
+  input: SyncInput,
+): Promise<PublicationSyncResult> {
+  return withIdentityCache(() => syncInRun(input));
+}
+
+async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
   const { database, userId } = input;
   const counts = emptyPublicationSyncCounts();
   const injectedStore = input.dependencies?.store;
@@ -283,10 +352,18 @@ export async function syncPublicationSubscriptions(input: {
     changedFeeds = false;
   };
   /** Clients learn the Feed before its items arrive, as with Add. */
-  const fetchAfterImport = async (feed: DatabaseFeedWithOrigins) => {
+  const announceNewFeed = async () => {
+    try {
+      await publishFeedChanges();
+    } catch (error) {
+      // The Feed exists either way; the run publishes its changes at the end.
+      logError("[publication-sync] Feed announcement failed", error);
+    }
+  };
+  /** A Feed's first content. Throws only when the run lost its claim. */
+  const fetchFirstContent = async (feed: DatabaseFeedWithOrigins) => {
     try {
       await renewSubscriptionSync(database, connection);
-      await publishFeedChanges();
       await (input.dependencies?.fetchCreatedFeed ?? fetchCreatedFeed)(
         database,
         feed,
@@ -300,14 +377,21 @@ export async function syncPublicationSubscriptions(input: {
   let wroteRecords = false;
   let cursor = connection.subscriptionSyncCursor;
   let observedCompleteSnapshot = true;
+  /** Feeds found that still wait for a first fetch the run had no time for. */
+  let fetchesLeft = false;
   let lastProgressAt = 0;
-  const progress = async (completed: number, total: number) => {
+  const progress = async (
+    stage: TwoStageProgress["stage"],
+    completed: number,
+    total: number,
+  ) => {
     if (completed > 0 && completed < total && Date.now() - lastProgressAt < 100)
       return;
     lastProgressAt = Date.now();
     try {
       await input.onProgress?.({
         runId: input.runId ?? connection.subscriptionSyncToken!,
+        stage,
         completed,
         total,
       });
@@ -316,7 +400,7 @@ export async function syncPublicationSubscriptions(input: {
     }
   };
   try {
-    await progress(0, 0);
+    await progress("finding", 0, 0);
     const backfill = await (
       input.dependencies?.backfill ?? backfillPublicationOrigins
     )(database, connection);
@@ -404,21 +488,11 @@ export async function syncPublicationSubscriptions(input: {
           ...ordered.filter((uri) => uri <= cursor!),
         ]
       : ordered;
-    await progress(0, publications.length);
-    const deadline = Date.now() + 60_000;
-    for (const [index, publicationUri] of publications.entries()) {
-      if (Date.now() > deadline) {
-        counts.deferred += publications.length - index;
-        retryAfter(new Date());
-        observedCompleteSnapshot = false;
-        break;
-      }
-      cursor = publicationUri;
-      if (invalidPublications.has(publicationUri)) {
-        await progress(index + 1, publications.length);
-        continue;
-      }
-      let records = remoteByPublication.get(publicationUri) ?? [];
+    await progress("finding", 0, publications.length);
+    const deadline = Date.now() + RUN_DEADLINE_MS;
+    /** What the rules decide for one publication. It reads and writes nothing. */
+    const plan = (publicationUri: string) => {
+      const records = remoteByPublication.get(publicationUri) ?? [];
       const old = previousByPublication.get(publicationUri) ?? [];
       const previousFeedId = old[0]?.feedId ?? null;
       const localFeedId = localByPublication.get(publicationUri) ?? null;
@@ -437,13 +511,95 @@ export async function syncPublicationSubscriptions(input: {
         connection.importSubscriptions &&
         localFeedId === null &&
         records.length > 0;
-      if (skippedImport) counts.skipped++;
-      if (
+      /** When a failed import may retry, while that time has not come. */
+      const importWaitsUntil =
         pendingImport &&
         priorImport?.importRetryAt &&
         priorImport.importRetryAt > new Date()
-      ) {
-        awaitRetry(priorImport.importRetryAt);
+          ? priorImport.importRetryAt
+          : null;
+      const action = planPublicationSync({
+        retryImport: pendingImport,
+        localFeedId,
+        previousFeedId,
+        remotePresent: records.length > 0,
+        previousRemotePresent: old.some((row) => row.remotePresent),
+        known: old.length > 0,
+        importEnabled: connection.importSubscriptions,
+        exportEnabled: connection.exportSubscriptions,
+        importBaseline:
+          !old.length ||
+          old[0]!.importGeneration !== connection.subscriptionImportGeneration,
+        exportBaseline:
+          !old.length ||
+          old[0]!.exportGeneration !== connection.subscriptionExportGeneration,
+      });
+      return {
+        publicationUri,
+        records,
+        old,
+        localFeedId,
+        priorImport,
+        skippedImport,
+        importWaitsUntil,
+        action,
+      };
+    };
+    type Plan = ReturnType<typeof plan>;
+    type Found =
+      | { prepared: PreparedFeedImport; maxActiveFeeds: number }
+      | { error: unknown };
+    /**
+     * The network half of finding: an import resolves its publication and
+     * checks the Feed it would create. It may run ahead of the commits before
+     * it, so it writes nothing. Null once the run is out of time.
+     */
+    const find = async (
+      publicationUri: string,
+    ): Promise<{ planned: Plan; found?: Found } | null> => {
+      if (Date.now() > deadline) return null;
+      const planned = plan(publicationUri);
+      if (
+        planned.action !== "import" ||
+        planned.importWaitsUntil ||
+        invalidPublications.has(publicationUri)
+      )
+        return { planned };
+      try {
+        const details = await (
+          input.dependencies?.resolveFeed ?? resolveImportedFeed
+        )(userId, publicationUri);
+        const prepared = await prepareFeedImport(database, userId, details);
+        const budget = await (
+          input.dependencies?.activationBudget ?? getFeedsActivationBudget
+        )(database, userId);
+        return {
+          planned,
+          found: { prepared, maxActiveFeeds: budget.maxActiveFeeds },
+        };
+      } catch (error) {
+        return { planned, found: { error } };
+      }
+    };
+    /**
+     * Commits one publication, in publication order. Resolves to whether the
+     * run lost its claim and must stop.
+     */
+    const commit = async (planned: Plan, found?: Found) => {
+      const {
+        publicationUri,
+        old,
+        localFeedId,
+        priorImport,
+        skippedImport,
+        action,
+      } = planned;
+      let records = planned.records;
+      cursor = publicationUri;
+      if (invalidPublications.has(publicationUri)) return false;
+      if (skippedImport) counts.skipped++;
+      if (planned.importWaitsUntil) {
+        awaitRetry(planned.importWaitsUntil);
         if (
           !observationUnchanged(
             old,
@@ -466,39 +622,21 @@ export async function syncPublicationSubscriptions(input: {
               imported: true,
               failure: {
                 state: "pending",
-                retryAt: priorImport.importRetryAt,
-                attempts: priorImport.importFailures,
+                retryAt: planned.importWaitsUntil,
+                attempts: priorImport!.importFailures,
               },
             });
           });
         }
         counts.deferred++;
-        await progress(index + 1, publications.length);
-        continue;
+        return false;
       }
-      const action = planPublicationSync({
-        retryImport: pendingImport,
-        localFeedId,
-        previousFeedId,
-        remotePresent: records.length > 0,
-        previousRemotePresent: old.some((row) => row.remotePresent),
-        known: old.length > 0,
-        importEnabled: connection.importSubscriptions,
-        exportEnabled: connection.exportSubscriptions,
-        importBaseline:
-          !old.length ||
-          old[0]!.importGeneration !== connection.subscriptionImportGeneration,
-        exportBaseline:
-          !old.length ||
-          old[0]!.exportGeneration !== connection.subscriptionExportGeneration,
-      });
       // Only a listing read at a known revision proves a record is gone. A
       // run that could not read one keeps the Feed for the next check.
       if (action === "remove-local" && rev === null) {
         counts.failed++;
         mustReconcile = true;
-        await progress(index + 1, publications.length);
-        continue;
+        return false;
       }
       try {
         // Most refreshes reach this fast path: no per-publication SQL or network calls.
@@ -511,10 +649,8 @@ export async function syncPublicationSubscriptions(input: {
             connection.subscriptionImportGeneration,
             connection.subscriptionExportGeneration,
           )
-        ) {
-          await progress(index + 1, publications.length);
-          continue;
-        }
+        )
+          return false;
         const writesRecord = action === "export" || action === "remove-remote";
         if (writesRecord && writeRetries.held) {
           writeRetries.leaveOwed();
@@ -523,22 +659,10 @@ export async function syncPublicationSubscriptions(input: {
             counts.deferred++;
             awaitRetry(writeRetries.held.until);
           }
-          await progress(index + 1, publications.length);
-          continue;
+          return false;
         }
         await renewSubscriptionSync(database, connection);
-        let prepared: PreparedFeedImport | undefined;
-        let maxActiveFeeds = 0;
-        if (action === "import") {
-          const details = await (
-            input.dependencies?.resolveFeed ?? resolveImportedFeed
-          )(userId, publicationUri);
-          prepared = await prepareFeedImport(database, userId, details);
-          const budget = await (
-            input.dependencies?.activationBudget ?? getFeedsActivationBudget
-          )(database, userId);
-          maxActiveFeeds = budget.maxActiveFeeds;
-        }
+        if (found && "error" in found) throw found.error;
         if (writesRecord) {
           await assertSubscriptionSyncCurrent(database, connection, true);
           // A Feed may have been deleted while reading the PDS listing.
@@ -580,20 +704,20 @@ export async function syncPublicationSubscriptions(input: {
           let imported = 0,
             inactive = 0,
             removed = 0,
-            createdFeed: DatabaseFeedWithOrigins | null = null;
-          if (prepared) {
+            createdFeed = false;
+          if (found) {
             const activeCount = await getActiveFeedCount(tx, userId);
             const created = await commitFeedImport(
               tx,
               userId,
-              prepared,
-              !connection.importAsInactive && activeCount < maxActiveFeeds,
+              found.prepared,
+              !connection.importAsInactive &&
+                activeCount < found.maxActiveFeeds,
             );
             feedId = created.feed.id;
             imported = Number(created.created || created.attached);
             inactive = Number(created.created && !created.feed.isActive);
-            if (created.created && created.feed.isActive)
-              createdFeed = created.feed;
+            createdFeed = created.created && created.feed.isActive;
           }
           if (action === "remove-local" && feedId !== null) {
             removed = (await deleteUserFeeds(tx, userId, [feedId])).length;
@@ -622,8 +746,8 @@ export async function syncPublicationSubscriptions(input: {
         counts.removed += result.removed + Number(action === "remove-remote");
         counts.exported += Number(action === "export");
         changedFeeds ||= result.imported > 0 || result.removed > 0;
-        // The import is committed; nothing below may be read as its failure.
-        if (result.createdFeed) await fetchAfterImport(result.createdFeed);
+        // The import is committed; its content waits for fetching.
+        if (result.createdFeed) await announceNewFeed();
       } catch (error) {
         if (
           action === "import" &&
@@ -689,15 +813,66 @@ export async function syncPublicationSubscriptions(input: {
             publicationUri,
             error,
           );
-        if (error instanceof SubscriptionSyncChangedError) break;
+        return error instanceof SubscriptionSyncChangedError;
       }
-      await progress(index + 1, publications.length);
+      return false;
+    };
+    // Finding: two publications at a time, committed in publication order.
+    let committed = 0;
+    let claimLost = false;
+    for await (const step of orderedWorkerPool(
+      publications,
+      FIND_CONCURRENCY,
+      find,
+    )) {
+      if (!step) break;
+      claimLost = await commit(step.planned, step.found);
+      if (claimLost) break;
+      await progress("finding", ++committed, publications.length);
+    }
+    if (!claimLost && committed < publications.length) {
+      counts.deferred += publications.length - committed;
+      retryAfter(new Date());
+      observedCompleteSnapshot = false;
+    }
+    // Fetching: the first content of every Feed found, once finding is done.
+    if (!claimLost && committed === publications.length) {
+      const awaiting = await feedsAwaitingFirstFetch(database, userId);
+      if (awaiting.length) await progress("fetching", 0, awaiting.length);
+      let fetched = 0;
+      for await (const attempted of workerPool(
+        awaiting,
+        FETCH_CONCURRENCY,
+        async (feed) => {
+          if (claimLost || Date.now() > deadline) return false;
+          try {
+            await fetchFirstContent(feed);
+          } catch {
+            // Only a lost claim reaches here: settings changed or another run took over.
+            claimLost = true;
+            return false;
+          }
+          return true;
+        },
+      )) {
+        if (attempted) await progress("fetching", ++fetched, awaiting.length);
+      }
+      if (claimLost) {
+        counts.failed++;
+        mustReconcile = true;
+      } else if (fetched < awaiting.length) {
+        // The rest wait for the next run, which follows at once.
+        fetchesLeft = true;
+        retryAfter(new Date());
+      }
     }
     // A stored revision promises a finished pass over a complete snapshot, with
     // nothing left but retries waiting for their time. An invalid record is
     // part of that snapshot: the same revision yields it again.
     const finishedRev =
-      mustReconcile || !observedCompleteSnapshot || wroteRecords ? null : rev;
+      mustReconcile || !observedCompleteSnapshot || wroteRecords || fetchesLeft
+        ? null
+        : rev;
     // The digest describes the listing at the stored revision and means
     // nothing without one, so a pass that stores none leaves it alone.
     const finishedDigest =

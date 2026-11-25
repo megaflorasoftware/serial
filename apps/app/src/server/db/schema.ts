@@ -31,6 +31,7 @@ import {
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { ReaderBody } from "@serial/standard-site";
 import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
@@ -1320,7 +1321,7 @@ export const atprotoConnections = sqliteTable(
      */
     subscriptionJobProgress: text("subscription_job_progress", {
       mode: "json",
-    }).$type<{ completed: number; total: number }>(),
+    }).$type<TwoStageProgress>(),
     subscriptionJobResult: text("subscription_job_result", {
       mode: "json",
     }).$type<PublicationSyncResult>(),

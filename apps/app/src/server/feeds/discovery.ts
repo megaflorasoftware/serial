@@ -28,6 +28,7 @@ import type {
   DiscoveredFeed,
   SyndicationCandidate,
 } from "@serial/feed-discovery";
+import type { ResolvedPublication } from "./publications";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { captureException } from "~/server/logger";
 import { readFeedHttp } from "~/server/rss/feedHttp";
@@ -133,9 +134,11 @@ async function discoverFeedsWithoutLimits(
 function requestReader(signal?: AbortSignal) {
   const requests = new Map<string, ReturnType<typeof readFeedHttp>>();
   const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
-  return ((url, options) => {
+  const keyOf = (...[url, options]: Parameters<typeof readFeedHttp>) =>
+    `${options?.method ?? "GET"}:${url}`;
+  const read = ((url, options) => {
     if (signal?.aborted) return Promise.reject(signal.reason);
-    const key = `${options?.method ?? "GET"}:${url}`;
+    const key = keyOf(url, options);
     const existing = requests.get(key);
     if (existing) return existing;
     if (requests.size >= 24 || Date.now() >= deadline)
@@ -154,7 +157,16 @@ function requestReader(signal?: AbortSignal) {
     requests.set(key, value);
     return value;
   }) satisfies typeof readFeedHttp;
+  /**
+   * After discovery: a response discovery already read, or a fresh read
+   * outside its budget for anything it did not.
+   */
+  const reuse: typeof readFeedHttp = (url, options) =>
+    requests.get(keyOf(url, options)) ?? readFeedHttp(url, options);
+  return { read, reuse };
 }
+
+type PublicationResolver = typeof resolvePublication;
 
 async function websitePublications(
   url: string,
@@ -163,6 +175,7 @@ async function websitePublications(
   strict = false,
   onUpdate?: (rows: DiscoveredFeed[]) => void,
   deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS,
+  resolve: PublicationResolver = resolvePublication,
 ) {
   let target = new URL(url);
   const readHint =
@@ -233,7 +246,7 @@ async function websitePublications(
     2,
     async (uri) => {
       try {
-        return await resolvePublication(uri, signal, deadline);
+        return await resolve(uri, signal, deadline);
       } catch (error) {
         if (strict) throw error;
         return null;
@@ -262,6 +275,7 @@ async function discoverWebsite(
   strict = false,
   onUpdate?: (rows: DiscoveredFeed[]) => void,
   deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS,
+  resolve: PublicationResolver = resolvePublication,
 ) {
   const candidates = new Map<string, SyndicationCandidate>();
   let publications: DiscoveredFeed[] = [];
@@ -319,6 +333,7 @@ async function discoverWebsite(
           }
         : undefined,
       deadline,
+      resolve,
     ).then((rows) => {
       publications = rows;
     }),
@@ -351,7 +366,7 @@ async function runDiscovery(
   const signal = callerSignal
     ? AbortSignal.any([callerSignal, controller.signal])
     : controller.signal;
-  const read = requestReader(signal);
+  const { read } = requestReader(signal);
   let latest: DiscoveredFeed[] = [];
   let wakeOnAbort: () => void = () => {};
   const aborted = new Promise<void>((resolve) => {
@@ -513,7 +528,7 @@ export async function* streamDiscoverFeeds(
 
 /** Explicit revalidation must distinguish an unavailable site from an empty discovery. */
 export async function discoverFeedOriginsForRevalidation(url: string) {
-  const read = requestReader();
+  const { read } = requestReader();
   const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
   const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
   const response = await read(url, undefined);
@@ -525,22 +540,30 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
  * Imports require completed discovery; an unavailable source is never evidence
  * of absence. A site that answers 410 is reported as gone, apart from
  * discovery that could not finish and is worth another attempt.
+ *
+ * An import is background work: it waits for one of the user's background
+ * discovery slots. `publication` is one the caller already read, which
+ * discovery uses instead of reading its record again. Besides the rows it
+ * hands back a reader that answers from the responses discovery holds, so
+ * the caller reads none of them twice.
  */
 export async function discoverFeedOriginsForImport(
   userId: string,
   url: string,
+  publication?: ResolvedPublication,
 ) {
-  const lease = captureLimiter.acquire(userId, "discovery");
-  if (!lease.ok) {
+  const lease = await captureLimiter.acquireInBackground(userId, "discovery");
+  if (!lease.ok)
     throw new FeedImportDeferredError(
       undefined,
-      new Date(
-        Date.now() + (lease.reason === "rate_limited" ? 600_000 : 60_000),
-      ),
+      new Date(Date.now() + 600_000),
     );
-  }
   try {
-    const request = requestReader();
+    const { read: request, reuse } = requestReader();
+    const resolve: PublicationResolver = (uri, ...rest) =>
+      uri === publication?.uri
+        ? Promise.resolve(publication)
+        : resolvePublication(uri, ...rest);
     let incomplete: FeedImportDeferredError | undefined;
     const read: typeof readFeedHttp = async (target, options) => {
       try {
@@ -588,12 +611,13 @@ export async function discoverFeedOriginsForImport(
       true,
       undefined,
       deadline,
+      resolve,
     ).catch((error: unknown) => {
       throw incomplete ?? error;
     });
     if (incomplete || signal.aborted)
       throw incomplete ?? new FeedImportDeferredError();
-    return rows;
+    return { rows, read: reuse };
   } catch (error) {
     if (
       error instanceof FeedImportDeferredError ||

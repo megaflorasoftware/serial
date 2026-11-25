@@ -10,6 +10,7 @@ import {
 } from "./publications";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { NewFeedDetails } from "~/server/rss/types";
+import type { readFeedHttp } from "~/server/rss/feedHttp";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 
 function isCombinedSelection(
@@ -93,13 +94,21 @@ async function resolveSelectedFeed(
 ) {
   let rss = selected.origins?.find((origin) => origin.kind === "rss");
   let publicationDiscovery: DiscoveredFeed[] | undefined;
+  /** Reads the RSS Feed, from the response discovery already holds when it has one. */
+  let read: typeof readFeedHttp | undefined;
   if (publication && !rss) {
-    publicationDiscovery = importing
-      ? combinePublicationRows(
-          await discoverFeedOriginsForImport(userId, publication.siteUrl),
-          [publicationRow(publication)],
-        )
-      : await discoverFeeds(userId, publication.siteUrl);
+    if (importing) {
+      const discovered = await discoverFeedOriginsForImport(
+        userId,
+        publication.siteUrl,
+        publication,
+      );
+      publicationDiscovery = combinePublicationRows(discovered.rows, [
+        publicationRow(publication),
+      ]);
+      read = discovered.read;
+    } else
+      publicationDiscovery = await discoverFeeds(userId, publication.siteUrl);
     const matching = publicationDiscovery.find((row) =>
       row.origins?.some(
         (origin) =>
@@ -109,7 +118,7 @@ async function resolveSelectedFeed(
     rss = matching?.origins?.find((origin) => origin.kind === "rss");
   }
   const rssDetails = rss
-    ? (await fetchNewFeedDetails(rss.locator))[0]
+    ? (await fetchNewFeedDetails(rss.locator, read))[0]
     : undefined;
   if (rss && !rssDetails)
     throw new Error("Unable to read the selected RSS Feed");

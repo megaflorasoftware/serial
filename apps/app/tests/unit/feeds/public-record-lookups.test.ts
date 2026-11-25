@@ -22,6 +22,7 @@ vi.mock("~/server/logger", () => ({ captureException: vi.fn() }));
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   resolve: vi.fn(),
+  publicPds: vi.fn(),
   env: { ATPROTO_SLINGSHOT_ENDPOINT: "https://slingshot.microcosm.blue" },
 }));
 vi.mock("~/env", () => ({ env: mocks.env }));
@@ -29,7 +30,7 @@ vi.mock("~/server/auth/atproto/hardened-fetch", () => ({
   createHardenedFetch: () => mocks.fetch,
 }));
 vi.mock("~/server/auth/atproto/did-resolver", () => ({
-  resolvePublicPds: vi.fn(),
+  resolvePublicPds: mocks.publicPds,
   resolvePublicDidDocument: vi.fn(),
   UnsupportedDidError: class extends Error {},
 }));
@@ -64,6 +65,7 @@ beforeEach(() => {
   endpoint = `https://cache-${sequence++}.example`;
   mocks.env.ATPROTO_SLINGSHOT_ENDPOINT = endpoint;
   resolvePds = vi.fn(async () => pds);
+  mocks.publicPds.mockResolvedValue(pds);
   mocks.resolve.mockResolvedValue({
     did,
     didDoc: {
@@ -94,7 +96,7 @@ for (const [name, call] of Object.entries(callers)) {
       expect(mocks.fetch).toHaveBeenCalledTimes(1);
       expect(new URL(mocks.fetch.mock.calls[0]![0]).origin).toBe(endpoint);
       expect(resolvePds).not.toHaveBeenCalled();
-      expect(mocks.resolve).not.toHaveBeenCalled();
+      expect(mocks.publicPds).not.toHaveBeenCalled();
     });
     it.each([
       [
@@ -346,7 +348,9 @@ it.each(["healthy", "unavailable", "stalled"])(
     ]);
     expect(Date.now() - start).toBe(mode === "stalled" ? 1000 : 0);
     expect(mocks.fetch).toHaveBeenCalledTimes(mode === "healthy" ? 1 : 2);
-    expect(mocks.resolve).toHaveBeenCalledTimes(mode === "healthy" ? 0 : 1);
+    expect(mocks.publicPds).toHaveBeenCalledTimes(mode === "healthy" ? 0 : 1);
+    // Reading a publication needs the repository's PDS, never its handle.
+    expect(mocks.resolve).not.toHaveBeenCalled();
   },
 );
 it("preserves a streamed RSS result and uses the remaining overall budget for Slingshot fallback", async () => {
@@ -377,7 +381,7 @@ it("preserves a streamed RSS result and uses the remaining overall budget for Sl
     feeds: [{ origins: [{ kind: "rss" }, { kind: "atproto", locator: uri }] }],
   });
   expect(mocks.fetch).toHaveBeenCalledTimes(2);
-  expect(mocks.resolve).toHaveBeenCalledTimes(1);
+  expect(mocks.publicPds).toHaveBeenCalledTimes(1);
 });
 
 describe("a publication that is gone", () => {
@@ -389,7 +393,7 @@ describe("a publication that is gone", () => {
     "reports a repository whose DID answers %s as unavailable",
     async (status) => {
       cacheMiss();
-      mocks.resolve.mockRejectedValue(
+      mocks.publicPds.mockRejectedValue(
         new DidError(did, "DID not found", "did-fetch-error", status),
       );
       await expect(resolvePublication(uri)).rejects.toBeInstanceOf(
@@ -401,7 +405,7 @@ describe("a publication that is gone", () => {
     cacheMiss();
     // The resolver reports a transport failure with status 400.
     const failure = new DidError(did, "fetch failed", "did-fetch-error", 400);
-    mocks.resolve.mockRejectedValue(failure);
+    mocks.publicPds.mockRejectedValue(failure);
     await expect(resolvePublication(uri)).rejects.toBe(failure);
   });
   it("reports a record that is not a valid publication as unavailable", async () => {

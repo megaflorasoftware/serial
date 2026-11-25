@@ -6,9 +6,10 @@ import { captureException, logError } from "~/server/logger";
 
 export async function fetchUnknownRssFeed(
   url: string,
+  read: typeof readFeedHttp = readFeedHttp,
 ): Promise<NewFeedDetails | null> {
   try {
-    const feed = await readFeedHttp(url);
+    const feed = await read(url);
     if (!feed.ok) {
       throw new Error(
         `Failed to fetch RSS feed: ${feed.status} ${feed.statusText}`,

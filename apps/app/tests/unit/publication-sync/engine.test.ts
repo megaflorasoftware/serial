@@ -6,12 +6,14 @@ import type {
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
 import type { backfillPublicationOrigins } from "~/server/publication-sync/backfill";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
 import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import { runPublicationSyncJobs } from "~/server/publication-sync/jobs";
 import { listingDigest } from "~/server/publication-sync/check";
 import {
   atprotoConnections,
   atprotoSubscriptionMirror,
+  feedOrigins,
   feeds,
   user,
 } from "~/server/db/schema";
@@ -58,10 +60,17 @@ let fetchCreatedFeed: ReturnType<
   typeof vi.fn<(database: unknown, feed: { id: number }) => Promise<void>>
 >;
 let maxActiveFeeds: number;
-const run = (backfill?: typeof backfillPublicationOrigins) =>
+const run = (
+  backfill?: typeof backfillPublicationOrigins,
+  onProgress?: (progress: TwoStageProgress) => void,
+) =>
   syncPublicationSubscriptions({
     database: fixture.database,
     userId: "owner",
+    onProgress: ({ stage, completed, total }) => {
+      onProgress?.({ stage, completed, total });
+      return Promise.resolve();
+    },
     dependencies: {
       ...(backfill ? { backfill } : {}),
       store,
@@ -79,12 +88,22 @@ const runJobs = (sync: typeof syncPublicationSubscriptions) =>
   runPublicationSyncJobs(fixture.database, sync, {
     refreshesInBackground: async () => false,
   });
-const addLocal = (name: string) =>
-  insertFeedWithOrigins(fixture.database, {
+/** A fetch visits every origin of the Feed and moves its schedule on, whatever it finds. */
+const visit = (feedId: number) =>
+  fixture.database
+    .update(feedOrigins)
+    .set({ nextFetchAt: new Date(Date.now() + 60 * 60 * 1000) })
+    .where(eq(feedOrigins.feedId, feedId));
+/** A Feed the user added, which Add fetched at once. */
+const addLocal = async (name: string) => {
+  const feed = await insertFeedWithOrigins(fixture.database, {
     userId: "owner",
     details: details(publication(name)),
     isActive: true,
   });
+  await visit(feed.id);
+  return feed;
+};
 const method = (
   method: "none" | "import" | "export" | "bidirectional",
   importAsInactive = false,
@@ -133,9 +152,11 @@ beforeEach(async () => {
   maxActiveFeeds = 10;
   resolveFeed = vi.fn(async (_userId: string, uri: string) => details(uri));
   invalidate = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-  fetchCreatedFeed = vi
-    .fn<(database: unknown, feed: { id: number }) => Promise<void>>()
-    .mockResolvedValue(undefined);
+  fetchCreatedFeed = vi.fn<
+    (database: unknown, feed: { id: number }) => Promise<void>
+  >(async (_database, feed) => {
+    await visit(feed.id);
+  });
   store = {
     visibility: "public",
     latestRev: vi.fn(async () => String(rev)),
@@ -1380,5 +1401,179 @@ describe("failures that end or wait", () => {
       subscriptionWriteFailures: 0,
       subscriptionWriteRetryAt: null,
     });
+  });
+});
+
+describe("finding, then fetching", () => {
+  const name = (uri: string) => uri.split("/").at(-1)!;
+  /** Runs past the deadline once `passed` is set, without waiting a minute. */
+  const pastDeadline = () => {
+    const realNow = Date.now.bind(Date);
+    const clock = { passed: 0 };
+    const spy = vi
+      .spyOn(Date, "now")
+      .mockImplementation(() => realNow() + clock.passed);
+    return Object.assign(clock, { restore: () => spy.mockRestore() });
+  };
+  const stored = async () =>
+    (await fixture.database.select().from(atprotoConnections).get())!;
+  const createdNames = async () =>
+    (
+      await fixture.database
+        .select({ name: feeds.name })
+        .from(feeds)
+        .orderBy(feeds.id)
+    ).map((feed) => feed.name);
+
+  it("finds every Feed before it fetches any, and counts each stage", async () => {
+    records = [record("one"), record("two"), record("three")];
+    await method("import");
+    const events: string[] = [];
+    resolveFeed.mockImplementation(async (_userId, uri) => {
+      events.push("find");
+      return details(uri);
+    });
+    fetchCreatedFeed.mockImplementation(async (_database, feed) => {
+      events.push("fetch");
+      await visit(feed.id);
+    });
+    const progress: TwoStageProgress[] = [];
+    expect(
+      await run(undefined, (update) => {
+        progress.push(update);
+      }),
+    ).toMatchObject({ status: "completed", imported: 3 });
+    expect(events).toEqual(["find", "find", "find", "fetch", "fetch", "fetch"]);
+    expect(progress.at(0)).toEqual({
+      stage: "finding",
+      completed: 0,
+      total: 0,
+    });
+    expect(progress).toContainEqual({
+      stage: "finding",
+      completed: 3,
+      total: 3,
+    });
+    expect(progress.at(-1)).toEqual({
+      stage: "fetching",
+      completed: 3,
+      total: 3,
+    });
+    // Once fetching starts, finding never reports again.
+    const fetching = progress.findIndex(
+      (update) => update.stage === "fetching",
+    );
+    expect(
+      progress.slice(fetching).every((update) => update.stage === "fetching"),
+    ).toBe(true);
+  });
+
+  it("finds two publications at a time and commits them in publication order", async () => {
+    records = ["a", "b", "c", "d"].map((rkey) => record(rkey));
+    await method("import");
+    const waiting = new Map<string, () => void>();
+    let active = 0;
+    let most = 0;
+    resolveFeed.mockImplementation(
+      (_userId, uri) =>
+        new Promise((resolve) => {
+          most = Math.max(most, ++active);
+          waiting.set(name(uri), () => {
+            active--;
+            resolve(details(uri));
+          });
+        }),
+    );
+    const syncing = run();
+    await vi.waitFor(() => expect([...waiting.keys()]).toEqual(["a", "b"]));
+    // "b" is found first, but commits only after "a".
+    waiting.get("b")!();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await createdNames()).toEqual([]);
+    waiting.get("a")!();
+    await vi.waitFor(() => expect(waiting.has("c")).toBe(true));
+    await vi.waitFor(() => expect(waiting.has("d")).toBe(true));
+    waiting.get("d")!();
+    waiting.get("c")!();
+    expect(await syncing).toMatchObject({ imported: 4 });
+    expect(most).toBe(2);
+    expect(await createdNames()).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("fetches the Feeds an earlier run found once a later run finishes finding", async () => {
+    records = [record("one"), record("two")];
+    await method("import");
+    const clock = pastDeadline();
+    // Finding "one" takes the run beyond its minute, so "two" waits.
+    resolveFeed.mockImplementationOnce(async (_userId, uri) => {
+      clock.passed = 61_000;
+      return details(uri);
+    });
+    try {
+      expect(await run()).toMatchObject({ imported: 1, deferred: 1 });
+    } finally {
+      clock.restore();
+    }
+    // Finding did not finish, so nothing was fetched and the pass stays open.
+    expect(fetchCreatedFeed).not.toHaveBeenCalled();
+    expect((await stored()).subscriptionRepoRev).toBeNull();
+    expect(await run()).toMatchObject({ imported: 1, deferred: 0 });
+    const created = await fixture.database.select().from(feeds);
+    expect(
+      fetchCreatedFeed.mock.calls.map(([, feed]) => feed.id).sort(),
+    ).toEqual(created.map((feed) => feed.id).sort());
+    expect((await stored()).subscriptionRepoRev).toBe("1");
+  });
+
+  it("leaves the first fetches it has no time for to the next run", async () => {
+    records = ["a", "b", "c", "d", "e"].map((rkey) => record(rkey));
+    await method("import");
+    const clock = pastDeadline();
+    // The first fetch to finish takes the run beyond its minute. Four start
+    // together; the fifth would start after it.
+    fetchCreatedFeed.mockImplementationOnce(async (_database, feed) => {
+      clock.passed = 61_000;
+      await visit(feed.id);
+    });
+    let result;
+    try {
+      result = await run();
+    } finally {
+      clock.restore();
+    }
+    expect(result).toMatchObject({ imported: 5, deferred: 0 });
+    expect(result?.retryAt).toBeInstanceOf(Date);
+    expect(fetchCreatedFeed).toHaveBeenCalledTimes(4);
+    // The revision waits until every Feed found has its content.
+    expect((await stored()).subscriptionRepoRev).toBeNull();
+    const progress: TwoStageProgress[] = [];
+    expect(
+      await run(undefined, (update) => {
+        progress.push(update);
+      }),
+    ).toMatchObject({ imported: 0 });
+    expect(fetchCreatedFeed).toHaveBeenCalledTimes(5);
+    expect(progress.at(-1)).toEqual({
+      stage: "fetching",
+      completed: 1,
+      total: 1,
+    });
+    expect((await stored()).subscriptionRepoRev).toBe("1");
+  });
+
+  it("does not fetch a Feed whose first fetch was already tried", async () => {
+    records = [record("one")];
+    await method("import");
+    // A failed fetch still moves the schedule on, as the real one does.
+    fetchCreatedFeed.mockImplementation(async (_database, feed) => {
+      await visit(feed.id);
+      throw new Error("offline");
+    });
+    expect(await run()).toMatchObject({ imported: 1 });
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionRepoRev: null });
+    expect(await run()).toMatchObject({ imported: 0 });
+    expect(fetchCreatedFeed).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,7 @@
 import { useSelector } from "@xstate/react";
 import { assign, createActor, setup } from "xstate";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
+import { findingProgress } from "~/lib/two-stage-progress";
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -16,9 +18,8 @@ type LoadingMachineEvent =
   | { type: "BACKGROUND_REFRESH_START"; totalFeeds: number }
   | { type: "BACKGROUND_REFRESH_COMPLETE" }
 
-  // Per-feed status (used by background refresh, manual refresh, and import)
+  // Per-feed status of a refresh
   | { type: "FEED_STATUS" }
-  | { type: "FEED_STATUS_BATCH"; count: number }
 
   // Manual refresh (user clicks the refresh button)
   | { type: "MANUAL_REFRESH_REQUEST" }
@@ -28,6 +29,7 @@ type LoadingMachineEvent =
 
   // Import (OPML / CSV feed import)
   | { type: "IMPORT_START"; totalFeeds: number }
+  | { type: "IMPORT_PROGRESS"; progress: TwoStageProgress }
   | { type: "IMPORT_COMPLETE" }
   | { type: "IMPORT_FEED_ERROR"; feedUrl: string }
   | {
@@ -47,6 +49,8 @@ type LoadingMachineContext = {
   totalFeeds: number;
   completedFeeds: number;
   importErrors: number;
+  /** The import's own count, as the server reports it for each stage. */
+  importProgress: TwoStageProgress;
   failedImportUrls: Set<string>;
   importDeactivatedCount: number;
   importMaxActiveFeeds: number;
@@ -57,6 +61,7 @@ const INITIAL_CONTEXT: LoadingMachineContext = {
   totalFeeds: 0,
   completedFeeds: 0,
   importErrors: 0,
+  importProgress: findingProgress(0),
   failedImportUrls: new Set<string>(),
   importDeactivatedCount: 0,
   importMaxActiveFeeds: 0,
@@ -78,28 +83,18 @@ export const loadingMachine = setup({
     allFeedsCompleteAfterStatus: ({ context }) =>
       context.totalFeeds > 0 &&
       context.completedFeeds + 1 + context.importErrors >= context.totalFeeds,
-
-    allFeedsCompleteAfterStatusBatch: ({ context, event }) => {
-      const count = event.type === "FEED_STATUS_BATCH" ? event.count : 1;
-      return (
-        context.totalFeeds > 0 &&
-        context.completedFeeds + count + context.importErrors >=
-          context.totalFeeds
-      );
-    },
-
-    allFeedsCompleteAfterError: ({ context }) =>
-      context.totalFeeds > 0 &&
-      context.completedFeeds + context.importErrors + 1 >= context.totalFeeds,
   },
   actions: {
     incrementCompleted: assign({
       completedFeeds: ({ context }) => context.completedFeeds + 1,
     }),
-    incrementCompletedBatch: assign({
-      completedFeeds: ({ context, event }) =>
-        context.completedFeeds +
-        (event.type === "FEED_STATUS_BATCH" ? event.count : 1),
+    startImport: assign({
+      importErrors: 0,
+      importProgress: ({ event }) =>
+        findingProgress(event.type === "IMPORT_START" ? event.totalFeeds : 0),
+      failedImportUrls: () => new Set<string>(),
+      importDeactivatedCount: 0,
+      importMaxActiveFeeds: 0,
     }),
     recordImportError: assign({
       importErrors: ({ context }) => context.importErrors + 1,
@@ -150,17 +145,7 @@ export const loadingMachine = setup({
             importErrors: 0,
           }),
         },
-        IMPORT_START: {
-          target: "importing",
-          actions: assign({
-            totalFeeds: ({ event }) => event.totalFeeds,
-            completedFeeds: 0,
-            importErrors: 0,
-            failedImportUrls: () => new Set<string>(),
-            importDeactivatedCount: 0,
-            importMaxActiveFeeds: 0,
-          }),
-        },
+        IMPORT_START: { target: "importing", actions: "startImport" },
       },
     },
 
@@ -172,17 +157,7 @@ export const loadingMachine = setup({
         RECONCILIATION_COMPLETE: { target: "idle" },
         RECONCILIATION_FAILED: { target: "idle" },
         // Import can interrupt initial load
-        IMPORT_START: {
-          target: "importing",
-          actions: assign({
-            totalFeeds: ({ event }) => event.totalFeeds,
-            completedFeeds: 0,
-            importErrors: 0,
-            failedImportUrls: () => new Set<string>(),
-            importDeactivatedCount: 0,
-            importMaxActiveFeeds: 0,
-          }),
-        },
+        IMPORT_START: { target: "importing", actions: "startImport" },
         RESET: { target: "idle" },
       },
     },
@@ -208,14 +183,6 @@ export const loadingMachine = setup({
           },
           { actions: "incrementCompleted" },
         ],
-        FEED_STATUS_BATCH: [
-          {
-            guard: "allFeedsCompleteAfterStatusBatch",
-            target: "idle",
-            actions: "incrementCompletedBatch",
-          },
-          { actions: "incrementCompletedBatch" },
-        ],
         BACKGROUND_REFRESH_COMPLETE: { target: "idle" },
         RESET: { target: "idle" },
       },
@@ -238,50 +205,22 @@ export const loadingMachine = setup({
             importErrors: 0,
           }),
         },
-        IMPORT_START: {
-          target: "importing",
-          actions: assign({
-            totalFeeds: ({ event }) => event.totalFeeds,
-            completedFeeds: 0,
-            importErrors: 0,
-            failedImportUrls: () => new Set<string>(),
-            importDeactivatedCount: 0,
-            importMaxActiveFeeds: 0,
-          }),
-        },
+        IMPORT_START: { target: "importing", actions: "startImport" },
         RESET: { target: "idle" },
       },
     },
 
     // -----------------------------------------------------------------
-    // Importing — OPML / CSV feed import in progress
+    // Importing — OPML / CSV feed import in progress. It counts only what
+    // the import stream reports, and ends when that stream does: finding
+    // every Feed is followed by fetching their content.
     // -----------------------------------------------------------------
     importing: {
       on: {
-        FEED_STATUS: [
-          {
-            guard: "allFeedsCompleteAfterStatus",
-            target: "idle",
-            actions: "incrementCompleted",
-          },
-          { actions: "incrementCompleted" },
-        ],
-        FEED_STATUS_BATCH: [
-          {
-            guard: "allFeedsCompleteAfterStatusBatch",
-            target: "idle",
-            actions: "incrementCompletedBatch",
-          },
-          { actions: "incrementCompletedBatch" },
-        ],
-        IMPORT_FEED_ERROR: [
-          {
-            guard: "allFeedsCompleteAfterError",
-            target: "idle",
-            actions: "recordImportError",
-          },
-          { actions: "recordImportError" },
-        ],
+        IMPORT_PROGRESS: {
+          actions: assign({ importProgress: ({ event }) => event.progress }),
+        },
+        IMPORT_FEED_ERROR: { actions: "recordImportError" },
         IMPORT_LIMIT_WARNING: {
           actions: assign({
             importDeactivatedCount: ({ event }) => event.deactivatedCount,
@@ -324,9 +263,7 @@ export type LoadingMode =
   | { mode: "manualRefresh"; progress: number }
   | {
       mode: "importing";
-      progress: number;
-      completed: number;
-      total: number;
+      importProgress: TwoStageProgress;
       errors: number;
       failedImportUrls: Set<string>;
       importDeactivatedCount: number;
@@ -358,9 +295,7 @@ export function useLoadingMode(): LoadingMode {
     if (snapshot.matches("importing")) {
       return {
         mode: "importing",
-        progress: computeProgress(context),
-        completed: context.completedFeeds,
-        total: context.totalFeeds,
+        importProgress: context.importProgress,
         errors: context.importErrors,
         failedImportUrls: context.failedImportUrls,
         importDeactivatedCount: context.importDeactivatedCount,

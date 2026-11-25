@@ -24,7 +24,12 @@ describe("pre-refresh subscription sync", () => {
         },
         syncSubscriptions: async (input) => {
           order.push("sync");
-          await input.onProgress?.({ runId: "run", completed: 0, total: 1 });
+          await input.onProgress?.({
+            runId: "run",
+            stage: "finding",
+            completed: 0,
+            total: 1,
+          });
           order.push("import");
           return { ...emptyPublicationSyncCounts(), status: "completed" };
         },

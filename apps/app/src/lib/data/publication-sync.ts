@@ -5,6 +5,7 @@ import type {
   PublicationSyncResult,
 } from "~/lib/auth/publication-sync";
 import { orpc } from "~/lib/orpc";
+import { twoStageProgressLabel } from "~/lib/two-stage-progress";
 
 /** Explicit saves and consent need feedback even if work finishes before polling starts. */
 export async function refreshPublicationSyncProgress(queryClient: QueryClient) {
@@ -19,8 +20,8 @@ export async function refreshPublicationSyncProgress(queryClient: QueryClient) {
         meta: { persist: false },
       }),
     );
-    if (job && (!job.pending || (!job.running && job.result)))
-      showPublicationSyncProgress(job);
+    // The mounted progress observer shows a pending request.
+    if (job && !job.pending) showPublicationSyncProgress(job);
   } catch (error) {
     console.error("Unable to refresh publication sync progress", error);
   }
@@ -47,13 +48,17 @@ export function publicationSyncMessage(result: PublicationSyncResult) {
   return `Subscriptions synced: ${result.imported} imported, ${result.exported} exported, ${result.inactive} added inactive, ${result.removed} removed${result.skipped ? `, ${result.skipped} skipped` : ""}${result.failed ? `, ${result.failed} failed` : ""}${result.deferred ? `, ${result.deferred} pending the next sync` : ""}.`;
 }
 
-/** Progress observes persisted server work; it never occupies the global loading state. */
+/**
+ * Progress observes persisted server work; it never occupies the global
+ * loading state. A pending request keeps its loading toast between runs: the
+ * result shows once it is done, or once its next retry is further off.
+ */
 export function showPublicationSyncProgress(job: PublicationSyncJobStatus) {
-  if (job.pending && (job.running || !job.result)) {
+  if (job.pending) {
     const progress = job.progress;
     toast.loading(
       progress?.total
-        ? `Syncing subscriptions: ${progress.completed} of ${progress.total}`
+        ? twoStageProgressLabel(progress)
         : "Syncing subscriptions…",
       {
         id: PUBLICATION_SYNC_TOAST,

@@ -15,6 +15,10 @@ import type { NewFeedOriginDetails } from "~/server/rss/types";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import { createPublicRecordReader } from "~/server/auth/atproto/public-record";
 import { getAtprotoIdentityResolver } from "~/server/auth/atproto/identity";
+import {
+  resolvePublicPds,
+  UnsupportedDidError,
+} from "~/server/auth/atproto/did-resolver";
 import { createHardenedFetch } from "~/server/auth/atproto/hardened-fetch";
 import { searchAtprotoActorsTypeahead } from "~/server/auth/atproto/typeahead";
 import { HANDLE_PATTERN } from "~/server/auth/atproto/schemas";
@@ -83,23 +87,37 @@ function didNoLongerResolves(error: unknown) {
   );
 }
 
+/** A repository that no longer resolves makes its publication unavailable. */
+function rethrowResolutionError(error: unknown): never {
+  if (didNoLongerResolves(error) || error instanceof UnsupportedDidError)
+    throw new PublicationUnavailableError(
+      "Publication repository no longer resolves",
+    );
+  throw error;
+}
+
 async function publicIdentity(identifier: string, signal: AbortSignal) {
   signal.throwIfAborted();
   const identity = await getAtprotoIdentityResolver()
     .resolve(identifier, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
     })
-    .catch((error: unknown) => {
-      if (didNoLongerResolves(error))
-        throw new PublicationUnavailableError(
-          "Publication repository no longer resolves",
-        );
-      throw error;
-    });
+    .catch(rethrowResolutionError);
   return {
     did: identity.did,
     pdsUrl: extractPdsUrl(identity.didDoc).toString(),
   };
+}
+
+/**
+ * The PDS that holds a repository's public records. Reading them needs the
+ * DID document alone, so no handle is verified.
+ */
+async function publicPds(did: string, signal: AbortSignal) {
+  signal.throwIfAborted();
+  return resolvePublicPds(did, { deadline: Date.now() + 5_000 }).catch(
+    rethrowResolutionError,
+  );
 }
 
 async function readRecordJson(
@@ -133,10 +151,7 @@ export async function resolvePublication(
   const readRecord = createPublicRecordReader({
     fetch,
     resolvePds: async () => {
-      const identity = await publicIdentity(parts.did, signal);
-      if (identity.did !== parts.did)
-        throw new Error("Repository DID mismatch");
-      pdsUrl = identity.pdsUrl;
+      pdsUrl = await publicPds(parts.did, signal);
       return pdsUrl;
     },
   });
