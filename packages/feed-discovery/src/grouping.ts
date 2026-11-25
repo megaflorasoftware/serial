@@ -95,6 +95,20 @@ export function collapseSyndicationAlternates(
   });
 }
 
+/** Whether a publication on `siteUrl` can take a website row as its RSS origin. */
+export function combinesWithPublication(
+  row: DiscoveredFeed,
+  siteUrl: string | undefined,
+) {
+  const site = siteKey(siteUrl);
+  return (
+    site !== undefined &&
+    siteKey(row.siteUrl) === site &&
+    !row.origins?.some((source) => source.kind === "atproto") &&
+    !staysSeparate({ row, hasFullBody: false, itemUrls: [] })
+  );
+}
+
 /** Website results keep their order. A publication is represented at most once. */
 export function combinePublicationRows(
   websites: DiscoveredFeed[],
@@ -115,13 +129,8 @@ export function combinePublicationRows(
     );
     if (!origin || seen.has(origin.locator)) continue;
     seen.add(origin.locator);
-    const site = siteKey(publication.siteUrl);
-    const index = result.findIndex(
-      (row) =>
-        site &&
-        siteKey(row.siteUrl) === site &&
-        !row.origins?.some((source) => source.kind === "atproto") &&
-        !staysSeparate({ row, hasFullBody: false, itemUrls: [] }),
+    const index = result.findIndex((row) =>
+      combinesWithPublication(row, publication.siteUrl),
     );
     if (index < 0) result.push(publication);
     else {

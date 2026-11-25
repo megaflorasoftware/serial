@@ -157,6 +157,43 @@ it.each(["import", "revalidation"])(
   },
 );
 
+it.each([
+  ["stops", false, 3],
+  ["keeps", true, 10],
+])(
+  "%s a strict import's guessing after an advertised Feed the publication combines with",
+  async (_stops, hasFeedOnSite, reads) => {
+    responses((url) => {
+      if (url === site)
+        return {
+          ms: 20,
+          text: '<link rel="alternate" type="application/rss+xml" href="/rss.xml">',
+        };
+      if (url === rss) return { ms: 80, text: xml };
+      if (url.includes("/.well-known/")) return { ms: 20, status: 404 };
+      return { ms: 1500, status: 404 };
+    });
+    const publication = {
+      uri: "at://did:plc:example/site.standard.publication/one",
+      did: "did:plc:example",
+      rkey: "one",
+      pdsUrl: "https://pds.example.com",
+      siteUrl: site,
+      name: "Example",
+    };
+    const result = await measure(() =>
+      discoverFeedOriginsForImport("advertised-import", site, {
+        publication,
+        hasFeedOnSite,
+      }).then(({ rows }) => rows),
+    );
+    expect(result.rows.map((row) => row.url)).toEqual([rss]);
+    expect(readFeedHttp).toHaveBeenCalledTimes(reads);
+    if (hasFeedOnSite) expect(result.elapsedMs).toBeGreaterThanOrEqual(6000);
+    else expect(result.elapsedMs).toBeLessThanOrEqual(120);
+  },
+);
+
 it.each(["import", "revalidation"])(
   "does not return successful RSS when strict %s has an incomplete Publication check",
   async (mode) => {

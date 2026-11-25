@@ -72,18 +72,24 @@ export async function resolveFeedSelection(
 /**
  * Subscription imports resolve their publication once, then use the same
  * discovery and validation as Add. `signal` gives up a wait for discovery.
+ * `hasFeedOnSite` answers whether the user already has a Feed on the
+ * publication's site, which keeps discovery guessing feed addresses.
  */
 export async function resolvePublicationFeed(
   userId: string,
   publicationUri: string,
-  signal?: AbortSignal,
+  importing: {
+    signal?: AbortSignal;
+    hasFeedOnSite: (siteUrl: string) => Promise<boolean>;
+  },
 ) {
   const publication = await resolvePublication(publicationUri);
   // A record that does not describe this publication stays that way until it changes.
   if (!publication)
     throw new PublicationGoneError("Unable to read the selected publication");
   return resolveSelectedFeed(userId, publicationRow(publication), publication, {
-    signal,
+    signal: importing.signal,
+    hasFeedOnSite: await importing.hasFeedOnSite(publication.siteUrl),
   });
 }
 
@@ -91,8 +97,11 @@ async function resolveSelectedFeed(
   userId: string,
   selected: DiscoveredFeed,
   publication: Awaited<ReturnType<typeof resolvePublication>>,
-  /** A subscription import, with what gives up its wait for discovery. */
-  importing?: { signal?: AbortSignal },
+  /**
+   * A subscription import, with what gives up its wait for discovery and
+   * whether the user already has a Feed on the publication's site.
+   */
+  importing?: { signal?: AbortSignal; hasFeedOnSite: boolean },
 ) {
   let rss = selected.origins?.find((origin) => origin.kind === "rss");
   let publicationDiscovery: DiscoveredFeed[] | undefined;
@@ -103,7 +112,7 @@ async function resolveSelectedFeed(
       const discovered = await discoverFeedOriginsForImport(
         userId,
         publication.siteUrl,
-        { publication, signal: importing.signal },
+        { publication, ...importing },
       );
       publicationDiscovery = combinePublicationRows(discovered.rows, [
         publicationRow(publication),

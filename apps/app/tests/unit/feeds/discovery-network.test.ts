@@ -460,9 +460,12 @@ describe("import discovery completeness", () => {
     ).rejects.toThrow("Unable to read the RSS Feed");
   });
   it("preserves the longest Retry-After across subsequent failures", async () => {
-    vi.mocked(scoutFeeds).mockImplementation(async (_url, options) => {
-      await options!.fetchFn!("https://example.com/slow");
-      await options!.fetchFn!("https://example.com/offline");
+    // The advertised candidates. Feedscout records each failure and moves on.
+    vi.mocked(scoutFeeds).mockImplementationOnce(async (_url, options) => {
+      for (const candidate of ["/slow", "/offline"])
+        await Promise.resolve(
+          options!.fetchFn!(`https://example.com${candidate}`),
+        ).catch(() => undefined);
       return [];
     });
     vi.mocked(readFeedHttp).mockImplementation(async (url) => {
@@ -556,5 +559,146 @@ describe("import discovery completeness", () => {
         (error as FeedImportDeferredError).retryAt.getTime(),
       ).toBeGreaterThanOrEqual(before + 900_000);
     }
+  });
+});
+
+describe("import guessing", () => {
+  const advertising = (href: string) =>
+    `<link rel="alternate" type="application/rss+xml" href="${href}">`;
+  const rss = (site: string) =>
+    `<rss version="2.0"><channel><title>Example</title><link>${site}</link><description>News</description><item><title>Post</title><link>${site}post</link></item></channel></rss>`;
+  /** A website at the publication's address. Addresses it does not serve answer `missing`. */
+  function website(
+    page: string,
+    feeds: Record<string, string>,
+    missing: (url: string) => ReturnType<typeof response> = (url) =>
+      statusResponse(url, 404),
+  ) {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+      if (url === publication.siteUrl) return response(url, page);
+      const feed = feeds[new URL(url).pathname];
+      if (feed !== undefined) return response(url, feed);
+      if (url.includes("/.well-known/")) return statusResponse(url, 404);
+      return missing(url);
+    });
+  }
+  /** Feed addresses read beyond the page, the well-known file and `advertised`. */
+  const guessed = (...advertised: string[]) =>
+    vi
+      .mocked(readFeedHttp)
+      .mock.calls.map(([url]) => new URL(url).pathname)
+      .filter(
+        (path) =>
+          path !== "/" &&
+          !path.startsWith("/.well-known/") &&
+          !advertised.includes(path),
+      );
+  beforeEach(async () => {
+    const actual = await vi.importActual<{
+      discoverFeeds: typeof scoutFeeds;
+    }>("feedscout");
+    vi.mocked(scoutFeeds).mockImplementation(actual.discoverFeeds);
+  });
+
+  it("stops guessing once an advertised Feed the publication combines with validates", async () => {
+    website(advertising("/blog.xml"), {
+      "/blog.xml": rss("https://www.example.com/"),
+    });
+    const { rows } = await discoverFeedOriginsForImport(
+      "combinable",
+      publication.siteUrl,
+      { publication },
+    );
+    expect(rows.map((row) => row.url)).toEqual([
+      "https://www.example.com/blog.xml",
+    ]);
+    expect(guessed("/blog.xml")).toEqual([]);
+  });
+
+  it("guesses in full when the user already has a Feed on the site", async () => {
+    website(advertising("/blog.xml"), {
+      "/blog.xml": rss("https://www.example.com/"),
+    });
+    await discoverFeedOriginsForImport("followed", publication.siteUrl, {
+      publication,
+      hasFeedOnSite: true,
+    });
+    // The advertised Feed took one of the eight candidate slots.
+    expect(guessed("/blog.xml")).toHaveLength(7);
+  });
+
+  it("guesses in full when revalidating", async () => {
+    website(advertising("/blog.xml"), {
+      "/blog.xml": rss("https://www.example.com/"),
+    });
+    await discoverFeedOriginsForRevalidation(publication.siteUrl);
+    expect(guessed("/blog.xml")).toHaveLength(7);
+  });
+
+  it.each([
+    [
+      "a comments feed",
+      advertising("/comments/feed.xml"),
+      "/comments/feed.xml",
+    ],
+    ["a podcast feed", advertising("/podcast.xml"), "/podcast.xml"],
+    [
+      "a feed for another site",
+      advertising("/partner.xml"),
+      "/partner.xml",
+      "https://partner.example/",
+    ],
+    [
+      "a feed only an anchor links to",
+      '<a href="/blog.xml">RSS</a>',
+      "/blog.xml",
+    ],
+  ])(
+    "keeps guessing when the site offers only %s",
+    async (_name, page, path, site = "https://www.example.com/") => {
+      website(page, { [path]: rss(site) });
+      await discoverFeedOriginsForImport("uncombinable", publication.siteUrl, {
+        publication,
+      });
+      expect(guessed(path)).toHaveLength(7);
+    },
+  );
+
+  it.each([
+    ["a 500", (url: string) => statusResponse(url, 500)],
+    ["a 429", (url: string) => statusResponse(url, 429)],
+    [
+      "a network error",
+      (): ReturnType<typeof response> => {
+        throw new Error("offline");
+      },
+    ],
+  ])(
+    "completes an import whose guesses fail with %s",
+    async (_name, missing) => {
+      website(
+        "<html></html>",
+        { "/rss": rss("https://www.example.com/") },
+        missing,
+      );
+      const { rows } = await discoverFeedOriginsForImport(
+        "failed-guesses",
+        publication.siteUrl,
+        { publication },
+      );
+      expect(rows.map((row) => row.url)).toEqual([
+        "https://www.example.com/rss",
+      ]);
+      expect(guessed()).toHaveLength(8);
+    },
+  );
+
+  it("still defers an import whose advertised Feed fails", async () => {
+    website(advertising("/blog.xml"), {}, (url) => statusResponse(url, 500));
+    await expect(
+      discoverFeedOriginsForImport("failed-advertised", publication.siteUrl, {
+        publication,
+      }),
+    ).rejects.toBeInstanceOf(FeedImportDeferredError);
   });
 });

@@ -16,7 +16,10 @@ import {
   REVALIDATION_MAX_CANDIDATES,
 } from "./revalidationEvidence";
 import type { FeedDatabase } from "./origins";
-import type { DatabaseFeedWithOrigins } from "~/server/db/schema";
+import type {
+  DatabaseFeedWithOrigins,
+  FeedOriginKind,
+} from "~/server/db/schema";
 import type { NewFeedDetails, NewFeedOriginDetails } from "~/server/rss/types";
 import { feedOrigins, feeds } from "~/server/db/schema";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
@@ -34,6 +37,30 @@ function originIdentity(origins: NewFeedOriginDetails[]) {
     .join("\n");
 }
 
+/** The user's Feeds on a normalized site that hold an origin of one of `kinds`. */
+function feedsOnSite(
+  database: FeedDatabase,
+  userId: string,
+  site: string,
+  kinds: FeedOriginKind[],
+) {
+  return and(
+    eq(feeds.userId, userId),
+    sql`rtrim(substr(${feeds.siteUrl}, 1, min(instr(${feeds.siteUrl} || '?', '?'), instr(${feeds.siteUrl} || '#', '#')) - 1), '/') = ${site}`,
+    exists(
+      database
+        .select({ id: feedOrigins.id })
+        .from(feedOrigins)
+        .where(
+          and(
+            eq(feedOrigins.feedId, feeds.id),
+            inArray(feedOrigins.kind, kinds),
+          ),
+        ),
+    ),
+  );
+}
+
 /** A site identifies candidates only. Article overlap is required before attachment. */
 async function siteCandidates(
   database: FeedDatabase,
@@ -44,34 +71,38 @@ async function siteCandidates(
   if (!site) return [];
   // Distinct RSS feeds on one site are valid. Only cross-origin candidates
   // require duplicate prevention; combined imports also check kind conflicts.
-  const candidateKinds =
+  const candidateKinds: FeedOriginKind[] =
     details.origins.length === 1
       ? [details.origins[0]!.kind === "rss" ? "atproto" : "rss"]
       : ["rss", "atproto"];
   const rows = await database
     .select()
     .from(feeds)
-    .where(
-      and(
-        eq(feeds.userId, userId),
-        sql`rtrim(substr(${feeds.siteUrl}, 1, min(instr(${feeds.siteUrl} || '?', '?'), instr(${feeds.siteUrl} || '#', '#')) - 1), '/') = ${site}`,
-        exists(
-          database
-            .select({ id: feedOrigins.id })
-            .from(feedOrigins)
-            .where(
-              and(
-                eq(feedOrigins.feedId, feeds.id),
-                inArray(feedOrigins.kind, candidateKinds),
-              ),
-            ),
-        ),
-      ),
-    )
+    .where(feedsOnSite(database, userId, site, candidateKinds))
     .limit(REVALIDATION_MAX_CANDIDATES + 1);
   if (rows.length > REVALIDATION_MAX_CANDIDATES)
     throw new FeedImportSkippedError();
   return withOrigins(database, rows);
+}
+
+/**
+ * Whether the user already has a Feed on a publication's site, which an import
+ * of that publication may join. It runs before discovery, so it covers every
+ * kind of origin an import can bring.
+ */
+export async function hasFeedOnSite(
+  database: FeedDatabase,
+  userId: string,
+  siteUrl: string,
+) {
+  const site = normalizePublicationUrl(siteUrl);
+  if (!site) return false;
+  const [feed] = await database
+    .select({ id: feeds.id })
+    .from(feeds)
+    .where(feedsOnSite(database, userId, site, ["rss", "atproto"]))
+    .limit(1);
+  return feed !== undefined;
 }
 
 function candidateIdentity(candidates: DatabaseFeedWithOrigins[]) {

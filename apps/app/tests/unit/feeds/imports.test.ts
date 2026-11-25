@@ -2,7 +2,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { NewFeedOriginDetails } from "~/server/rss/types";
-import { commitFeedImport, prepareFeedImport } from "~/server/feeds/imports";
+import {
+  commitFeedImport,
+  hasFeedOnSite,
+  prepareFeedImport,
+} from "~/server/feeds/imports";
 import { insertFeedWithCategories } from "~/server/api/routers/feed-router/utils";
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
@@ -99,6 +103,30 @@ it("attaches OPML RSS to a verified inactive publication without changing its se
   });
   expect(readOriginEvidence).not.toHaveBeenCalled();
 });
+
+it.each([
+  ["RSS", rss],
+  ["Atmosphere", publication],
+])(
+  "finds the user's %s Feed on a publication's site before discovery",
+  async (_kind, details) => {
+    const onSite = (siteUrl: string) =>
+      hasFeedOnSite(fixture.database, "owner", siteUrl);
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "other",
+      details,
+      isActive: true,
+    });
+    expect(await onSite(`${site}/`)).toBe(false);
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details,
+      isActive: true,
+    });
+    expect(await onSite(`${site}/?ref=home#top`)).toBe(true);
+    expect(await onSite("https://elsewhere.example/")).toBe(false);
+  },
+);
 
 it("attaches Atmosphere to matching RSS and preserves its identity", async () => {
   const original = await insertFeedWithOrigins(fixture.database, {

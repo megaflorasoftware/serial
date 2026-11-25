@@ -46,6 +46,8 @@ const publication = {
 };
 /** The reader import discovery hands back, holding the responses it read. */
 const discoveryRead = vi.fn();
+/** What the sync passes. Unless a test says otherwise, the user has no Feed on the site. */
+const importing = { hasFeedOnSite: vi.fn() };
 const selection = (rssUrl: string): DiscoveredFeed => ({
   url: rssUrl,
   siteUrl: publication.siteUrl,
@@ -63,6 +65,7 @@ beforeEach(() => {
     rows: [],
     read: discoveryRead,
   });
+  importing.hasFeedOnSite.mockResolvedValue(false);
 });
 
 describe("resolving a selected publication", () => {
@@ -172,7 +175,11 @@ describe("resolving a selected publication", () => {
 });
 
 it("resolves a subscription URI once before discovering the publication's RSS origin", async () => {
-  const [details] = await resolvePublicationFeed("user", publicationUri);
+  const [details] = await resolvePublicationFeed(
+    "user",
+    publicationUri,
+    importing,
+  );
   expect(details?.origins).toEqual([
     expect.objectContaining({ kind: "atproto", locator: publicationUri }),
   ]);
@@ -181,7 +188,23 @@ it("resolves a subscription URI once before discovering the publication's RSS or
   expect(discoverFeedOriginsForImport).toHaveBeenCalledExactlyOnceWith(
     "user",
     publication.siteUrl,
-    { publication, signal: undefined },
+    { publication, signal: undefined, hasFeedOnSite: false },
+  );
+});
+it("tells discovery when the user already has a Feed on the publication's site", async () => {
+  importing.hasFeedOnSite.mockResolvedValue(true);
+  const signal = new AbortController().signal;
+  await resolvePublicationFeed("user", publicationUri, {
+    ...importing,
+    signal,
+  });
+  expect(importing.hasFeedOnSite).toHaveBeenCalledExactlyOnceWith(
+    publication.siteUrl,
+  );
+  expect(discoverFeedOriginsForImport).toHaveBeenCalledExactlyOnceWith(
+    "user",
+    publication.siteUrl,
+    { publication, signal, hasFeedOnSite: true },
   );
 });
 
@@ -205,7 +228,11 @@ it("combines a known imported publication with RSS without requiring a website p
       url: rssUrl,
     }),
   ]);
-  const [details] = await resolvePublicationFeed("user", publicationUri);
+  const [details] = await resolvePublicationFeed(
+    "user",
+    publicationUri,
+    importing,
+  );
   expect(details?.origins.map((origin) => origin.kind)).toEqual([
     "rss",
     "atproto",
@@ -219,7 +246,7 @@ it("combines a known imported publication with RSS without requiring a website p
 it("reports a record that does not describe the publication as gone", async () => {
   vi.mocked(resolvePublication).mockResolvedValue(null);
   await expect(
-    resolvePublicationFeed("user", publicationUri),
+    resolvePublicationFeed("user", publicationUri, importing),
   ).rejects.toBeInstanceOf(PublicationGoneError);
   expect(discoverFeedOriginsForImport).not.toHaveBeenCalled();
 });
@@ -227,7 +254,7 @@ it("leaves an import unresolved when discovery cannot finish", async () => {
   vi.mocked(discoverFeedOriginsForImport).mockRejectedValue(
     new Error("Discovery throttled"),
   );
-  await expect(resolvePublicationFeed("user", publicationUri)).rejects.toThrow(
-    "Discovery throttled",
-  );
+  await expect(
+    resolvePublicationFeed("user", publicationUri, importing),
+  ).rejects.toThrow("Discovery throttled");
 });
