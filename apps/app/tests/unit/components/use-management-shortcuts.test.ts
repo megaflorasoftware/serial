@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   onEdit: vi.fn(),
   onClear: vi.fn(),
   onDelete: vi.fn(),
+  onRevalidate: vi.fn(),
 }));
 
 vi.mock("~/lib/data/offline-mutations", () => ({
@@ -25,7 +26,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
 
-function mountManagementShortcuts() {
+function mountManagementShortcuts(onRevalidate?: () => void) {
   function ManagementShortcutHarness() {
     useFeedManagementShortcuts({
       onEscape: mocks.onEscape,
@@ -33,6 +34,7 @@ function mountManagementShortcuts() {
       onEdit: mocks.onEdit,
       onClear: mocks.onClear,
       onDelete: mocks.onDelete,
+      onRevalidate,
       isDialogOpen: false,
       hasSelection: true,
     });
@@ -91,6 +93,17 @@ describe("useFeedManagementShortcuts", () => {
     expect(mocks.onEdit).toHaveBeenCalledTimes(1);
     expect(mocks.onClear).toHaveBeenCalledTimes(1);
     expect(mocks.onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("revalidates with r only where the page offers it", () => {
+    pressKey({ key: "r", code: "KeyR" });
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    mountManagementShortcuts(mocks.onRevalidate);
+    pressKey({ key: "r", code: "KeyR" });
+
+    expect(mocks.onRevalidate).toHaveBeenCalledTimes(1);
   });
 
   it("fires while Alt composes the key on macOS and cancels the default", () => {

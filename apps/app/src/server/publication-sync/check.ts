@@ -3,31 +3,6 @@ import { sql } from "drizzle-orm";
 import type { SubscriptionListing } from "./record-store";
 import type { DatabaseAtprotoConnection } from "~/server/db/schema";
 import { atprotoConnections as connections } from "~/server/db/schema";
-import { hasAtprotoWriteScope } from "~/server/auth/atproto/config";
-
-/** Whether backfill has work now, and when its next retry falls when it does not. */
-export function backfillSchedule(
-  connection: Pick<
-    DatabaseAtprotoConnection,
-    | "exportSubscriptions"
-    | "scopes"
-    | "subscriptionBackfillStarted"
-    | "subscriptionBackfillNextAttemptAt"
-  >,
-  now: Date,
-): { due: boolean; retryAt?: Date } {
-  if (
-    !connection.exportSubscriptions ||
-    !hasAtprotoWriteScope(connection.scopes)
-  )
-    return { due: false };
-  if (!connection.subscriptionBackfillStarted) return { due: true };
-  const next = connection.subscriptionBackfillNextAttemptAt;
-  if (!next) return { due: false };
-  return next.getTime() > now.getTime()
-    ? { due: false, retryAt: next }
-    : { due: true };
-}
 
 /** Everything a check reads, so deciding costs one row and no claim. */
 export const syncCheckColumns = {
@@ -42,9 +17,6 @@ export const syncCheckColumns = {
   subscriptionRepoRev: connections.subscriptionRepoRev,
   subscriptionListingDigest: connections.subscriptionListingDigest,
   subscriptionRetryAt: connections.subscriptionRetryAt,
-  subscriptionBackfillStarted: connections.subscriptionBackfillStarted,
-  subscriptionBackfillNextAttemptAt:
-    connections.subscriptionBackfillNextAttemptAt,
 };
 export type SyncCheckRow = Pick<
   DatabaseAtprotoConnection,
@@ -58,8 +30,6 @@ export type SyncCheckRow = Pick<
   | "subscriptionRepoRev"
   | "subscriptionListingDigest"
   | "subscriptionRetryAt"
-  | "subscriptionBackfillStarted"
-  | "subscriptionBackfillNextAttemptAt"
 > & { hasSession: boolean };
 
 export type SyncCheck =
@@ -160,14 +130,12 @@ export async function checkPublicationSync(
   now = new Date(),
 ): Promise<SyncCheck> {
   if (!syncsSubscriptions(row)) return { state: "disabled" };
-  const backfill = backfillSchedule(row, now);
   const retryDue =
     row.subscriptionRetryAt !== null &&
     row.subscriptionRetryAt.getTime() <= now.getTime();
-  if (row.subscriptionRepoRev === null || backfill.due || retryDue)
-    return { state: "due" };
+  if (row.subscriptionRepoRev === null || retryDue) return { state: "due" };
   const rev = await remote.latestRev(row.did);
-  const retryAt = earliest(backfill.retryAt, row.subscriptionRetryAt);
+  const retryAt = row.subscriptionRetryAt;
   const current = {
     state: "current" as const,
     ...(retryAt ? { retryAt } : {}),

@@ -493,7 +493,8 @@ describe("atproto consent upgrade", () => {
 
     expect(saved).toEqual({ method: "bidirectional", importAsInactive: true });
     const writes = session.instrumentation.snapshot();
-    expect(writes.statementCount).toBe(2);
+    // Export's first save also queues backfill for the existing Feeds.
+    expect(writes.statementCount).toBe(3);
     expect(writes.materializedRows).toBe(0);
     expect(await connectionRow()).toMatchObject({
       importSubscriptions: true,

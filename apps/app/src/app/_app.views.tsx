@@ -345,6 +345,8 @@ function ManageViewsPageContent() {
               >
                 Edit
               </ButtonWithShortcut>
+            </div>
+            <div className="flex gap-2">
               <ButtonWithShortcut
                 variant="outline"
                 onClick={handleClear}
@@ -352,16 +354,16 @@ function ManageViewsPageContent() {
               >
                 Clear
               </ButtonWithShortcut>
+              <ButtonWithShortcut
+                variant="destructive"
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={isDeletingView}
+                shortcut="d"
+              >
+                <Trash2Icon size={16} className="mr-2" />
+                Delete ({selectedCount})
+              </ButtonWithShortcut>
             </div>
-            <ButtonWithShortcut
-              variant="destructive"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={isDeletingView}
-              shortcut="d"
-            >
-              <Trash2Icon size={16} className="mr-2" />
-              Delete ({selectedCount})
-            </ButtonWithShortcut>
           </div>
         </div>
       )}

@@ -1,17 +1,24 @@
-import { eq } from "drizzle-orm";
-import { backfillPublicationOrigins } from "../../src/server/publication-sync/backfill";
-import { claimSubscriptionSync } from "../../src/server/publication-sync/state";
+import { asc, notInArray } from "drizzle-orm";
+import { backfillPublicationOrigin } from "../../src/server/origin-checks/backfill";
+import { queuePublicationBackfill } from "../../src/server/origin-checks/queue";
+import { runFeedOriginChecks } from "../../src/server/origin-checks/worker";
 import {
-  atprotoConnections,
+  feedOriginChecks,
   feedOrigins,
   feeds,
-  publicationBackfillProbes,
   user,
 } from "../../src/server/db/schema";
 import { FIXTURE_NEXT_FETCH_AT } from "./fixtures";
 import type { db } from "../../src/server/db";
 import { feedOriginRss } from "~/server/db/schema";
 
+/** How many queued checks a measured run finds due. */
+export const BACKFILL_BENCHMARK_CHECKS = 8;
+
+/**
+ * Publication backfill through the Feed origin check queue, among `count`
+ * RSS-only Feeds. Network reads are stubbed and counted.
+ */
 export async function createPublicationBackfillWorkload(
   database: typeof db,
   count: number,
@@ -24,14 +31,6 @@ export async function createPublicationBackfillWorkload(
     emailVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
-  });
-  await database.insert(atprotoConnections).values({
-    id: userId,
-    userId,
-    did: "did:plc:abcdefghijklmnopqrstuvwx",
-    session: "fixture",
-    scopes: "atproto include:site.standard.authSocial",
-    exportSubscriptions: true,
   });
   for (let offset = 0; offset < count; offset += 50) {
     // Bound fixture writes so seeding does not flood the database driver.
@@ -68,35 +67,45 @@ export async function createPublicationBackfillWorkload(
     get requests() {
       return requests;
     },
+    /** Queues every Feed, as enabling export does, and leaves a few due. */
     async prepare() {
-      await database.delete(publicationBackfillProbes);
+      await database.delete(feedOriginChecks);
+      await queuePublicationBackfill(database, userId);
       await database
-        .update(atprotoConnections)
-        .set({
-          subscriptionBackfillStarted: false,
-          subscriptionBackfillNextAttemptAt: null,
-          subscriptionSyncToken: null,
-          subscriptionSyncExpiresAt: null,
-        })
-        .where(eq(atprotoConnections.id, userId));
+        .update(feedOriginChecks)
+        .set({ nextAttemptAt: new Date(Date.now() + 86_400_000) })
+        .where(
+          notInArray(
+            feedOriginChecks.feedId,
+            database
+              .select({ feedId: feedOriginChecks.feedId })
+              .from(feedOriginChecks)
+              .orderBy(asc(feedOriginChecks.feedId))
+              .limit(BACKFILL_BENCHMARK_CHECKS),
+          ),
+        );
     },
     async run() {
       requests = 0;
-      const connection = (await claimSubscriptionSync(database, userId))!;
-      return backfillPublicationOrigins(database, connection, {
-        readOriginEvidence: (origin) => {
-          requests++;
-          return Promise.resolve({
-            origin: { ...origin },
-            siteUrl: "https://example.com",
-            itemUrls: new Set(["https://example.com/article"]),
-          });
-        },
-        readBackfillPublication: () => {
-          requests++;
-          return Promise.resolve(null);
-        },
+      const more = await runFeedOriginChecks(database, {
+        backfill: (checked, owner, feedId) =>
+          backfillPublicationOrigin(checked, owner, feedId, {
+            readOriginEvidence: (origin) => {
+              requests++;
+              return Promise.resolve({
+                origin: { ...origin },
+                siteUrl: "https://example.com",
+                itemUrls: new Set(["https://example.com/article"]),
+              });
+            },
+            readBackfillPublication: () => {
+              requests++;
+              return Promise.resolve(null);
+            },
+          }),
+        publish: () => Promise.resolve(),
       });
+      return { more };
     },
   };
 }

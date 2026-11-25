@@ -9,6 +9,7 @@ export function useFeedManagementShortcuts({
   onEdit,
   onClear,
   onDelete,
+  onRevalidate,
   isDialogOpen,
   hasSelection,
 }: {
@@ -17,6 +18,8 @@ export function useFeedManagementShortcuts({
   onEdit: () => void;
   onClear: () => void;
   onDelete: () => void;
+  /** Only pages that revalidate a selection pass it. */
+  onRevalidate?: () => void;
   isDialogOpen: boolean;
   hasSelection: boolean;
 }) {
@@ -65,6 +68,11 @@ export function useFeedManagementShortcuts({
       case "d":
         if (canMutate && !isDialogOpen && hasSelection) {
           fire(onDelete);
+        }
+        break;
+      case "r":
+        if (onRevalidate && canMutate && !isDialogOpen && hasSelection) {
+          fire(onRevalidate);
         }
         break;
     }

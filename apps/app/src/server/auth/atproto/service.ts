@@ -544,7 +544,6 @@ export async function unlinkAtprotoConnection(userId: string): Promise<void> {
         subscriptionJobProgress: null,
         subscriptionJobResult: null,
         subscriptionBackfillStarted: false,
-        subscriptionBackfillNextAttemptAt: null,
         subscriptionSyncToken: null,
         subscriptionSyncExpiresAt: null,
         ...DEFAULT_ATPROTO_SYNC_SETTINGS,
@@ -705,7 +704,7 @@ export async function completeAtprotoUpgrade(input: {
  */
 export function saveAtprotoSyncSettings(
   input: Parameters<typeof persistAtprotoSyncSettings>[0],
-  database: Pick<typeof db, "update"> = db,
+  database: Parameters<typeof persistAtprotoSyncSettings>[1] = db,
 ) {
   return persistAtprotoSyncSettings(input, database);
 }

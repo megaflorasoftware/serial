@@ -1,10 +1,9 @@
-import { and, eq } from "drizzle-orm";
 import { discoverFeedOriginsForRevalidation } from "./discovery";
 import {
   attachMissingFeedOrigins,
   FEED_ORIGIN_CONFLICT,
   findFeedForOrigins,
-  withOrigins,
+  loadUserFeedWithOrigins,
 } from "./origins";
 import {
   originsShareArticles,
@@ -14,7 +13,7 @@ import {
 import type { FeedDatabase } from "./origins";
 import type { OriginEvidence } from "./revalidationEvidence";
 import type { db } from "~/server/db";
-import { feeds, feedsSchema } from "~/server/db/schema";
+import { feedsSchema } from "~/server/db/schema";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { applyOriginMetadata } from "~/server/rss/originMetadata";
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
@@ -25,11 +24,7 @@ async function ownedFeed(
   userId: string,
   feedId: number,
 ) {
-  const rows = await database
-    .select()
-    .from(feeds)
-    .where(and(eq(feeds.id, feedId), eq(feeds.userId, userId)));
-  const [feed] = await withOrigins(database, rows);
+  const feed = await loadUserFeedWithOrigins(database, userId, feedId);
   if (!feed) throw new Error("Feed not found");
   return feed;
 }

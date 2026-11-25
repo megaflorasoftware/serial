@@ -1,5 +1,6 @@
 import { createRouterClient } from "@orpc/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type * as Evidence from "~/server/feeds/revalidationEvidence";
 import type * as RetryWrite from "~/server/db/retry-write";
@@ -16,6 +17,7 @@ import {
 import { insertFeedWithOrigins } from "~/server/feeds/origins";
 import {
   feedCategories,
+  feedOriginChecks,
   feedOrigins,
   feeds,
   user,
@@ -24,6 +26,7 @@ import {
 import { newRssFeedDetails } from "~/server/rss/types";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { dbSemaphore } from "~/lib/semaphore";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 
 const state = vi.hoisted((): { database: unknown } => ({
   database: undefined,
@@ -56,6 +59,10 @@ vi.mock("~/server/rss/fetchFeeds", () => ({
 vi.mock("~/server/feeds/revalidationEvidence", async (original) => ({
   ...(await original<typeof Evidence>()),
   readOriginEvidence: vi.fn(),
+}));
+// The real checks would read the imported sites.
+vi.mock("~/server/origin-checks/worker", () => ({
+  wakeFeedOriginChecks: vi.fn(),
 }));
 vi.mock("~/server/db/retry-write", async (original) => {
   const actual = await original<typeof RetryWrite>();
@@ -193,6 +200,38 @@ it.each(["bulk", "streaming"] as const)(
       0,
     );
     expect(await fixture.database.select().from(viewFeeds)).toHaveLength(0);
+    // The Feed already existed, so the import queues no backfill for it.
+    expect(await fixture.database.select().from(feedOriginChecks)).toEqual([]);
+  },
+);
+
+it.each(["bulk", "streaming"] as const)(
+  "%s OPML queues Publication backfill for the RSS-only Feeds it creates",
+  async (route) => {
+    vi.mocked(fetchNewFeedDetails).mockResolvedValue([
+      newRssFeedDetails({
+        name: "Other",
+        url: "https://other.example/feed",
+        platform: "website",
+        siteUrl: "https://other.example",
+      }),
+    ]);
+    const feedInputs = [
+      { feedUrl: "https://other.example/feed", categories: [] },
+    ];
+    if (route === "bulk") await api().bulk({ feeds: feedInputs });
+    else
+      for await (const event of await api().streaming({ feeds: feedInputs }))
+        void event;
+    const created = await fixture.database
+      .select()
+      .from(feeds)
+      .where(eq(feeds.name, "Other"))
+      .get();
+    expect(await fixture.database.select().from(feedOriginChecks)).toEqual([
+      expect.objectContaining({ feedId: created!.id, type: "light" }),
+    ]);
+    expect(wakeFeedOriginChecks).toHaveBeenCalledWith(fixture.database);
   },
 );
 

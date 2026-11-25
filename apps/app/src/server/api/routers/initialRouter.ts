@@ -31,6 +31,7 @@ import { dbSemaphore } from "~/lib/semaphore";
 import { prepareRssFeedImport } from "~/server/feeds/imports";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { workerPool } from "~/lib/workerPool";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 import {
   contentCategories,
   feedCategories,
@@ -1068,6 +1069,7 @@ export const streamingImport = protectedProcedure
     }
 
     await publishOrganizationInvalidation();
+    wakeFeedOriginChecks(context.db);
   });
 
 /**

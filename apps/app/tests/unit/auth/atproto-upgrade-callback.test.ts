@@ -44,6 +44,9 @@ vi.mock("better-auth/api", async (importOriginal) => ({
 vi.mock("~/server/publication-sync/jobs", () => ({
   wakePublicationSyncJobs: vi.fn(),
 }));
+vi.mock("~/server/origin-checks/worker", () => ({
+  wakeFeedOriginChecks: vi.fn(),
+}));
 vi.mock("~/server/logger", () => ({
   logError: vi.fn(),
   captureException: vi.fn(),
@@ -194,4 +197,7 @@ it.each([
   const { wakePublicationSyncJobs } =
     await import("~/server/publication-sync/jobs");
   expect(wakePublicationSyncJobs).toHaveBeenCalledWith(session.database);
+  const { wakeFeedOriginChecks } =
+    await import("~/server/origin-checks/worker");
+  expect(wakeFeedOriginChecks).toHaveBeenCalledWith(session.database);
 });

@@ -4,11 +4,14 @@ import {
   createLocalBenchmarkTarget,
   openBenchmarkDatabase,
 } from "../../../scripts/performance/database";
-import { createPublicationBackfillWorkload } from "../../../scripts/performance/publication-backfill-workload";
-import { BACKFILL_BATCH_SIZE } from "~/server/publication-sync/backfill";
+import {
+  BACKFILL_BENCHMARK_CHECKS,
+  createPublicationBackfillWorkload,
+} from "../../../scripts/performance/publication-backfill-workload";
+import { feedOriginChecks } from "~/server/db/schema";
 
 it.each([100, 1000])(
-  "bounds first backfill work with %s existing Feeds",
+  "bounds queued backfill work with %s existing Feeds",
   async (count) => {
     const target = createLocalBenchmarkTarget();
     const session = openBenchmarkDatabase({ url: target.url });
@@ -18,13 +21,19 @@ it.each([100, 1000])(
         session.database,
         count,
       );
+      // Queueing every existing Feed is one statement that returns nothing.
       session.instrumentation.reset();
-      expect(await workload.run()).toMatchObject({
-        attached: 0,
-        retryAt: expect.any(Date),
-      });
+      await workload.prepare();
+      const queued = session.instrumentation.snapshot();
+      expect(
+        queued.statements.filter((statement) =>
+          statement.sql.startsWith('insert into "serial_feed_origin_checks"'),
+        ),
+      ).toHaveLength(1);
+      session.instrumentation.reset();
+      expect(await workload.run()).toEqual({ more: false });
       const evidence = session.instrumentation.snapshot();
-      expect(workload.requests).toBe(BACKFILL_BATCH_SIZE * 2);
+      expect(workload.requests).toBe(BACKFILL_BENCHMARK_CHECKS * 2);
       expect(evidence.statementCount).toBeLessThanOrEqual(75);
       expect(evidence.materializedRows).toBeLessThanOrEqual(75);
       expect(
@@ -32,6 +41,9 @@ it.each([100, 1000])(
           statement.sql.includes('"serial_feed_item"'),
         ),
       ).toBe(false);
+      expect(await session.database.$count(feedOriginChecks)).toBe(
+        count - BACKFILL_BENCHMARK_CHECKS,
+      );
     } finally {
       session.close();
       target.cleanup();

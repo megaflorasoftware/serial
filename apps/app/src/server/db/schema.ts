@@ -1273,15 +1273,15 @@ export const atprotoConnections = sqliteTable(
     importAsInactive: integer("import_as_inactive", { mode: "boolean" })
       .notNull()
       .default(false),
+    /**
+     * Whether export was enabled since the account was linked. The first time
+     * it is, existing RSS-only Feeds join the Feed origin check queue.
+     */
     subscriptionBackfillStarted: integer("subscription_backfill_started", {
       mode: "boolean",
     })
       .notNull()
       .default(false),
-    subscriptionBackfillNextAttemptAt: integer(
-      "subscription_backfill_next_attempt_at",
-      { mode: "timestamp_ms" },
-    ),
     subscriptionRequestId: text("subscription_request_id"),
     subscriptionNextAttemptAt: integer("subscription_next_attempt_at", {
       mode: "timestamp_ms",
@@ -1358,8 +1358,14 @@ export const atprotoConnections = sqliteTable(
     ),
   ],
 );
-export const publicationBackfillProbes = sqliteTable(
-  "publication_backfill_probes",
+/**
+ * Feeds waiting for an origin check, at most one row each. A `light` check is
+ * Publication backfill; a `full` one is Feed revalidation, which covers it. A
+ * worker claims a row by moving its next attempt a few minutes ahead, so a row
+ * whose run stopped comes due again.
+ */
+export const feedOriginChecks = sqliteTable(
+  "feed_origin_checks",
   {
     feedId: integer("feed_id")
       .primaryKey()
@@ -1367,15 +1373,15 @@ export const publicationBackfillProbes = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    type: text("type").$type<"light" | "full">().notNull(),
     attempts: integer("attempts").notNull().default(0),
-    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+    nextAttemptAt: integer("next_attempt_at", {
+      mode: "timestamp_ms",
+    }).notNull(),
   },
+  // Due rows lead, so a tick with nothing due reads nothing.
   (table) => [
-    index("publication_backfill_due_idx").on(
-      table.userId,
-      table.nextAttemptAt,
-      table.feedId,
-    ),
+    index("feed_origin_check_due_idx").on(table.nextAttemptAt, table.userId),
   ],
 );
 

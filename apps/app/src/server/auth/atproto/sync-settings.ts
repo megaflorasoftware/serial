@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
-import type { db } from "~/server/db";
+import { and, eq, exists, sql } from "drizzle-orm";
 import type { AtprotoSyncPreferences } from "~/lib/auth/atproto-sync-settings";
+import type { FeedDatabase } from "~/server/feeds/origins";
 import {
   FULL_RECONCILE,
   newPublicationSyncRequest,
@@ -8,6 +8,7 @@ import {
 } from "~/server/publication-sync/requests";
 import { syncSettingsFromPreferences } from "~/lib/auth/atproto-sync-settings";
 import { atprotoConnections } from "~/server/db/schema";
+import { queuePublicationBackfill } from "~/server/origin-checks/queue";
 
 export async function persistAtprotoSyncSettings(
   input: {
@@ -16,9 +17,35 @@ export async function persistAtprotoSyncSettings(
     preferences: AtprotoSyncPreferences;
     expectedVersion?: number;
   },
-  database: Pick<typeof db, "update">,
+  database: FeedDatabase,
 ): Promise<boolean> {
   const preferences = syncSettingsFromPreferences(input.preferences);
+  const connection = and(
+    eq(atprotoConnections.userId, input.userId),
+    eq(atprotoConnections.did, input.did),
+    input.expectedVersion === undefined
+      ? undefined
+      : eq(atprotoConnections.syncSettingsVersion, input.expectedVersion),
+  );
+  // Export enabled for the first time since the link queues Publication
+  // backfill for the Feeds that existed before it. Queueing twice is
+  // harmless, so the two writes need no transaction of their own.
+  if (preferences.exportSubscriptions)
+    await queuePublicationBackfill(
+      database,
+      input.userId,
+      exists(
+        database
+          .select({ id: atprotoConnections.id })
+          .from(atprotoConnections)
+          .where(
+            and(
+              connection,
+              eq(atprotoConnections.subscriptionBackfillStarted, false),
+            ),
+          ),
+      ),
+    );
   const result = await database
     .update(atprotoConnections)
     .set({
@@ -28,6 +55,9 @@ export async function persistAtprotoSyncSettings(
       ),
       ...FULL_RECONCILE,
       ...RETRY_REFUSED_WRITES,
+      ...(preferences.exportSubscriptions
+        ? { subscriptionBackfillStarted: true }
+        : {}),
       subscriptionImportGeneration: preferences.importSubscriptions
         ? sql`case when ${atprotoConnections.importSubscriptions} = 0 then ${atprotoConnections.subscriptionImportGeneration} + 1 else ${atprotoConnections.subscriptionImportGeneration} end`
         : atprotoConnections.subscriptionImportGeneration,
@@ -37,14 +67,6 @@ export async function persistAtprotoSyncSettings(
       syncSettingsVersion: sql`${atprotoConnections.syncSettingsVersion} + 1`,
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(atprotoConnections.userId, input.userId),
-        eq(atprotoConnections.did, input.did),
-        input.expectedVersion === undefined
-          ? undefined
-          : eq(atprotoConnections.syncSettingsVersion, input.expectedVersion),
-      ),
-    );
+    .where(connection);
   return result.rowsAffected > 0;
 }

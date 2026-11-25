@@ -374,6 +374,8 @@ function ManageTagsPageContent() {
               >
                 Assign Feeds
               </ButtonWithShortcut>
+            </div>
+            <div className="flex gap-2">
               <ButtonWithShortcut
                 variant="outline"
                 onClick={handleClear}
@@ -381,16 +383,16 @@ function ManageTagsPageContent() {
               >
                 Clear
               </ButtonWithShortcut>
+              <ButtonWithShortcut
+                variant="destructive"
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={isDeletingTag}
+                shortcut="d"
+              >
+                <Trash2Icon size={16} className="mr-2" />
+                Delete ({selectedCount})
+              </ButtonWithShortcut>
             </div>
-            <ButtonWithShortcut
-              variant="destructive"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={isDeletingTag}
-              shortcut="d"
-            >
-              <Trash2Icon size={16} className="mr-2" />
-              Delete ({selectedCount})
-            </ButtonWithShortcut>
           </div>
         </div>
       )}

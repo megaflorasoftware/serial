@@ -8,6 +8,8 @@ import {
   verifyViewsOwnedByUser,
 } from "./utils";
 import { revalidateFeed } from "~/server/feeds/revalidate";
+import { queueFeedRevalidation } from "~/server/origin-checks/queue";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 import { setFeedsActive } from "~/server/feeds/activation";
@@ -178,6 +180,7 @@ export const createFromSubscriptionImport = protectedProcedure
         context.user.id,
         organizationInvalidationSummary(),
       );
+      wakeFeedOriginChecks(context.db);
     }
     return allResults;
   });
@@ -436,6 +439,16 @@ export const discoverFeedsStream = protectedProcedure
   .input(z.object({ url: z.string().trim().min(1).max(DISCOVERY_QUERY_LIMIT) }))
   .handler(async function* ({ input, context, signal }) {
     yield* streamDiscoverFeeds(context.user.id, input.url, signal);
+  });
+
+/** Queues revalidation for the selected Feeds and returns before it runs. */
+export const bulkRevalidate = protectedProcedure
+  .input(z.object({ feedIds: boundedNumberIdsSchema }))
+  .handler(async ({ context, input }) => {
+    if (input.feedIds.length === 0) return;
+
+    await queueFeedRevalidation(context.db, context.user.id, input.feedIds);
+    wakeFeedOriginChecks(context.db);
   });
 
 export const revalidate = protectedProcedure

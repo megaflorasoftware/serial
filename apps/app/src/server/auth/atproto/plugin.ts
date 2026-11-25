@@ -37,6 +37,7 @@ import type {
   AtprotoLinkResult,
 } from "~/lib/auth/atproto";
 import { wakePublicationSyncJobs } from "~/server/publication-sync/jobs";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
 import { db } from "~/server/db";
 import { enforceResolvedSignupPolicy } from "~/server/auth/policy";
 import {
@@ -397,6 +398,7 @@ export const atprotoPlugin = () => {
           }
 
           wakePublicationSyncJobs(db);
+          wakeFeedOriginChecks(db);
           throw ctx.redirect(consentResultRedirect("success"));
         },
       ),

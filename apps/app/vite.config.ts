@@ -53,6 +53,7 @@ export default defineConfig(({ mode }) => {
       scheduledTasks: {
         "* * * * *": [
           "publications:sync",
+          "feeds:origin-checks",
           ...(BACKGROUND_REFRESH_ENABLED ? ["feeds:background-refresh"] : []),
         ],
         ...scheduleTask({ "0 0 * * *": ["demo:midnight-wipe"] }, isDemoBuild),

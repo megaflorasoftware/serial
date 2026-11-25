@@ -13,6 +13,7 @@ import {
   requestSyncForFeedChange,
 } from "~/server/publication-sync/requests";
 import { getActiveFeedCount } from "~/server/subscriptions/helpers";
+import { queuePublicationBackfill } from "~/server/origin-checks/queue";
 
 type SerialSchema = typeof schema;
 
@@ -231,6 +232,12 @@ export async function insertFeedWithCategories(
     await applyFeedCategories(db, userId, [
       { feedId: newFeedRow.id, categories: feedInput.categories },
     ]);
+    // An imported RSS-only Feed may belong to a site that declares a publication.
+    await queuePublicationBackfill(
+      db,
+      userId,
+      eq(schema.feeds.id, newFeedRow.id),
+    );
   }
 
   // Parse the feed to ApplicationFeed format
