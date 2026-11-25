@@ -60,6 +60,17 @@ it("looks each DID up once within a run, nested runs included", async () => {
   expect(mocks.resolve).toHaveBeenCalledTimes(3);
 });
 
+it("never shares a lookup its caller may abort", async () => {
+  await withIdentityCache(async () => {
+    const stop = new AbortController();
+    await resolvePublicPds(alice, { signal: stop.signal });
+    await resolvePublicPds(alice);
+    await resolvePublicPds(alice);
+  });
+  expect(mocks.resolve).toHaveBeenCalledTimes(2);
+  expect(mocks.resolve.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+});
+
 it("does not keep a lookup that failed", async () => {
   mocks.resolve.mockRejectedValueOnce(new Error("PLC unavailable"));
   await withIdentityCache(async () => {

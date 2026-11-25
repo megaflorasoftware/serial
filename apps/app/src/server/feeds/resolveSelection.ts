@@ -69,28 +69,30 @@ export async function resolveFeedSelection(
   return resolveSelectedFeed(userId, selected, publication);
 }
 
-/** Subscription imports resolve their publication once, then use the same discovery and validation as Add. */
+/**
+ * Subscription imports resolve their publication once, then use the same
+ * discovery and validation as Add. `signal` gives up a wait for discovery.
+ */
 export async function resolvePublicationFeed(
   userId: string,
   publicationUri: string,
+  signal?: AbortSignal,
 ) {
   const publication = await resolvePublication(publicationUri);
   // A record that does not describe this publication stays that way until it changes.
   if (!publication)
     throw new PublicationGoneError("Unable to read the selected publication");
-  return resolveSelectedFeed(
-    userId,
-    publicationRow(publication),
-    publication,
-    true,
-  );
+  return resolveSelectedFeed(userId, publicationRow(publication), publication, {
+    signal,
+  });
 }
 
 async function resolveSelectedFeed(
   userId: string,
   selected: DiscoveredFeed,
   publication: Awaited<ReturnType<typeof resolvePublication>>,
-  importing = false,
+  /** A subscription import, with what gives up its wait for discovery. */
+  importing?: { signal?: AbortSignal },
 ) {
   let rss = selected.origins?.find((origin) => origin.kind === "rss");
   let publicationDiscovery: DiscoveredFeed[] | undefined;
@@ -101,7 +103,7 @@ async function resolveSelectedFeed(
       const discovered = await discoverFeedOriginsForImport(
         userId,
         publication.siteUrl,
-        publication,
+        { publication, signal: importing.signal },
       );
       publicationDiscovery = combinePublicationRows(discovered.rows, [
         publicationRow(publication),

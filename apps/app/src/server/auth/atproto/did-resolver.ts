@@ -31,26 +31,35 @@ export function withIdentityCache<T>(work: () => Promise<T>) {
   return runDocuments.getStore() ? work() : runDocuments.run(new Map(), work);
 }
 
+type LookupOptions = {
+  deadline?: number;
+  /** A caller's own bound. A lookup it may abort is its own, never shared. */
+  signal?: AbortSignal;
+};
+
 /**
  * The DID document as published, for handles and service endpoints. It is
- * read afresh each time, except within one `withIdentityCache` run.
+ * read afresh each time, except within one `withIdentityCache` run, where
+ * lookups without a caller's signal share one answer per DID.
  */
 export async function resolvePublicDidDocument(
   did: string,
-  options: { deadline?: number } = {},
+  options: LookupOptions = {},
 ) {
   if (!did.startsWith("did:plc:") && !did.startsWith("did:web:"))
     throw new UnsupportedDidError();
-  const documents = runDocuments.getStore();
+  const documents = options.signal ? undefined : runDocuments.getStore();
   const known = documents?.get(did);
   if (known) return known;
-  const signal =
-    options.deadline === undefined
-      ? undefined
-      : AbortSignal.timeout(Math.max(0, options.deadline - Date.now()));
+  const bounds = [
+    ...(options.signal ? [options.signal] : []),
+    ...(options.deadline === undefined
+      ? []
+      : [AbortSignal.timeout(Math.max(0, options.deadline - Date.now()))]),
+  ];
   const document = publicDidResolver.resolve(did as `did:${string}:${string}`, {
     noCache: true,
-    signal,
+    signal: bounds.length ? AbortSignal.any(bounds) : undefined,
   });
   if (documents) {
     documents.set(did, document);
@@ -61,7 +70,7 @@ export async function resolvePublicDidDocument(
 
 export async function resolvePublicPds(
   did: string,
-  options: { deadline?: number } = {},
+  options: LookupOptions = {},
 ) {
   const document = await resolvePublicDidDocument(did, options);
   const service = document.service?.find(

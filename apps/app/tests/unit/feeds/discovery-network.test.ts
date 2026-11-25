@@ -395,7 +395,7 @@ describe("import discovery completeness", () => {
     const { rows, read } = await discoverFeedOriginsForImport(
       "known-publication",
       publication.siteUrl,
-      publication,
+      { publication },
     );
     expect(resolvePublication).not.toHaveBeenCalled();
     expect(rows).toEqual([

@@ -129,6 +129,30 @@ describe("background discovery", () => {
     await vi.waitFor(() => expect(lease).toMatchObject({ ok: true }));
   });
 
+  it("drops a wait its caller gave up on, leaving the slot to the next", async () => {
+    const limiter = new CaptureLimiter(8);
+    const held = await Promise.all(
+      [1, 2].map(() => limiter.acquireInBackground("one", "discovery")),
+    );
+    const stop = new AbortController();
+    const abandoned = limiter.acquireInBackground(
+      "one",
+      "discovery",
+      stop.signal,
+    );
+    stop.abort(new Error("run ended"));
+    await expect(abandoned).rejects.toThrow("run ended");
+    const next = limiter.acquireInBackground("one", "discovery");
+    const [first] = held;
+    if (first?.ok) first.release();
+    expect(await next).toMatchObject({ ok: true });
+    // The abandoned wait took nothing: the user's own slot is still free.
+    expect(limiter.acquire("one", "discovery").ok).toBe(true);
+    await expect(
+      limiter.acquireInBackground("one", "discovery", stop.signal),
+    ).rejects.toThrow("run ended");
+  });
+
   it("counts one attempt however long it waits, and still refuses a rate limit at once", async () => {
     let now = 0;
     const limiter = new CaptureLimiter(8, () => now);

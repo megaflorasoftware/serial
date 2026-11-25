@@ -181,7 +181,7 @@ it("resolves a subscription URI once before discovering the publication's RSS or
   expect(discoverFeedOriginsForImport).toHaveBeenCalledExactlyOnceWith(
     "user",
     publication.siteUrl,
-    publication,
+    { publication, signal: undefined },
   );
 });
 

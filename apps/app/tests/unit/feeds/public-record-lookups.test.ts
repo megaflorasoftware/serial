@@ -401,6 +401,26 @@ describe("a publication that is gone", () => {
       );
     },
   );
+  it("bounds the repository lookup by the caller's signal", async () => {
+    cacheMiss();
+    mocks.publicPds.mockImplementation(
+      (_did: string, { signal }: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) =>
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          }),
+        ),
+    );
+    const caller = new AbortController();
+    const resolving = resolvePublication(uri, caller.signal).catch(
+      (error: unknown) => error,
+    );
+    await vi.waitFor(() => expect(mocks.publicPds).toHaveBeenCalled());
+    const [, options] = mocks.publicPds.mock.calls[0]!;
+    caller.abort(new Error("import gave up"));
+    expect((options as { signal: AbortSignal }).signal.aborted).toBe(true);
+    await resolving;
+  });
   it("keeps a DID lookup that failed in transit retryable", async () => {
     cacheMiss();
     // The resolver reports a transport failure with status 400.

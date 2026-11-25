@@ -17,10 +17,9 @@ export async function syncBeforeFeedRefresh(input: {
     await (input.sync ?? syncPublicationSubscriptions)({
       database: input.database,
       userId: input.userId,
+      // The refresh fetches every due origin next, new Feeds' included.
+      skipFetching: true,
       onProgress: async (progress) => {
-        // The refresh shows one bar, so it follows finding alone; the
-        // refresh's own fetches come right after.
-        if (progress.stage !== "finding") return;
         if (!started) {
           await input.publish(input.channel, {
             type: "refresh-start",

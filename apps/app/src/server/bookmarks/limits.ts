@@ -61,19 +61,37 @@ export class CaptureLimiter {
    * Background work takes its turn instead of being turned away: while no
    * slot it may hold is free, it waits for one to be released. It counts as
    * one attempt however long it waits, and a rate limit still refuses at once.
+   * Aborting `signal` gives up the wait, rejecting with its reason.
    */
   async acquireInBackground(
     userId: string,
     surface: BackgroundSurface,
+    signal?: AbortSignal,
   ): Promise<GrantedLease | typeof RATE_LIMITED> {
+    signal?.throwIfAborted();
     if (!this.withinRate(userId, surface)) return RATE_LIMITED;
     for (;;) {
       const lease = this.take(userId, surface, true);
       if (lease) return lease;
-      // Each release wakes every waiter; the first to retry takes the slot.
       // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      await new Promise<void>((resolve) => this.waiting.add(resolve));
+      await this.nextRelease(signal);
     }
+  }
+
+  /** Each release wakes every waiter; the first to retry takes the slot. */
+  private nextRelease(signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+      const giveUp = () => {
+        this.waiting.delete(wake);
+        reject(signal!.reason);
+      };
+      const wake = () => {
+        signal?.removeEventListener("abort", giveUp);
+        resolve();
+      };
+      this.waiting.add(wake);
+      signal?.addEventListener("abort", giveUp, { once: true });
+    });
   }
 
   /** Records this attempt and reports whether the rolling window allows it. */

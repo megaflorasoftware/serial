@@ -542,17 +542,22 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
  * discovery that could not finish and is worth another attempt.
  *
  * An import is background work: it waits for one of the user's background
- * discovery slots. `publication` is one the caller already read, which
- * discovery uses instead of reading its record again. Besides the rows it
- * hands back a reader that answers from the responses discovery holds, so
- * the caller reads none of them twice.
+ * discovery slots, until `signal` gives up the wait. `publication` is one the
+ * caller already read, which discovery uses instead of reading its record
+ * again. Besides the rows it hands back a reader that answers from the
+ * responses discovery holds, so the caller reads none of them twice.
  */
 export async function discoverFeedOriginsForImport(
   userId: string,
   url: string,
-  publication?: ResolvedPublication,
+  importing: { publication?: ResolvedPublication; signal?: AbortSignal } = {},
 ) {
-  const lease = await captureLimiter.acquireInBackground(userId, "discovery");
+  const { publication } = importing;
+  const lease = await captureLimiter.acquireInBackground(
+    userId,
+    "discovery",
+    importing.signal,
+  );
   if (!lease.ok)
     throw new FeedImportDeferredError(
       undefined,

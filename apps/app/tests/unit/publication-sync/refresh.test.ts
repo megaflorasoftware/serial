@@ -52,6 +52,25 @@ describe("pre-refresh subscription sync", () => {
       "rss-attempt-complete",
     ]);
   });
+  it("leaves the first fetches of new Feeds to the refresh", async () => {
+    const sync = vi.fn(() =>
+      Promise.resolve({
+        ...emptyPublicationSyncCounts(),
+        status: "completed" as const,
+      }),
+    );
+    await syncBeforeFeedRefresh({
+      database: {} as typeof Database,
+      userId: "owner",
+      channel: "user:owner",
+      nextRefreshAt: new Date(),
+      publish: vi.fn(),
+      sync,
+    });
+    expect(sync).toHaveBeenCalledWith(
+      expect.objectContaining({ skipFetching: true }),
+    );
+  });
   it("allows normal item refresh after an unexpected sync failure", async () => {
     const result = await syncBeforeFeedRefresh({
       database: {} as typeof Database,

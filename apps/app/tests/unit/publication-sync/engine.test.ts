@@ -52,7 +52,11 @@ let rev: number;
 let store: SubscriptionRecordStore;
 let resolveFeed: ReturnType<
   typeof vi.fn<
-    (userId: string, uri: string) => Promise<ReturnType<typeof details>>
+    (
+      userId: string,
+      uri: string,
+      signal?: AbortSignal,
+    ) => Promise<ReturnType<typeof details>>
   >
 >;
 let invalidate: ReturnType<typeof vi.fn<() => Promise<void>>>;
@@ -74,7 +78,7 @@ const run = (
     dependencies: {
       ...(backfill ? { backfill } : {}),
       store,
-      resolveFeed: (userId, uri) => resolveFeed(userId, uri),
+      resolveFeed: (userId, uri, signal) => resolveFeed(userId, uri, signal),
       fetchCreatedFeed: (database, feed) => fetchCreatedFeed(database, feed),
       invalidate,
       activationBudget: async () => ({
@@ -528,6 +532,7 @@ it("persists throttled imports, honors backoff, and retries with an unchanged PD
   expect(resolveFeed).toHaveBeenCalledExactlyOnceWith(
     "owner",
     publication("limited"),
+    expect.any(AbortSignal),
   );
   // The repository did not change, so the retry reuses the stored snapshot.
   expect(store.list).toHaveBeenCalledTimes(1);
@@ -1575,5 +1580,96 @@ describe("finding, then fetching", () => {
       .set({ subscriptionRepoRev: null });
     expect(await run()).toMatchObject({ imported: 0 });
     expect(fetchCreatedFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fetch or count a Feed again while its first fetch still runs", async () => {
+    records = [record("one"), record("two")];
+    await method("import");
+    let finishSlowFetch = () => {};
+    // The first fetch outlasts the run's wait for it and keeps running.
+    fetchCreatedFeed.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSlowFetch = resolve;
+        }),
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const first = run();
+      await vi.waitFor(() => expect(fetchCreatedFeed).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await first).toMatchObject({ imported: 2 });
+    } finally {
+      vi.useRealTimers();
+    }
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionRepoRev: null });
+    const progress: TwoStageProgress[] = [];
+    await run(undefined, (update) => {
+      progress.push(update);
+    });
+    expect(fetchCreatedFeed).toHaveBeenCalledTimes(2);
+    expect(progress.some((update) => update.stage === "fetching")).toBe(false);
+    finishSlowFetch();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it("fetches only the Feeds this connection imported", async () => {
+    // A Feed an OPML import or Add Feed is still fetching for the first time.
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details: details(publication("elsewhere")),
+      isActive: true,
+    });
+    records = [record("one")];
+    await method("import");
+    expect(await run()).toMatchObject({ imported: 1 });
+    const [imported] = await fixture.database
+      .select()
+      .from(feeds)
+      .where(eq(feeds.name, "one"));
+    expect(fetchCreatedFeed.mock.calls.map(([, feed]) => feed.id)).toEqual([
+      imported!.id,
+    ]);
+  });
+
+  it("only finds when the caller fetches every due origin next", async () => {
+    records = [record("one")];
+    await method("import");
+    const progress: TwoStageProgress[] = [];
+    expect(
+      await syncPublicationSubscriptions({
+        database: fixture.database,
+        userId: "owner",
+        skipFetching: true,
+        onProgress: ({ stage }) => {
+          progress.push({ stage, completed: 0, total: 0 });
+          return Promise.resolve();
+        },
+        dependencies: {
+          store,
+          invalidate,
+          resolveFeed: (userId, uri) => resolveFeed(userId, uri),
+          fetchCreatedFeed: (database, feed) =>
+            fetchCreatedFeed(database, feed),
+          activationBudget: () =>
+            Promise.resolve({ remainingSlots: 10, maxActiveFeeds: 10 }),
+        },
+      }),
+    ).toMatchObject({ imported: 1, status: "completed" });
+    expect(fetchCreatedFeed).not.toHaveBeenCalled();
+    expect(progress.every((update) => update.stage === "finding")).toBe(true);
+    // The refresh that follows fetches it, so the pass is finished.
+    expect((await stored()).subscriptionRepoRev).toBe("1");
+  });
+
+  it("gives up finding's waits for discovery once finding ends", async () => {
+    records = [record("one")];
+    await method("import");
+    await run();
+    const [, , signal] = resolveFeed.mock.calls[0]!;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal!.aborted).toBe(true);
   });
 });

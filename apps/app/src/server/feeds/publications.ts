@@ -115,9 +115,9 @@ async function publicIdentity(identifier: string, signal: AbortSignal) {
  */
 async function publicPds(did: string, signal: AbortSignal) {
   signal.throwIfAborted();
-  return resolvePublicPds(did, { deadline: Date.now() + 5_000 }).catch(
-    rethrowResolutionError,
-  );
+  return resolvePublicPds(did, {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+  }).catch(rethrowResolutionError);
 }
 
 async function readRecordJson(

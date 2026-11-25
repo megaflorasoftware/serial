@@ -105,21 +105,34 @@ async function writeSubscription<T>(write: () => Promise<T>) {
 /**
  * A Feed the sync created gets its first content at once, like a Feed the user
  * added by hand: every origin, published to the user's channel. This runs
- * outside the user's refresh window, bounded to Feeds this run created and to
- * the Add path's timeout so one slow publication cannot hold the sync claim.
+ * outside the user's refresh window, bounded to Feeds the sync created.
  */
 async function fetchCreatedFeed(
   database: typeof Database,
   feed: DatabaseFeedWithOrigins,
 ) {
+  await refreshUserFeeds({
+    db: database,
+    feedsList: fetchableOriginsOf([feed]),
+    channel: getUserChannel(feed.userId),
+  });
+}
+
+/**
+ * Feeds whose first fetch is still running in this process, including one a
+ * run stopped waiting for. No later run fetches or counts them again.
+ */
+const firstFetchesInFlight = new Set<number>();
+
+/**
+ * Waits for a first fetch no longer than the Add path does, so one slow
+ * publication cannot hold the sync claim. The fetch itself runs on.
+ */
+async function waitForFirstFetch(fetching: Promise<void>) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      refreshUserFeeds({
-        db: database,
-        feedsList: fetchableOriginsOf([feed]),
-        channel: getUserChannel(feed.userId),
-      }),
+      fetching,
       new Promise<never>((_, reject) => {
         timer = setTimeout(
           () => reject(new Error("First fetch timed out")),
@@ -131,22 +144,32 @@ async function fetchCreatedFeed(
     clearTimeout(timer);
   }
 }
-async function resolveImportedFeed(userId: string, publicationUri: string) {
+
+async function resolveImportedFeed(
+  userId: string,
+  publicationUri: string,
+  signal?: AbortSignal,
+) {
   const { resolvePublicationFeed } =
     await import("~/server/feeds/resolveSelection");
-  const [details] = await resolvePublicationFeed(userId, publicationUri);
+  const [details] = await resolvePublicationFeed(
+    userId,
+    publicationUri,
+    signal,
+  );
   if (!details) throw new Error("Unable to resolve publication");
   return details;
 }
 
 /**
- * Feeds with an Atmosphere origin whose content has not arrived: no fetch has
+ * Feeds this connection imported whose content has not arrived: no fetch has
  * visited any of their origins. Finding creates them, in this run or in an
  * earlier run of the same request, and fetching gives them their content.
+ * A Feed whose first fetch is still running is left to that fetch.
  */
 async function feedsAwaitingFirstFetch(
   database: typeof Database,
-  userId: string,
+  connection: Pick<DatabaseAtprotoConnection, "id" | "userId">,
 ) {
   const rows = await database
     .select()
@@ -160,10 +183,22 @@ async function feedsAwaitingFirstFetch(
             .from(feedOrigins)
             .where(
               and(
-                eq(feedOrigins.userId, userId),
+                eq(feedOrigins.userId, connection.userId!),
                 originIsDue(new Date()),
                 eq(feedOrigins.kind, "atproto"),
                 originAwaitsFirstFetch,
+                inArray(
+                  feedOrigins.feedId,
+                  database
+                    .select({ feedId: mirror.feedId })
+                    .from(mirror)
+                    .where(
+                      and(
+                        eq(mirror.connectionId, connection.id),
+                        eq(mirror.provenance, "imported"),
+                      ),
+                    ),
+                ),
               ),
             ),
         ),
@@ -181,7 +216,8 @@ async function feedsAwaitingFirstFetch(
       ),
     )
     .orderBy(asc(feeds.id));
-  return rows.length ? withOrigins(database, rows) : [];
+  const awaiting = rows.filter((feed) => !firstFetchesInFlight.has(feed.id));
+  return awaiting.length ? withOrigins(database, awaiting) : [];
 }
 
 type WriteRetries = Pick<
@@ -269,6 +305,11 @@ type SyncInput = {
   /** A caller that already checked, to decide before claiming its own work. */
   check?: SyncCheck;
   onProgress?: (progress: PublicationSyncProgress) => Promise<void>;
+  /**
+   * The caller fetches every due origin right after the run, as a refresh
+   * does, so the run leaves the first fetches to it and only finds.
+   */
+  skipFetching?: boolean;
   dependencies?: {
     backfill?: typeof backfillPublicationOrigins;
     store?: SubscriptionRecordStore;
@@ -364,10 +405,14 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
   const fetchFirstContent = async (feed: DatabaseFeedWithOrigins) => {
     try {
       await renewSubscriptionSync(database, connection);
-      await (input.dependencies?.fetchCreatedFeed ?? fetchCreatedFeed)(
-        database,
-        feed,
-      );
+      const fetching = (
+        input.dependencies?.fetchCreatedFeed ?? fetchCreatedFeed
+      )(database, feed);
+      firstFetchesInFlight.add(feed.id);
+      void fetching
+        .catch(() => undefined)
+        .finally(() => firstFetchesInFlight.delete(feed.id));
+      await waitForFirstFetch(fetching);
     } catch (error) {
       if (error instanceof SubscriptionSyncChangedError) throw error;
       // The Feed exists either way; content failures surface on the Feed itself.
@@ -379,6 +424,12 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
   let observedCompleteSnapshot = true;
   /** Feeds found that still wait for a first fetch the run had no time for. */
   let fetchesLeft = false;
+  /**
+   * Ends finding's waits for discovery once the run is out of time or done
+   * finding, so a wait the run gave up on never takes a slot later.
+   */
+  const finding = new AbortController();
+  let findingTimer: ReturnType<typeof setTimeout> | undefined;
   let lastProgressAt = 0;
   const progress = async (
     stage: TwoStageProgress["stage"],
@@ -490,6 +541,7 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       : ordered;
     await progress("finding", 0, publications.length);
     const deadline = Date.now() + RUN_DEADLINE_MS;
+    findingTimer = setTimeout(() => finding.abort(), RUN_DEADLINE_MS);
     /** What the rules decide for one publication. It reads and writes nothing. */
     const plan = (publicationUri: string) => {
       const records = remoteByPublication.get(publicationUri) ?? [];
@@ -568,7 +620,7 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       try {
         const details = await (
           input.dependencies?.resolveFeed ?? resolveImportedFeed
-        )(userId, publicationUri);
+        )(userId, publicationUri, finding.signal);
         const prepared = await prepareFeedImport(database, userId, details);
         const budget = await (
           input.dependencies?.activationBudget ?? getFeedsActivationBudget
@@ -578,6 +630,8 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
           found: { prepared, maxActiveFeeds: budget.maxActiveFeeds },
         };
       } catch (error) {
+        // Out of time while it waited: the next run finds it instead.
+        if (finding.signal.aborted) return null;
         return { planned, found: { error } };
       }
     };
@@ -830,14 +884,19 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       if (claimLost) break;
       await progress("finding", ++committed, publications.length);
     }
+    finding.abort();
     if (!claimLost && committed < publications.length) {
       counts.deferred += publications.length - committed;
       retryAfter(new Date());
       observedCompleteSnapshot = false;
     }
     // Fetching: the first content of every Feed found, once finding is done.
-    if (!claimLost && committed === publications.length) {
-      const awaiting = await feedsAwaitingFirstFetch(database, userId);
+    if (
+      !input.skipFetching &&
+      !claimLost &&
+      committed === publications.length
+    ) {
+      const awaiting = await feedsAwaitingFirstFetch(database, connection);
       if (awaiting.length) await progress("fetching", 0, awaiting.length);
       let fetched = 0;
       for await (const attempted of workerPool(
@@ -912,6 +971,8 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
     counts.failed++;
     logError("[publication-sync] sync failed", error);
   } finally {
+    clearTimeout(findingTimer);
+    finding.abort();
     // A run outside the job queue, such as one before a manual refresh, still
     // owes its unfinished work a schedule. It never opens a request of its
     // own: only the user starts one, so the follow-up runs unannounced.
