@@ -1365,8 +1365,8 @@ describe("finding, then fetching", () => {
     ).toBe(true);
   });
 
-  it("finds two publications at a time and commits them in publication order", async () => {
-    records = ["a", "b", "c", "d"].map((rkey) => record(rkey));
+  it("finds four publications at a time and commits each as it finishes", async () => {
+    records = ["a", "b", "c", "d", "e"].map((rkey) => record(rkey));
     await method("import");
     const waiting = new Map<string, () => void>();
     let active = 0;
@@ -1381,20 +1381,159 @@ describe("finding, then fetching", () => {
           });
         }),
     );
-    const syncing = run();
-    await vi.waitFor(() => expect([...waiting.keys()]).toEqual(["a", "b"]));
-    // "b" is found first, but commits only after "a".
+    const progress: TwoStageProgress[] = [];
+    const syncing = run((update) => {
+      progress.push(update);
+    });
+    await vi.waitFor(() =>
+      expect([...waiting.keys()]).toEqual(["a", "b", "c", "d"]),
+    );
+    // "b" is found first and commits without waiting for "a".
     waiting.get("b")!();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(await createdNames()).toEqual([]);
-    waiting.get("a")!();
-    await vi.waitFor(() => expect(waiting.has("c")).toBe(true));
-    await vi.waitFor(() => expect(waiting.has("d")).toBe(true));
-    waiting.get("d")!();
-    waiting.get("c")!();
-    expect(await syncing).toMatchObject({ imported: 4 });
-    expect(most).toBe(2);
-    expect(await createdNames()).toEqual(["a", "b", "c", "d"]);
+    await vi.waitFor(() => expect(progress).toHaveLength(3));
+    expect(await createdNames()).toEqual(["b"]);
+    // Nothing before it has committed, so finding has not moved on.
+    expect(progress.at(-1)).toEqual({
+      stage: "finding",
+      completed: 0,
+      total: 5,
+    });
+    await vi.waitFor(() => expect(waiting.has("e")).toBe(true));
+    for (const rkey of ["e", "d", "c", "a"]) waiting.get(rkey)!();
+    expect(await syncing).toMatchObject({ imported: 5 });
+    expect(most).toBe(4);
+    expect((await createdNames()).sort()).toEqual(["a", "b", "c", "d", "e"]);
+    expect(progress).toContainEqual({
+      stage: "finding",
+      completed: 5,
+      total: 5,
+    });
+    expect((await stored()).subscriptionSyncCursor).toBe(publication("e"));
+  });
+
+  it("resumes after the leading run, and counts what lies beyond it once", async () => {
+    records = ["a", "b", "c", "d", "e"].map((rkey) => record(rkey));
+    await method("import");
+    const reported: TwoStageProgress[] = [];
+    const sync: typeof syncPublicationSubscriptions = (input) =>
+      syncPublicationSubscriptions({
+        ...input,
+        onProgress: async (update) => {
+          const { stage, completed, total } = update;
+          reported.push({ stage, completed, total });
+          await input.onProgress?.(update);
+        },
+        dependencies: {
+          store,
+          invalidate,
+          resolveFeed: (userId, uri, signal) =>
+            resolveFeed(userId, uri, signal),
+          fetchCreatedFeed: (database, feed) =>
+            fetchCreatedFeed(database, feed),
+          activationBudget: () =>
+            Promise.resolve({ remainingSlots: maxActiveFeeds, maxActiveFeeds }),
+        },
+      });
+    const requestProgress = async () =>
+      (await stored()).subscriptionJobProgress;
+    const waiting = new Map<string, () => void>();
+    let slotTaken = true;
+    resolveFeed.mockImplementation(
+      (_userId, uri, signal) =>
+        new Promise((resolve, reject) => {
+          if (name(uri) === "b" && slotTaken) {
+            // No discovery slot comes free before the run gives up its wait.
+            signal!.addEventListener("abort", () => reject(signal!.reason), {
+              once: true,
+            });
+            return;
+          }
+          waiting.set(name(uri), () => resolve(details(uri)));
+        }),
+    );
+    const clock = pastDeadline();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const first = runJobs(sync);
+      await vi.waitFor(() =>
+        expect([...waiting.keys()]).toEqual(["a", "c", "d"]),
+      );
+      waiting.get("c")!();
+      await vi.waitFor(() => expect(waiting.has("e")).toBe(true));
+      waiting.get("d")!();
+      await vi.waitFor(async () =>
+        expect(await createdNames()).toHaveLength(2),
+      );
+      // "c" and "d" committed, but nothing before them has.
+      expect(await requestProgress()).toEqual({
+        stage: "finding",
+        completed: 0,
+        total: 5,
+      });
+      waiting.get("a")!();
+      await vi.waitFor(async () =>
+        expect(await createdNames()).toHaveLength(3),
+      );
+      // The run's minute ends while "b" still waits, and "e" arrives after.
+      clock.passed = 61_000;
+      await vi.advanceTimersByTimeAsync(60_000);
+      waiting.get("e")!();
+      await first;
+    } finally {
+      vi.useRealTimers();
+      clock.restore();
+    }
+    expect(await stored()).toMatchObject({
+      subscriptionSyncCursor: publication("a"),
+      subscriptionJobProgress: { stage: "finding", completed: 1, total: 5 },
+      subscriptionJobResult: { imported: 4, deferred: 1 },
+    });
+
+    slotTaken = false;
+    waiting.clear();
+    reported.length = 0;
+    await fixture.database
+      .update(atprotoConnections)
+      .set({ subscriptionNextAttemptAt: new Date(0) });
+    const second = runJobs(sync);
+    await vi.waitFor(() => expect(waiting.has("b")).toBe(true));
+    // "c", "d", "e" and "a" are revisited at once, while "b" is still found.
+    await vi.waitFor(() =>
+      expect(reported.filter((update) => update.stage === "finding")).toEqual([
+        { stage: "finding", completed: 0, total: 0 },
+        ...Array.from({ length: 5 }, () => ({
+          stage: "finding",
+          completed: 0,
+          total: 5,
+        })),
+      ]),
+    );
+    expect(await requestProgress()).toEqual({
+      stage: "finding",
+      completed: 1,
+      total: 5,
+    });
+    waiting.get("b")!();
+    await second;
+    expect(resolveFeed.mock.calls.map(([, uri]) => name(uri))).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "b",
+    ]);
+    expect(reported).toContainEqual({
+      stage: "finding",
+      completed: 5,
+      total: 5,
+    });
+    expect(fetchCreatedFeed).toHaveBeenCalledTimes(5);
+    expect(await stored()).toMatchObject({
+      subscriptionSyncCursor: publication("a"),
+      subscriptionJobProgress: null,
+      subscriptionJobResult: { imported: 5, deferred: 0 },
+    });
   });
 
   it("fetches the Feeds an earlier run found once a later run finishes finding", async () => {

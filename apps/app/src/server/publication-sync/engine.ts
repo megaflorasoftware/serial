@@ -56,7 +56,7 @@ import { refreshUserFeeds } from "~/server/rss/refreshUserFeeds";
 import { fetchableOriginsOf, withOrigins } from "~/server/feeds/origins";
 import { originAwaitsFirstFetch, originIsDue } from "~/server/feeds/schedule";
 import { withIdentityCache } from "~/server/auth/atproto/did-resolver";
-import { orderedWorkerPool, workerPool } from "~/lib/workerPool";
+import { workerPool } from "~/lib/workerPool";
 import { getUserChannel } from "~/server/api/channels";
 import {
   getActiveFeedCount,
@@ -79,8 +79,8 @@ function groupByPublication<T extends { publicationUri: string }>(rows: T[]) {
 }
 /** The same bound Add gives a new Feed's first fetch. */
 const FIRST_FETCH_TIMEOUT_MS = 15_000;
-/** Publications found at once. Their commits still land one at a time, in order. */
-const FIND_CONCURRENCY = 2;
+/** Publications found at once. Each commits as it finishes, one at a time. */
+const FIND_CONCURRENCY = 4;
 /** First fetches at once, as an OPML import runs them. */
 const FETCH_CONCURRENCY = 4;
 /** A run starts no work after this. The next run continues at once. */
@@ -320,7 +320,7 @@ type SyncInput = {
 
 /**
  * One run in two stages. Finding resolves every publication and creates its
- * Feed, two at a time. Fetching then gives the new Feeds their first content.
+ * Feed, four at a time. Fetching then gives the new Feeds their first content.
  * A run that reaches its deadline stops and the next one continues the work.
  */
 export function syncPublicationSubscriptions(
@@ -593,8 +593,8 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       | { error: unknown };
     /**
      * The network half of finding: an import resolves its publication and
-     * checks the Feed it would create. It may run ahead of the commits before
-     * it, so it writes nothing. Null once the run is out of time.
+     * checks the Feed it would create. It runs beside other finds and their
+     * commits, so it writes nothing. Null once the run is out of time.
      */
     const find = async (
       publicationUri: string,
@@ -626,7 +626,7 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       }
     };
     /**
-     * Commits one publication, in publication order. Resolves to whether the
+     * Commits one publication once its find finishes. Resolves to whether the
      * run lost its claim and must stop.
      */
     const commit = async (planned: Plan, found?: Found) => {
@@ -639,7 +639,6 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
         action,
       } = planned;
       let records = planned.records;
-      cursor = publicationUri;
       if (invalidPublications.has(publicationUri)) return false;
       if (skippedImport) counts.skipped++;
       if (planned.importWaitsUntil) {
@@ -861,18 +860,20 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       }
       return false;
     };
-    // Finding: two publications at a time, committed in publication order.
+    // Finding: four publications at a time, each committed as it finishes.
+    const reached = leadingRun(publications);
     let committed = 0;
     let claimLost = false;
-    for await (const step of orderedWorkerPool(
-      publications,
-      FIND_CONCURRENCY,
-      find,
-    )) {
-      if (!step) break;
+    for await (const step of workerPool(publications, FIND_CONCURRENCY, find)) {
+      // Out of time: finds already under way still arrive and commit.
+      if (!step) continue;
       claimLost = await commit(step.planned, step.found);
       if (claimLost) break;
-      await progress("finding", ++committed, publications.length);
+      committed++;
+      cursor = reached.commit(step.planned.publicationUri) ?? cursor;
+      // The next run revisits what lies beyond the leading run, so only the
+      // leading run counts.
+      await progress("finding", reached.length, publications.length);
     }
     finding.abort();
     if (!claimLost && committed < publications.length) {
@@ -1003,6 +1004,31 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       counts.failed || counts.deferred || counts.skipped
         ? "partial"
         : "completed",
+  };
+}
+
+/**
+ * How far a run got through its publications in their order: up to the first
+ * it has not committed. Finds commit as they finish, so this moves on only as
+ * gaps close, and the next run resumes after it.
+ */
+function leadingRun(publications: string[]) {
+  const committed = new Set<string>();
+  let length = 0;
+  return {
+    /** Records a commit and returns the last publication of the leading run. */
+    commit(publicationUri: string) {
+      committed.add(publicationUri);
+      while (
+        length < publications.length &&
+        committed.has(publications[length]!)
+      )
+        length++;
+      return publications[length - 1];
+    },
+    get length() {
+      return length;
+    },
   };
 }
 

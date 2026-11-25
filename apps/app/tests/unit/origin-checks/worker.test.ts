@@ -408,15 +408,19 @@ describe("Feed revalidation", () => {
   it("leaves the user's own discovery a slot while revalidating in the background", async () => {
     const feedIds = [(await addFeed(1)).id, (await addFeed(2)).id];
     await queueFeedRevalidation(fixture.database, "owner", feedIds);
-    // Subscription sync holds one of the two background slots.
-    const sync = await captureLimiter.acquireInBackground("owner", "discovery");
+    // Subscription sync holds three of the four background slots.
+    const sync = await Promise.all(
+      [1, 2, 3].map(() =>
+        captureLimiter.acquireInBackground("owner", "discovery"),
+      ),
+    );
     const own: boolean[] = [];
     revalidate.mockImplementation(() => {
       const lease = captureLimiter.acquire("owner", "discovery");
       own.push(lease.ok);
       if (lease.ok) lease.release();
       // Sync finishes, which lets the waiting worker in.
-      if (sync.ok) sync.release();
+      for (const finished of sync) if (finished.ok) finished.release();
       return Promise.resolve({ changed: false });
     });
     // The real limiter's background slots.
