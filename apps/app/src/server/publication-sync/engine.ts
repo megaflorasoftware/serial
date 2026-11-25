@@ -862,22 +862,20 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
     };
     // Finding: four publications at a time, each committed as it finishes.
     const reached = leadingRun(publications);
-    let committed = 0;
     let claimLost = false;
     for await (const step of workerPool(publications, FIND_CONCURRENCY, find)) {
       // Out of time: finds already under way still arrive and commit.
       if (!step) continue;
       claimLost = await commit(step.planned, step.found);
       if (claimLost) break;
-      committed++;
       cursor = reached.commit(step.planned.publicationUri) ?? cursor;
       // The next run revisits what lies beyond the leading run, so only the
       // leading run counts.
       await progress("finding", reached.length, publications.length);
     }
     finding.abort();
-    if (!claimLost && committed < publications.length) {
-      counts.deferred += publications.length - committed;
+    if (!claimLost && reached.committed < publications.length) {
+      counts.deferred += publications.length - reached.committed;
       retryAfter(new Date());
       observedCompleteSnapshot = false;
     }
@@ -885,7 +883,7 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
     if (
       !input.skipFetching &&
       !claimLost &&
-      committed === publications.length
+      reached.committed === publications.length
     ) {
       const awaiting = await feedsAwaitingFirstFetch(database, connection);
       if (awaiting.length) await progress("fetching", 0, awaiting.length);
@@ -1028,6 +1026,10 @@ function leadingRun(publications: string[]) {
     },
     get length() {
       return length;
+    },
+    /** How many it committed, in the leading run or beyond it. */
+    get committed() {
+      return committed.size;
     },
   };
 }
