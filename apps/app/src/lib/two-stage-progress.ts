@@ -20,10 +20,10 @@ export function findingProgress(total: number): TwoStageProgress {
   return { stage: "finding", completed: 0, total };
 }
 
-/** "Step 1 of 2 · Finding feeds: 3 of 12" */
+/** "Finding feeds 3 of 12 (Step 1 of 2)" */
 export function twoStageProgressLabel(progress: TwoStageProgress) {
   const { step, label } = STAGES[progress.stage];
-  return `Step ${step} of 2 · ${label}: ${progress.completed} of ${progress.total}`;
+  return `${label} ${progress.completed} of ${progress.total} (Step ${step} of 2)`;
 }
 
 /** How full the bar is within the current stage, from 0 to 100. */

@@ -109,7 +109,7 @@ it("tracks server work without blocking a concurrent Feed import", () => {
   });
   expect(loadingActor.getSnapshot().context.importProgress.total).toBe(9);
   expect(mocks.loading).toHaveBeenCalledWith(
-    "Step 1 of 2 · Finding feeds: 2 of 8",
+    "Finding feeds 2 of 8 (Step 1 of 2)",
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
   showPublicationSyncProgress({
@@ -147,7 +147,7 @@ it("keeps the loading toast between the runs of a request, and shows each stage"
   });
   expect(mocks.warning).not.toHaveBeenCalled();
   expect(mocks.loading).toHaveBeenLastCalledWith(
-    "Step 1 of 2 · Finding feeds: 4 of 13",
+    "Finding feeds 4 of 13 (Step 1 of 2)",
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
   showPublicationSyncProgress({
@@ -158,7 +158,7 @@ it("keeps the loading toast between the runs of a request, and shows each stage"
     result: null,
   });
   expect(mocks.loading).toHaveBeenLastCalledWith(
-    "Step 2 of 2 · Fetching content: 3 of 12",
+    "Fetching content 3 of 12 (Step 2 of 2)",
     expect.objectContaining({ id: PUBLICATION_SYNC_TOAST }),
   );
   showPublicationSyncProgress({

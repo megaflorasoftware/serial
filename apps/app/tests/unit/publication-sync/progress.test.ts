@@ -108,7 +108,7 @@ it("reads the status again when the server announces a change", async () => {
   mocks.status.mockResolvedValue(inFlight);
   await mount();
   expect(mocks.loading).toHaveBeenCalledWith(
-    "Step 1 of 2 · Finding feeds: 1 of 4",
+    "Finding feeds 1 of 4 (Step 1 of 2)",
     expect.anything(),
   );
   mocks.status.mockResolvedValue(settled);
