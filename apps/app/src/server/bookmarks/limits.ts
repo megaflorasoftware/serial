@@ -7,10 +7,11 @@ type SurfacePolicy = {
   windowMs: number;
   activePerUser: number;
   /**
-   * How many of the user's slots background work may hold at once, so the
-   * user's own request always finds one free.
+   * Background work's own share: how many of the user's slots it may hold at
+   * once, so the user's own request always finds one free, and an allowance
+   * of attempts apart from the user's.
    */
-  backgroundPerUser?: number;
+  background?: { activePerUser: number; attempts: number };
 };
 
 const SURFACE_POLICIES: Record<CaptureSurface, SurfacePolicy> = {
@@ -18,17 +19,20 @@ const SURFACE_POLICIES: Record<CaptureSurface, SurfacePolicy> = {
   extension: { attempts: 30, windowMs: 10 * 60 * 1_000, activePerUser: 2 },
   revalidation: { attempts: 10, windowMs: 10 * 60 * 1_000, activePerUser: 1 },
   // Subscription sync and the Feed origin check queue share the background
-  // slots; Add Feed always keeps the third.
+  // slots and allowance; Add Feed always keeps the fifth slot and its own 180.
   discovery: {
     attempts: 180,
     windowMs: 60 * 1_000,
-    activePerUser: 3,
-    backgroundPerUser: 2,
+    activePerUser: 5,
+    background: { activePerUser: 4, attempts: 360 },
   },
 };
 
 /** The surfaces whose policy sets aside slots for background work. */
 type BackgroundSurface = "discovery";
+
+/** Server-wide fetches that only what users ask for themselves may take. */
+const INTERACTIVE_SERVER_RESERVE = 2;
 
 type GrantedLease = { ok: true; release: () => void };
 const RATE_LIMITED = { ok: false, reason: "rate_limited" } as const;
@@ -38,17 +42,24 @@ export type CaptureLease =
 
 export class CaptureLimiter {
   private readonly attempts = new Map<string, number[]>();
+  /** Slots held, per user share and server-wide. */
   private readonly active = new Map<string, number>();
   private readonly waiting = new Set<() => void>();
-  private activeServerFetches = 0;
+  /** Background work always gets one, however small the configured cap. */
+  private readonly maxBackgroundServerFetches: number;
 
   constructor(
     private readonly maxServerFetches: number,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    this.maxBackgroundServerFetches = Math.max(
+      1,
+      maxServerFetches - INTERACTIVE_SERVER_RESERVE,
+    );
+  }
 
   acquire(userId: string, surface: CaptureSurface): CaptureLease {
-    if (!this.withinRate(userId, surface)) return RATE_LIMITED;
+    if (!this.withinRate(userId, surface, false)) return RATE_LIMITED;
     return (
       this.take(userId, surface, false) ?? {
         ok: false,
@@ -60,7 +71,8 @@ export class CaptureLimiter {
   /**
    * Background work takes its turn instead of being turned away: while no
    * slot it may hold is free, it waits for one to be released. It counts as
-   * one attempt however long it waits, and a rate limit still refuses at once.
+   * one attempt of its own allowance however long it waits, and a rate limit
+   * still refuses at once.
    * Aborting `signal` gives up the wait, rejecting with its reason.
    */
   async acquireInBackground(
@@ -69,7 +81,7 @@ export class CaptureLimiter {
     signal?: AbortSignal,
   ): Promise<GrantedLease | typeof RATE_LIMITED> {
     signal?.throwIfAborted();
-    if (!this.withinRate(userId, surface)) return RATE_LIMITED;
+    if (!this.withinRate(userId, surface, true)) return RATE_LIMITED;
     for (;;) {
       const lease = this.take(userId, surface, true);
       if (lease) return lease;
@@ -95,41 +107,52 @@ export class CaptureLimiter {
   }
 
   /** Records this attempt and reports whether the rolling window allows it. */
-  private withinRate(userId: string, surface: CaptureSurface) {
+  private withinRate(
+    userId: string,
+    surface: CaptureSurface,
+    background: boolean,
+  ) {
     const policy = SURFACE_POLICIES[surface];
-    const key = `${surface}:${userId}`;
+    const [key, attempts] = background
+      ? [`${surface}:background:${userId}`, policy.background?.attempts ?? 0]
+      : [`${surface}:${userId}`, policy.attempts];
     const now = this.now();
     const recentAttempts = (this.attempts.get(key) ?? []).filter(
       (timestamp) => timestamp > now - policy.windowMs,
     );
     recentAttempts.push(now);
     this.attempts.set(key, recentAttempts);
-    return recentAttempts.length <= policy.attempts;
+    return recentAttempts.length <= attempts;
   }
 
-  /** A slot when the user, their background work and the server have one free. */
+  /**
+   * A slot when every share it counts against has one free: the user's,
+   * their background work's, and the server's, of which background work
+   * leaves some for what users ask for themselves.
+   */
   private take(
     userId: string,
     surface: CaptureSurface,
     background: boolean,
   ): GrantedLease | null {
     const policy = SURFACE_POLICIES[surface];
-    const userKey = `${surface}:${userId}`;
-    const backgroundKey = `${surface}:background:${userId}`;
-    const usesServerCapacity = surface !== "extension";
-    if (
-      (this.active.get(userKey) ?? 0) >= policy.activePerUser ||
-      (background &&
-        (this.active.get(backgroundKey) ?? 0) >=
-          (policy.backgroundPerUser ?? 0)) ||
-      (usesServerCapacity && this.activeServerFetches >= this.maxServerFetches)
-    )
+    const shares: Array<[key: string, limit: number]> = [
+      [`${surface}:${userId}`, policy.activePerUser],
+    ];
+    if (surface !== "extension") shares.push(["server", this.maxServerFetches]);
+    if (background)
+      shares.push(
+        [
+          `${surface}:background:${userId}`,
+          policy.background?.activePerUser ?? 0,
+        ],
+        ["server:background", this.maxBackgroundServerFetches],
+      );
+    if (shares.some(([key, limit]) => (this.active.get(key) ?? 0) >= limit))
       return null;
 
-    const keys = background ? [userKey, backgroundKey] : [userKey];
-    for (const key of keys)
+    for (const [key] of shares)
       this.active.set(key, (this.active.get(key) ?? 0) + 1);
-    if (usesServerCapacity) this.activeServerFetches += 1;
     let released = false;
 
     return {
@@ -137,12 +160,11 @@ export class CaptureLimiter {
       release: () => {
         if (released) return;
         released = true;
-        for (const key of keys) {
+        for (const [key] of shares) {
           const active = this.active.get(key) ?? 1;
           if (active <= 1) this.active.delete(key);
           else this.active.set(key, active - 1);
         }
-        if (usesServerCapacity) this.activeServerFetches -= 1;
         const waiting = [...this.waiting];
         this.waiting.clear();
         for (const wake of waiting) wake();
