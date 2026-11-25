@@ -104,29 +104,29 @@ it("attaches OPML RSS to a verified inactive publication without changing its se
   expect(readOriginEvidence).not.toHaveBeenCalled();
 });
 
-it.each([
-  ["RSS", rss],
-  ["Atmosphere", publication],
-])(
-  "finds the user's %s Feed on a publication's site before discovery",
-  async (_kind, details) => {
-    const onSite = (siteUrl: string) =>
-      hasFeedOnSite(fixture.database, "owner", siteUrl);
-    await insertFeedWithOrigins(fixture.database, {
-      userId: "other",
-      details,
-      isActive: true,
-    });
-    expect(await onSite(`${site}/`)).toBe(false);
-    await insertFeedWithOrigins(fixture.database, {
-      userId: "owner",
-      details,
-      isActive: true,
-    });
-    expect(await onSite(`${site}/?ref=home#top`)).toBe(true);
-    expect(await onSite("https://elsewhere.example/")).toBe(false);
-  },
-);
+it("finds only the user's RSS Feed on a publication's site before discovery", async () => {
+  const onSite = (siteUrl: string) =>
+    hasFeedOnSite(fixture.database, "owner", siteUrl);
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "other",
+    details: rss,
+    isActive: true,
+  });
+  // An Atmosphere-only Feed has no address a guess could match.
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "owner",
+    details: publication,
+    isActive: true,
+  });
+  expect(await onSite(`${site}/`)).toBe(false);
+  await insertFeedWithOrigins(fixture.database, {
+    userId: "owner",
+    details: rss,
+    isActive: true,
+  });
+  expect(await onSite(`${site}/?ref=home#top`)).toBe(true);
+  expect(await onSite("https://elsewhere.example/")).toBe(false);
+});
 
 it("attaches Atmosphere to matching RSS and preserves its identity", async () => {
   const original = await insertFeedWithOrigins(fixture.database, {

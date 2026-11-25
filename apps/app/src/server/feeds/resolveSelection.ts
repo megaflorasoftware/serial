@@ -72,7 +72,7 @@ export async function resolveFeedSelection(
 /**
  * Subscription imports resolve their publication once, then use the same
  * discovery and validation as Add. `signal` gives up a wait for discovery.
- * `hasFeedOnSite` answers whether the user already has a Feed on the
+ * `hasFeedOnSite` answers whether the user already has an RSS Feed on the
  * publication's site, which keeps discovery guessing feed addresses.
  */
 export async function resolvePublicationFeed(
@@ -99,7 +99,7 @@ async function resolveSelectedFeed(
   publication: Awaited<ReturnType<typeof resolvePublication>>,
   /**
    * A subscription import, with what gives up its wait for discovery and
-   * whether the user already has a Feed on the publication's site.
+   * whether the user already has an RSS Feed on the publication's site.
    */
   importing?: { signal?: AbortSignal; hasFeedOnSite: boolean },
 ) {

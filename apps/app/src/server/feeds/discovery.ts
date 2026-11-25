@@ -553,8 +553,8 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
  * responses discovery holds, so the caller reads none of them twice.
  *
  * It stops guessing feed addresses once an advertised Feed the publication
- * combines with validates, unless the user already has a Feed on that site,
- * which only a guessed address may match. A guess that fails leaves discovery
+ * combines with validates, unless the user already has an RSS Feed on that
+ * site, which only a guessed address may match. A guess that fails leaves discovery
  * complete.
  */
 export async function discoverFeedOriginsForImport(

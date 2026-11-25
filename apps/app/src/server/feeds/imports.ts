@@ -86,9 +86,9 @@ async function siteCandidates(
 }
 
 /**
- * Whether the user already has a Feed on a publication's site, which an import
- * of that publication may join. It runs before discovery, so it covers every
- * kind of origin an import can bring.
+ * Whether the user already has a Feed with an RSS origin on a publication's
+ * site. Only its address can match a guessed one, so only it needs discovery
+ * to guess in full.
  */
 export async function hasFeedOnSite(
   database: FeedDatabase,
@@ -100,7 +100,7 @@ export async function hasFeedOnSite(
   const [feed] = await database
     .select({ id: feeds.id })
     .from(feeds)
-    .where(feedsOnSite(database, userId, site, ["rss", "atproto"]))
+    .where(feedsOnSite(database, userId, site, ["rss"]))
     .limit(1);
   return feed !== undefined;
 }
