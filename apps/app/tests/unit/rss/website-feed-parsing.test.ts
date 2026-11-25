@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseFeed } from "feedsmith";
 import { makeFetchableOrigin } from "./fetchable-origin";
+import type * as Feedsmith from "feedsmith";
 import { fetchUnknownRssFeed } from "~/server/rss/parsers/unknown";
 import { fetchWebsiteFeedData } from "~/server/rss/parsers/website";
 import { readFeedHttp } from "~/server/rss/feedHttp";
@@ -14,6 +16,10 @@ vi.mock("~/server/logger", () => ({
   captureException: vi.fn(),
 }));
 vi.mock("~/server/rss/feedHttp", () => ({ readFeedHttp: vi.fn() }));
+vi.mock("feedsmith", async (importOriginal) => {
+  const actual = await importOriginal<typeof Feedsmith>();
+  return { ...actual, parseFeed: vi.fn(actual.parseFeed) };
+});
 
 const url = "https://example.pckt.blog/feed";
 // Trimmed from a pckt.blog feed: no dc:creator, media:thumbnail or
@@ -84,6 +90,31 @@ describe("reading a feed of unknown platform", () => {
     );
     expect(logError).not.toHaveBeenCalled();
     expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("logs one line for malformed XML and reports nothing", async () => {
+    serve(pcktFeed.replace("</channel>", "<!-- unfinished"));
+    expect(await fetchUnknownRssFeed(url)).toBeNull();
+    expect(logWarning).toHaveBeenCalledExactlyOnceWith(
+      `[feed-parse] ${url}: Comment is not closed.`,
+    );
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("reports a fault inside the parser rather than calling it a parse failure", async () => {
+    const fault = new TypeError(
+      "Cannot read properties of undefined (reading 'items')",
+    );
+    vi.mocked(parseFeed).mockImplementationOnce(() => {
+      throw fault;
+    });
+    serve(pcktFeed);
+    expect(await fetchUnknownRssFeed(url)).toBeNull();
+    expect(captureException).toHaveBeenCalledWith(fault, {
+      context: "unknown-feed-fetch",
+      url,
+    });
+    expect(logWarning).not.toHaveBeenCalled();
   });
 
   it("still reports an unexpected failure", async () => {

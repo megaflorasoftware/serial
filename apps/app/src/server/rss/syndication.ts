@@ -7,14 +7,20 @@ import type { FeedFetchMetadata, RSSContent } from "./types";
 /** A body that no syndication format reads. Sites serve these; it is not a fault of ours. */
 export class FeedParseError extends Error {}
 
+/**
+ * feedsmith and its XML parser reject input only with plain Errors. Any other
+ * kind, such as a TypeError, is a fault in the code and stays unexpected.
+ */
+function rejectsInput(error: unknown): error is Error {
+  return error instanceof Error && error.constructor === Error;
+}
+
 function parseDocument(text: string) {
   try {
     return parseFeed(text);
   } catch (error) {
-    throw new FeedParseError(
-      error instanceof Error ? error.message : "Unreadable feed",
-      { cause: error },
-    );
+    if (!rejectsInput(error)) throw error;
+    throw new FeedParseError(error.message, { cause: error });
   }
 }
 
