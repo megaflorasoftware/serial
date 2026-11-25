@@ -2,7 +2,8 @@ import { discoveredFeedSchema } from "@serial/feed-discovery/validation";
 import { combinePublicationRows } from "@serial/feed-discovery";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import { discoverFeedOriginsForImport, discoverFeeds } from "./discovery";
-import { FeedImportDeferredError, PublicationGoneError } from "./importErrors";
+import { PublicationGoneError } from "./importErrors";
+import { pacedImportFind } from "./imports";
 import {
   publicationOrigin,
   publicationRow,
@@ -12,7 +13,6 @@ import type { DiscoveredFeed } from "@serial/feed-discovery";
 import type { NewFeedDetails } from "~/server/rss/types";
 import type { readFeedHttp } from "~/server/rss/feedHttp";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
-import { pauseEnd, withDiscoveryPacing } from "~/server/http/pacing";
 
 function isCombinedSelection(
   rssDetails: NewFeedDetails,
@@ -86,7 +86,7 @@ export async function resolvePublicationFeed(
     hasFeedOnSite: (siteUrl: string) => Promise<boolean>;
   },
 ) {
-  return withDiscoveryPacing(async () => {
+  return pacedImportFind(async () => {
     const publication = await resolvePublication(publicationUri);
     // A record that does not describe this publication stays that way until it changes.
     if (!publication)
@@ -100,9 +100,6 @@ export async function resolvePublicationFeed(
         hasFeedOnSite: await importing.hasFeedOnSite(publication.siteUrl),
       },
     );
-  }).catch((error: unknown) => {
-    const paused = pauseEnd(error);
-    throw paused ? new FeedImportDeferredError(undefined, paused) : error;
   });
 }
 

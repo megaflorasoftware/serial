@@ -48,6 +48,7 @@ import {
 import {
   commitFeedImport,
   hasFeedOnSite,
+  pacedImportFind,
   prepareFeedImport,
 } from "~/server/feeds/imports";
 import {
@@ -615,7 +616,10 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
         const details = await (
           input.dependencies?.resolveFeed ?? resolveImportedFeed
         )(userId, publicationUri, finding.signal, database);
-        const prepared = await prepareFeedImport(database, userId, details);
+        // Comparing with the user's Feeds on the same site reads their origins.
+        const prepared = await pacedImportFind(() =>
+          prepareFeedImport(database, userId, details),
+        );
         const budget = await (
           input.dependencies?.activationBudget ?? getFeedsActivationBudget
         )(database, userId);

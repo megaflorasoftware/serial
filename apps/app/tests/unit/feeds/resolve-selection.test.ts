@@ -275,7 +275,7 @@ describe("a subscription find", () => {
       paced.push(await runsAsDiscoveryWork());
       return { rows: [], read: discoveryRead };
     });
-    await resolvePublicationFeed("user", publicationUri);
+    await resolvePublicationFeed("user", publicationUri, importing);
     expect(paced).toEqual([true, true]);
     expect(await runsAsDiscoveryWork()).toBe(false);
   });
@@ -311,9 +311,11 @@ describe("a subscription find", () => {
     ],
   ])("waits for the pause that held up %s", async (_read, pause) => {
     pause();
-    const deferred = await resolvePublicationFeed("user", publicationUri).catch(
-      (error: unknown) => error,
-    );
+    const deferred = await resolvePublicationFeed(
+      "user",
+      publicationUri,
+      importing,
+    ).catch((error: unknown) => error);
     expect(deferred).toBeInstanceOf(FeedImportDeferredError);
     expect((deferred as FeedImportDeferredError).retryAt).toEqual(later);
   });
