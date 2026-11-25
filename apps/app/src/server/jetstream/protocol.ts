@@ -7,6 +7,7 @@ import {
   isRecordKeyString,
   isTidString,
 } from "@atproto/lex";
+import { errorChain } from "~/server/errorChain";
 
 export const COLLECTIONS = [
   "site.standard.document",
@@ -94,25 +95,8 @@ export class ArchiveUnreadableError extends Error {
     super("Jetstream archive data cannot be decoded", { cause });
   }
 }
-export function retryAfter(value: string | null, now = Date.now()) {
-  if (!value) return undefined;
-  const seconds = Number(value);
-  const delay = Number.isFinite(seconds)
-    ? seconds * 1000
-    : Date.parse(value) - now;
-  return Number.isFinite(delay) ? Math.max(0, delay) : undefined;
-}
-
-export function errorChain(error: unknown): object[] {
-  const chain: object[] = [];
-  const seen = new Set<object>();
-  while (error !== null && typeof error === "object" && !seen.has(error)) {
-    seen.add(error);
-    chain.push(error);
-    error = "cause" in error ? error.cause : undefined;
-  }
-  return chain;
-}
+export { retryAfter } from "~/server/http/retryAfter";
+export { errorChain };
 export function streamFailure(error: unknown) {
   return errorChain(error).find(
     (entry): entry is StreamFailure => entry instanceof StreamFailure,

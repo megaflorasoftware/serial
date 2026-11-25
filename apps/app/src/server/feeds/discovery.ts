@@ -34,6 +34,8 @@ import type { FeedGuessing } from "./discoverRss";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { captureException } from "~/server/logger";
 import { readFeedHttp } from "~/server/rss/feedHttp";
+import { pauseEnd } from "~/server/http/pacing";
+import { createPinnedPool } from "~/server/http/publicHttp";
 
 import { parseSyndicationFeed } from "~/server/rss/syndication";
 import { workerPool } from "~/lib/workerPool";
@@ -134,8 +136,14 @@ async function discoverFeedsWithoutLimits(
   });
 }
 
+/**
+ * One discovery's reads, each made once, within its request budget. They share
+ * one connection per hostname until `close`, which the discovery calls when it
+ * ends.
+ */
 function requestReader(signal?: AbortSignal) {
   const requests = new Map<string, ReturnType<typeof readFeedHttp>>();
+  const pool = createPinnedPool();
   const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
   const keyOf = (...[url, options]: Parameters<typeof readFeedHttp>) =>
     `${options?.method ?? "GET"}:${url}`;
@@ -149,6 +157,7 @@ function requestReader(signal?: AbortSignal) {
     const value = readFeedHttp(url, {
       ...options,
       signal,
+      pool,
       // Any Feed the refresh path can ingest must also be discoverable.
       maxBodyBytes: FEED_HTTP_MAX_BODY_BYTES,
       totalDurationMs: Math.min(
@@ -162,11 +171,11 @@ function requestReader(signal?: AbortSignal) {
   }) satisfies typeof readFeedHttp;
   /**
    * After discovery: a response discovery already read, or a fresh read
-   * outside its budget for anything it did not.
+   * outside its budget, on a connection of its own, for anything it did not.
    */
   const reuse: typeof readFeedHttp = (url, options) =>
     requests.get(keyOf(url, options)) ?? readFeedHttp(url, options);
-  return { read, reuse };
+  return { read, reuse, close: pool.close };
 }
 
 type PublicationResolver = typeof resolvePublication;
@@ -371,7 +380,7 @@ async function runDiscovery(
   const signal = callerSignal
     ? AbortSignal.any([callerSignal, controller.signal])
     : controller.signal;
-  const { read } = requestReader(signal);
+  const { read, close } = requestReader(signal);
   let latest: DiscoveredFeed[] = [];
   let wakeOnAbort: () => void = () => {};
   const aborted = new Promise<void>((resolve) => {
@@ -472,6 +481,7 @@ async function runDiscovery(
     clearTimeout(timeout);
     signal.removeEventListener("abort", wakeOnAbort);
     controller.abort();
+    close();
     lease.release();
   }
 }
@@ -533,12 +543,16 @@ export async function* streamDiscoverFeeds(
 
 /** Explicit revalidation must distinguish an unavailable site from an empty discovery. */
 export async function discoverFeedOriginsForRevalidation(url: string) {
-  const { read } = requestReader();
-  const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
-  const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
-  const response = await read(url, undefined);
-  if (!response.ok) throw new Error("Unable to read the Feed website");
-  return discoverWebsite(url, read, signal, true, undefined, deadline);
+  const { read, close } = requestReader();
+  try {
+    const deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS;
+    const signal = AbortSignal.timeout(DISCOVERY_TOTAL_BUDGET_MS);
+    const response = await read(url, undefined);
+    if (!response.ok) throw new Error("Unable to read the Feed website");
+    return await discoverWebsite(url, read, signal, true, undefined, deadline);
+  } finally {
+    close();
+  }
 }
 
 /**
@@ -577,8 +591,8 @@ export async function discoverFeedOriginsForImport(
       undefined,
       new Date(Date.now() + 600_000),
     );
+  const { read: request, reuse, close } = requestReader();
   try {
-    const { read: request, reuse } = requestReader();
     const resolve: PublicationResolver = (uri, ...rest) =>
       uri === publication?.uri
         ? Promise.resolve(publication)
@@ -611,7 +625,7 @@ export async function discoverFeedOriginsForImport(
         }
         return response;
       } catch (error) {
-        incomplete ??= new FeedImportDeferredError();
+        incomplete ??= new FeedImportDeferredError(undefined, pauseEnd(error));
         throw error;
       }
     };
@@ -652,8 +666,9 @@ export async function discoverFeedOriginsForImport(
       error instanceof PublicationGoneError
     )
       throw error;
-    throw new FeedImportDeferredError();
+    throw new FeedImportDeferredError(undefined, pauseEnd(error));
   } finally {
+    close();
     lease.release();
   }
 }

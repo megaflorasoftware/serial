@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { runsAsDiscoveryWork } from "../http/discovery-work";
 import type * as Publications from "~/server/feeds/publications";
 import type { DiscoveredFeed } from "@serial/feed-discovery";
 import {
@@ -10,7 +11,11 @@ import {
   discoverFeeds,
 } from "~/server/feeds/discovery";
 import { resolvePublication } from "~/server/feeds/publications";
-import { PublicationGoneError } from "~/server/feeds/importErrors";
+import {
+  FeedImportDeferredError,
+  PublicationGoneError,
+} from "~/server/feeds/importErrors";
+import { DiscoveryPausedError } from "~/server/http/pacing";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
 import { newRssFeedDetails } from "~/server/rss/types";
 
@@ -36,6 +41,7 @@ vi.mock("~/server/rss/fetchFeeds", () => ({ fetchNewFeedDetails: vi.fn() }));
 
 const publicationUri =
   "at://did:plc:example/site.standard.publication/publication";
+const later = new Date(Date.now() + 2 * 60 * 60_000);
 const publication = {
   uri: publicationUri,
   did: "did:plc:example",
@@ -257,4 +263,58 @@ it("leaves an import unresolved when discovery cannot finish", async () => {
   await expect(
     resolvePublicationFeed("user", publicationUri, importing),
   ).rejects.toThrow("Discovery throttled");
+});
+describe("a subscription find", () => {
+  it("runs as discovery-side work", async () => {
+    const paced: boolean[] = [];
+    vi.mocked(resolvePublication).mockImplementation(async () => {
+      paced.push(await runsAsDiscoveryWork());
+      return publication;
+    });
+    vi.mocked(discoverFeedOriginsForImport).mockImplementation(async () => {
+      paced.push(await runsAsDiscoveryWork());
+      return { rows: [], read: discoveryRead };
+    });
+    await resolvePublicationFeed("user", publicationUri);
+    expect(paced).toEqual([true, true]);
+    expect(await runsAsDiscoveryWork()).toBe(false);
+  });
+
+  it.each([
+    [
+      "its publication read",
+      () =>
+        vi.mocked(resolvePublication).mockRejectedValue(
+          new Error("did-fetch-error", {
+            cause: new DiscoveryPausedError(later),
+          }),
+        ),
+    ],
+    [
+      "its RSS read",
+      () => {
+        const rssUrl = "https://example.com/rss";
+        vi.mocked(discoverFeedOriginsForImport).mockResolvedValue({
+          rows: [
+            {
+              url: rssUrl,
+              siteUrl: publication.siteUrl,
+              origins: [{ kind: "rss", locator: rssUrl }],
+            },
+          ],
+          read: discoveryRead,
+        });
+        vi.mocked(fetchNewFeedDetails).mockRejectedValue(
+          new DiscoveryPausedError(later),
+        );
+      },
+    ],
+  ])("waits for the pause that held up %s", async (_read, pause) => {
+    pause();
+    const deferred = await resolvePublicationFeed("user", publicationUri).catch(
+      (error: unknown) => error,
+    );
+    expect(deferred).toBeInstanceOf(FeedImportDeferredError);
+    expect((deferred as FeedImportDeferredError).retryAt).toEqual(later);
+  });
 });

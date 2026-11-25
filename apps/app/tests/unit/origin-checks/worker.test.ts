@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import { runsAsDiscoveryWork } from "../http/discovery-work";
 import type { NewFeedDetails } from "~/server/rss/types";
 import type { CaptureLease } from "~/server/bookmarks/limits";
 import { captureLimiter } from "~/server/bookmarks/limits";
@@ -26,6 +27,7 @@ import {
 import { persistAtprotoSyncSettings } from "~/server/auth/atproto/sync-settings";
 import { wakeRequestedSync } from "~/server/publication-sync/wake";
 import { newRssFeedDetails } from "~/server/rss/types";
+import { DiscoveryPausedError } from "~/server/http/pacing";
 
 // The real wake would start a sync run against the PDS.
 vi.mock("~/server/publication-sync/wake", () => ({
@@ -148,6 +150,53 @@ describe("Publication backfill", () => {
     expect(waiting!.nextAttemptAt.getTime()).toBeGreaterThan(Date.now());
     await run();
     expect(publication).toHaveBeenCalledTimes(1);
+    await makeDue();
+    await run();
+    expect(await fixture.database.select().from(feedOrigins)).toHaveLength(2);
+    expect(await checks()).toEqual([]);
+  });
+
+  it("reads as discovery-side work, and wakes the sync outside it", async () => {
+    await addFeed(1);
+    const reads: boolean[] = [];
+    let wake: Promise<boolean> | undefined;
+    readOriginEvidence.mockImplementationOnce(async () => {
+      reads.push(await runsAsDiscoveryWork());
+      return {
+        ...evidence(),
+        origin: { kind: "rss", locator: "https://example.com/rss" },
+      };
+    });
+    publication.mockImplementationOnce(async () => {
+      reads.push(await runsAsDiscoveryWork());
+      return evidence();
+    });
+    vi.mocked(wakeRequestedSync).mockImplementationOnce(() => {
+      wake = runsAsDiscoveryWork();
+    });
+    await queuePublicationBackfill(fixture.database, "owner");
+    await run();
+    expect(reads).toEqual([true, true]);
+    expect(await wake).toBe(false);
+  });
+
+  it("waits for a paused site before trying again", async () => {
+    await addFeed(1);
+    const pausedUntil = new Date(Date.now() + 2 * 60 * 60_000);
+    publication.mockRejectedValueOnce(
+      new Error("Publication discovery unavailable", {
+        cause: new DiscoveryPausedError(pausedUntil),
+      }),
+    );
+    await queuePublicationBackfill(fixture.database, "owner");
+    await run();
+    expect(await checks()).toEqual([
+      expect.objectContaining({
+        type: "light",
+        attempts: 1,
+        nextAttemptAt: pausedUntil,
+      }),
+    ]);
     await makeDue();
     await run();
     expect(await fixture.database.select().from(feedOrigins)).toHaveLength(2);
@@ -403,6 +452,26 @@ describe("Feed revalidation", () => {
     expect(release).toHaveBeenCalledTimes(2);
     expect(await checks()).toEqual([]);
     expect(backfill).not.toHaveBeenCalled();
+  });
+
+  it("runs again once a paused site resumes, and finishes after that", async () => {
+    const feed = await addFeed(1);
+    const pausedUntil = new Date(Date.now() + 2 * 60 * 60_000);
+    revalidate.mockRejectedValueOnce(new DiscoveryPausedError(pausedUntil));
+    await queueFeedRevalidation(fixture.database, "owner", [feed.id]);
+    await run();
+    expect(await checks()).toEqual([
+      expect.objectContaining({
+        type: "full",
+        attempts: 1,
+        nextAttemptAt: pausedUntil,
+      }),
+    ]);
+    expect(release).toHaveBeenCalledTimes(1);
+    await makeDue();
+    await run();
+    expect(revalidate).toHaveBeenCalledTimes(2);
+    expect(await checks()).toEqual([]);
   });
 
   it("leaves the user's own discovery a slot while revalidating in the background", async () => {

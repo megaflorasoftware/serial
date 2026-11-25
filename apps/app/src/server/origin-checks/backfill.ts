@@ -15,6 +15,7 @@ import { applyOriginMetadata } from "~/server/rss/originMetadata";
 import { runDatabaseWrite } from "~/server/db/retry-write";
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
 import { wakeRequestedSync } from "~/server/publication-sync/wake";
+import { withDiscoveryPacing } from "~/server/http/pacing";
 
 /** An absent declaration is final; transport and server failures remain retryable. */
 export async function readBackfillPublication(
@@ -44,6 +45,7 @@ export async function readBackfillPublication(
  * joins the Feed when its articles overlap the RSS feed's. Resolves to whether
  * it joined. A missing declaration, no overlap, or a publication another Feed
  * already holds is a finished check. A failure that may pass later throws.
+ * Its reads are discovery-side work.
  */
 export async function backfillPublicationOrigin(
   database: typeof db,
@@ -55,11 +57,16 @@ export async function backfillPublicationOrigin(
   const rss = feed?.origins.find((origin) => origin.kind === "rss");
   if (!feed || !rss || feed.origins.some((origin) => origin.kind === "atproto"))
     return false;
-  const evidence = await dependencies.readOriginEvidence(rss);
-  const siteUrl = evidence.siteUrl ?? feed.siteUrl;
-  if (!siteUrl || !evidence.itemUrls.size) return false;
-  const candidate = await dependencies.readBackfillPublication(siteUrl);
-  if (!candidate || !originsShareArticles(evidence, candidate)) return false;
+  const candidate = await withDiscoveryPacing(async () => {
+    const evidence = await dependencies.readOriginEvidence(rss);
+    const siteUrl = evidence.siteUrl ?? feed.siteUrl;
+    if (!siteUrl || !evidence.itemUrls.size) return null;
+    const declared = await dependencies.readBackfillPublication(siteUrl);
+    return declared && originsShareArticles(evidence, declared)
+      ? declared
+      : null;
+  });
+  if (!candidate) return false;
   const attached = await runDatabaseWrite(database, () =>
     database.transaction(
       async (tx) => {

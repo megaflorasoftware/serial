@@ -20,6 +20,7 @@ import {
   streamFailure,
 } from "~/server/jetstream/protocol";
 import { captureException } from "~/server/logger";
+import { SERIAL_USER_AGENT } from "~/server/http/publicHttp";
 
 vi.mock("~/server/logger", () => ({ captureException: vi.fn() }));
 afterEach(() => {
@@ -77,6 +78,9 @@ describe("Jetstream transport", () => {
     expect(batches).toEqual([{ events: [], lastCursor: 1000 }]);
     const init = fetch.mock.calls[0]?.[1];
     expect(init?.headers).toBeDefined();
+    expect(new Headers(init?.headers).get("user-agent")).toBe(
+      SERIAL_USER_AGENT,
+    );
   });
   it("reports replay HTTP errors with sanitized context and honors the entire Retry-After", async () => {
     const transport = createStreamTransport({
@@ -140,7 +144,9 @@ describe("Jetstream transport", () => {
     if (!address || typeof address === "string") throw new Error();
     let cursor: string | null = null;
     let kinds: string[] = [];
+    let userAgent: string | undefined;
     sockets.on("connection", (socket, request) => {
+      userAgent = request.headers["user-agent"];
       const requested = new URL(request.url!, "http://localhost").searchParams;
       cursor = requested.get("cursor");
       kinds = requested.getAll("kinds");
@@ -172,6 +178,7 @@ describe("Jetstream transport", () => {
       }
       expect(cursor).toBe("10");
       expect(kinds).toEqual(["commit", "account", "sync"]);
+      expect(userAgent).toBe(SERIAL_USER_AGENT);
     } finally {
       controller.abort();
       for (const socket of sockets.clients) socket.terminate();

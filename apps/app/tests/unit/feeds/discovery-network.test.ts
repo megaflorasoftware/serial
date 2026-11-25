@@ -1,6 +1,7 @@
 import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
 import { discoverFeeds as scoutFeeds } from "feedscout";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PinnedPool } from "~/server/http/publicHttp";
 import {
   discoverFeedOriginsForImport,
   discoverFeedOriginsForRevalidation,
@@ -12,6 +13,7 @@ import {
   PublicationGoneError,
 } from "~/server/feeds/importErrors";
 import { readFeedHttp } from "~/server/rss/feedHttp";
+import { DiscoveryPausedError } from "~/server/http/pacing";
 import {
   resolvePublication,
   searchPublications,
@@ -488,6 +490,27 @@ describe("import discovery completeness", () => {
       (error as FeedImportDeferredError).retryAt.getTime(),
     ).toBeGreaterThanOrEqual(before + 900_000);
   });
+  it.each(["the website", "its publication declaration"])(
+    "waits for the pause that kept discovery from reading %s",
+    async (paused) => {
+      const pausedUntil = new Date(Date.now() + 2 * 60 * 60_000);
+      vi.mocked(readFeedHttp).mockImplementation(async (url) => {
+        if (
+          paused === "the website"
+            ? url === "https://example.com"
+            : url.includes("/.well-known/")
+        )
+          throw new DiscoveryPausedError(pausedUntil);
+        return response(url, "<html></html>");
+      });
+      const error = await discoverFeedOriginsForImport(
+        `paused-${paused}`,
+        "https://example.com",
+      ).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(FeedImportDeferredError);
+      expect((error as FeedImportDeferredError).retryAt).toEqual(pausedUntil);
+    },
+  );
   it("allows completed empty discovery when optional endpoints do not exist", async () => {
     vi.mocked(readFeedHttp).mockImplementation(async (url) =>
       response(url, "<html></html>", !url.includes("/.well-known/")),
@@ -700,5 +723,56 @@ describe("import guessing", () => {
         publication,
       }),
     ).rejects.toBeInstanceOf(FeedImportDeferredError);
+  });
+});
+
+describe("connections", () => {
+  const pools = () =>
+    new Set(
+      vi
+        .mocked(readFeedHttp)
+        .mock.calls.map(([, options]) => options?.pool as PinnedPool),
+    );
+  const lends = (pool: PinnedPool) =>
+    pool.lend("example.com", () => Promise.reject(new Error("unused"))) !==
+    undefined;
+
+  it.each([
+    [
+      "import",
+      () =>
+        discoverFeedOriginsForImport("pooled-import", "https://example.com"),
+    ],
+    [
+      "revalidation",
+      () => discoverFeedOriginsForRevalidation("https://example.com"),
+    ],
+    ["Add Feed", () => discoverFeeds("pooled-add", "https://example.com")],
+  ])(
+    "are shared across one %s discovery and closed when it ends",
+    async (_discovery, discover) => {
+      vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+        url.includes("/.well-known/")
+          ? statusResponse(url, 404)
+          : response(url, "<html></html>"),
+      );
+      await discover();
+      expect(vi.mocked(readFeedHttp).mock.calls.length).toBeGreaterThan(1);
+      const [pool, ...others] = pools();
+      expect(pool).toBeDefined();
+      expect(others).toEqual([]);
+      expect(lends(pool!)).toBe(false);
+    },
+  );
+
+  it("are separate for each discovery", async () => {
+    vi.mocked(readFeedHttp).mockImplementation(async (url) =>
+      response(url, "<html></html>"),
+    );
+    await Promise.all([
+      discoverFeedOriginsForRevalidation("https://example.com"),
+      discoverFeedOriginsForRevalidation("https://example.org"),
+    ]);
+    expect(pools().size).toBe(2);
   });
 });

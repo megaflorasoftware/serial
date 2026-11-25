@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import { runsAsDiscoveryWork } from "../http/discovery-work";
 import type { OriginEvidence } from "~/server/feeds/revalidationEvidence";
 import type { NewFeedOriginDetails } from "~/server/rss/types";
 import { revalidateFeed } from "~/server/feeds/revalidate";
@@ -314,6 +315,22 @@ describe("telling subscription sync about an attached publication", () => {
       subscriptionNextAttemptAt: null,
     });
     expect(wakeRequestedSync).toHaveBeenLastCalledWith(fixture.database, false);
+  });
+  it("reads as discovery-side work, and wakes the sync outside it", async () => {
+    const feed = await seed();
+    await cleanConnection();
+    const reads: boolean[] = [];
+    let wake: Promise<boolean> | undefined;
+    read.mockImplementation(async (origin) => {
+      reads.push(await runsAsDiscoveryWork());
+      return origin.kind === "rss" ? rss : publication;
+    });
+    vi.mocked(wakeRequestedSync).mockImplementationOnce(() => {
+      wake = runsAsDiscoveryWork();
+    });
+    await run(feed.id);
+    expect(reads).toEqual([true, true]);
+    expect(await wake).toBe(false);
   });
   it("leaves sync alone when revalidation attaches nothing", async () => {
     const feed = await seed([rss.origin, publication.origin]);

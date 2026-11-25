@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { normalizeService, retryAfter, StreamFailure } from "./protocol";
 import { isLegacyJetstream } from "~/lib/jetstream-endpoint";
+import { serialHeaders } from "~/server/http/publicHttp";
 
 const services = new Map<string, Promise<string>>();
 
@@ -26,6 +27,7 @@ function probeV2(service: string): Promise<string> {
     );
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(url, "xrpc.v1.json", {
+      headers: Object.fromEntries(serialHeaders()),
       handshakeTimeout: 10_000,
     });
     socket.on("error", () => reject(new StreamFailure("protocol-detection")));
