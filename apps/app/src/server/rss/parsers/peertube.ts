@@ -63,30 +63,24 @@ export const peerTubeSchema = baseFeedSchema.extend({
   docs: z.string(),
 });
 
+/**
+ * Most feeds are not PeerTube, so a mismatch is the usual answer, not an
+ * error. Neither is XML this stricter parser rejects: the website parser
+ * reads feeds such as one with a bare ampersand in a title.
+ */
 export async function getPeerTubeFeedIfMatches(
   rssString: string,
 ): Promise<NewFeedDetails | null> {
-  const rssData = await parser.parseString(rssString); // as unknown as RSSPeerTubeData;
-
-  const {
-    data: peerTubeData,
-    success: peerTubeSuccess,
-    error,
-  } = peerTubeSchema.safeParse(rssData);
-
-  if (peerTubeSuccess) {
-    return newRssFeedDetails({
-      name: peerTubeData.title,
-      url: peerTubeData.feedUrl,
-      platform: "peertube",
-      siteUrl: peerTubeData.link,
-      description: peerTubeData.description,
-    });
-  } else {
-    logError(error);
-  }
-
-  return null;
+  const rssData = await parser.parseString(rssString).catch(() => null);
+  const peerTube = peerTubeSchema.safeParse(rssData);
+  if (!peerTube.success) return null;
+  return newRssFeedDetails({
+    name: peerTube.data.title,
+    url: peerTube.data.feedUrl,
+    platform: "peertube",
+    siteUrl: peerTube.data.link,
+    description: peerTube.data.description,
+  });
 }
 
 export async function fetchPeerTubeFeedData(

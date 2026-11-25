@@ -4,6 +4,20 @@ import { httpUrl } from "@serial/feed-discovery";
 import type { Atom, DeepPartial } from "feedsmith/types";
 import type { FeedFetchMetadata, RSSContent } from "./types";
 
+/** A body that no syndication format reads. Sites serve these; it is not a fault of ours. */
+export class FeedParseError extends Error {}
+
+function parseDocument(text: string) {
+  try {
+    return parseFeed(text);
+  } catch (error) {
+    throw new FeedParseError(
+      error instanceof Error ? error.message : "Unreadable feed",
+      { cause: error },
+    );
+  }
+}
+
 export type SyndicationFeed = {
   format: "atom" | "json" | "rss" | "rdf";
   title: string;
@@ -76,7 +90,7 @@ export function parseSyndicationFeed(
   text: string,
   url: string,
 ): SyndicationFeed {
-  const parsed = parseFeed(text);
+  const parsed = parseDocument(text);
   const items: RSSContent[] = [];
   let hasFullBody = false;
   if (parsed.format === "atom") {

@@ -1,0 +1,28 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel>
+        <title><![CDATA[ example&#039;s art blog - pckt ]]></title>
+        <link><![CDATA[ https://example.pckt.blog ]]></link>
+        <description><![CDATA[ notes on paintings ]]></description>
+        <language>en</language>
+        <pubDate>Wed, 25 Nov 2026 16:48:17 +0000</pubDate>
+
+                    <item>
+                <title>still life with pears</title>
+                <link>https://example.pckt.blog/still-life-with-pears-a1b2c3d</link>
+                <description><![CDATA[a short note on a still life, and why the pears look heavier than the bowl ...]]></description>
+                <author>example&#039;s art blog</author>
+                <guid isPermaLink="false">still-life-with-pears-a1b2c3d</guid>
+                <pubDate>Sat, 15 Aug 2026 23:34:37 +0000</pubDate>
+                                <enclosure url="https://pckt-blog-media.s3.us-east-2.amazonaws.com/cover_image/00000000-0000-4000-8000-000000000001/conversions/pears-feed_thumb.webp" type="image/jpeg" />
+                            </item>
+                    <item>
+                <title>can&#039;t stop sketching</title>
+                <link>https://example.pckt.blog/cant-stop-sketching-e4f5g6h</link>
+                <description><![CDATA[the sketchbook i can&#039;t put down, and what it taught me about line ...]]></description>
+                <author>example&#039;s art blog</author>
+                <guid isPermaLink="false">cant-stop-sketching-e4f5g6h</guid>
+                <pubDate>Sun, 28 Jun 2026 00:39:43 +0000</pubDate>
+                                <enclosure url="https://pckt-blog-media.s3.us-east-2.amazonaws.com/cover_image/00000000-0000-4000-8000-000000000002/conversions/sketch-feed_thumb.webp" type="image/jpeg" />
+                            </item>
+            </channel>
+</rss>
