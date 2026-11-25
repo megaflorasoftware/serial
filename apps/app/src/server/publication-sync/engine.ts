@@ -45,7 +45,11 @@ import {
   feeds,
   atprotoSubscriptionMirror as mirror,
 } from "~/server/db/schema";
-import { commitFeedImport, prepareFeedImport } from "~/server/feeds/imports";
+import {
+  commitFeedImport,
+  hasFeedOnSite,
+  prepareFeedImport,
+} from "~/server/feeds/imports";
 import {
   FeedImportDeferredError,
   FeedImportSkippedError,
@@ -147,15 +151,15 @@ async function waitForFirstFetch(fetching: Promise<void>) {
 async function resolveImportedFeed(
   userId: string,
   publicationUri: string,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  database: typeof Database,
 ) {
   const { resolvePublicationFeed } =
     await import("~/server/feeds/resolveSelection");
-  const [details] = await resolvePublicationFeed(
-    userId,
-    publicationUri,
+  const [details] = await resolvePublicationFeed(userId, publicationUri, {
     signal,
-  );
+    hasFeedOnSite: (siteUrl) => hasFeedOnSite(database, userId, siteUrl),
+  });
   if (!details) throw new Error("Unable to resolve publication");
   return details;
 }
@@ -610,7 +614,7 @@ async function syncInRun(input: SyncInput): Promise<PublicationSyncResult> {
       try {
         const details = await (
           input.dependencies?.resolveFeed ?? resolveImportedFeed
-        )(userId, publicationUri, finding.signal);
+        )(userId, publicationUri, finding.signal, database);
         const prepared = await prepareFeedImport(database, userId, details);
         const budget = await (
           input.dependencies?.activationBudget ?? getFeedsActivationBudget

@@ -3,6 +3,7 @@ import {
   classifyDiscoveryInput,
   collapseSyndicationAlternates,
   combinePublicationRows,
+  combinesWithPublication,
   DISCOVERY_LIMIT,
   DISCOVERY_TOTAL_BUDGET_MS,
   httpUrl,
@@ -29,6 +30,7 @@ import type {
   SyndicationCandidate,
 } from "@serial/feed-discovery";
 import type { ResolvedPublication } from "./publications";
+import type { FeedGuessing } from "./discoverRss";
 import { captureLimiter } from "~/server/bookmarks/limits";
 import { captureException } from "~/server/logger";
 import { readFeedHttp } from "~/server/rss/feedHttp";
@@ -79,10 +81,11 @@ async function discoverFeedsWithoutLimits(
   read: typeof readFeedHttp,
   strict = false,
   onFeed?: (feed: DiscoveredFeed) => Promise<void>,
+  guessing?: FeedGuessing,
 ): Promise<DiscoveredFeed[]> {
   const [youtubeResult, feedscoutResult] = await Promise.allSettled([
     discoverYouTubeFeeds(url, read),
-    discoverRssFeeds(url, read, strict, onFeed),
+    discoverRssFeeds(url, read, strict, onFeed, guessing),
   ]);
   const discoveredFeeds: DiscoveredFeed[] = [];
 
@@ -276,6 +279,7 @@ async function discoverWebsite(
   onUpdate?: (rows: DiscoveredFeed[]) => void,
   deadline = Date.now() + DISCOVERY_TOTAL_BUDGET_MS,
   resolve: PublicationResolver = resolvePublication,
+  guessing?: FeedGuessing,
 ) {
   const candidates = new Map<string, SyndicationCandidate>();
   let publications: DiscoveredFeed[] = [];
@@ -320,6 +324,7 @@ async function discoverWebsite(
       read,
       strict,
       onUpdate ? addCandidate : undefined,
+      guessing,
     ),
     websitePublications(
       url,
@@ -546,11 +551,20 @@ export async function discoverFeedOriginsForRevalidation(url: string) {
  * caller already read, which discovery uses instead of reading its record
  * again. Besides the rows it hands back a reader that answers from the
  * responses discovery holds, so the caller reads none of them twice.
+ *
+ * It stops guessing feed addresses once an advertised Feed the publication
+ * combines with validates, unless the user already has an RSS Feed on that
+ * site, which only a guessed address may match. A guess that fails leaves discovery
+ * complete.
  */
 export async function discoverFeedOriginsForImport(
   userId: string,
   url: string,
-  importing: { publication?: ResolvedPublication; signal?: AbortSignal } = {},
+  importing: {
+    publication?: ResolvedPublication;
+    hasFeedOnSite?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ) {
   const { publication } = importing;
   const lease = await captureLimiter.acquireInBackground(
@@ -573,7 +587,7 @@ export async function discoverFeedOriginsForImport(
     const read: typeof readFeedHttp = async (target, options) => {
       try {
         const response = await request(target, options);
-        // Missing guessed endpoints are normal. Other HTTP failures leave discovery incomplete.
+        // Missing optional endpoints are normal. Other HTTP failures leave discovery incomplete.
         if (
           !response.ok &&
           response.status !== 404 &&
@@ -609,6 +623,14 @@ export async function discoverFeedOriginsForImport(
     if (page.status === 410)
       throw new PublicationGoneError("The publication's website is gone");
     if (!page.ok) throw incomplete ?? new FeedImportDeferredError();
+    const guessing: FeedGuessing = {
+      // Guesses bypass the completeness check above.
+      read: request,
+      suffices:
+        publication && !importing.hasFeedOnSite
+          ? (feed) => combinesWithPublication(feed, publication.siteUrl)
+          : undefined,
+    };
     const rows = await discoverWebsite(
       url,
       read,
@@ -617,6 +639,7 @@ export async function discoverFeedOriginsForImport(
       undefined,
       deadline,
       resolve,
+      guessing,
     ).catch((error: unknown) => {
       throw incomplete ?? error;
     });

@@ -3,6 +3,7 @@ export type { DiscoveredFeed, DiscoveredOrigin } from "./validation";
 export {
   collapseSyndicationAlternates,
   combinePublicationRows,
+  combinesWithPublication,
   mergeCapturedDiscoveryFeeds,
   matchesDiscoveredFeed,
 } from "./grouping";
