@@ -5,7 +5,7 @@ import {
 import { newRssFeedDetails } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
-import { parseSyndicationFeed } from "../syndication";
+import { FeedParseError, parseSyndicationFeed } from "../syndication";
 import { withLegacyInputs } from "../legacyItemHash";
 import type {
   ConditionalHeaders,
@@ -14,7 +14,12 @@ import type {
   FetchableOrigin,
   NewFeedDetails,
 } from "../types";
-import { captureException, logError } from "~/server/logger";
+import { captureException, logError, logWarning } from "~/server/logger";
+
+/** A site serving something that is not a feed: one line, and nothing for Sentry. */
+export function logFeedParseFailure(url: string, error: FeedParseError) {
+  logWarning(`[feed-parse] ${url}: ${error.message}`);
+}
 
 export async function getWebsiteFeedIfMatches(
   text: string,
@@ -72,6 +77,10 @@ export async function fetchWebsiteFeedData(
       fetchMetadata,
     };
   } catch (e) {
+    if (e instanceof FeedParseError) {
+      logFeedParseFailure(origin.locator, e);
+      return null;
+    }
     captureException(e, {
       context: "website-feed-fetch",
       feedId: feed.id,
