@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
 import type { NewFeedDetails } from "~/server/rss/types";
+import type { CaptureLease } from "~/server/bookmarks/limits";
+import { captureLimiter } from "~/server/bookmarks/limits";
 import {
   atprotoConnections,
   feedOriginChecks,
@@ -47,7 +49,9 @@ const readOriginEvidence = vi.fn(() =>
 const publication = vi.fn<() => Promise<ReturnType<typeof evidence> | null>>();
 const revalidate = vi.fn<() => Promise<{ changed: boolean }>>();
 const release = vi.fn();
-const acquireDiscovery = vi.fn(() => ({ ok: true as const, release }));
+const acquireDiscovery = vi.fn<
+  (userId: string, signal: AbortSignal) => Promise<CaptureLease>
+>(() => Promise.resolve({ ok: true, release }));
 const publish = vi.fn(async () => {});
 const backfill = vi.fn(
   (database: typeof fixture.database, userId: string, feedId: number) =>
@@ -392,24 +396,75 @@ describe("Feed revalidation", () => {
     await queueFeedRevalidation(fixture.database, "owner", [one.id, two.id]);
     await run();
     expect(revalidate).toHaveBeenCalledTimes(2);
-    expect(acquireDiscovery).toHaveBeenCalledWith("owner");
+    expect(acquireDiscovery).toHaveBeenCalledWith(
+      "owner",
+      expect.any(AbortSignal),
+    );
     expect(release).toHaveBeenCalledTimes(2);
     expect(await checks()).toEqual([]);
     expect(backfill).not.toHaveBeenCalled();
   });
 
-  it("stays due without a discovery slot while backfill carries on", async () => {
+  it("leaves the user's own discovery a slot while revalidating in the background", async () => {
+    const feedIds = [(await addFeed(1)).id, (await addFeed(2)).id];
+    await queueFeedRevalidation(fixture.database, "owner", feedIds);
+    // Subscription sync holds one of the two background slots.
+    const sync = await captureLimiter.acquireInBackground("owner", "discovery");
+    const own: boolean[] = [];
+    revalidate.mockImplementation(() => {
+      const lease = captureLimiter.acquire("owner", "discovery");
+      own.push(lease.ok);
+      if (lease.ok) lease.release();
+      // Sync finishes, which lets the waiting worker in.
+      if (sync.ok) sync.release();
+      return Promise.resolve({ changed: false });
+    });
+    // The real limiter's background slots.
+    await runFeedOriginChecks(fixture.database, {
+      backfill,
+      revalidate,
+      publish,
+    });
+    expect(own).toEqual([true, true]);
+    expect(await checks()).toEqual([]);
+  });
+
+  it("waits for a background slot while the other worker carries on", async () => {
+    const full = await addFeed(1);
+    const light = [(await addFeed(2)).id, (await addFeed(3)).id];
+    await queueFeedRevalidation(fixture.database, "owner", [full.id]);
+    await queuePublicationBackfill(fixture.database, "owner");
+    let grant: (lease: CaptureLease) => void = () => {};
+    acquireDiscovery.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          grant = resolve;
+        }),
+    );
+    const running = run();
+    await vi.waitFor(() => expect(backfill).toHaveBeenCalledTimes(2));
+    expect(backfill.mock.calls.map(([, , feedId]) => feedId).sort()).toEqual(
+      light,
+    );
+    expect(revalidate).not.toHaveBeenCalled();
+    grant({ ok: true, release });
+    await running;
+    expect(revalidate).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(await checks()).toEqual([]);
+  });
+
+  it("stays due when no slot comes before its claim runs low, while backfill carries on", async () => {
     const full = [(await addFeed(1)).id, (await addFeed(2)).id];
     const light = await addFeed(3);
     await queueFeedRevalidation(fixture.database, "owner", full);
     await queuePublicationBackfill(fixture.database, "owner");
-    acquireDiscovery.mockReturnValue({
-      ok: false,
-      reason: "capacity_limited",
-    } as never);
+    acquireDiscovery.mockRejectedValue(
+      new DOMException("Slot wait ran out", "TimeoutError"),
+    );
     await run();
     expect(revalidate).not.toHaveBeenCalled();
-    // Each worker meets the missing slot once, then claims only backfill.
+    // Each worker gives up on a slot once, then claims only backfill.
     expect(acquireDiscovery.mock.calls.length).toBeLessThanOrEqual(
       CHECKS_PER_USER,
     );
@@ -426,7 +481,7 @@ describe("Feed revalidation", () => {
     );
     for (const check of waiting)
       expect(check.nextAttemptAt.getTime()).toBeLessThanOrEqual(Date.now());
-    acquireDiscovery.mockReturnValue({ ok: true, release });
+    acquireDiscovery.mockResolvedValue({ ok: true, release });
     await run();
     expect(revalidate).toHaveBeenCalledTimes(2);
     expect(await checks()).toEqual([]);
@@ -435,10 +490,10 @@ describe("Feed revalidation", () => {
     const one = await addFeed(1);
     const two = await addFeed(2);
     await queueFeedRevalidation(fixture.database, "owner", [one.id, two.id]);
-    acquireDiscovery.mockReturnValueOnce({
+    acquireDiscovery.mockResolvedValueOnce({
       ok: false,
-      reason: "capacity_limited",
-    } as never);
+      reason: "rate_limited",
+    });
     await run();
     expect(revalidate).toHaveBeenCalledTimes(2);
     expect(await checks()).toEqual([]);

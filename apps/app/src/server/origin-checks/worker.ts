@@ -18,6 +18,8 @@ import { createInProcessWake } from "~/server/inProcessWake";
 
 /** How far a claim moves a row's next attempt. A row whose run stopped is due again after it. */
 const CLAIM_MS = 5 * 60_000;
+/** How long revalidation waits for a discovery slot, well inside its claim. */
+const SLOT_WAIT_MS = CLAIM_MS / 2;
 export const CHECKS_PER_USER = 2;
 const USER_PAGE_SIZE = 8;
 const USERS_AT_ONCE = 4;
@@ -38,13 +40,17 @@ type Dependencies = {
     userId: string,
     feedId: number,
   ) => Promise<{ changed: boolean }>;
-  acquireDiscovery?: (userId: string) => CaptureLease;
+  /** One of the user's background discovery slots, waited for until `signal` aborts. */
+  acquireDiscovery?: (
+    userId: string,
+    signal: AbortSignal,
+  ) => Promise<CaptureLease>;
   /** Tells the user's open clients that their Feeds changed. */
   publish?: (userId: string) => Promise<void>;
 };
-/** A check changed the Feed, finished without changing it, or found no discovery slot. */
+/** A check changed the Feed, finished without changing it, or got no discovery slot in time. */
 type Outcome = "changed" | "unchanged" | "waiting";
-/** Which checks a worker claims: any, or only backfill once no discovery slot is free. */
+/** Which checks a worker claims: any, or only backfill once it got no discovery slot. */
 type Claimable = "any" | "light";
 
 function publishFeedChanges(userId: string) {
@@ -121,8 +127,10 @@ async function runBackfill(
 }
 
 /**
- * Revalidation runs discovery, so it takes one of the user's discovery slots.
- * It gets one attempt. Without a free slot it stays due, unattempted.
+ * Revalidation runs discovery as background work, so it waits for one of the
+ * user's background discovery slots and the user's own requests keep theirs.
+ * It gets one attempt. With no slot before its claim runs low, or under a rate
+ * limit, it stays due, unattempted.
  */
 async function runRevalidation(
   database: typeof db,
@@ -130,8 +138,11 @@ async function runRevalidation(
   revalidate: NonNullable<Dependencies["revalidate"]>,
   acquireDiscovery: NonNullable<Dependencies["acquireDiscovery"]>,
 ): Promise<Outcome> {
-  const lease = acquireDiscovery(claim.userId);
-  if (!lease.ok) {
+  const lease = await acquireDiscovery(
+    claim.userId,
+    AbortSignal.timeout(SLOT_WAIT_MS),
+  ).catch(() => null);
+  if (!lease?.ok) {
     await database
       .update(checks)
       .set({ nextAttemptAt: new Date() })
@@ -161,7 +172,8 @@ function runCheck(
         claim,
         dependencies.revalidate ?? revalidateFeed,
         dependencies.acquireDiscovery ??
-          ((userId) => captureLimiter.acquire(userId, "discovery")),
+          ((userId, signal) =>
+            captureLimiter.acquireInBackground(userId, "discovery", signal)),
       )
     : runBackfill(
         database,
@@ -190,7 +202,7 @@ async function checkUserFeeds(
   };
   const batched = throttleWithTrailing(publish, PUBLISH_INTERVAL_MS, () => {});
   const checkUntilNothingDue = async () => {
-    // Backfill needs no discovery slot, so it carries on once none is free.
+    // Backfill needs no discovery slot, so it carries on when none came.
     let claimable: Claimable = "any";
     for (;;) {
       // Each claim waits for the previous check, so a user never has more
