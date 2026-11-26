@@ -23,6 +23,18 @@ import type {
 import type { NewFeedDetails, NewFeedOriginDetails } from "~/server/rss/types";
 import { feedOrigins, feeds } from "~/server/db/schema";
 import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
+import { pauseEnd, withDiscoveryPacing } from "~/server/http/pacing";
+
+/**
+ * Runs part of a subscription import's find as discovery-side work. One that
+ * a paused site or service held up is deferred until the pause ends.
+ */
+export function pacedImportFind<T>(find: () => Promise<T>) {
+  return withDiscoveryPacing(find).catch((error: unknown) => {
+    const paused = pauseEnd(error);
+    throw paused ? new FeedImportDeferredError(undefined, paused) : error;
+  });
+}
 
 export type PreparedFeedImport = {
   details: NewFeedDetails;

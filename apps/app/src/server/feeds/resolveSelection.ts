@@ -3,6 +3,7 @@ import { combinePublicationRows } from "@serial/feed-discovery";
 import { normalizePublicationUrl } from "@serial/standard-site";
 import { discoverFeedOriginsForImport, discoverFeeds } from "./discovery";
 import { PublicationGoneError } from "./importErrors";
+import { pacedImportFind } from "./imports";
 import {
   publicationOrigin,
   publicationRow,
@@ -74,6 +75,8 @@ export async function resolveFeedSelection(
  * discovery and validation as Add. `signal` gives up a wait for discovery.
  * `hasFeedOnSite` answers whether the user already has an RSS Feed on the
  * publication's site, which keeps discovery guessing feed addresses.
+ * The find is discovery-side work. One that a paused site or service held up
+ * waits for the pause to end.
  */
 export async function resolvePublicationFeed(
   userId: string,
@@ -83,13 +86,20 @@ export async function resolvePublicationFeed(
     hasFeedOnSite: (siteUrl: string) => Promise<boolean>;
   },
 ) {
-  const publication = await resolvePublication(publicationUri);
-  // A record that does not describe this publication stays that way until it changes.
-  if (!publication)
-    throw new PublicationGoneError("Unable to read the selected publication");
-  return resolveSelectedFeed(userId, publicationRow(publication), publication, {
-    signal: importing.signal,
-    hasFeedOnSite: await importing.hasFeedOnSite(publication.siteUrl),
+  return pacedImportFind(async () => {
+    const publication = await resolvePublication(publicationUri);
+    // A record that does not describe this publication stays that way until it changes.
+    if (!publication)
+      throw new PublicationGoneError("Unable to read the selected publication");
+    return resolveSelectedFeed(
+      userId,
+      publicationRow(publication),
+      publication,
+      {
+        signal: importing.signal,
+        hasFeedOnSite: await importing.hasFeedOnSite(publication.siteUrl),
+      },
+    );
   });
 }
 

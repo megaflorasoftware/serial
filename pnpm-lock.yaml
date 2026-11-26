@@ -330,6 +330,9 @@ importers:
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
+      tldts:
+        specifier: ^7.4.9
+        version: 7.4.9
       undici:
         specifier: ^8.9.0
         version: 8.9.0

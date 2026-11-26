@@ -9,8 +9,12 @@ import {
 import type { PublicRecordRequest } from "@serial/standard-site";
 import type { HardenedFetch } from "./hardened-fetch";
 import { env } from "~/env";
+import { RequestSlots } from "~/server/http/pacing";
+import { retryAfter } from "~/server/http/retryAfter";
 
 const retryAtByService = new Map<string, number>();
+/** Slingshot is community-run and publishes no limits, so few go at once. */
+const slingshotRequests = new RequestSlots(8);
 
 export type PublicRecordOptions = {
   signal?: AbortSignal;
@@ -19,20 +23,14 @@ export type PublicRecordOptions = {
 };
 
 function rememberRetryDelay(service: string, response: Response) {
-  const retryAfter = response.headers.get("retry-after");
-  if (retryAfter === null) return;
-  const seconds = Number(retryAfter);
-  const retryAt = Number.isFinite(seconds)
-    ? Date.now() + seconds * 1000
-    : Date.parse(retryAfter);
-  if (retryAt > Date.now()) {
-    if (!retryAtByService.has(service) && retryAtByService.size >= 256)
-      retryAtByService.delete(retryAtByService.keys().next().value!);
-    retryAtByService.set(
-      service,
-      Math.max(retryAt, retryAtByService.get(service) ?? 0),
-    );
-  }
+  const delay = retryAfter(response.headers.get("retry-after"));
+  if (!delay) return;
+  if (!retryAtByService.has(service) && retryAtByService.size >= 256)
+    retryAtByService.delete(retryAtByService.keys().next().value!);
+  retryAtByService.set(
+    service,
+    Math.max(Date.now() + delay, retryAtByService.get(service) ?? 0),
+  );
 }
 
 async function readRecordResponse(
@@ -96,7 +94,11 @@ export function createPublicRecordReader(dependencies: {
   ) => {
     const deadline = Math.min(options.deadline ?? Infinity, Date.now() + 5_000);
     const remaining = () => Math.max(0, deadline - Date.now());
-    const read = (service: () => Promise<string>, duration: number) =>
+    const read = (
+      service: () => Promise<string>,
+      duration: number,
+      slots?: RequestSlots,
+    ) =>
       withinRecordBudget(duration, options.signal, async (signal) => {
         const base = new URL(await service());
         signal.throwIfAborted();
@@ -120,15 +122,19 @@ export function createPublicRecordReader(dependencies: {
           rkey: parts.rkey,
           ...(request.cid !== undefined ? { cid: request.cid } : {}),
         }).toString();
-        const response = await dependencies.fetch(url, { signal });
-        if (!response.ok) rememberRetryDelay(key, response);
-        return readRecordResponse(response, request);
+        const send = async () => {
+          const response = await dependencies.fetch(url, { signal });
+          if (!response.ok) rememberRetryDelay(key, response);
+          return readRecordResponse(response, request);
+        };
+        return slots ? slots.run(key, signal, send) : send();
       });
     return lookupPublicRecord(request, {
       slingshot: () =>
         read(
           () => Promise.resolve(env.ATPROTO_SLINGSHOT_ENDPOINT),
           Math.min(1_000, Math.floor(remaining() / 2)),
+          slingshotRequests,
         ),
       pds: () =>
         read(

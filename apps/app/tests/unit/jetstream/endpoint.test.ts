@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { expect, it } from "vitest";
 import { resolveStreamService } from "~/server/jetstream/endpoint";
+import { SERIAL_USER_AGENT } from "~/server/http/publicHttp";
 
 it("prefers and caches v2 on a custom service that supports both protocols", async () => {
   const server = createServer();
@@ -10,8 +11,10 @@ it("prefers and caches v2 on a custom service that supports both protocols", asy
     handleProtocols: () => "xrpc.v1.json",
   });
   let connections = 0;
-  sockets.on("connection", () => {
+  const userAgents: Array<string | undefined> = [];
+  sockets.on("connection", (_socket, request) => {
     connections++;
+    userAgents.push(request.headers["user-agent"]);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -21,6 +24,7 @@ it("prefers and caches v2 on a custom service that supports both protocols", asy
     expect(await resolveStreamService(service)).toBe(service);
     expect(await resolveStreamService(service)).toBe(service);
     expect(connections).toBe(1);
+    expect(userAgents).toEqual([SERIAL_USER_AGENT]);
   } finally {
     for (const socket of sockets.clients) socket.terminate();
     await new Promise<void>((resolve) =>

@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  DiscoveryPausedError,
+  withDiscoveryPacing,
+} from "~/server/http/pacing";
+import { SERIAL_USER_AGENT } from "~/server/http/publicHttp";
 
 /**
  * The hardened fetch handed to the SDK. Its SSRF, protocol, and size guards
@@ -72,6 +77,7 @@ describe("createHardenedFetch", () => {
     const request = receivedRequest(stub);
     expect(request.method).toBe("POST");
     expect(request.headers.get("DPoP")).toBe("proof-value");
+    expect(request.headers.get("User-Agent")).toBe(SERIAL_USER_AGENT);
     expect(request.url).toBe(
       "https://pds.example/xrpc/com.atproto.server.getSession",
     );
@@ -83,5 +89,57 @@ describe("createHardenedFetch", () => {
 
     await expect(fetch("file:///etc/passwd")).rejects.toThrow();
     expect(stub).not.toHaveBeenCalled();
+  });
+
+  it("names Serial as the User-Agent, keeping the caller's headers", async () => {
+    const stub = stubFetch();
+    const fetch = createHardenedFetch(stub);
+
+    await fetch("https://pds.example/xrpc/foo", {
+      headers: { Accept: "application/json", "User-Agent": "other" },
+    });
+
+    const { headers } = receivedRequest(stub);
+    expect(headers.get("Accept")).toBe("application/json");
+    expect(headers.get("User-Agent")).toBe(SERIAL_USER_AGENT);
+  });
+
+  it("sends discovery-side work nothing more for a service host that answered 429", async () => {
+    const stub = vi.fn((input: string | Request | URL) =>
+      Promise.resolve(
+        new Response("{}", {
+          status: new URL(
+            String(input instanceof Request ? input.url : input),
+          ).hostname.startsWith("limited")
+            ? 429
+            : 200,
+          headers: { "Retry-After": "30" },
+        }),
+      ),
+    );
+    const fetch = createHardenedFetch(stub);
+
+    await withDiscoveryPacing(async () => {
+      expect((await fetch("https://limited.pds.example/xrpc/a")).status).toBe(
+        429,
+      );
+      await expect(
+        fetch("https://limited.pds.example/xrpc/b"),
+      ).rejects.toBeInstanceOf(DiscoveryPausedError);
+      expect((await fetch("https://other.pds.example/xrpc/c")).status).toBe(
+        200,
+      );
+    });
+    // Other work is not paced.
+    expect((await fetch("https://limited.pds.example/xrpc/d")).status).toBe(
+      429,
+    );
+    expect(
+      stub.mock.calls.map(
+        ([input]) =>
+          new URL(String(input instanceof Request ? input.url : input))
+            .pathname,
+      ),
+    ).toEqual(["/xrpc/a", "/xrpc/c", "/xrpc/d"]);
   });
 });

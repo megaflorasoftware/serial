@@ -18,6 +18,7 @@ import { runDatabaseWrite } from "~/server/db/retry-write";
 import { applyOriginMetadata } from "~/server/rss/originMetadata";
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
 import { wakeRequestedSync } from "~/server/publication-sync/wake";
+import { withDiscoveryPacing } from "~/server/http/pacing";
 
 async function ownedFeed(
   database: FeedDatabase,
@@ -29,17 +30,19 @@ async function ownedFeed(
   return feed;
 }
 
+type RevalidationDependencies = {
+  readOriginEvidence: typeof readOriginEvidence;
+  discoverFeedOriginsForRevalidation: typeof discoverFeedOriginsForRevalidation;
+};
+
 /**
- * Feed revalidation. Resolves to the Feed as it stands after the pass, and
- * whether the pass changed its origins or what they say about themselves.
+ * What the Feed's origins say about themselves, and an origin of a missing
+ * kind that shares their articles, when discovery finds one.
  */
-export async function revalidateFeed(
-  database: typeof db,
-  userId: string,
-  feedId: number,
-  dependencies = { readOriginEvidence, discoverFeedOriginsForRevalidation },
+async function observeOrigins(
+  feed: Awaited<ReturnType<typeof ownedFeed>>,
+  dependencies: RevalidationDependencies,
 ) {
-  const feed = await ownedFeed(database, userId, feedId);
   const evidence = await Promise.all(
     feed.origins.map((origin) =>
       dependencies.readOriginEvidence(origin, feed.origins.length < 2),
@@ -77,6 +80,27 @@ export async function revalidateFeed(
       }
     }
   }
+  return { evidence, additions };
+}
+
+/**
+ * Feed revalidation. Resolves to the Feed as it stands after the pass, and
+ * whether the pass changed its origins or what they say about themselves.
+ * Its reads are discovery-side work.
+ */
+export async function revalidateFeed(
+  database: typeof db,
+  userId: string,
+  feedId: number,
+  dependencies: RevalidationDependencies = {
+    readOriginEvidence,
+    discoverFeedOriginsForRevalidation,
+  },
+) {
+  const feed = await ownedFeed(database, userId, feedId);
+  const { evidence, additions } = await withDiscoveryPacing(() =>
+    observeOrigins(feed, dependencies),
+  );
   // All network work finishes before the write lock. Re-read to preserve concurrent edits.
   const revalidated = await runDatabaseWrite(database, () =>
     database.transaction(

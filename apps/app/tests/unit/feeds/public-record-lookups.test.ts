@@ -447,3 +447,31 @@ describe("a publication that is gone", () => {
     expect(publicationIsGone(new Error("Network timed out"))).toBe(false);
   });
 });
+
+it("keeps at most eight Slingshot requests in flight", async () => {
+  const held: Array<() => void> = [];
+  let inFlight = 0;
+  let peak = 0;
+  mocks.fetch.mockImplementation(async () => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    await new Promise<void>((resolve) => held.push(resolve));
+    inFlight -= 1;
+    return Response.json(record);
+  });
+  // Each reader is its own, as each of a sync's finds is.
+  const reads = Array.from({ length: 12 }, () => client().getRecord(uri));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(peak).toBe(8);
+  expect(held).toHaveLength(8);
+  while (held.length) {
+    held.shift()!();
+    // oxlint-disable-next-line react-doctor/async-await-in-loop
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  expect(await Promise.all(reads)).toHaveLength(12);
+  expect(peak).toBe(8);
+  // Every read waited its turn at Slingshot instead of falling back.
+  expect(mocks.fetch).toHaveBeenCalledTimes(12);
+  expect(resolvePds).not.toHaveBeenCalled();
+});

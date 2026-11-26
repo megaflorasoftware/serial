@@ -1,6 +1,7 @@
 import { FEED_HTTP_MAX_BODY_BYTES } from "@serial/bookmark-capture";
 import { discoverFeeds as scoutFeeds } from "feedscout";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PinnedPool } from "~/server/http/publicHttp";
 import {
   discoverFeedOriginsForImport,
   discoverFeedOriginsForRevalidation,
@@ -12,6 +13,7 @@ import {
   PublicationGoneError,
 } from "~/server/feeds/importErrors";
 import { readFeedHttp } from "~/server/rss/feedHttp";
+import { DiscoveryPausedError } from "~/server/http/pacing";
 import {
   resolvePublication,
   searchPublications,
@@ -488,6 +490,75 @@ describe("import discovery completeness", () => {
       (error as FeedImportDeferredError).retryAt.getTime(),
     ).toBeGreaterThanOrEqual(before + 900_000);
   });
+  it.each(["the website", "its publication declaration"])(
+    "waits for the pause that kept discovery from reading %s",
+    async (paused) => {
+      const pausedUntil = new Date(Date.now() + 30 * 60_000);
+      vi.mocked(readFeedHttp).mockImplementation((url) =>
+        (
+          paused === "the website"
+            ? url === "https://example.com"
+            : url.includes("/.well-known/")
+        )
+          ? Promise.reject(new DiscoveryPausedError(pausedUntil))
+          : Promise.resolve(response(url, "<html></html>")),
+      );
+      const deferred = await discoverFeedOriginsForImport(
+        `paused-${paused}`,
+        "https://example.com",
+      ).catch((error: unknown) => error);
+      expect(deferred).toBeInstanceOf(FeedImportDeferredError);
+      expect((deferred as FeedImportDeferredError).retryAt).toEqual(
+        pausedUntil,
+      );
+    },
+  );
+  it.each([
+    ["a huge Retry-After", "1000000000000000"],
+    ["a far-future Retry-After", "Fri, 31 Dec 9999 23:59:59 GMT"],
+  ])("waits no more than an hour for %s", async (_wait, retryAfter) => {
+    vi.mocked(readFeedHttp).mockResolvedValue({
+      ...response("https://example.com", "", false),
+      status: 429,
+      headers: new Headers({ "retry-after": retryAfter }),
+    });
+    const before = Date.now();
+    const deferred = await discoverFeedOriginsForImport(
+      `bounded-${retryAfter}`,
+      "https://example.com",
+    ).catch((error: unknown) => error);
+    const retryAt = (deferred as FeedImportDeferredError).retryAt.getTime();
+    expect(retryAt).toBeGreaterThanOrEqual(before + 60 * 60_000);
+    expect(retryAt).toBeLessThanOrEqual(Date.now() + 60 * 60_000);
+  });
+  it("waits for a pause that ends after an earlier failure's retry", async () => {
+    const pausedUntil = new Date(Date.now() + 30 * 60_000);
+    vi.mocked(scoutFeeds).mockImplementation(async (_url, options) => {
+      // Each fails, and discovery carries on to the next.
+      for (const url of [
+        "https://example.com/busy",
+        "https://example.com/paused",
+      ])
+        // oxlint-disable-next-line react-doctor/async-await-in-loop
+        await Promise.resolve(options!.fetchFn!(url)).catch(() => {});
+      return [];
+    });
+    vi.mocked(readFeedHttp).mockImplementation((url) =>
+      url.endsWith("/paused")
+        ? Promise.reject(new DiscoveryPausedError(pausedUntil))
+        : Promise.resolve(
+            url.endsWith("/busy")
+              ? statusResponse(url, 503)
+              : response(url, "<html></html>"),
+          ),
+    );
+    const deferred = await discoverFeedOriginsForImport(
+      "later-pause",
+      "https://example.com",
+    ).catch((error: unknown) => error);
+    expect(deferred).toBeInstanceOf(FeedImportDeferredError);
+    expect((deferred as FeedImportDeferredError).retryAt).toEqual(pausedUntil);
+  });
   it("allows completed empty discovery when optional endpoints do not exist", async () => {
     vi.mocked(readFeedHttp).mockImplementation(async (url) =>
       response(url, "<html></html>", !url.includes("/.well-known/")),
@@ -700,5 +771,58 @@ describe("import guessing", () => {
         publication,
       }),
     ).rejects.toBeInstanceOf(FeedImportDeferredError);
+  });
+});
+
+describe("connections", () => {
+  const pools = () =>
+    new Set(
+      vi
+        .mocked(readFeedHttp)
+        .mock.calls.map(([, options]) => options?.pool as PinnedPool),
+    );
+  const lends = (pool: PinnedPool) =>
+    pool.lend("example.com", () => Promise.reject(new Error("unused"))) !==
+    undefined;
+
+  it.each([
+    [
+      "import",
+      () =>
+        discoverFeedOriginsForImport("pooled-import", "https://example.com"),
+    ],
+    [
+      "revalidation",
+      () => discoverFeedOriginsForRevalidation("https://example.com"),
+    ],
+    ["Add Feed", () => discoverFeeds("pooled-add", "https://example.com")],
+  ])(
+    "are shared across one %s discovery and closed when it ends",
+    async (_discovery, discover) => {
+      vi.mocked(readFeedHttp).mockImplementation((url) =>
+        Promise.resolve(
+          url.includes("/.well-known/")
+            ? statusResponse(url, 404)
+            : response(url, "<html></html>"),
+        ),
+      );
+      await discover();
+      expect(vi.mocked(readFeedHttp).mock.calls.length).toBeGreaterThan(1);
+      const [pool, ...others] = pools();
+      expect(pool).toBeDefined();
+      expect(others).toEqual([]);
+      expect(lends(pool!)).toBe(false);
+    },
+  );
+
+  it("are separate for each discovery", async () => {
+    vi.mocked(readFeedHttp).mockImplementation((url) =>
+      Promise.resolve(response(url, "<html></html>")),
+    );
+    await Promise.all([
+      discoverFeedOriginsForRevalidation("https://example.com"),
+      discoverFeedOriginsForRevalidation("https://example.org"),
+    ]);
+    expect(pools().size).toBe(2);
   });
 });

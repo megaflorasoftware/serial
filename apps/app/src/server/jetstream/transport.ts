@@ -17,10 +17,8 @@ import { captureRecordText, captureRecordValue } from "./document-source";
 import {
   ArchiveUnreadableError,
   COLLECTIONS,
-  errorChain,
   eventSchema,
   normalizeService,
-  retryAfter,
   sequence,
   STREAM_KINDS,
   StreamFailure,
@@ -43,6 +41,9 @@ import type {
 } from "@bsky/jetstream";
 import type { StreamBatch } from "./protocol";
 import { isLegacyJetstream } from "~/lib/jetstream-endpoint";
+import { serialHeaders } from "~/server/http/publicHttp";
+import { retryAfter } from "~/server/http/retryAfter";
+import { errorChain } from "~/server/errorChain";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 /** Past this the socket stops reading, so the host holds what it has not sent. */
@@ -177,7 +178,7 @@ export function liveTransport(
   return {
     async *stream(getUrl, signal, options) {
       const socket = new WebSocket(getUrl(), legacy ? [] : ["xrpc.v1.json"], {
-        headers: Object.fromEntries(new Headers(options?.headers)),
+        headers: Object.fromEntries(serialHeaders(options?.headers)),
         maxPayload: 32 * 1024 * 1024,
         handshakeTimeout: 30_000,
       });
@@ -284,6 +285,7 @@ export function createStreamTransport(input: {
     try {
       const response = await (input.fetch ?? fetch)(request, {
         ...init,
+        headers: serialHeaders(init?.headers, request),
         signal: AbortSignal.any([
           ...(signal ? [signal] : []),
           AbortSignal.timeout(60_000),

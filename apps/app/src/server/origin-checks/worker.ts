@@ -15,6 +15,7 @@ import {
 import { workerPool } from "~/lib/workerPool";
 import { logError } from "~/server/logger";
 import { createInProcessWake } from "~/server/inProcessWake";
+import { pauseEnd } from "~/server/http/pacing";
 
 /** How far a claim moves a row's next attempt. A row whose run stopped is due again after it. */
 const CLAIM_MS = 5 * 60_000;
@@ -102,6 +103,26 @@ function finish(database: typeof db, claim: Claim) {
   return database.delete(checks).where(held(claim));
 }
 
+/**
+ * When a check that failed with `error` runs again: after its backoff, and not
+ * before a pause that held it up ends. Null once its backoff runs out.
+ */
+function retryAfterFailure(claim: Claim, error: unknown) {
+  const backoff = nextRetryAt(claim.attempts + 1);
+  const paused = pauseEnd(error);
+  return backoff && paused && paused > backoff ? paused : backoff;
+}
+
+/** Schedules the check's next attempt, or finishes it when there is none. */
+function reschedule(database: typeof db, claim: Claim, retryAt: Date | null) {
+  return retryAt
+    ? database
+        .update(checks)
+        .set({ attempts: claim.attempts + 1, nextAttemptAt: retryAt })
+        .where(held(claim))
+    : finish(database, claim);
+}
+
 /** Backfill keeps retrying a failure that may pass, until its backoff runs out. */
 async function runBackfill(
   database: typeof db,
@@ -115,14 +136,9 @@ async function runBackfill(
   } catch (error) {
     logError("[origin-checks] backfill failed", claim.feedId, error);
     // A publication that is gone is a finished check.
-    retryAt = publicationIsGone(error) ? null : nextRetryAt(claim.attempts + 1);
+    retryAt = publicationIsGone(error) ? null : retryAfterFailure(claim, error);
   }
-  await (retryAt
-    ? database
-        .update(checks)
-        .set({ attempts: claim.attempts + 1, nextAttemptAt: retryAt })
-        .where(held(claim))
-    : finish(database, claim));
+  await reschedule(database, claim, retryAt);
   return attached ? "changed" : "unchanged";
 }
 
@@ -130,7 +146,8 @@ async function runBackfill(
  * Revalidation runs discovery as background work, so it waits for one of the
  * user's background discovery slots and the user's own requests keep theirs.
  * It gets one attempt. With no slot before its claim runs low, or under a rate
- * limit, it stays due, unattempted.
+ * limit, it stays due, unattempted. One that a paused site or service held up
+ * runs again once the pause ends, backing off as backfill does.
  */
 async function runRevalidation(
   database: typeof db,
@@ -149,15 +166,17 @@ async function runRevalidation(
       .where(held(claim));
     return "waiting";
   }
+  let retryAt: Date | null = null;
   try {
     const { changed } = await revalidate(database, claim.userId, claim.feedId);
     return changed ? "changed" : "unchanged";
   } catch (error) {
     logError("[origin-checks] revalidation failed", claim.feedId, error);
+    if (pauseEnd(error)) retryAt = retryAfterFailure(claim, error);
     return "unchanged";
   } finally {
     lease.release();
-    await finish(database, claim);
+    await reschedule(database, claim, retryAt);
   }
 }
 

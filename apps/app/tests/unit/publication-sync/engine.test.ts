@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, isNotNull } from "drizzle-orm";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
+import { runsAsDiscoveryWork } from "../http/discovery-work";
 import type {
   SubscriptionRecord,
   SubscriptionRecordStore,
 } from "~/server/publication-sync/record-store";
 import type { TwoStageProgress } from "~/lib/two-stage-progress";
+import type * as RevalidationEvidence from "~/server/feeds/revalidationEvidence";
 import { syncPublicationSubscriptions } from "~/server/publication-sync/engine";
 import { runPublicationSyncJobs } from "~/server/publication-sync/jobs";
 import { listingDigest } from "~/server/publication-sync/check";
@@ -26,11 +28,17 @@ import { persistAtprotoSyncSettings } from "~/server/auth/atproto/sync-settings"
 import { requestSyncForFeedChange } from "~/server/publication-sync/requests";
 import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
 import { wakeRequestedSync } from "~/server/publication-sync/wake";
+import { readOriginEvidence } from "~/server/feeds/revalidationEvidence";
+import { newRssFeedDetails } from "~/server/rss/types";
 
 // The real wake would start a second run beside the one under test.
 vi.mock("~/server/publication-sync/wake", () => ({
   wakeRequestedSync: vi.fn(),
 }));
+vi.mock("~/server/feeds/revalidationEvidence", async (original) => {
+  const actual = await original<typeof RevalidationEvidence>();
+  return { ...actual, readOriginEvidence: vi.fn(actual.readOriginEvidence) };
+});
 
 let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 const did = "did:plc:abcdefghijklmnopqrstuvwx";
@@ -1302,6 +1310,38 @@ describe("failures that end or wait", () => {
 });
 
 describe("finding, then fetching", () => {
+  it("compares a found publication with the user's Feed on its site as discovery-side work", async () => {
+    const site = "https://site.example";
+    await insertFeedWithOrigins(fixture.database, {
+      userId: "owner",
+      details: newRssFeedDetails({
+        url: `${site}/rss`,
+        name: "Site",
+        platform: "website",
+        siteUrl: site,
+      }),
+      isActive: true,
+    });
+    resolveFeed.mockImplementation((_userId, uri) =>
+      Promise.resolve({ ...details(uri), siteUrl: site }),
+    );
+    const paced: boolean[] = [];
+    // The Feed's RSS origin, then the publication's.
+    for (let read = 0; read < 2; read++)
+      vi.mocked(readOriginEvidence).mockImplementationOnce(async (origin) => {
+        paced.push(await runsAsDiscoveryWork());
+        return {
+          origin: { kind: origin.kind, locator: origin.locator },
+          siteUrl: site,
+          itemUrls: new Set([`${site}/article`]),
+        };
+      });
+    records = [record("site")];
+    await method("import");
+    expect(await run()).toMatchObject({ status: "completed", imported: 1 });
+    expect(paced).toEqual([true, true]);
+    expect(await fixture.database.select().from(feeds)).toHaveLength(1);
+  });
   const name = (uri: string) => uri.split("/").at(-1)!;
   /** Runs past the deadline once `passed` is set, without waiting a minute. */
   const pastDeadline = () => {
