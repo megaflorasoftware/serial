@@ -53,6 +53,31 @@ describe("OPML file types", () => {
     });
   });
 
+  it("rejects truncated OPML instead of importing up to the cut", () => {
+    expect(
+      getInitialFeedDataFromOPMLInput(
+        OPML.slice(0, OPML.indexOf("</body>")),
+        "serial-feeds.opml",
+      ),
+    ).toEqual({
+      success: false,
+      error: 'File "serial-feeds.opml" isn\'t a valid OPML file.',
+    });
+  });
+
+  it("accepts leading whitespace and unescaped ampersands in feed URLs", () => {
+    const result = getInitialFeedDataFromOPMLInput(
+      `\n  <?xml version="1.0"?>
+<opml version="2.0"><body><outline xmlUrl="https://example.com/feed?a=1&b=2" /></body></opml>`,
+      "feeds.opml",
+    );
+    expect(result.success).toBe(true);
+    if (result.success)
+      expect(result.data.map((feed) => feed.feedUrl)).toEqual([
+        "https://example.com/feed?a=1&b=2",
+      ]);
+  });
+
   it("keeps the OPML files it can read when another file is rejected", async () => {
     const result = await getInitialFeedDataFromFiles([
       file("feed.xml", RSS),
