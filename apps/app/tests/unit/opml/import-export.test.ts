@@ -140,7 +140,7 @@ describe("OPML import/export", () => {
     expect(outlines[1].outline).not.toHaveProperty("@_xmlUrl");
     expect(outlines[1].outline).not.toHaveProperty("@_type");
     expect(opml).not.toContain("at://");
-    const imported = getInitialFeedDataFromOPMLInput(opml);
+    const imported = getInitialFeedDataFromOPMLInput(opml, "feeds.opml");
     expect(imported.success).toBe(true);
     if (imported.success) expect(imported.data).toHaveLength(1);
   });
@@ -188,7 +188,8 @@ describe("OPML import/export", () => {
   });
 
   it("imports nested outlines as category paths", () => {
-    const result = getInitialFeedDataFromOPMLInput(`
+    const result = getInitialFeedDataFromOPMLInput(
+      `
       <?xml version="1.0" encoding="UTF-8"?>
       <opml version="2.0">
         <body>
@@ -199,7 +200,9 @@ describe("OPML import/export", () => {
           </outline>
         </body>
       </opml>
-    `);
+    `,
+      "feeds.opml",
+    );
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -212,7 +215,8 @@ describe("OPML import/export", () => {
   });
 
   it("keeps feed-named sections when they are nested inside a view and preserves subsection type", () => {
-    const result = getInitialFeedDataFromOPMLInput(`
+    const result = getInitialFeedDataFromOPMLInput(
+      `
       <?xml version="1.0" encoding="UTF-8"?>
       <opml version="2.0" xmlns:serial="https://serial.tube/opml">
         <body>
@@ -226,7 +230,9 @@ describe("OPML import/export", () => {
           </outline>
         </body>
       </opml>
-    `);
+    `,
+      "feeds.opml",
+    );
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -250,7 +256,8 @@ describe("OPML import/export", () => {
   });
 
   it("differentiates feed and tag subsections with the same name", () => {
-    const result = getInitialFeedDataFromOPMLInput(`
+    const result = getInitialFeedDataFromOPMLInput(
+      `
       <?xml version="1.0" encoding="UTF-8"?>
       <opml version="2.0" xmlns:serial="https://serial.tube/opml">
         <body>
@@ -264,7 +271,9 @@ describe("OPML import/export", () => {
           </outline>
         </body>
       </opml>
-    `);
+    `,
+      "feeds.opml",
+    );
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -329,7 +338,7 @@ describe("OPML import/export", () => {
       feedCategories,
       viewFeeds,
     });
-    const result = getInitialFeedDataFromOPMLInput(opml);
+    const result = getInitialFeedDataFromOPMLInput(opml, "feeds.opml");
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -392,7 +401,7 @@ describe("OPML import/export", () => {
       feedCategories: [],
       viewFeeds: [],
     });
-    const result = getInitialFeedDataFromOPMLInput(opml);
+    const result = getInitialFeedDataFromOPMLInput(opml, "feeds.opml");
 
     expect(result.success).toBe(true);
     if (!result.success) return;

@@ -6,22 +6,11 @@ import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { useContentCategories } from "~/lib/data/content-categories";
 import { buildViewOPML } from "~/lib/data/export/buildViewOPML";
+import { downloadOPML } from "~/lib/data/export/downloadOPML";
 import { useFeedCategories } from "~/lib/data/feed-categories";
 import { useFeeds } from "~/lib/data/feeds";
 import { useViewFeeds } from "~/lib/data/view-feeds";
 import { useViews } from "~/lib/data/views";
-
-function downloadOPML(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
 export function ExportDataSection() {
   const [isExporting, setIsExporting] = useState(false);

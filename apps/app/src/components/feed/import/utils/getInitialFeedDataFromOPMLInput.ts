@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import { formSuccess } from "./shared";
+import { formError, formSuccess } from "./shared";
 import type {
   ImportCategoryPathItem,
   ImportFeedDataFromFileResult,
@@ -157,10 +157,24 @@ function parseOutline(
   );
 }
 
+/** An OPML document has an `opml` root with a `body`; anything else is not OPML. */
+function parseOPMLDocument(fileContent: string): OPMLResult | null {
+  try {
+    const parsed = parser.parse(fileContent) as Partial<OPMLResult>;
+    return parsed.opml?.body === undefined ? null : (parsed as OPMLResult);
+  } catch {
+    return null;
+  }
+}
+
 export function getInitialFeedDataFromOPMLInput(
   fileContent: string,
+  fileName: string,
 ): ImportFeedDataFromFileResult {
-  const opmlData = parser.parse(fileContent) as OPMLResult;
+  const opmlData = parseOPMLDocument(fileContent);
+  if (!opmlData)
+    return formError(`File "${fileName}" isn't a valid OPML file.`);
+
   const feeds = outlineList(opmlData.opml.body.outline).flatMap((entry) =>
     parseOutline(entry, []),
   );
