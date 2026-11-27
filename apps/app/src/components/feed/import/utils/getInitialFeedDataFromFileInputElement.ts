@@ -7,6 +7,9 @@ import type {
   ImportFeedDataItem,
 } from "./shared";
 
+// iOS saves `text/xml` downloads as `*.opml.xml`, and some readers export OPML as `*.xml`.
+const OPML_FILE_EXTENSIONS = new Set(["opml", "xml"]);
+
 async function getInitialFeedDataFromFile(
   file: File,
 ): Promise<ImportFeedDataFromFileResult> {
@@ -18,9 +21,9 @@ async function getInitialFeedDataFromFile(
     return getInitialFeedDataFromCSVInput(fileContent);
   }
 
-  // *.opml
-  else if (fileExtension === "opml") {
-    return getInitialFeedDataFromOPMLInput(fileContent);
+  // *.opml, *.xml
+  else if (fileExtension && OPML_FILE_EXTENSIONS.has(fileExtension)) {
+    return getInitialFeedDataFromOPMLInput(fileContent, file.name);
   }
 
   // rest

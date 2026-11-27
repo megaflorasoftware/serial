@@ -1,5 +1,5 @@
-import { XMLParser } from "fast-xml-parser";
-import { formSuccess } from "./shared";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { formError, formSuccess } from "./shared";
 import type {
   ImportCategoryPathItem,
   ImportFeedDataFromFileResult,
@@ -157,10 +157,30 @@ function parseOutline(
   );
 }
 
+/**
+ * An OPML document is well-formed XML with an `opml` root and a `body`, so a
+ * truncated file is rejected rather than imported up to the cut.
+ */
+function parseOPMLDocument(fileContent: string): OPMLResult | null {
+  // The validator rejects whitespace before the XML declaration, which some exports have.
+  const content = fileContent.trimStart();
+  if (XMLValidator.validate(content) !== true) return null;
+  try {
+    const parsed = parser.parse(content) as Partial<OPMLResult>;
+    return parsed.opml?.body === undefined ? null : (parsed as OPMLResult);
+  } catch {
+    return null;
+  }
+}
+
 export function getInitialFeedDataFromOPMLInput(
   fileContent: string,
+  fileName: string,
 ): ImportFeedDataFromFileResult {
-  const opmlData = parser.parse(fileContent) as OPMLResult;
+  const opmlData = parseOPMLDocument(fileContent);
+  if (!opmlData)
+    return formError(`File "${fileName}" isn't a valid OPML file.`);
+
   const feeds = outlineList(opmlData.opml.body.outline).flatMap((entry) =>
     parseOutline(entry, []),
   );
