@@ -20,7 +20,11 @@ function file(name: string, content: string) {
 }
 
 describe("OPML file types", () => {
+  // jsdom does not define these, so they are assigned rather than spied on.
+  const { createObjectURL, revokeObjectURL } = URL;
   afterEach(() => {
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
     vi.restoreAllMocks();
   });
 
