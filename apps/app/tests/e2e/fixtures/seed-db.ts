@@ -414,6 +414,32 @@ export async function addArticlePublicationOrigin(
   }
 }
 
+/**
+ * An article with the given body, read either as its feed item or as a
+ * bookmark of it. `contentId` is the `/read` route's ID for that reader.
+ */
+export async function seedReaderArticle(
+  tursoPort: number,
+  appPort: number,
+  reader: "full" | "bookmark",
+  html: string,
+) {
+  const fixture = await seedArticleData(tursoPort, appPort);
+  await setFeedItemContent(tursoPort, fixture.feedItemId, html);
+  const contentId =
+    reader === "bookmark"
+      ? (
+          await seedBookmarkProjectionData(
+            tursoPort,
+            fixture.email,
+            fixture.feedItemId,
+            html,
+          )
+        ).bookmarkId
+      : fixture.feedItemId;
+  return { email: fixture.email, password: fixture.password, contentId };
+}
+
 export async function setFeedItemContent(
   tursoPort: number,
   id: string,

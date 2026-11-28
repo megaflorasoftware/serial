@@ -4,12 +4,7 @@ import {
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_TURSO_PORT,
 } from "../fixtures/ports";
-import {
-  cleanupUser,
-  seedArticleData,
-  seedBookmarkProjectionData,
-  setFeedItemContent,
-} from "../fixtures/seed-db";
+import { cleanupUser, seedReaderArticle } from "../fixtures/seed-db";
 
 const longLine = `const message = "${"A long line of code. ".repeat(18)}";`;
 const articleHtml = `<p>Code examples retain their formatting in the reader.</p>
@@ -29,32 +24,18 @@ test.describe("article code and image layout", () => {
     test(`${kind} code fills the reader and scrolls within its block`, async ({
       page,
     }) => {
-      const fixture = await seedArticleData(
+      const fixture = await seedReaderArticle(
         SELF_HOSTED_TURSO_PORT,
         SELF_HOSTED_APP_PORT,
-      );
-      email = fixture.email;
-      await setFeedItemContent(
-        SELF_HOSTED_TURSO_PORT,
-        fixture.feedItemId,
+        kind,
         articleHtml,
       );
-      const contentId =
-        kind === "bookmark"
-          ? (
-              await seedBookmarkProjectionData(
-                SELF_HOSTED_TURSO_PORT,
-                email,
-                fixture.feedItemId,
-                articleHtml,
-              )
-            ).bookmarkId
-          : fixture.feedItemId;
+      email = fixture.email;
       await page.route("https://images.example.com/**", (route) =>
         route.abort(),
       );
       await signIn({ page, email, password: fixture.password });
-      await page.goto(`/read/${contentId}`);
+      await page.goto(`/read/${fixture.contentId}`);
       const blocks = page.locator("pre");
       await expect(blocks).toHaveCount(2);
       await expect(blocks.first().locator(".hljs-keyword")).toBeVisible();
