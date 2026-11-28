@@ -233,11 +233,10 @@
   transition: opacity 0.2s ease;
 }
 
+/* Nothing grows past its container, so the article fills its column out to
+   the source row's edges on both sides. */
 .article * {
-  --non-edge: calc(var(--article-max-width));
-  --edge: calc(100vw - var(--spacing) * 16);
-
-  max-width: min(var(--edge), var(--non-edge));
+  max-width: 100%;
   font-family: inherit;
 }
 

@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { getArticleWidthLayout } from "~/components/content-reader/articleWidth";
+import { getArticleWidthClassName } from "~/components/content-reader/articleWidth";
 import { useZoom } from "~/components/feed/watch/[id]/useZoom";
 
 /**
@@ -21,14 +21,12 @@ export function ReaderLayout({
   children: ReactNode;
 }) {
   const { zoom } = useZoom();
-  const articleWidthLayout = getArticleWidthLayout(zoom);
   return (
     <div
       className={clsx(
         "mx-auto grid h-full w-full grid-cols-1 place-items-center",
-        articleWidthLayout.className,
+        getArticleWidthClassName(zoom),
       )}
-      style={articleWidthLayout.style}
     >
       <div className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6">
         {source}
