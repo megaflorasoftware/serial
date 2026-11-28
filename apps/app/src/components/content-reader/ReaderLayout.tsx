@@ -28,7 +28,10 @@ export function ReaderLayout({
         getArticleWidthClassName(zoom),
       )}
     >
-      <div className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6">
+      <div
+        data-reader-source
+        className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6"
+      >
         {source}
       </div>
       {children}

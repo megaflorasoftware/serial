@@ -95,10 +95,6 @@
 /* Body images sit at their own size, never upscaled, centred in the column.
    Card previews, avatars, social images and video posters keep their own
    layout. */
-.article img {
-  max-width: 100%;
-}
-
 .article
   img:not(
     [data-record-image],
@@ -246,7 +242,6 @@
   border-radius: var(--radius-md);
   width: 100%;
   min-width: 0;
-  max-width: 100%;
   overflow-x: auto;
   white-space: pre;
   overflow-wrap: normal;
@@ -268,7 +263,6 @@
 
 .article :global([data-lightbox]) {
   width: 100%;
-  max-width: 100%;
 }
 
 .article {
@@ -552,13 +546,6 @@
    centre unless the author aligned them left or right. */
 .article :global([data-lightbox-trigger]) {
   width: 100%;
-}
-
-/* A failed image's placeholder spans the whole column, past the edge inset
-   other body elements keep. */
-.article :global([data-lightbox-trigger]:has([data-image-frame="failed"])),
-.article :global([data-image-frame="failed"]) {
-  max-width: 100%;
 }
 
 .article :global([data-reader-figure][data-reader-align="left"]) img,
