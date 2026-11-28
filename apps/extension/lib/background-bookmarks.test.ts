@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EXTENSION_FEED_ADD_REQUEST_TIMEOUT_MS } from "@serial/bookmark-capture";
+import { DISCOVERY_TOTAL_BUDGET_MS } from "@serial/feed-discovery";
 
 import {
   handleBookmarkMessage,
@@ -215,7 +216,7 @@ describe("extension Bookmark Feed discovery", () => {
         method: "POST",
         body: JSON.stringify({ sourceUrl: "https://example.com/article" }),
       }),
-      undefined,
+      { timeoutMs: DISCOVERY_TOTAL_BUDGET_MS + 3_000 },
     );
     expect(response).toEqual({
       ok: true,

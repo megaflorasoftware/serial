@@ -1,10 +1,11 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { determinePlanFromProductId, polarClient } from "./polar";
 import { getEffectivePlanConfig, PLANS } from "./plans";
 import { deactivateExcessFeeds, isAdminUser } from "./helpers";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
-import { feeds, user } from "~/server/db/schema";
+import { feedOrigins, feeds, user } from "~/server/db/schema";
+import { makeOriginsDue, originIsScheduled } from "~/server/feeds/schedule";
 import { getKV } from "~/server/kv";
 import { logError, logWarning } from "~/server/logger";
 
@@ -174,46 +175,50 @@ export async function applySubscriptionSideEffects(
   await db.update(user).set({ nextRefreshAt: null }).where(eq(user.id, userId));
 
   if (ACTIVE_STATUSES.has(data.status)) {
-    // Subscription is active — stagger feed nextFetchAt across the refresh
-    // interval so feeds don't all become due at the same instant.
+    // Subscription is active — stagger origin nextFetchAt across the refresh
+    // interval so origins don't all become due at the same instant.
     if (config.backgroundRefreshIntervalMs) {
-      const activeFeeds = await db
-        .select({ id: feeds.id })
-        .from(feeds)
-        .where(and(eq(feeds.userId, userId), eq(feeds.isActive, true)))
+      const activeOrigins = await db
+        .select({ id: feedOrigins.id })
+        .from(feedOrigins)
+        .innerJoin(feeds, eq(feeds.id, feedOrigins.feedId))
+        .where(and(eq(feedOrigins.userId, userId), eq(feeds.isActive, true)))
+        .orderBy(asc(feedOrigins.id))
         .all();
 
       const interval = config.backgroundRefreshIntervalMs;
-      const feedCount = activeFeeds.length;
+      const originCount = activeOrigins.length;
 
-      if (feedCount > 0) {
+      if (originCount > 0) {
         const nowMs = Date.now();
-        const cases = activeFeeds.map((f, i) => {
+        const cases = activeOrigins.map((origin, i) => {
           const offset =
-            feedCount > 1 ? Math.round((interval / feedCount) * i) : 0;
+            originCount > 1 ? Math.round((interval / originCount) * i) : 0;
           const ts = Math.floor((nowMs + offset) / 1000);
-          return sql`WHEN ${f.id} THEN ${ts}`;
+          return sql`WHEN ${origin.id} THEN ${ts}`;
         });
 
         await db
-          .update(feeds)
+          .update(feedOrigins)
           .set({
-            nextFetchAt: sql`(CASE ${feeds.id} ${sql.join(cases, sql` `)} END)`,
+            nextFetchAt: sql`(CASE ${feedOrigins.id} ${sql.join(cases, sql` `)} END)`,
           })
+          // A Feed deactivated since the read is unscheduled and stays so.
           .where(
-            inArray(
-              feeds.id,
-              activeFeeds.map((f) => f.id),
+            and(
+              inArray(
+                feedOrigins.id,
+                activeOrigins.map((origin) => origin.id),
+              ),
+              originIsScheduled,
             ),
           );
       }
     }
   } else {
-    // Subscription ended — deactivate excess feeds, clear nextFetchAt
+    // Subscription ended — deactivate excess feeds, then make the origins
+    // still scheduled due so the client's next refresh fetches them.
     await deactivateExcessFeeds(db, userId, PLANS.free.maxActiveFeeds);
-    await db
-      .update(feeds)
-      .set({ nextFetchAt: null })
-      .where(eq(feeds.userId, userId));
+    await makeOriginsDue(db, eq(feedOrigins.userId, userId), new Date());
   }
 }

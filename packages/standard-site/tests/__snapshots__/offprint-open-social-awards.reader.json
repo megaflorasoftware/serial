@@ -1,0 +1,286 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "New_ Public ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@newpublic.org",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:hheutzl4mxedshsz4yqek5tt",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " , PublicSpaces ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@publicspaces.net",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:2wtlfpgkikwdxkmeqxt25e7p",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " , and Waag Futurelab ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@waag.org",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:dwasx7iawlm63zivignwu6jr",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": "  are hosting the first Open Social Awards.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "The Open Social Awards celebrate technology that makes the social internet work for everyone. We believe the future of open social will be strongest when it’s shaped by people from a wide range of backgrounds, perspectives, and lived experiences. We especially encourage applications from individuals and teams who are from communities historically underrepresented in technology.",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "recordPreview",
+      "card": {
+        "uri": "at://did:plc:hheutzl4mxedshsz4yqek5tt/app.bsky.feed.post/3mk3up2q3ac2s",
+        "url": "https://bsky.app/profile/did:plc:hheutzl4mxedshsz4yqek5tt/post/3mk3up2q3ac2s",
+        "title": "Post on Bluesky",
+        "size": "row"
+      }
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "This is the first year of the awards, with a €10,000 grand prize and two €5,000 excellence awards. There are two broad areas to apply under. The first is social apps for end users, the second is shared, community infrastructure, that is used by developers making open social apps.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We know there are many people building amazing apps and infrastructure, and many of you don't think your app is good enough, you're too early, or some other silly goose thoughts in your head.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We really encourage everyone to apply: even those that don't win a cash prize will be part of a list of all those that applied, and we get to see many great apps and infra that people are building, and get some publicity for what's being worked on! ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Always Be Launching! And Applying!",
+          "marks": {
+            "highlight": {
+              "color": "rgb(34 197 94 / 0.5)"
+            }
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Need some help reviewing your application or getting a pep talk about how awesome you and your app are? Drop into the ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "chat",
+          "marks": {},
+          "link": {
+            "href": "https://discord.atprotocol.dev/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " and we'll help where we can!",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Read the full details and eligibility rules here:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "linkCard",
+      "href": "https://newpublic.org/OSA",
+      "title": "Open Social Awards | New_ Public",
+      "description": "The awards aim to recognize and celebrate the breakthrough products of developers building on open protocols such as ATProtocol and ActivityPub.",
+      "imageUrl": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:lehcqqkwzcwvjvw66uthu5oq/bafkreihxltf7o24577u3ljbkrp73a7wfkhsds5ksidxqd2rnda2mw36vgi@jpeg"
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The application deadline is May 1st — this Friday! Click through to fill out the form and submit:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "linkCard",
+      "href": "https://app.formbricks.com/s/cmn3lqvw6b5lfv101shpmepis",
+      "title": "Apply for Open Social Awards",
+      "description": null,
+      "imageUrl": null
+    },
+    {
+      "align": null,
+      "kind": "divider"
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "PublicSpaces Conference",
+          "marks": {},
+          "link": {
+            "href": "https://conference.publicspaces.net/en",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " takes place June 4th - 6th, 2026 in Amsterdam. Buy your tickets here ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "https://tickets.publicspaces.net/publicspaces/pubconf2026/",
+          "marks": {},
+          "link": {
+            "href": "https://tickets.publicspaces.net/publicspaces/pubconf2026/",
+            "record": null
+          }
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "There is also the beginning of a thread for atproto community focused activities during the conference. Thanks ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@dave.self.surf",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:oiespunf6wfpglx2z46jetgp",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": "  for getting that kicked off. Join the discussion in the community forum ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "https://discourse.atprotocol.community/t/atproto-side-event-public-spaces/785",
+          "marks": {},
+          "link": {
+            "href": "https://discourse.atprotocol.community/t/atproto-side-event-public-spaces/785",
+            "record": null
+          }
+        }
+      ]
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

@@ -2,9 +2,9 @@
 
 import { useLocation } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { AddFeedButton } from "./AddFeedButton";
 import { ManageFeedsButton } from "./ManageFeedsButton";
 import { OpenRightSidebarButton } from "./OpenRightSidebarButton";
-import { RefetchItemsButton } from "./RefetchItemsButton";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { SHORTCUT_KEYS } from "~/lib/constants/shortcuts";
 import { PLATFORM_TO_FORMATTED_NAME_MAP } from "~/lib/data/feeds/utils";
@@ -81,8 +81,8 @@ export function TopRightHeaderContent() {
 
   return (
     <div className="flex items-center gap-2">
+      <AddFeedButton />
       <ManageFeedsButton />
-      <RefetchItemsButton />
       <div className="lg:hidden">
         <OpenRightSidebarButton />
       </div>

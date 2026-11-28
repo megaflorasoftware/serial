@@ -1,0 +1,256 @@
+{
+  "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.document/3mjnpr2iijl23",
+  "cid": "bafyreib7iiwusdzjjbxbz5ctrhnflhgxjc72oodlt6r3i4oln6oewqxlv4",
+  "value": {
+    "$type": "site.standard.document",
+    "content": {
+      "$type": "app.offprint.content",
+      "items": [
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://bsky.social/"
+                },
+                {
+                  "$type": "app.offprint.richtext.facet#underline"
+                }
+              ],
+              "index": {
+                "byteEnd": 44,
+                "byteStart": 37
+              }
+            }
+          ],
+          "plaintext": "Bryan Newbold, protocol engineer for Bluesky, joined us to discuss DID PLC, a self-authenticating decentralized identifier that is key to account portability on the Bluesky social network."
+        },
+        {
+          "$type": "app.offprint.block.webEmbed",
+          "alignment": "center",
+          "description": "Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on YouTube.",
+          "embedHeight": 450,
+          "embedUrl": "https://www.youtube.com/embed/m9AVUAUDC2A?feature=oembed",
+          "embedWidth": 800,
+          "href": "https://youtu.be/m9AVUAUDC2A?si=3mTSSesLabttUvdY",
+          "siteName": "YouTube",
+          "title": "Fission Tech Talks: Bluesky and PLC",
+          "width": "100%"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#bold"
+                }
+              ],
+              "index": {
+                "byteEnd": 95,
+                "byteStart": 75
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#bold"
+                }
+              ],
+              "index": {
+                "byteEnd": 113,
+                "byteStart": 100
+              }
+            }
+          ],
+          "plaintext": "Bryan takes the Fission community through Bluesky's principles, especially owning your own data and credible exit, describing how these influenced the design of DID PLC. Further, he gives us a peek behind the scenes at Bluesky, detailing how well PLC has worked as they hit 5 million accounts just last week."
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#bold"
+                }
+              ],
+              "index": {
+                "byteEnd": 63,
+                "byteStart": 43
+              }
+            }
+          ],
+          "plaintext": "The second half of the presentation covers Governance and Trust. Bluesky has been working hard to make sure ATProto is \"locked open\", making it secure for other developers to build on top of. Bryan runs through some potential models towards gaining adoption beyond Bluesky."
+        },
+        {
+          "$type": "app.offprint.block.callout",
+          "emoji": "💡",
+          "plaintext": "Figure out how to upload / link a PDF"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#bold"
+                }
+              ],
+              "index": {
+                "byteEnd": 13,
+                "byteStart": 0
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://bsky.app/profile/bnewbold.net?ref=atprotocol.dev"
+                },
+                {
+                  "$type": "app.offprint.richtext.facet#underline"
+                }
+              ],
+              "index": {
+                "byteEnd": 31,
+                "byteStart": 18
+              }
+            }
+          ],
+          "plaintext": "Follow Bryan 🦋 @bnewbold.net"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#bold"
+                }
+              ],
+              "index": {
+                "byteEnd": 13,
+                "byteStart": 0
+              }
+            }
+          ],
+          "plaintext": "Explore more:"
+        },
+        {
+          "$type": "app.offprint.block.bulletList",
+          "children": [
+            {
+              "content": {
+                "$type": "app.offprint.block.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "app.offprint.richtext.facet#link",
+                        "uri": "https://web.plc.directory/?ref=atprotocol.dev"
+                      },
+                      {
+                        "$type": "app.offprint.richtext.facet#underline"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 26,
+                      "byteStart": 0
+                    }
+                  }
+                ],
+                "plaintext": "https://web.plc.directory/"
+              }
+            },
+            {
+              "content": {
+                "$type": "app.offprint.block.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "app.offprint.richtext.facet#link",
+                        "uri": "https://github.com/bluesky-social/proposals/tree/main/0004-oauth?ref=atprotocol.dev"
+                      },
+                      {
+                        "$type": "app.offprint.richtext.facet#underline"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 64,
+                      "byteStart": 0
+                    }
+                  }
+                ],
+                "plaintext": "https://github.com/bluesky-social/proposals/tree/main/0004-oauth"
+              }
+            },
+            {
+              "content": {
+                "$type": "app.offprint.block.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "app.offprint.richtext.facet#link",
+                        "uri": "https://atproto.com/specs/did?ref=atprotocol.dev"
+                      },
+                      {
+                        "$type": "app.offprint.richtext.facet#underline"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 29,
+                      "byteStart": 0
+                    }
+                  }
+                ],
+                "plaintext": "https://atproto.com/specs/did"
+              }
+            }
+          ]
+        },
+        {
+          "$type": "app.offprint.block.horizontalRule"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://bsky.app/profile/fission.codes"
+                },
+                {
+                  "$type": "app.offprint.richtext.facet#underline"
+                }
+              ],
+              "index": {
+                "byteEnd": 37,
+                "byteStart": 30
+              }
+            }
+          ],
+          "plaintext": "This was originally posted to Fission in February of 2024"
+        }
+      ]
+    },
+    "coverImage": {
+      "$type": "blob",
+      "mimeType": "image/jpeg",
+      "ref": {
+        "$link": "bafkreigpfndvu2tkojptx3icgiqqdpdgpbe3iym7zn5dz5ra5gleweohg4"
+      },
+      "size": 22067
+    },
+    "description": "Bryan Newbold presents DID PLC and the PLC Directory to Fission, February 2024",
+    "path": "/a/3mjnpr2iijl23-bluesky-and-did-plc",
+    "publishedAt": "2024-02-22T01:25:00+00:00",
+    "site": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3mjnpilwnrp2v",
+    "textContent": "Bryan Newbold, protocol engineer for Bluesky, joined us to discuss DID PLC, a self-authenticating decentralized identifier that is key to account portability on the Bluesky social network.\nBryan takes the Fission community through Bluesky's principles, especially owning your own data and credible exit, describing how these influenced the design of DID PLC. Further, he gives us a peek behind the scenes at Bluesky, detailing how well PLC has worked as they hit 5 million accounts just last week.\nThe second half of the presentation covers Governance and Trust. Bluesky has been working hard to make sure ATProto is \"locked open\", making it secure for other developers to build on top of. Bryan runs through some potential models towards gaining adoption beyond Bluesky.\n💡 Figure out how to upload / link a PDF\nFollow Bryan 🦋 @bnewbold.net\nExplore more:\n- https://web.plc.directory/\n- https://github.com/bluesky-social/proposals/tree/main/0004-oauth\n- https://atproto.com/specs/did\n\n\n---\nThis was originally posted to Fission in February of 2024",
+    "title": "Bluesky and DID PLC"
+  }
+}

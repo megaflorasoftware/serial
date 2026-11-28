@@ -1,0 +1,1136 @@
+{
+  "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.document/3m5pejic4fk2p",
+  "cid": "bafyreicrolnxli5fvfp2xufjhpb4g5jeqjnosbuw6imksfqpvhxelb2okq",
+  "value": {
+    "$type": "site.standard.document",
+    "bskyPostRef": {
+      "cid": "bafyreiahmmvupvn72ypnll4aba3pqe3gg6qgwcsuur5kwzinyd4osinrry",
+      "commit": {
+        "cid": "bafyreiddppgwhk3qigrgs63ecdyq2nzadtnggmb3liqbbirivfhh6r572a",
+        "rev": "3m5pejpfrgg2b"
+      },
+      "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/app.bsky.feed.post/3m5pejpdgec2p",
+      "validationStatus": "valid"
+    },
+    "content": {
+      "$type": "pub.leaflet.content",
+      "pages": [
+        {
+          "$type": "pub.leaflet.pages.linearDocument",
+          "blocks": [
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "The ATProto community gathered in Montreal in the first week of November 2025. IETF124 and the AT Protocol pre-BOF is the reason for gathering together, and we also took the opportunity for a couple of community days."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.website",
+                "description": "Register today for the IETF 124 Montreal meeting on 1-7 November 2025 with 1000+ participants and 100+ sessions, including an IETF Hackathon.",
+                "previewImage": {
+                  "$type": "blob",
+                  "mimeType": "image/png",
+                  "ref": {
+                    "$link": "bafkreibftn5kyxviu44fwhho3gnct5x2yzmfojloa2yeuutmnburpbqhfy"
+                  },
+                  "size": 42377
+                },
+                "src": "https://www.ietf.org/meeting/124/",
+                "title": "IETF 124 Montreal"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://discourse.atprotocol.community/t/atproto-community-sessions-in-montreal-for-ietf124/164"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 34,
+                      "byteStart": 9
+                    }
+                  }
+                ],
+                "plaintext": "We had a rough agenda in the forum that we mostly stuck to, as well as some nice meals and lots of talking to other ATProto builders."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 1,
+                "plaintext": "Hackathon Sunday"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We started things off on the Sunday at the IETF124 hackathon and hung out talking to IETF folks."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.bskyPost",
+                "postRef": {
+                  "cid": "bafyreibf2ldgfwlnjnykyxir4xunrbbd2dsagq7rclrap3ycuznuqg67ve",
+                  "uri": "at://did:plc:2cxgdrgtsmrbqnjkwyplmp43/app.bsky.feed.post/3m4ntigu7ak27"
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We left the hackathon venue and had introduced a handful of folks to poutine."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "alt": "Group of people plus a statue outside the Fairmont hotel. Boris, open mouth, Nick center, Daniel and Fig behind either side of yellow head statue, Bryan at right.",
+                "aspectRatio": {
+                  "height": 768,
+                  "width": 1024
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/jpeg",
+                  "ref": {
+                    "$link": "bafkreie4phcb3tltjqhb2qws3rq72ipztoweb5ynjkdklr72iptdj5ine4"
+                  },
+                  "size": 131822
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 1,
+                "plaintext": "Community Days"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://bsky.app/profile/maparent.ca"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 176,
+                      "byteStart": 164
+                    }
+                  }
+                ],
+                "plaintext": "Since not everyone attending had full IETF passes, we had help from Marc-Antoine in booking a meeting room at his co-working cooperative, ECTO. Thanks Marc-Antoine @maparent.ca!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Monday"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We started with a round of introductions to hear what everyone is working on and what their challenges are."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "alt": "Fisheye of a meeting room with people sitting around the outside. A large whiteboard is on one wall.",
+                "aspectRatio": {
+                  "height": 900,
+                  "width": 1200
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/jpeg",
+                  "ref": {
+                    "$link": "bafkreidv6kzyletv2pj3xi4e7ffqg3zteguthak7vpeefhzhow2giw3pku"
+                  },
+                  "size": 136445
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "alt": "Corner of a room with a big TV showing a presentation saying Protected Resources. Nick is sitting on the left, Gov is sitting at the right.",
+                "aspectRatio": {
+                  "height": 665,
+                  "width": 1200
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/jpeg",
+                  "ref": {
+                    "$link": "bafkreigpz3dbfgmvjze65e66rlayvbf7udoapo65btrmjzqso4jnha6jum"
+                  },
+                  "size": 81436
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://github.com/graze-social/aip"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 98,
+                      "byteStart": 95
+                    }
+                  }
+                ],
+                "plaintext": "Nick did a high speed overview of OAuth, and worked with some of the attendees on implementing AIP for their products."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Monday Social at Café Nocturne"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://www.instagram.com/cafe_nocturne/"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 64,
+                      "byteStart": 50
+                    }
+                  },
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://bsky.app/profile/gov.glados.computer"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 149,
+                      "byteStart": 129
+                    }
+                  }
+                ],
+                "plaintext": "On Monday night, Gov arranged for us to gather at Café Nocturne for a mini social, and the traditional beer & pizza. Thanks Gov @gov.glados.computer!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "alt": "FIsheye of people gathered at a cafe.",
+                "aspectRatio": {
+                  "height": 900,
+                  "width": 1200
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/jpeg",
+                  "ref": {
+                    "$link": "bafkreihkgzih2y47l7poaxfjb5fajbjnbgnereviikedni5an7f3x5q45u"
+                  },
+                  "size": 117976
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "alt": "A man wearing a t-shirt with a pink cube and the slogan \"Video, for everyone. Streamplace\". The man is holding pizza, because also everyone should have pizza.",
+                "aspectRatio": {
+                  "height": 1200,
+                  "width": 900
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/jpeg",
+                  "ref": {
+                    "$link": "bafkreicodcm4gt7sgbdgm3emkjcek66qrbzmy65ty2e2hg2qtxggft375e"
+                  },
+                  "size": 85162
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Video (and pizza) for everyone!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Tuesday"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We were back at ECTO for a day of discussions and dug deep into a bunch of topics."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "aspectRatio": {
+                  "height": 1052,
+                  "width": 1200
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/jpeg",
+                  "ref": {
+                    "$link": "bafkreifvywnay2ltpksrfk7f4aikrtlwh6g3e4tvgt5blvynkv7efhek2e"
+                  },
+                  "size": 33980
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Here's a quick whiteboard photo covering a few other hints on what we discussed, that we'll cover in bullet points below."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://www.familytri.ca/"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 119,
+                      "byteStart": 108
+                    }
+                  }
+                ],
+                "plaintext": "We wrapped up Tuesday night with a great meal at a very cool sushi place recommended by Marc-Antoine called Tri Express."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.bskyPost",
+                "postRef": {
+                  "cid": "bafyreichntoonhnyjta4treuvsliaue5qfahwhes6yukhqp3ehuy4ewv2m",
+                  "uri": "at://did:plc:cbkjy5n7bk3ax2wplmtjofq2/app.bsky.feed.post/3m4tmbsuqis2s"
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Thanks Boris for paying for food, and Nick for paying for drinks!"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Wednesday IETF124 Pre-BOF"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Daniel wrote this up in late September in preparing for this IETF \"pre-BOF\". This is the first step in asking to be considered as an IETF standard:"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.website",
+                "description": "Last week we posted two drafts to the IETF Data Tracker. This is the first major step towards standardizing parts of AT in an effort to establish long-term governance for the protocol.",
+                "previewImage": {
+                  "$type": "blob",
+                  "mimeType": "image/png",
+                  "ref": {
+                    "$link": "bafkreibdvitesjmjusncr5d2tr6zzxtufn4ppcmegeetaeb7fgnmzpknmm"
+                  },
+                  "size": 38886
+                },
+                "src": "https://docs.bsky.app/blog/taking-at-to-ietf",
+                "title": "Taking AT to the IETF | Bluesky"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Those of us without tickets had a mini watch party at the AirBnB (apparently you're not supposed to full screen share video of your living room for a meeting?) and enjoyed all the people presenting and questions that were asked, along with a very active chat backchannel (130 people online at peak)."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.bskyPost",
+                "postRef": {
+                  "cid": "bafyreigjn5sayvhaovhths5vtii46bokgzf3ytnkw6zpo4obhxnqfctn5i",
+                  "uri": "at://did:plc:tgfzv5irks5acnmk75j4elky/app.bsky.feed.post/3m4vbmix2322l"
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "All of the information about joining the mailing list and Zulip rooms for the \"ATP\" work at the IETF can be found here:"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.website",
+                "description": "Document\n                                            dependencies",
+                "previewImage": {
+                  "$type": "blob",
+                  "mimeType": "image/png",
+                  "ref": {
+                    "$link": "bafkreidyyfmrfnsu57jczcw3o2ydxedqprlxnudmy7dquhdpsq5dwyxokq"
+                  },
+                  "size": 17668
+                },
+                "src": "https://datatracker.ietf.org/wg/atp/about/",
+                "title": "Authenticated Transfer (atp)"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "The reception was generally positive, with everyone encouraged to join the mailing list as the main venue for hashing out next steps. Forming a charter for the working group, and figuring what is/isn't in scope to initially bring to the IETF (Bryan's slides with green / yellow / etc boxes) seem to be the main work to do."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We wrapped things up Wednesday evening with a nice dinner."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 1,
+                "plaintext": "Community Topics"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Here are some brief notes on topics we covered."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#bold"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 33,
+                      "byteStart": 0
+                    }
+                  }
+                ],
+                "plaintext": "Shared / Collaborative structures"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "aspectRatio": {
+                  "height": 1857,
+                  "width": 3432
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/png",
+                  "ref": {
+                    "$link": "bafkreigv3pfhu5nmxnsmro6hn44f4xmej43thpwq37ordj5ichuxwsxm6a"
+                  },
+                  "size": 5956979
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Wesley from Cosmik shared thoughts on shared Collections in Semble as a use case for shared data in group-like structures. An initial owner creates a collection and then can accept in collaborators in different ways. All of them would have \"two way\" records showing that an account was connected to a collection, and would have to be accepted by the other side."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Bryan from Bluesky gave an alternate structure about having \"community DIDs\" rather than individual accounts in order to enable ownership and collaboration, and lean into all the tools around portable accounts. It does mean managing auth in different ways, something that AIP or other tools might help with to delegate control between multiple accounts."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "This was a long discussion that was really good, and balanced \"let's do it the quick way that is implementable in products today\" vs \"you're going to want to plan for shared ownership models and roles that don't trap community data with a single, personal account\"."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Personal Private Data"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.image",
+                "aspectRatio": {
+                  "height": 2339,
+                  "width": 2667
+                },
+                "image": {
+                  "$type": "blob",
+                  "mimeType": "image/png",
+                  "ref": {
+                    "$link": "bafkreiblvy7k5nyg4dirf4qnpfdm73ibzqlo5gua7kibpbdquuxs6apc2e"
+                  },
+                  "size": 4661460
+                }
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Rather than a full deep dive, we talked through tackling personal-private data as low hanging fruit."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Eli's suggestion was to essentially mirror the layout of the public repo, and insert e.g. \"personal-private\" in the at:// uri. Has to be implemented in a custom PDS, which leads to only some accounts having the feature."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "PDS feature detection and apps having to support multiple paths isn't really a good path. Jared from Leaflet was a hard no on supporting different kinds of PDS (they have private data on their own servers, Semble plans the same for how)."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "One approach was that if you logged into an app that supported private data, it could have a \"private data PDS\" service end point, just like there is a DID doc entry for personal data server today. "
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Private data is going to be a big lift. The people in the room were more aligned around \"classic app\" private data where an appview and PDS host gate access to data with OAuth, rather than a full encryption model. Running your own PDS would be the option for those that don't trust a host."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 2,
+                "plaintext": "Germ on MLS"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Mark and Anna from the Germ team were in town to participate in the MLS working group. "
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "There were a couple of distributed MLS discussions at the IETF. Here's the Distributed MLS draft that Mark contributed to:"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.website",
+                "description": "The Messaging Layer Security (MLS) protocol enables a group of participants to negotiate a common cryptographic state for messaging, providing Forward Secrecy (FS) and Post-Compromise Security (PCS). There are some use cases where message ordering challenges may make it difficult for a group of participants to agree on a common state or use cases where reaching eventual consistency is impractical for the application. This document describes Distributed-MLS (DMLS), a composition protocol for using MLS sessions to protect messages among participants without negotiating a common group state.",
+                "previewImage": {
+                  "$type": "blob",
+                  "mimeType": "image/png",
+                  "ref": {
+                    "$link": "bafkreibohozkjurl6e6ftmm6dcvrw6vpczugslx3eoaiivhy7qnp3mtkee"
+                  },
+                  "size": 22692
+                },
+                "src": "https://datatracker.ietf.org/doc/draft-xue-distributed-mls/",
+                "title": "Distributed MLS"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We had a great discussion of how they are thinking about ATProto integration and what the challenges are of designing for a federated standard, rather than Signal's single provider."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://engineering.fb.com/wp-content/uploads/2023/12/TheLabyrinthEncryptedMessageStorageProtocol_12-6-2023.pdf"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 314,
+                      "byteStart": 305
+                    }
+                  }
+                ],
+                "plaintext": "In particular, to make an MLS implementation work on the web would take significant resources. Germ is on iOS today and can make libraries that would work on Android and desktop devices, and lean into local secure enclaves and signed apps. Making this work on the web, Facebook has previously implemented Labyrinth for this use case, and Mark's estimate was a small team of 5-6 applied cryptographers would be needed to work on the problem. So, let's consider that an annual burn rate of around $1MUSD."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "There's a whole other challenge around authenticated delivery of software on the web / secure software supply chain. Content addressing and web3 dapps have done some work on this in the past."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We brainstormed a couple of things here, and it's clear that this is the sort of thing that many different applications need, including outside of ATProto, and it is a candidate for looking for a large amount of pooled funding if we hope to see cross-platform MLS that works on the web."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.horizontalRule"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Other topics:"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.unorderedList",
+                "children": [
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 32,
+                            "byteStart": 0
+                          }
+                        },
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#link",
+                              "uri": "https://www.microcosm.blue/"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 102,
+                            "byteStart": 89
+                          }
+                        }
+                      ],
+                      "plaintext": "Using Microcosm for more things: Fig was in the room and got asked a bunch of questions, Constellation might be a good solution for Germ in checking the bsky social graph for blocks."
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 36,
+                            "byteStart": 0
+                          }
+                        },
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#link",
+                              "uri": "https://c2pa.org/"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 96,
+                            "byteStart": 92
+                          }
+                        }
+                      ],
+                      "plaintext": "Streamplace is building the Best PDS: needs to support high throughput and lots of storage, C2PA support for every chunk of video stored in the PDS."
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 14,
+                            "byteStart": 0
+                          }
+                        }
+                      ],
+                      "plaintext": "Notifications: lots of interest in cross app notifications, and also how ownership, opt in, and \"where do the notifications show\" are challenges"
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 39,
+                            "byteStart": 0
+                          }
+                        }
+                      ],
+                      "plaintext": "Scoped permissions for shared Lexicons: Jared presented a challenge about the Leaflet comments lexicon, and giving permissions for comments that means any blog could potentially edit comments of the current user on any other blog "
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 37,
+                            "byteStart": 0
+                          }
+                        }
+                      ],
+                      "plaintext": "Payments, receipts, and attestations: Leaflet subscriptions and payments, plus data structures for attesting to payment vs receipts."
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 24,
+                            "byteStart": 0
+                          }
+                        }
+                      ],
+                      "plaintext": "Cross app collaboration: creating a Smoke Signal event in a block in Leaflet, and having it aggregated on Smoke Signal (with advanced event editing features there)."
+                    }
+                  },
+                  {
+                    "$type": "pub.leaflet.blocks.unorderedList#listItem",
+                    "children": [],
+                    "content": {
+                      "$type": "pub.leaflet.blocks.text",
+                      "facets": [
+                        {
+                          "features": [
+                            {
+                              "$type": "pub.leaflet.richtext.facet#bold"
+                            }
+                          ],
+                          "index": {
+                            "byteEnd": 25,
+                            "byteStart": 0
+                          }
+                        }
+                      ],
+                      "plaintext": "Protocol level redirects: we have AT URIs and content addressing, but sometimes things need to be migrated. What is the concept of a \"redirect\" record in ATProto?"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "We covered lots more and had really great discussions with all the builders. "
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 1,
+                "plaintext": "Thanks"
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": "Thanks to everyone that came and participated. As well as supporting the ATP IETF standardization efforts, the opportunity to work on hard problems and different product approaches with other builders in ATProto community is so valuable."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://opencollective.com/atprotocoldev"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 21,
+                      "byteStart": 4
+                    }
+                  }
+                ],
+                "plaintext": "The AT Community Fund sponsored the coworking rental that Marc-Antoine organized and for Boris' travel."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://cosmik.network"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 14,
+                      "byteStart": 0
+                    }
+                  },
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://graze.social"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 75,
+                      "byteStart": 70
+                    }
+                  }
+                ],
+                "plaintext": "Cosmik Network paid for shared accommodation that kept costs low. and Graze supported Nick's travel and paid access to the ."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://semble.so"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 74,
+                      "byteStart": 68
+                    }
+                  },
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://www.germnetwork.com/"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 134,
+                      "byteStart": 122
+                    }
+                  },
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://leaflet.pub"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 154,
+                      "byteStart": 147
+                    }
+                  },
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://microcosm.blue"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 172,
+                      "byteStart": 163
+                    }
+                  },
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://stream.place"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 194,
+                      "byteStart": 183
+                    }
+                  }
+                ],
+                "plaintext": "Thanks to everyone that came - Wesley & Ronen from Cosmik Network / Semble, Bryan & Daniel from Bluesky, Mark & Anna from Germ Network, Jared from Leaflet, Fig of Microcosm, Eli from Streamplace, and Nick with his OAuth, AIP, Smoke Signal and many other expertises."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [
+                  {
+                    "features": [
+                      {
+                        "$type": "pub.leaflet.richtext.facet#link",
+                        "uri": "https://discourse.atprotocol.community/c/event-planning/17"
+                      }
+                    ],
+                    "index": {
+                      "byteEnd": 53,
+                      "byteStart": 10
+                    }
+                  }
+                ],
+                "plaintext": "Check the Event Planning topic in the community forum for other upcoming events."
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": ""
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": ""
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": " "
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.header",
+                "facets": [],
+                "level": 1,
+                "plaintext": ""
+              }
+            },
+            {
+              "$type": "pub.leaflet.pages.linearDocument#block",
+              "block": {
+                "$type": "pub.leaflet.blocks.text",
+                "facets": [],
+                "plaintext": ""
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "description": "IETF124 and community sessions",
+    "path": "/3m5pejic4fk2p",
+    "publishedAt": "2025-11-15T23:39:09.510Z",
+    "site": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3lxv5nk6jik2k",
+    "title": "ATProto Montreal Recap"
+  }
+}

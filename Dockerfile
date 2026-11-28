@@ -76,15 +76,12 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 
 WORKDIR /usr/src/app/apps/app
 
-# Copy migration files and source needed for running migrations
-COPY --from=build-base /usr/src/app/apps/app/tsconfig.json ./tsconfig.json
-COPY --from=build-base /usr/src/app/apps/app/src/server/db ./src/server/db
-COPY --from=build-base /usr/src/app/apps/app/src/env.js ./src/env.js
-COPY --from=build-base /usr/src/app/apps/app/src/lib/extension-auth.ts ./src/lib/extension-auth.ts
-COPY --from=build-base /usr/src/app/apps/app/src/lib/content/descriptor.ts ./src/lib/content/descriptor.ts
-COPY --from=build-base /usr/src/app/apps/app/src/lib/schemas/bulk.ts ./src/lib/schemas/bulk.ts
-COPY --from=build-base /usr/src/app/apps/app/src/lib/views/contentFilter.ts ./src/lib/views/contentFilter.ts
-COPY --from=build-base /usr/src/app/packages/extension-identity /usr/src/app/packages/extension-identity
+# Migrations run from source at startup, so copy the app source and workspace
+# packages whole. A new import in the migration runtime then cannot break
+# deploys.
+COPY --from=prepare /usr/src/app/out/full/apps/app/tsconfig.json ./tsconfig.json
+COPY --from=prepare /usr/src/app/out/full/apps/app/src ./src
+COPY --from=prepare /usr/src/app/out/full/packages /usr/src/app/packages
 
 # Catch missing transitive imports in the migration runtime before deployment.
 RUN PUBLIC_BASE_URL=http://localhost \

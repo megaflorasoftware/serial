@@ -1,0 +1,277 @@
+import {
+  buildBlueskyCdnImageUrl,
+  InvalidPublicRecordError,
+  MissingPublicRecordError,
+  normalizePublicationUrl,
+  parsePublicationRecord,
+  parsePublicationUri,
+  PublicRecordHttpError,
+  STANDARD_SITE_COLLECTIONS,
+} from "@serial/standard-site";
+import { extractPdsUrl } from "@atproto/oauth-client-node";
+import { DidError } from "@atproto-labs/did-resolver";
+import { PublicationGoneError } from "./importErrors";
+import type { NewFeedOriginDetails } from "~/server/rss/types";
+import type { DiscoveredFeed } from "@serial/feed-discovery";
+import { createPublicRecordReader } from "~/server/auth/atproto/public-record";
+import { getAtprotoIdentityResolver } from "~/server/auth/atproto/identity";
+import {
+  resolvePublicPds,
+  UnsupportedDidError,
+} from "~/server/auth/atproto/did-resolver";
+import { createHardenedFetch } from "~/server/auth/atproto/hardened-fetch";
+import { searchAtprotoActorsTypeahead } from "~/server/auth/atproto/typeahead";
+import { HANDLE_PATTERN } from "~/server/auth/atproto/schemas";
+import { workerPool } from "~/lib/workerPool";
+
+const PUBLICATION_PAGES = 2;
+const RECORDS_PER_PAGE = 20;
+const CACHE_ENTRIES = 128;
+const CACHE_TTL_MS = 60_000;
+const cache = new Map<
+  string,
+  { expires: number; value: Promise<ResolvedPublication[]> }
+>();
+const fetch = createHardenedFetch();
+
+/** The publication was deleted, its repository is gone, or its record is invalid. */
+export class PublicationUnavailableError extends PublicationGoneError {}
+
+export type ResolvedPublication = {
+  uri: string;
+  did: string;
+  rkey: string;
+  pdsUrl?: string;
+  siteUrl: string;
+  name: string;
+  imageUrl?: string;
+  description?: string;
+};
+
+function parseResolvedPublication(
+  input: unknown,
+  did: string,
+  pdsUrl?: string,
+): ResolvedPublication | null {
+  const record = parsePublicationRecord(input);
+  if (!record) return null;
+  const uri = parsePublicationUri(record.uri);
+  const siteUrl = normalizePublicationUrl(record.value.url);
+  if (!uri || uri.did !== did || !siteUrl) return null;
+  return {
+    uri: record.uri,
+    did,
+    rkey: uri.rkey,
+    pdsUrl,
+    siteUrl,
+    name: record.value.name,
+    description: record.value.description,
+    imageUrl: record.value.icon
+      ? (buildBlueskyCdnImageUrl(did, record.value.icon.ref.$link, "avatar") ??
+        undefined)
+      : undefined,
+  };
+}
+
+/**
+ * The DID's own method answered that it does not exist: an unregistered or
+ * retired identity, or a method nobody resolves. A transport failure reports a
+ * different status and stays retryable.
+ */
+function didNoLongerResolves(error: unknown) {
+  return (
+    error instanceof DidError &&
+    (error.code === "did-method-invalid" ||
+      (error.code === "did-fetch-error" &&
+        (error.status === 404 || error.status === 410)))
+  );
+}
+
+/** A repository that no longer resolves makes its publication unavailable. */
+function rethrowResolutionError(error: unknown): never {
+  if (didNoLongerResolves(error) || error instanceof UnsupportedDidError)
+    throw new PublicationUnavailableError(
+      "Publication repository no longer resolves",
+    );
+  throw error;
+}
+
+async function publicIdentity(identifier: string, signal: AbortSignal) {
+  signal.throwIfAborted();
+  const identity = await getAtprotoIdentityResolver()
+    .resolve(identifier, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+    })
+    .catch(rethrowResolutionError);
+  return {
+    did: identity.did,
+    pdsUrl: extractPdsUrl(identity.didDoc).toString(),
+  };
+}
+
+/**
+ * The PDS that holds a repository's public records. Reading them needs the
+ * DID document alone, so no handle is verified.
+ */
+async function publicPds(did: string, signal: AbortSignal) {
+  signal.throwIfAborted();
+  return resolvePublicPds(did, {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+  }).catch(rethrowResolutionError);
+}
+
+async function readRecordJson(
+  pdsUrl: string,
+  method: string,
+  params: Record<string, string>,
+  signal: AbortSignal,
+): Promise<unknown> {
+  signal.throwIfAborted();
+  const url = new URL(`${pdsUrl.replace(/\/$/, "")}/xrpc/${method}`);
+  url.search = new URLSearchParams(params).toString();
+  const response = await fetch(url, {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+  });
+  if (!response.ok) {
+    if ([400, 401, 403, 404, 410].includes(response.status))
+      throw new PublicationUnavailableError("Publication is unavailable");
+    throw new Error("Unable to read publication records");
+  }
+  return response.json();
+}
+
+export async function resolvePublication(
+  uri: string,
+  signal: AbortSignal = AbortSignal.timeout(12_000),
+  deadline = Date.now() + 12_000,
+): Promise<ResolvedPublication | null> {
+  const parts = parsePublicationUri(uri);
+  if (!parts) return null;
+  let pdsUrl: string | undefined;
+  const readRecord = createPublicRecordReader({
+    fetch,
+    resolvePds: async () => {
+      pdsUrl = await publicPds(parts.did, signal);
+      return pdsUrl;
+    },
+  });
+  const result = await readRecord({ uri }, { signal, deadline }).catch(
+    (error: unknown) => {
+      if (
+        error instanceof MissingPublicRecordError ||
+        error instanceof InvalidPublicRecordError ||
+        (error instanceof PublicRecordHttpError &&
+          [400, 401, 403, 404, 410].includes(error.status))
+      )
+        throw new PublicationUnavailableError("Publication is unavailable");
+      throw error;
+    },
+  );
+  const publication = parseResolvedPublication(result, parts.did, pdsUrl);
+  return publication?.uri === uri ? publication : null;
+}
+
+async function listPublications(
+  did: string,
+  signal: AbortSignal,
+): Promise<ResolvedPublication[]> {
+  signal.throwIfAborted();
+  const existing = cache.get(did);
+  if (existing && existing.expires > Date.now()) return existing.value;
+  const value = (async () => {
+    const identity = await publicIdentity(did, signal);
+    const publications: ResolvedPublication[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < PUBLICATION_PAGES; page++) {
+      const response = await readRecordJson(
+        identity.pdsUrl,
+        "com.atproto.repo.listRecords",
+        {
+          repo: did,
+          collection: STANDARD_SITE_COLLECTIONS.publication,
+          limit: String(RECORDS_PER_PAGE),
+          ...(cursor ? { cursor } : {}),
+        },
+        signal,
+      );
+      if (
+        !response ||
+        typeof response !== "object" ||
+        !("records" in response) ||
+        !Array.isArray(response.records)
+      )
+        break;
+      for (const record of response.records.slice(0, RECORDS_PER_PAGE)) {
+        const publication = parseResolvedPublication(
+          record,
+          did,
+          identity.pdsUrl,
+        );
+        if (publication) publications.push(publication);
+      }
+      const next =
+        "cursor" in response && typeof response.cursor === "string"
+          ? response.cursor
+          : undefined;
+      if (!next || next === cursor) break;
+      cursor = next;
+    }
+    return publications;
+  })();
+  const publications = await value;
+  if (cache.size >= CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
+  cache.set(did, {
+    expires: Date.now() + CACHE_TTL_MS,
+    value: Promise.resolve(publications),
+  });
+  return publications;
+}
+
+export async function searchPublications(
+  term: string,
+  signal: AbortSignal = AbortSignal.timeout(12_000),
+): Promise<ResolvedPublication[]> {
+  const actors = await searchAtprotoActorsTypeahead(term, undefined, signal);
+  const dids = actors.map((actor) => actor.did);
+  if (dids.length === 0 && HANDLE_PATTERN.test(term)) {
+    try {
+      dids.push((await publicIdentity(term, signal)).did);
+    } catch {
+      return [];
+    }
+  }
+  const byDid = new Map<string, ResolvedPublication[]>();
+  for await (const result of workerPool(dids, 2, async (did) => {
+    try {
+      return { did, publications: await listPublications(did, signal) };
+    } catch {
+      return { did, publications: [] };
+    }
+  }))
+    byDid.set(result.did, result.publications);
+  return dids.flatMap((did) => byDid.get(did) ?? []);
+}
+
+export function publicationRow(
+  publication: ResolvedPublication,
+): DiscoveredFeed {
+  return {
+    url: publication.siteUrl,
+    siteUrl: publication.siteUrl,
+    title: publication.name,
+    imageUrl: publication.imageUrl,
+    origins: [{ kind: "atproto", locator: publication.uri }],
+  };
+}
+
+export function publicationOrigin(
+  publication: ResolvedPublication,
+): NewFeedOriginDetails {
+  return {
+    kind: "atproto",
+    locator: publication.uri,
+    sourceName: publication.name,
+    sourceImageUrl: publication.imageUrl,
+    sourceDescription: publication.description,
+  };
+}

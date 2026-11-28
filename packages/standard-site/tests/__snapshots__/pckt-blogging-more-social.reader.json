@@ -1,0 +1,779 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 3,
+      "content": [
+        {
+          "kind": "text",
+          "text": "We want blogging to feel less like posting to the void, and more like sharing with a community. From pckt notes to better discovery, everything we've built over the last few weeks is designed to help bloggers connect.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Hey Bloggers! ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Since our last post, we've shipped a ton of new features and bug fixes. We've been so busy working on making ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " better that we almost forgot to tell you about everything that's new. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Let's start with the biggest new feature—",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt notes",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ". ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "socialPost",
+      "post": {
+        "platform": "pckt",
+        "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mpnjkuyimjd4",
+        "url": "https://pckt.blog/n/did:plc:v46ojbiop5ebs5h7gaomixcc/3mpnjkuyimjd4",
+        "author": {
+          "did": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+          "handle": "brookie.blog",
+          "name": "Brookie’s Blog",
+          "avatarUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:v46ojbiop5ebs5h7gaomixcc/bafkreif2zmdettmdbcyiborvikvzr645szqwt5b3dgo4xvsuem6oskqziy@jpeg",
+          "url": "https://brookie.blog"
+        },
+        "siteUrl": "https://brookie.blog",
+        "text": [
+          {
+            "kind": "text",
+            "text": "Oh wow ! This is cool :)",
+            "marks": {},
+            "link": null
+          }
+        ],
+        "createdAt": "2026-07-02T07:37:34.913Z",
+        "images": [],
+        "external": null,
+        "video": null,
+        "quote": null,
+        "mediaHidden": false
+      }
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Sometimes there's something you want to say that doesn't need a full blog post. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "pckt notes",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " are a brand new way to share bite-sized information. Think quick thoughts, or live blogging, or small updates throughout your day. Notes can be shared, quoted, or re-blogged, and they can either stand on their own or become part of the conversation around a longer blog post. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "socialPost",
+      "post": {
+        "platform": "bluesky",
+        "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpzujjs4s2q",
+        "url": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv/post/3mqpzujjs4s2q",
+        "author": {
+          "did": "did:plc:revjuqmkvrw6fnkxppqtszpv",
+          "handle": "pckt.blog",
+          "name": "pckt.blog",
+          "avatarUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:revjuqmkvrw6fnkxppqtszpv/bafkreic22tl2yrbl5ts3uar3j6zsvfbjpodlf27kybyzdo2js5zqzynz7m@jpeg",
+          "url": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv"
+        },
+        "siteUrl": null,
+        "text": [
+          {
+            "kind": "text",
+            "text": "notes enables a lot of things.\n\na pckt note can:\n\n-be a short thought\n-be a comment on a blog\n-reblog an article\n-quote post an article\n-reblog or quote another note\n-be posted as you or your blog\n\nthe idea is to have a social layer to help distribute blog posts and open up discussion on pckt :)",
+            "marks": {},
+            "link": null
+          }
+        ],
+        "createdAt": "2026-07-16T00:59:49.415Z",
+        "images": [],
+        "external": null,
+        "video": null,
+        "quote": null,
+        "mediaHidden": false
+      }
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "You can publish notes as either yourself, or as one of your blogs. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "socialPost",
+      "post": {
+        "platform": "pckt",
+        "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mppyplylm5ib",
+        "url": "https://pckt.blog/n/did:plc:v46ojbiop5ebs5h7gaomixcc/3mppyplylm5ib",
+        "author": {
+          "did": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+          "handle": "brookie.blog",
+          "name": "Brookie’s Blog",
+          "avatarUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:v46ojbiop5ebs5h7gaomixcc/bafkreif2zmdettmdbcyiborvikvzr645szqwt5b3dgo4xvsuem6oskqziy@jpeg",
+          "url": "https://brookie.blog"
+        },
+        "siteUrl": "https://brookie.blog",
+        "text": [
+          {
+            "kind": "text",
+            "text": "did i just reinvent microblogging ? \n\nyes, i think so, but i think it’s good :)",
+            "marks": {},
+            "link": null
+          }
+        ],
+        "createdAt": "2026-07-03T07:13:58.855Z",
+        "images": [],
+        "external": null,
+        "video": null,
+        "quote": null,
+        "mediaHidden": false
+      }
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "When posting as your blog, your most recent note will display at the top of your blog's home page, and a notes page will be available to show all of the notes for your blog. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Personal notes skip the blog and go straight to the community feed, making it easy to start conversations. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "socialPost",
+      "post": {
+        "platform": "pckt",
+        "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mprc2enuhhf3",
+        "url": "https://pckt.blog/n/did:plc:v46ojbiop5ebs5h7gaomixcc/3mprc2enuhhf3",
+        "author": {
+          "did": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+          "handle": "brookie.blog",
+          "name": "Brookie",
+          "avatarUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:v46ojbiop5ebs5h7gaomixcc/bafkreig7covijemejvj2fz5v4hxrpzhevyq2srq2gqohxqfzi2ljzyllfq@jpeg",
+          "url": "https://bsky.app/profile/did:plc:v46ojbiop5ebs5h7gaomixcc"
+        },
+        "siteUrl": null,
+        "text": [
+          {
+            "kind": "text",
+            "text": "omg i love seeing other peoples pckt stickers",
+            "marks": {},
+            "link": null
+          }
+        ],
+        "createdAt": "2026-07-03T19:33:43.677Z",
+        "images": [],
+        "external": null,
+        "video": null,
+        "quote": {
+          "align": null,
+          "kind": "recordPreview",
+          "card": {
+            "uri": "at://did:plc:xtuer24wmkwitvr2ajjeewra/site.standard.document/3mk6kki3i2skf",
+            "url": "https://kandyelmo.pckt.blog/being-online-is-worth-it-sometimes-hs9jt4e",
+            "title": "Being Online is Worth It Sometimes",
+            "description": "A couples of months, I got some stickers from this platform thanks to . As of now, they're both plastered on my laptop and water bottle. This isn't the first that I got sent something from anyone online, but this definitely got me thinking about my presence all over the place, digitally. A good chunk of my time online has just been me expanding that digital footprint by feeding it the growth I had throughout my upbringing. All the lessons learned, all the changes in different parts of my identit...",
+            "imageUrl": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:xtuer24wmkwitvr2ajjeewra/bafkreihdpokroytj4h2vjoxyuthk2clqjbcaslmgrjfcypjbmmnovvvp3i@jpeg",
+            "publicationName": "KandyElmo: The Blog",
+            "iconUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:xtuer24wmkwitvr2ajjeewra/bafkreiaxxfi5bcocnqi3qf3zeog6pp5xgfkuh3jmetari2x2ot7yz2dsoq@jpeg",
+            "publishedAt": "2026-07-03T19:01:48.000Z",
+            "size": "row"
+          }
+        },
+        "mediaHidden": false
+      }
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The best way to get familiar with how notes work is to start using them for yourself. You will find the note composer underneath the \"New Post\" button on your dashboard, as well as in a few other locations throughout ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ". ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "A huge thank you to everyone that helped test ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt notes",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " in the few weeks leading up to their release. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "This is just the beginning for notes. We already have plenty of ideas for what's next and your feedback will help make ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt notes",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " even better. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "What else is new:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "list",
+      "ordered": false,
+      "start": null,
+      "items": [
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Browse ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "read.pckt.blog",
+                  "marks": {},
+                  "link": {
+                    "href": "https://read.pckt.blog/",
+                    "record": null
+                  }
+                },
+                {
+                  "kind": "text",
+                  "text": " in Dark Mode.",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Improved feed rankings for the read page. ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Get notified when someone subscribes to your blog or interacts with your notes. ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Add subheadings to customize your post previews. ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Share posts and notes directly to bluesky. ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Profile pages showcase your blogs and notes. ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Buy a custom domain right from ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "pckt",
+                  "marks": {
+                    "bold": true
+                  },
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": " with ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "@marque.at",
+                  "marks": {},
+                  "link": {
+                    "href": "https://bsky.app/profile/did:plc:nckosudltxrtrjkt4zz4jy5y",
+                    "record": null
+                  }
+                },
+                {
+                  "kind": "text",
+                  "text": ".",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Improvements to the layout throughout ",
+                  "marks": {},
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": "pckt",
+                  "marks": {
+                    "bold": true
+                  },
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": ". ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "pckt",
+                  "marks": {
+                    "bold": true
+                  },
+                  "link": null
+                },
+                {
+                  "kind": "text",
+                  "text": " is now available in English, Spanish, French, and Japanese. (More on this soon.) ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        },
+        {
+          "content": [
+            {
+              "align": null,
+              "kind": "paragraph",
+              "content": [
+                {
+                  "kind": "text",
+                  "text": "Choose which languages of posts and notes you'd like to see. ",
+                  "marks": {},
+                  "link": null
+                }
+              ]
+            }
+          ],
+          "checked": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Bug fixes: ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "socialPost",
+      "post": {
+        "platform": "bluesky",
+        "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpqcba5dk25",
+        "url": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv/post/3mqpqcba5dk25",
+        "author": {
+          "did": "did:plc:revjuqmkvrw6fnkxppqtszpv",
+          "handle": "pckt.blog",
+          "name": "pckt.blog",
+          "avatarUrl": "https://cdn.bsky.app/img/avatar/plain/did:plc:revjuqmkvrw6fnkxppqtszpv/bafkreic22tl2yrbl5ts3uar3j6zsvfbjpodlf27kybyzdo2js5zqzynz7m@jpeg",
+          "url": "https://bsky.app/profile/did:plc:revjuqmkvrw6fnkxppqtszpv"
+        },
+        "siteUrl": null,
+        "text": [
+          {
+            "kind": "text",
+            "text": "bugs we’ve rehabilitated \n🏥🐞🩺🐛👩‍⚕️🐜🪲🩻😇\n\n- fixed broken profile links\n- improved video embed aspect ratios\n- fixed dropdown layering issues\n- fresher profile pictures\n- fresher username info\n- fixed toolbar transparency issue 🔥🦊\n- fixed empty draft preview\n\n+ more stuff 💞",
+            "marks": {},
+            "link": null
+          }
+        ],
+        "createdAt": "2026-07-15T22:08:33.054Z",
+        "images": [],
+        "external": null,
+        "video": null,
+        "quote": null,
+        "mediaHidden": false
+      }
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "we have a lot more bug fixes but we don't want to bore you ! ",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Thanks for reading, and thank you to everyone who continues to build this community with us. We can't wait to see what you share with ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt notes",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ". ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "One last reminder:",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " our Summer Pass Sale will be coming to an end soon. If you've been enjoying ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "pckt",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", now is the perfect time to upgrade to an annual plan and save 25%.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Sponsored by ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@bsky.app",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " and valid through July 31st. ",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "linkCard",
+      "href": "https://pckt.blog/plans",
+      "title": "Plans",
+      "description": "Simple pricing. Start free, upgrade when you're ready.",
+      "imageUrl": "https://pckt-blog-media.s3.us-east-2.amazonaws.com/images/a9111196-6022-4e2d-b3b4-b470bc2654f9/og-image.png"
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

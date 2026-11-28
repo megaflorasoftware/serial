@@ -1,5 +1,6 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+import { normalizeJetstreamEndpoint } from "./lib/jetstream-endpoint";
 import { parseExtensionRedirectUriList } from "./lib/extension-auth";
 
 const optionalBoolean = z.union([z.boolean(), z.stringbool()]).default(false);
@@ -127,6 +128,40 @@ export const env = createEnv({
      * http and private addresses work only outside production.
      */
     ATPROTO_APPVIEW_URL: z.url().optional(),
+    ATPROTO_SLINGSHOT_ENDPOINT: z.preprocess(
+      (value) =>
+        typeof value === "string" ? value.trim() || undefined : value,
+      z
+        .url()
+        .refine((value) => {
+          const url = URL.parse(value);
+          return (
+            !!url &&
+            ["http:", "https:"].includes(url.protocol) &&
+            !url.username &&
+            !url.password &&
+            !url.search &&
+            !url.hash
+          );
+        }, "Expected an HTTP(S) service URL without credentials, query or fragment")
+        .default("https://slingshot.microcosm.blue"),
+    ),
+    ATPROTO_JETSTREAM_ENDPOINT: z.preprocess(
+      (value) =>
+        typeof value === "string" ? value.trim() || undefined : value,
+      z
+        .url()
+        .refine((value) => {
+          try {
+            normalizeJetstreamEndpoint(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "Expected an HTTP(S) or WS(S) Jetstream URL without credentials, query or fragment")
+        .default("https://jetstream.us-east.bsky.network"),
+    ),
+    ATPROTO_JETSTREAM_API_KEY: z.string().trim().min(1).optional(),
     SERIAL_EXTENSION_REDIRECT_URIS: z
       .string()
       .optional()
@@ -222,6 +257,9 @@ export const env = createEnv({
     ATPROTO_STORE_ENCRYPTION_KEY: process.env.ATPROTO_STORE_ENCRYPTION_KEY,
     ATPROTO_PLC_DIRECTORY_URL: process.env.ATPROTO_PLC_DIRECTORY_URL,
     ATPROTO_APPVIEW_URL: process.env.ATPROTO_APPVIEW_URL,
+    ATPROTO_SLINGSHOT_ENDPOINT: process.env.ATPROTO_SLINGSHOT_ENDPOINT,
+    ATPROTO_JETSTREAM_ENDPOINT: process.env.ATPROTO_JETSTREAM_ENDPOINT,
+    ATPROTO_JETSTREAM_API_KEY: process.env.ATPROTO_JETSTREAM_API_KEY,
     SERIAL_EXTENSION_REDIRECT_URIS: process.env.SERIAL_EXTENSION_REDIRECT_URIS,
     SERIAL_CAPTURE_MAX_CONCURRENT_FETCHES:
       process.env.SERIAL_CAPTURE_MAX_CONCURRENT_FETCHES,

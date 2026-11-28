@@ -3,7 +3,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { CheckIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState, FeedEmptyState } from "./EmptyStates";
+import { EmptyState } from "./EmptyStates";
 import { PaginationEnd } from "./PaginationEnd";
 import { PaginationLoader } from "./PaginationLoader";
 import {
@@ -281,7 +281,7 @@ function ContentStatusSectionList({
   const navigationIsGridLayout =
     navigationSectionInfo.length === 1 &&
     navigationSectionInfo[0]?.isGrid === true;
-  const { handleMouseSelect, selectItem } = useFeedItemNavigation(
+  const { handleMouseSelect, selectItemAfterAction } = useFeedItemNavigation(
     navigationItems,
     navigationIsGridLayout,
     navigationSectionInfo,
@@ -295,10 +295,12 @@ function ContentStatusSectionList({
       );
 
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => selectItem(nextItemId));
+        requestAnimationFrame(() =>
+          selectItemAfterAction(nextItemId, { deferScroll: false }),
+        );
       });
     },
-    [fullComputedSections, selectItem],
+    [fullComputedSections, selectItemAfterAction],
   );
 
   return (
@@ -356,7 +358,6 @@ function getViewPlaceholder({
   hasInitialData,
   hasFetchedFeeds,
   hasFetchedFeedCategories,
-  hasFeeds,
   hasItems,
   paginationState,
   layout,
@@ -364,21 +365,12 @@ function getViewPlaceholder({
   hasInitialData: boolean;
   hasFetchedFeeds: boolean;
   hasFetchedFeedCategories: boolean;
-  hasFeeds: boolean;
   hasItems: boolean;
   paginationState: ReturnType<typeof useViewListScroll>["paginationState"];
   layout: ViewSection["layout"];
 }) {
   if (!hasInitialData) return <FeedLoading />;
   if (hasItems) return null;
-  if (
-    paginationState.isLoaded &&
-    hasFetchedFeeds &&
-    !hasFeeds &&
-    Object.keys(bookmarksStore.getState().snapshot()).length === 0
-  ) {
-    return <FeedEmptyState />;
-  }
   if (!paginationState.isLoaded || paginationState.isFetching) {
     return <ViewListSkeleton layout={layout} />;
   }
@@ -436,7 +428,6 @@ function ViewVisit({ viewListKey }: { viewListKey: string }) {
     hasInitialData,
     hasFetchedFeeds,
     hasFetchedFeedCategories,
-    hasFeeds: feeds.length > 0,
     hasItems: filteredFeedItemsOrder.length > 0,
     paginationState,
     layout: baseLayout,

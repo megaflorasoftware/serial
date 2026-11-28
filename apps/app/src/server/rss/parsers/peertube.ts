@@ -8,14 +8,15 @@ import {
   BASE_FEED_CUSTOM_FIELDS,
   baseFeedSchema,
   extractRssMetadata,
+  newRssFeedDetails,
 } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
   FeedFetchResult,
+  FetchableOrigin,
   NewFeedDetails,
   RSSContent,
 } from "../types";
@@ -62,36 +63,32 @@ export const peerTubeSchema = baseFeedSchema.extend({
   docs: z.string(),
 });
 
+/**
+ * Most feeds are not PeerTube, so a mismatch is the usual answer, not an
+ * error. Neither is XML this stricter parser rejects: the website parser
+ * reads feeds such as one with a bare ampersand in a title.
+ */
 export async function getPeerTubeFeedIfMatches(
   rssString: string,
 ): Promise<NewFeedDetails | null> {
-  const rssData = await parser.parseString(rssString); // as unknown as RSSPeerTubeData;
-
-  const {
-    data: peerTubeData,
-    success: peerTubeSuccess,
-    error,
-  } = peerTubeSchema.safeParse(rssData);
-
-  if (peerTubeSuccess) {
-    return {
-      name: peerTubeData.title,
-      url: peerTubeData.feedUrl,
-      platform: "peertube",
-    };
-  } else {
-    logError(error);
-  }
-
-  return null;
+  const rssData = await parser.parseString(rssString).catch(() => null);
+  const peerTube = peerTubeSchema.safeParse(rssData);
+  if (!peerTube.success) return null;
+  return newRssFeedDetails({
+    name: peerTube.data.title,
+    url: peerTube.data.feedUrl,
+    platform: "peertube",
+    siteUrl: peerTube.data.link,
+    description: peerTube.data.description,
+  });
 }
 
 export async function fetchPeerTubeFeedData(
-  feed: DatabaseFeed,
+  { origin, feed }: FetchableOrigin,
   cached?: ConditionalHeaders,
 ): Promise<FeedFetchResult | null> {
   try {
-    const feedResponse = await readFeedHttp(feed.url, {
+    const feedResponse = await readFeedHttp(origin.locator, {
       headers: cached ? buildConditionalHeaders(cached) : undefined,
     });
 
@@ -148,9 +145,9 @@ export async function fetchPeerTubeFeedData(
     captureException(e, {
       context: "peertube-feed-fetch",
       feedId: feed.id,
-      url: feed.url,
+      url: origin.locator,
     });
-    logError("Error fetching PeerTube feed data for URL =", feed.url);
+    logError("Error fetching PeerTube feed data for URL =", origin.locator);
     logError(e);
     return null;
   }

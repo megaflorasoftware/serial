@@ -1,0 +1,1390 @@
+{
+  "blocks": [
+    {
+      "align": null,
+      "kind": "embed",
+      "href": "https://www.youtube.com/embed/d-H1nzWHLoI?rel=0",
+      "embedUrl": "https://www.youtube.com/embed/d-H1nzWHLoI?rel=0",
+      "youtube": {
+        "videoId": "d-H1nzWHLoI",
+        "start": null
+      },
+      "height": 300,
+      "aspectRatio": null
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Thank you, Boris, for inviting me. Thanks to Ted, Eric, Patrick, Chad, Eli, Peter, and everyone else behind the scenes who put this event together. And thanks to all of you for taking time out of your lives to be here and to do the work that you do.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I also want to extend a deeply felt personal thank you and congratulations to Jay and the entire Bluesky team for the years of work they put in to make all of this happen. It’s not a small amount of work, and being here at the first conference of this sort is a pretty big achievement.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Hi — I feel really honored to be here, in no small part because of what this gathering represents. I’ve been at this a long time, as Boris said, and I don’t think I can properly express how much it means to me personally to see so many amazing people working on building meaningful alternatives to online social tools together in one room — and many more watching online, hopefully.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Normally, when I give talks about decentralization — and I suspect most here can empathize — it’s to a group of mostly confused people who think I’m from a different planet. Being here with you is like hardcore therapy for my Cassandra complex. It also has the side effect of triggering my imposter syndrome. It’s entirely possible that nothing I’m going to say will blow your mind “TED-style,” but I hope it can set the stage for us to listen and share with the incredible folks who are here over the next couple of days.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "The Early Days: Twitter’s Birth and My Role",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I want to share a bit of my context, because the story of Blue Sky and AT Protocol starts right at the beginning of Twitter — and that context may help inform some of the work you’re all doing.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I helped conceive Twitter. I didn’t give birth to it — that was Jack and Florian — but I was its midwife and adoptive mother. For two months in early 2007, I was the only programmer on Twitter. I was the code’s sole guardian and caretaker.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "My semi-official job title was given to me by a visitor to the office who, upon being introduced to me, exclaimed: “Oh, you’re the Twitter fluffer!”",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I also coined the word ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "tweet",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", designed @replies, and created OAuth around the same time — which is to say, I know more than the average bear about how you’re all feeling right now.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I was also the first person to hate Twitter — a badge I wear with honor. Back when it was SMS-only, before it launched publicly, I did the math and realized that on my prepaid immigrant phone plan, it would cost about $2,000 a year to send and receive even a modest 2006-era number of tweets. I didn’t think it was going anywhere.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "But eventually, I came to love Twitter. It has lived rent-free in my head ever since. In so many ways, it defines me, as much as I wish it didn’t. It’s a relationship that’s unreciprocated.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I was a working-class kid, naïve about media and venture capital. I didn’t become rich or famous — not many people have heard my name, which is awesome. As they say: the job will never love you back.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I wish I could let it go. But Twitter — the concept, not the servers or contracts or code, especially now that it’s called ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "X",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " — is so much bigger than a job. Even if it was often silly, it was the most visceral representation of public human communication and ideas anyone has ever created.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "How do you let that go? No seriously — if you have ideas, please let me know.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Moments That Defined an Era",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Everyone in Millennial and Gen-X–proximal generations can point to pivotal moments in their lives that hinged on social media. I know many of you have personal stories like that too.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "For me, there are a few defining moments from the early days that stand out.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The first was a project called ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "TxtMob",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", which I briefly helped with in 2004. It was a way for protesters to coordinate during the Republican National Convention — basically a primitive group SMS system. Until it was blocked by carriers, it worked beautifully.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Years later, when the Arab Spring unfolded on Twitter, my reaction wasn’t surprise — it was, “Hurrah, it worked.”",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "There’s an incredibly boring part of Twitter that was the Google-PM-designed, VC-backed Web 2.0 startup. But there was also always an ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "interesting punk thread",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " in it — something Facebook or Instagram never had.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "In the early days, before anyone understood that Twitter could be used for anything but sharing bathroom status updates, it was clear — if hard to believe — that both the possibilities and the problems of the platform were immense.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "It was clear, at least to me, that moderation would be a huge issue. My initial design for @replies was a less viral version — only people you followed could reply to you. Twitter’s product lead at the time wanted open replies to maximize virality.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I protested: our team of three developers didn’t have the resources to build moderation tools to deal with the inevitable spam and harassment. But I conceded that virality would probably win. I built open @replies on the condition that he’d take personal responsibility for the outcome. He did not. I think I lost that bet.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Federation: An Early Dream",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "In early 2008, at a conference not unlike this one, a lovely guy named ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Ralph Meijer",
+          "marks": {},
+          "link": {
+            "href": "https://ralphm.net/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "@ralphm.net",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/ralphm.net",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " and I got federation working between Twitter and a similar (and now defunct) service called Jaiku. We did it over XMPP.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "My motivation was simple: we couldn’t solve all these problems alone, no matter how successful we were. I did win that bet — even though the project was never launched publicly. Despite investor support, it was aborted by later venture capital rounds.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "But even then, it was obvious that ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "federation",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " — a more open, connected social web — was the destiny of online social networks. Seeing that early federation work across two totally different systems, I’ve known in my bones for decades that a freer social system was both possible and inevitable.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "That experience has stayed with me.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "The Cost of Lost Bets",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I lost a lot of bets back then. I was pushed out of the company for trying to make the fediverse a thing. For years afterward, I tried to build that fediverse without Twitter — and it didn’t work.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "For a long time, I thought it was my personal failure that we didn’t have a better alternative. The enormity of Twitter became oppressive — because despite its merits, it was so obviously the ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "wrong thing",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", corrupted by capital and a lack of imagination.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "What seemed like a simple tweak to Twitter’s code — something that could have changed the course of the platform and maybe the world — turned out to be a massive project that few people truly grasped.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "So seeing all of you here is deeply gratifying and hopeful. As dark as these days are, and as awful as Twitter-slash-X has become, seeing Blue Sky and all the amazing work happening here feels like being in Seattle just as the cherry blossoms start to bloom after a long, gray winter.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "What Future Are We Building?",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Obviously, that’s a big question with many answers. But I want to talk about one aspect in particular.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "For me, one major part of Twitter was always unfinished — all the things it never became. I always saw Twitter as this malleable thing: a big network of messages and content that could be shared, reshared, and remixed.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The 140-character limit was important — it defined Twitter — but there’s more to life than tweets. Even ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "dril",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " tweets.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Really, this is true of all major networks — Facebook, Instagram, TikTok — they’re all stuck in their grooves. They’re boring.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "When we think about the broad spectrum of human communication — art, science, commerce, politics — today’s online networks aren’t great at communicating nuance, let alone in a healthy way.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Mediums, the Internet, and the Loss of Flexibility",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Sixty years ago, as the world came to terms with radio, television, and recorded media, Marshall McLuhan and John Culkin gave us the concept of mediums as technologies that shape us: ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "“We shape our tools, and thereafter our tools shape us.”",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Fast-forward 30 or 40 years: the internet emerged as a medium for ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "creating new mediums.",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The Web 2.0 moment — roughly 2005 to 2008 — was when the tooling was good enough for people to build cool stuff, while the web was still malleable and open. Before monopolists took hold, before platforms ossified into piles of incentivized garbage.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Herzog and the Jungle",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "One of my favorite clips comes from Werner Herzog’s ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Burden of Dreams",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ", where he reflects on the chaos of the jungle while filming ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "Fitzcarraldo",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": ".",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "“Taking a close look at what’s around us, there is some sort of harmony — the harmony of overwhelming and collective murder… We have to become humble in front of this overwhelming misery and lack of order. There is no real harmony as we conceive it… But I love it against my better judgment.”",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "There’s an incredible tension in Herzog — this rational man trying to find order in chaos. He loves the creativity, even though it terrifies him.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Blue Sky is like that: a simulacrum of Twitter, designed to be approachable and understandable — an amazing achievement. But the jungle is more interesting.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "AT Protocol could be the jungle — if we let it. Its flexibility and culture of openness can be fertile ground for new experimentation.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We’re already seeing it: not just existing mediums like events, portable moderation tools, or communities-as-mediums, but ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "weird",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " stuff — experiments that stretch the imagination of what “social” can be.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "The Jungle Is Chaotic",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "There’s a catch. The jungle’s chaos is tolerable from within, but overwhelming from the outside. If we’re lucky, it’s only going to get more chaotic.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "In many ways, we’re already past the tolerable complexity threshold. The monopolies we see today emerged as a response to that complexity — a little corporate fascism to make the world feel understandable.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Even then, it’s too much. How many messaging apps do you have on your phone? For me, it’s always one too many.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Identity, Trust, and Complexity",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "This is where Mastodon got it wrong. Having a one-to-one connection between the server you use and your identity makes everything worse.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Nothing in the fediverse protocols demands that one identity equals one server or one medium. WebFinger was originally meant to ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "decouple",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": " identity from specific applications — to allow someone to use a single handle (like an email address) to connect their social accounts.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Instead, Mastodon tied identity to servers, adding complexity.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "AT Protocol gets this right — by tying data to identity, rather than identity to services. The apparent complexity to users is vastly reduced, and it supports the fragmentation of identity that reflects real human life.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Just as in the real world, I can have one identity for friends and another for work, I can have multiple AT Protocol accounts — each contextually appropriate, each under my control.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "This model also makes trust and safety easier. A persistent conception of identity allows us to transfer trust between different aspects of our lives — much like we do offline.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Technology Matters, but People Matter More",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "There’s nothing preventing the fediverse from changing tack and getting this right. Nor any barriers to ActivityPub and AT Protocol — or any other systems — working together.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "In fact, it’s critical that they do.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "As good as it is to build good technology, it’s the social outcomes that matter. Technologies only matter inasmuch as they help people do what they need to do.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "That’s why I worked with Ralph on federating Twitter, and why I pushed back against building the most viral thing we could. It’s why I worked on TxtMob, and before that, Indymedia — whose rallying cry was ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "“Be the media.”",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Ursula Franklin once asked in her 1990 Massey Lectures:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "“How come the right to change our mental environment — to change the constructs of our minds and the sounds around us — seems to have been given away without anybody’s consent?”",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "It feels more relevant than ever.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Learning from the Telegraph and the Telephone",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Despite the gray in my beard, none of this history is that long ago. I’d like to think there’s still time to course-correct.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "It took a hundred years to go from the invention of the telegraph to the modern telephone network. The telegraph was invented in the early 1800s as a way to send short text messages. The first versions used 27 wires — one per letter — later reduced to six wires with the Cooke and Wheatstone telegraph.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Thirty years later came Morse code, and 30 years after that, the Baudot code — the first binary encoding for text.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "When telephones arrived, you could only call people on the same network — the same operator. That lasted until 1914, when AT&T’s Kingsbury Commitment allowed cross-network calling under antitrust pressure.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Phone number portability — the legal right to own your telephonic identity — didn’t come until almost another century later.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We haven’t even begun that conversation for email addresses, let alone for post-X social identifiers.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "heading",
+      "level": 2,
+      "content": [
+        {
+          "kind": "text",
+          "text": "Reclaiming Our Tools",
+          "marks": {
+            "bold": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "We’ve lost something important. Twitter was a critical tool that helped people communicate, organize, and create. I’m hopeful that Blue Sky can help guide us past the fall of Babel — to a new, open, interconnected social web.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "As important as Twitter was, there’s so much we never had. The road ahead is long, and there’s still so much to build before the atmosphere of social media becomes breathable again.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "As you do this work, remember: Rome wasn’t built in a day. The goal isn’t just a world without Caesars or Zuckerbergs — it’s a world that holds true to Franklin’s aspiration:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "“A world where individuals and communities have the agency to shape the tools we use, and with them, our minds.”",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "I’ll end with one more of her quotes:",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "quotation",
+      "children": [
+        {
+          "align": null,
+          "kind": "paragraph",
+          "content": [
+            {
+              "kind": "text",
+              "text": "“The viability of technology, like democracy, depends in the end on the practice of justice and on the enforcement of limits to power.”",
+              "marks": {},
+              "link": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Thanks again for being here, and for the work you’re doing.",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "divider"
+    },
+    {
+      "align": "center",
+      "kind": "image",
+      "image": {
+        "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:lehcqqkwzcwvjvw66uthu5oq/bafkreiefsccyzsc724jax75xxjhu7u2fic6b7pdzuoen33smejmrovsyiu@jpeg",
+        "alt": "",
+        "title": null,
+        "aspectRatio": {
+          "width": 256,
+          "height": 256
+        },
+        "width": null,
+        "fullBleed": false
+      },
+      "caption": null
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "@blaine.bsky.social",
+          "marks": {},
+          "link": {
+            "href": "https://bsky.app/profile/blaine.bsky.social",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": " Sociotechnologist, activist. First employee @ Twitter, built that and pioneered social decentralization, created OAuth. Shy cloud-observer, mostly. Building for Local at ",
+          "marks": {},
+          "link": null
+        },
+        {
+          "kind": "text",
+          "text": "New Public",
+          "marks": {},
+          "link": {
+            "href": "https://newpublic.org/",
+            "record": null
+          }
+        },
+        {
+          "kind": "text",
+          "text": ".",
+          "marks": {},
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "divider"
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "The videos from ATmosphereConf 2025 held in Seattle, Washington, are being republished along with transcripts as part of the process of preparing for ATmosphereConf 2026, taking place March 26th - 29th in Vancouver, Canada.",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "paragraph",
+      "content": [
+        {
+          "kind": "text",
+          "text": "Follow the conference updates and register to join us!",
+          "marks": {
+            "italic": true
+          },
+          "link": null
+        }
+      ]
+    },
+    {
+      "align": null,
+      "kind": "linkCard",
+      "href": "https://news.atmosphereconf.org/",
+      "title": "ATmosphereConf News",
+      "description": "News from the ATProtocol Community Conference, aka ATmosphereConf.   March 26th - 29th, Vancouver, BC, Canada",
+      "imageUrl": null
+    }
+  ],
+  "footnotes": [],
+  "truncated": false
+}

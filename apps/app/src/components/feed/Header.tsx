@@ -28,7 +28,7 @@ export function Header() {
   return (
     <header
       className={clsx(
-        "top-0 z-20 flex w-full flex-wrap items-center justify-between gap-2 bg-transparent px-6 py-6",
+        "top-0 z-20 flex w-full flex-wrap items-center justify-between gap-2 bg-transparent px-6 pt-5 pb-6 md:pt-6",
         {
           "sticky transition-transform duration-300": isContentPage,
           "-translate-y-full": isContentPage && barsHidden,

@@ -171,6 +171,7 @@ export function EditViewDialog({
 
   return (
     <ControlledResponsiveDialog
+      mobileSheet
       open={selectedViewId !== null}
       onOpenChange={onClose}
       title="Edit View"

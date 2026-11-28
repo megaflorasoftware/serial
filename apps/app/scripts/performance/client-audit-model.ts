@@ -298,6 +298,11 @@ function makeBookmark(index: number): ApplicationBookmark {
 function makeFeedItem(index: number): ApplicationFeedItem {
   const date = new Date(FIXTURE_TIME.getTime() - index * 1_000);
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    sourceCid: null,
+    bodySource: "rss",
+    tags: [],
     id: `audit-feed-item-${index}`,
     feedId: (index % 100) + 1,
     contentId: `audit-${index}`,
@@ -305,7 +310,11 @@ function makeFeedItem(index: number): ApplicationFeedItem {
     author: "Serial audit",
     url: `https://feeds.serial.test/${index}`,
     thumbnail: "",
-    content: `<p>Audit body ${index}</p>`,
+    body: {
+      form: "html",
+      html: `<p>Audit body ${index}</p>`,
+      revision: `feed-hash-${index}`,
+    },
     contentSnippet: `Audit summary ${index}`,
     contentType: "text",
     isWatched: index % 5 > 2,

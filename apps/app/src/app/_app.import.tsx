@@ -26,6 +26,7 @@ import { dataRequestActions } from "~/lib/data/directRequests";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { MAX_BULK_MUTATION_ITEMS } from "~/lib/schemas/bulk";
 import { useCanMutate } from "~/lib/data/offline-mutations";
+import { findFeedWithRssUrl, getFeedRssUrl } from "~/lib/feeds/origins";
 
 export const Route = createFileRoute("/_app/import")({
   component: EditFeedsPage,
@@ -273,7 +274,7 @@ function EditFeedsPage() {
   ).length;
 
   const { feeds } = useFeeds();
-  const existingFeedUrls = new Set(feeds.map((feed) => feed.url));
+  const existingFeedUrls = new Set(feeds.map((feed) => getFeedRssUrl(feed)));
   const { selectedChannels, channelsToSubmit, leftOutByLimitCount } =
     getImportSubmission(feedsFoundFromFile, existingFeedUrls);
   const loading = useLoadingMode();
@@ -296,9 +297,7 @@ function EditFeedsPage() {
       // Mark already-added feeds as shouldImport: false
       const feedsWithImportStatus = feedResult.data.map((feed) => ({
         ...feed,
-        shouldImport: !feeds.some(
-          (existingFeed) => existingFeed.url === feed.feedUrl,
-        ),
+        shouldImport: !findFeedWithRssUrl(feeds, feed.feedUrl),
       }));
       setFeedsFoundFromFile(feedsWithImportStatus);
       setFileInputErrorList(null);

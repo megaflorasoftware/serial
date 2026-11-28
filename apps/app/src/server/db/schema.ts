@@ -2,14 +2,17 @@
 // https://orm.drizzle.team/docs/sql-schema-declaration
 
 import { createId } from "@paralleldrive/cuid2";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  blob,
+  foreignKey,
   index,
   integer,
   primaryKey,
   sqliteTableCreator,
   text,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import {
   createInsertSchema,
@@ -25,9 +28,15 @@ import {
   viewLayoutSchema,
   viewReadStatusSchema,
 } from "./constants";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { ReaderBody } from "@serial/standard-site";
+import type { PublicationSyncResult } from "~/lib/auth/publication-sync";
+import type { TwoStageProgress } from "~/lib/two-stage-progress";
+import type { ItemObservation } from "./feed-item-observation";
 import type { ContentPlatform } from "~/lib/content/descriptor";
 import {
   CONTENT_PLATFORM,
+  CONTENT_PLATFORMS,
   CONTENT_TYPE,
   contentPlatformSchema,
   contentTypeSchema,
@@ -68,6 +77,10 @@ export const user = sqliteTable(
     })
       .notNull()
       .default(false),
+    onboardingComplete: integer("onboarding_complete", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    onboardingStep: text("onboarding_step"),
     image: text("image"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
@@ -76,6 +89,7 @@ export const user = sqliteTable(
     banReason: text("ban_reason"),
     banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
     nextRefreshAt: integer("next_refresh_at", { mode: "timestamp" }),
+    lastActiveAt: integer("last_active_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     index("user_created_at_idx").on(table.createdAt),
@@ -242,7 +256,6 @@ export const feeds = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name", { length: 256 }).notNull().default(""),
-    url: text("url", { length: 512 }).notNull().default(""),
     imageUrl: text("image_url", { length: 512 }).notNull().default(""),
     platform: text("platform", { length: 256 }).notNull().default("youtube"),
     openLocation: text("open_location", { length: 64 })
@@ -254,27 +267,80 @@ export const feeds = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .$default(() => new Date())
       .notNull(),
-    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
-    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-    etag: text("etag"),
-    lastModifiedHeader: text("last_modified_header"),
+    // Canonical site the Feed subscribes to; null until an origin reports one.
+    siteUrl: text("site_url", { length: 512 }),
+    // Set when the user renames the Feed so derived names never overwrite it.
+    nameEditedAt: integer("name_edited_at", { mode: "timestamp" }),
   },
   (example) => [
     index("feed_user_id_idx").on(example.userId),
-    index("feed_user_id_url_idx").on(example.userId, example.url),
-    index("feed_user_id_is_active_idx").on(
-      example.userId,
-      example.isActive,
-      example.lastFetchedAt,
-    ),
-    index("feed_user_id_is_active_next_fetch_at_idx").on(
-      example.userId,
-      example.isActive,
-      example.nextFetchAt,
-    ),
+    index("feed_user_id_is_active_idx").on(example.userId, example.isActive),
   ],
 );
+
+export const FEED_ORIGIN_KIND = {
+  RSS: "rss",
+  ATPROTO: "atproto",
+} as const;
+export const feedOriginKindSchema = z.enum([
+  FEED_ORIGIN_KIND.RSS,
+  FEED_ORIGIN_KIND.ATPROTO,
+]);
+export type FeedOriginKind = z.infer<typeof feedOriginKindSchema>;
+
+/**
+ * One data source of a Feed. An RSS origin is located by its feed URL; an
+ * Atmosphere origin by a publication at-uri. Scheduling and observed source metadata live here so each origin keeps its
+ * own clock. `userId` is denormalised so the due-origin pager never joins
+ * before filtering.
+ */
+export const feedOrigins = sqliteTable(
+  "feed_origin",
+  {
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { length: 16 }).notNull(),
+    locator: text("locator", { length: 1024 }).notNull(),
+    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
+    // NULL means unscheduled: the origin's Feed is inactive. An origin is due
+    // once this time has passed.
+    nextFetchAt: integer("next_fetch_at", { mode: "timestamp" }),
+    // Metadata as observed from the source on the last successful read.
+    sourceName: text("source_name", { length: 256 }),
+    sourceImageUrl: text("source_image_url", { length: 512 }),
+    sourceDescription: text("source_description"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("feed_origin_feed_id_kind_unique").on(table.feedId, table.kind),
+    index("feed_origin_kind_locator_idx").on(table.kind, table.locator),
+    index("feed_origin_user_id_kind_locator_idx").on(
+      table.userId,
+      table.kind,
+      table.locator,
+    ),
+    // Covers the due check: only scheduled origins, with the Feed id it counts.
+    index("feed_origin_due_idx")
+      .on(table.userId, table.nextFetchAt, table.feedId)
+      .where(sql`${table.nextFetchAt} is not null`),
+  ],
+);
+export const feedOriginSchema = createSelectSchema(feedOrigins).merge(
+  z.object({ kind: feedOriginKindSchema }),
+);
+export type DatabaseFeedOrigin = typeof feedOrigins.$inferSelect;
+export type ApplicationFeedOrigin = z.infer<typeof feedOriginSchema>;
 export const openLocationSchema = z.enum(["serial", "origin"]);
 export type FeedOpenLocation = z.infer<typeof openLocationSchema>;
 
@@ -288,10 +354,251 @@ export const feedsSchema = createSelectSchema(feeds).merge(
   z.object({
     platform: contentPlatformSchema,
     openLocation: openLocationSchema,
+    origins: feedOriginSchema.array(),
   }),
 );
 export type DatabaseFeed = typeof feeds.$inferSelect;
+/** A Feed row with its origin rows attached, the shape every Feed read returns. */
+export type DatabaseFeedWithOrigins = DatabaseFeed & {
+  origins: HydratedFeedOrigin[];
+};
+/** A Feed row with only the common origin rows the application schema exposes. */
+export type DatabaseFeedWithCommonOrigins = DatabaseFeed & {
+  origins: DatabaseFeedOrigin[];
+};
 export type ApplicationFeed = z.infer<typeof feedsSchema>;
+
+export const feedOriginRss = sqliteTable("feed_origin_rss", {
+  originId: integer("origin_id")
+    .primaryKey()
+    .references(() => feedOrigins.id, { onDelete: "cascade" }),
+  etag: text("etag"),
+  lastModifiedHeader: text("last_modified_header"),
+  alternateLocators: text("alternate_locators", { mode: "json" }).$type<
+    string[]
+  >(),
+  // Identifies the parsed feed last ingested in full. A fetch that parses to
+  // the same digest reads and writes no item. NULL until a fetch ingests.
+  itemsDigest: text("items_digest"),
+});
+
+/**
+ * An origin the retry sweep may process: the stream applies it live and its
+ * repository is active. Both pending-work indexes keep only these origins.
+ * SQLite uses a partial index only for a query that states the index's terms
+ * as the same literals, so the sweep states this same condition.
+ */
+export function sweepableOrigin(
+  origin: Record<
+    "streamMode" | "initialized" | "repositoryActive",
+    AnySQLiteColumn
+  >,
+) {
+  return sql`${origin.streamMode} = 'live' and ${origin.initialized} = 1 and ${origin.repositoryActive} = 1`;
+}
+
+export const feedOriginAtproto = sqliteTable(
+  "feed_origin_atproto",
+  {
+    originId: integer("origin_id")
+      .primaryKey()
+      .references(() => feedOrigins.id, { onDelete: "cascade" }),
+    publicationDid: text("publication_did").notNull(),
+    workOwner: text("work_owner"),
+    workUntil: integer("work_until", { mode: "timestamp_ms" }),
+    recoveryRetryAt: integer("recovery_retry_at", { mode: "timestamp_ms" }),
+    recoveryAttempts: integer("recovery_attempts").notNull().default(0),
+    streamService: text("stream_service"),
+    streamSeq: text("stream_seq"),
+    streamGeneration: integer("stream_generation").notNull().default(0),
+    streamMode: text("stream_mode", {
+      enum: ["paused", "direct", "catchup", "live"],
+    })
+      .notNull()
+      .default("paused"),
+    publicationRecord: text("publication_record", {
+      mode: "json",
+    }).$type<unknown>(),
+    publicationSeq: text("publication_seq"),
+    publicationDirty: integer("publication_dirty", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    accountSeq: text("account_seq"),
+    accountStatus: text("account_status"),
+    repositorySeq: text("repository_seq"),
+    repositoryRev: text("repository_rev"),
+    repositoryActive: integer("repository_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    identitySeq: text("identity_seq"),
+    listingEtag: text("listing_etag"),
+    // The repository revision the last complete listing saw. A recovery whose
+    // repository still reads this revision skips the listing.
+    listingRev: text("listing_rev"),
+    cursor: text("cursor"),
+    boundary: text("boundary"),
+    newestRkey: text("newest_rkey"),
+    initialCount: integer("initial_count").notNull().default(0),
+    initialized: integer("initialized", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
+     * The earliest time a staged document of this origin is due. NULL when
+     * none is staged; the epoch when one is due at once.
+     */
+    stagedDueAt: integer("staged_due_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    index("feed_origin_atproto_publication_did_idx").on(table.publicationDid),
+    // The retry sweep reads these two indexes and nothing else. Each keeps
+    // only origins the sweep may process, so a paused, uninitialized or
+    // deactivated origin costs it nothing however much work it holds.
+    index("feed_origin_atproto_dirty_idx")
+      .on(table.originId)
+      .where(sql`${table.publicationDirty} = 1 and ${sweepableOrigin(table)}`),
+    index("feed_origin_atproto_staged_due_at_idx")
+      .on(table.stagedDueAt)
+      .where(
+        sql`${table.stagedDueAt} is not null and ${sweepableOrigin(table)}`,
+      ),
+  ],
+);
+
+/** Server-only details; the application schema exposes only the common origin. */
+export type HydratedFeedOrigin = DatabaseFeedOrigin & {
+  rss: typeof feedOriginRss.$inferSelect | null;
+  atproto: typeof feedOriginAtproto.$inferSelect | null;
+};
+
+/** One configured service. Sequences are exact decimal text, never floating-point SQL values. */
+export const atprotoStreamState = sqliteTable("atproto_stream_state", {
+  id: text("id").primaryKey(),
+  service: text("service").notNull(),
+  seq: text("seq"),
+  generation: integer("generation").notNull().default(0),
+  connected: integer("connected", { mode: "boolean" }).notNull().default(false),
+  leaseOwner: text("lease_owner"),
+  leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
+});
+
+export const DOCUMENT_LEDGER_REASONS = [
+  "invalid",
+  "oversized",
+  "adapter",
+  // The import kept failing until its retries ran out.
+  "failed",
+] as const;
+
+/**
+ * Work ledger per document. It never carries record data: the Document source
+ * lives in its own rows so due-work scans stay narrow.
+ */
+export const feedOriginAtprotoDocuments = sqliteTable(
+  "feed_origin_atproto_document",
+  {
+    originId: integer("origin_id")
+      .notNull()
+      .references(() => feedOriginAtproto.originId, { onDelete: "cascade" }),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    status: text("status", {
+      enum: ["ready", "retry", "invalid", "deleted"],
+    }).notNull(),
+    eventSeq: text("event_seq"),
+    eventRev: text("event_rev"),
+    /** The source version underlying the last readable body; never replaced by a failed import. */
+    bodyCid: text("body_cid"),
+    /**
+     * The content `$type` of that readable version, written with `bodyCid`.
+     * NULL without a readable body; empty when the readable content has no type.
+     */
+    bodyContentType: text("body_content_type"),
+    reason: text("reason", { enum: DOCUMENT_LEDGER_REASONS }),
+    retryAt: integer("retry_at", { mode: "timestamp_ms" }),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.originId, table.uri] }),
+    // Pending work drains fresh-first, newest-first; the index serves that order.
+    index("feed_origin_atproto_document_due_idx").on(
+      table.originId,
+      table.status,
+      table.retryAt,
+      sql`${table.uri} desc`,
+    ),
+    // Readable versions by content type: the platform check probes this
+    // instead of reading the retained sources.
+    index("feed_origin_atproto_document_body_type_idx")
+      .on(table.originId, table.bodyContentType)
+      .where(sql`${table.bodyContentType} is not null`),
+  ],
+);
+
+/** The record as the platform wrote it, as lossless JSON text, per Feed and version. */
+export const feedOriginAtprotoDocumentSources = sqliteTable(
+  "feed_origin_atproto_document_source",
+  {
+    originId: integer("origin_id").notNull(),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    record: text("record").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.originId, table.uri, table.cid] }),
+    foreignKey({
+      columns: [table.originId, table.uri],
+      foreignColumns: [
+        feedOriginAtprotoDocuments.originId,
+        feedOriginAtprotoDocuments.uri,
+      ],
+      name: "feed_origin_atproto_document_source_document_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+/** Overflow blob bytes fetched during import, exactly as served, keyed by the source version. */
+export const feedOriginAtprotoDocumentBlobs = sqliteTable(
+  "feed_origin_atproto_document_blob",
+  {
+    originId: integer("origin_id").notNull(),
+    uri: text("uri").notNull(),
+    cid: text("cid").notNull(),
+    blobCid: text("blob_cid").notNull(),
+    mimeType: text("mime_type"),
+    bytes: blob("bytes", { mode: "buffer" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.originId, table.uri, table.cid, table.blobCid],
+    }),
+    foreignKey({
+      columns: [table.originId, table.uri, table.cid],
+      foreignColumns: [
+        feedOriginAtprotoDocumentSources.originId,
+        feedOriginAtprotoDocumentSources.uri,
+        feedOriginAtprotoDocumentSources.cid,
+      ],
+      name: "feed_origin_atproto_document_blob_source_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+/** The last state resolved for a referenced record, shared by every document that refers to it. */
+export const atprotoReferenceSnapshots = sqliteTable(
+  "atproto_reference_snapshot",
+  {
+    uri: text("uri").primaryKey(),
+    cid: text("cid"),
+    outcome: text("outcome", {
+      enum: ["resolved", "missing", "unsupported", "unavailable"],
+    }).notNull(),
+    record: text("record"),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }).notNull(),
+    readAt: integer("read_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [index("atproto_reference_snapshot_read_at_idx").on(table.readAt)],
+);
 
 export const feedItems = sqliteTable(
   "feed_item",
@@ -338,9 +645,29 @@ export const feedItems = sqliteTable(
       mode: "timestamp",
     }),
     contentHash: text("content_hash"),
+    sourceKind: text("source_kind", { enum: ["rss", "atproto", "both"] })
+      .notNull()
+      .default("rss"),
+    atprotoUri: text("atproto_uri"),
+    /** Which origin supplied the body. NULL on items written before this column existed. */
+    bodySource: text("body_source", { enum: ["rss", "atproto", "none"] }),
+    tags: text("tags", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** Set when the Reader body is a Document source; the body revision for clients. */
+    sourceCid: text("source_cid"),
   },
   (example) => [
     unique().on(example.url, example.feedId),
+    // Both are partial: text items store no normalization override and RSS
+    // items no Atmosphere URI, so most rows would only add NULL entries.
+    index("feed_item_feed_normalized_url_idx")
+      .on(example.feedId, example.normalizedUrl)
+      .where(sql`${example.normalizedUrl} is not null`),
+    uniqueIndex("feed_item_feed_atproto_uri_unique")
+      .on(example.feedId, example.atprotoUri)
+      .where(sql`${example.atprotoUri} is not null`),
     index("feed_item_feed_id_posted_at_idx").on(
       example.feedId,
       example.postedAt,
@@ -371,16 +698,56 @@ export const feedItems = sqliteTable(
     ),
   ],
 );
+/** Internal source snapshots allow edits to restore the other origin's fallback. */
+export const feedItemObservations = sqliteTable(
+  "feed_item_observation",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["rss", "atproto"] }).notNull(),
+    // The narrow columns sit ahead of the value so reading them never walks
+    // the value's overflow pages.
+    /** Hash of the observation as parsed from its source, before image enrichment. */
+    digest: text("digest"),
+    value: text("value", { mode: "json" }).$type<ItemObservation>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.kind] })],
+);
+
+/** Old URLs remain aliases after an edit so stale RSS cannot recreate a duplicate. */
+export const feedItemAliases = sqliteTable(
+  "feed_item_alias",
+  {
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    locator: text("locator").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => feedItems.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.feedId, table.locator] }),
+    index("feed_item_alias_item_idx").on(table.itemId),
+  ],
+);
+
 export const feedItemSchema = createSelectSchema(feedItems);
 export type DatabaseFeedItem = typeof feedItems.$inferSelect;
+export type DatabaseFeedItemObservation =
+  typeof feedItemObservations.$inferSelect;
+export type DatabaseFeedItemAlias = typeof feedItemAliases.$inferSelect;
 
 export const applicationFeedItemSchema = feedItemSchema
-  .omit({ normalizedUrl: true })
+  .omit({ normalizedUrl: true, content: true })
   .merge(
     z.object({
       platform: contentPlatformSchema,
       contentType: contentTypeSchema,
       orientation: videoOrientationSchema.nullable(),
+      /** Null until loaded through the body endpoint or a direct open; typed, not parsed, at this boundary. */
+      body: z.custom<ReaderBody>().nullable(),
     }),
   )
   .required();
@@ -443,14 +810,7 @@ export const bookmarks = sqliteTable(
     sourceUrl: text("source_url").notNull(),
     effectiveUrl: text("effective_url").notNull().default(""),
     canonicalUrl: text("canonical_url").notNull(),
-    platform: text("platform", {
-      enum: [
-        CONTENT_PLATFORM.WEBSITE,
-        CONTENT_PLATFORM.YOUTUBE,
-        CONTENT_PLATFORM.PEERTUBE,
-        CONTENT_PLATFORM.NEBULA,
-      ],
-    })
+    platform: text("platform", { enum: CONTENT_PLATFORMS })
       .notNull()
       .default(CONTENT_PLATFORM.WEBSITE),
     contentType: text("content_type", {
@@ -880,31 +1240,198 @@ export const atprotoAuthState = sqliteTable(
  * the OAuth callback persisting the session and the sign-in flow binding the
  * DID to a Serial user; unbound rows are swept with expired auth state.
  */
-export const atprotoConnections = sqliteTable("atproto_connections", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  userId: text("user_id")
-    .unique()
-    .references(() => user.id, { onDelete: "cascade" }),
-  did: text("did").notNull().unique(),
-  session: text("session"),
-  /** Scope actually granted; null when the server omitted it. */
-  scopes: text("scopes"),
-  handle: text("handle"),
-  pdsUrl: text("pds_url"),
-  status: text("status")
-    .$type<"active" | "disconnected">()
-    .notNull()
-    .default("active"),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .$default(() => new Date())
-    .notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .$default(() => new Date())
-    .notNull(),
-});
+export const atprotoConnections = sqliteTable(
+  "atproto_connections",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id")
+      .unique()
+      .references(() => user.id, { onDelete: "cascade" }),
+    did: text("did").notNull().unique(),
+    session: text("session"),
+    /** Scope actually granted; null when the server omitted it. */
+    scopes: text("scopes"),
+    handle: text("handle"),
+    pdsUrl: text("pds_url"),
+    status: text("status")
+      .$type<"active" | "disconnected">()
+      .notNull()
+      .default("active"),
+    /**
+     * Atmosphere subscription sync settings. Both directions default off (the
+     * None method) on sign-up and link; unlink resets them because the row
+     * outlives the link and is reused when the DID is linked again.
+     */
+    importSubscriptions: integer("import_subscriptions", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    exportSubscriptions: integer("export_subscriptions", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    importAsInactive: integer("import_as_inactive", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
+     * Whether export was enabled since the account was linked. The first time
+     * it is, existing RSS-only Feeds join the Feed origin check queue.
+     */
+    subscriptionBackfillStarted: integer("subscription_backfill_started", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
+    subscriptionRequestId: text("subscription_request_id"),
+    subscriptionNextAttemptAt: integer("subscription_next_attempt_at", {
+      mode: "timestamp_ms",
+    }),
+    /**
+     * When the earliest waiting retry falls due: a failed import, export or
+     * remote removal. Until then a check stays idle even though that work is
+     * unfinished.
+     */
+    subscriptionRetryAt: integer("subscription_retry_at", {
+      mode: "timestamp_ms",
+    }),
+    /**
+     * Retries in a row in which the PDS refused a subscription write. It sets
+     * the wait before the next retry and ends retries once they run out. A
+     * Feed change, a settings save or a backfill attach starts it again.
+     */
+    subscriptionWriteFailures: integer("subscription_write_failures")
+      .notNull()
+      .default(0),
+    /**
+     * When a refused subscription write may next be attempted. Until then a
+     * run leaves owed writes alone, whatever started it. Empty beside a
+     * count means the retries ran out and the writes wait for a reset.
+     */
+    subscriptionWriteRetryAt: integer("subscription_write_retry_at", {
+      mode: "timestamp_ms",
+    }),
+    subscriptionJobToken: text("subscription_job_token"),
+    subscriptionJobExpiresAt: integer("subscription_job_expires_at", {
+      mode: "timestamp_ms",
+    }),
+    /**
+     * Progress of the request the user started. It stays set between that
+     * request's runs and clears once the request settles, so background runs
+     * leave it and the result alone.
+     */
+    subscriptionJobProgress: text("subscription_job_progress", {
+      mode: "json",
+    }).$type<TwoStageProgress>(),
+    subscriptionJobResult: text("subscription_job_result", {
+      mode: "json",
+    }).$type<PublicationSyncResult>(),
+    subscriptionSyncCursor: text("subscription_sync_cursor"),
+    subscriptionRepoRev: text("subscription_repo_rev"),
+    /**
+     * Digest of the subscription listing read at `subscriptionRepoRev`. A
+     * check whose revision moved compares the listing against it, so only a
+     * changed listing starts a run.
+     */
+    subscriptionListingDigest: text("subscription_listing_digest"),
+    subscriptionImportGeneration: integer("subscription_import_generation")
+      .notNull()
+      .default(0),
+    subscriptionExportGeneration: integer("subscription_export_generation")
+      .notNull()
+      .default(0),
+    subscriptionSyncToken: text("subscription_sync_token"),
+    subscriptionSyncExpiresAt: integer("subscription_sync_expires_at", {
+      mode: "timestamp_ms",
+    }),
+    // Consent only saves the submitted draft if no newer settings save won.
+    syncSettingsVersion: integer("sync_settings_version").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("atproto_subscription_job_due_idx").on(
+      table.subscriptionNextAttemptAt,
+    ),
+  ],
+);
+/**
+ * Feeds waiting for an origin check, at most one row each. A `light` check is
+ * Publication backfill; a `full` one is Feed revalidation, which covers it. A
+ * worker claims a row by moving its next attempt a few minutes ahead, so a row
+ * whose run stopped comes due again.
+ */
+export const feedOriginChecks = sqliteTable(
+  "feed_origin_checks",
+  {
+    feedId: integer("feed_id")
+      .primaryKey()
+      .references(() => feeds.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    type: text("type").$type<"light" | "full">().notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at", {
+      mode: "timestamp_ms",
+    }).notNull(),
+  },
+  // Due rows lead, so a tick with nothing due reads nothing.
+  (table) => [
+    index("feed_origin_check_due_idx").on(table.nextAttemptAt, table.userId),
+  ],
+);
+
 export type DatabaseAtprotoConnection = typeof atprotoConnections.$inferSelect;
+
+/** Retain absent records as tombstones so neither side resurrects an unsubscribe. */
+export const atprotoSubscriptionMirror = sqliteTable(
+  "atproto_subscription_mirror",
+  {
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => atprotoConnections.id, { onDelete: "cascade" }),
+    publicationUri: text("publication_uri").notNull(),
+    recordUri: text("record_uri").notNull(),
+    recordCid: text("record_cid"),
+    // No Feed FK: a deleted Feed must remain observable until sync processes it.
+    feedId: integer("feed_id"),
+    provenance: text("provenance").$type<"serial" | "imported">().notNull(),
+    visibility: text("visibility")
+      .$type<"public" | "private">()
+      .notNull()
+      .default("public"),
+    remotePresent: integer("remote_present", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    importState: text("import_state").$type<"pending" | "skipped">(),
+    importRetryAt: integer("import_retry_at", { mode: "timestamp" }),
+    importFailures: integer("import_failures").notNull().default(0),
+    importGeneration: integer("import_generation").notNull().default(0),
+    exportGeneration: integer("export_generation").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .$default(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.connectionId,
+        table.publicationUri,
+        table.recordUri,
+        table.visibility,
+      ],
+    }),
+  ],
+);
+export type DatabaseSubscriptionMirror =
+  typeof atprotoSubscriptionMirror.$inferSelect;
 
 // === App Config (app-wide settings) ===
 

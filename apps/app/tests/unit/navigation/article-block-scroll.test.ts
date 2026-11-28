@@ -64,13 +64,13 @@ describe("article block scroll placement", () => {
     element({ tagName: "IMG", top: 640, height: 400 }),
     element({ tagName: "FIGURE", top: 640, height: 400 }),
     element({ tagName: "DIV", top: 640, height: 400, containsImage: true }),
-  ])("centers image blocks in the viewport", (block) => {
+  ])("places image blocks like text blocks", (block) => {
     const target = container();
 
     scrollArticleBlockToTarget(block, "instant", target.element);
 
     expect(target.scrollTo).toHaveBeenCalledWith({
-      top: 650,
+      top: 750,
       behavior: "instant",
     });
   });

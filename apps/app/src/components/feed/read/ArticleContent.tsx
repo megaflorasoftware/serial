@@ -2,24 +2,18 @@
 
 import parse, { Element } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
-import { CustomVideoPlayer } from "~/components/CustomVideoPlayer";
+import type { ExternalContentVisibility } from "~/components/content-reader/ExternalContent";
+import { ExternalContent } from "~/components/content-reader/ExternalContent";
 import { flattenReaderImages } from "~/components/content-reader/flattenReaderImages";
 import { replaceReaderCodeBlock } from "~/components/content-reader/ReaderCodeBlock";
 import { ArticleImageLightbox } from "~/components/feed/read/ArticleImageLightbox";
-import { useFlagState } from "~/lib/hooks/useFlagState";
-import classes from "~/components/feed/read/article.module.css";
 
-function extractYouTubeVideoId(src: string): string | null {
-  const match = src.match(
-    /(?:youtube\.com|youtube-nocookie\.com)\/embed\/([^?/]+)/,
-  );
-  return match?.[1] ?? null;
-}
-
-function findImage(node: Element): { src: string; alt?: string } | null {
+function findImage(
+  node: Element,
+): { src: string; alt?: string; node: Element } | null {
   if (node.name === "img") {
     return node.attribs.src
-      ? { src: node.attribs.src, alt: node.attribs.alt }
+      ? { src: node.attribs.src, alt: node.attribs.alt, node }
       : null;
   }
   if (node.name === "source") {
@@ -28,7 +22,11 @@ function findImage(node: Element): { src: string; alt?: string } | null {
       (child) => child instanceof Element && child.name === "img",
     );
     return src
-      ? { src, alt: image instanceof Element ? image.attribs.alt : undefined }
+      ? {
+          src,
+          alt: image instanceof Element ? image.attribs.alt : undefined,
+          node,
+        }
       : null;
   }
   for (const child of node.children) {
@@ -38,6 +36,18 @@ function findImage(node: Element): { src: string; alt?: string } | null {
     }
   }
   return null;
+}
+
+/** Publisher-declared pixel dimensions, when both are plain positive numbers. */
+function htmlImageAspectRatio(node: Element) {
+  const width = Number(node.attribs.width);
+  const height = Number(node.attribs.height);
+  return Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+    ? { width, height }
+    : null;
 }
 
 function isImageContainer(node: Element): boolean {
@@ -50,21 +60,37 @@ function isImageContainer(node: Element): boolean {
   return false;
 }
 
+export type ArticleContentProps = {
+  content: string;
+  externalContent: ExternalContentVisibility;
+  /** The item's own page, the target of every External content notice. */
+  noticeHref: string;
+  originActionLabel: string;
+  /** A caller's own element mapping, consulted before the shared rules. */
+  replace?: HTMLReactParserOptions["replace"];
+};
+
+/**
+ * Renders an HTML Reader body: RSS bodies, legacy stored HTML and Bookmark
+ * captures. Every `iframe` in the markup, stored or legacy, is intercepted
+ * here so nothing renders unsandboxed.
+ */
 export function ArticleContent({
   content,
-  simplified = false,
-}: {
-  content: string;
-  simplified?: boolean;
-}) {
-  const [videoPlayer] = useFlagState("CUSTOM_VIDEO_PLAYER");
-
+  externalContent,
+  noticeHref,
+  originActionLabel,
+  replace,
+}: ArticleContentProps) {
   const options: HTMLReactParserOptions = {
-    replace: (domNode) => {
+    replace: (domNode, index) => {
+      if (!(domNode instanceof Element)) return;
+
+      const replaced = replace?.(domNode, index);
+      if (replaced !== undefined) return replaced;
+
       const codeBlock = replaceReaderCodeBlock(domNode);
       if (codeBlock) return codeBlock;
-      if (simplified) return;
-      if (!(domNode instanceof Element)) return;
 
       // Open external links in new tabs. In-page links include footnote refs.
       if (
@@ -78,47 +104,28 @@ export function ArticleContent({
 
       if (domNode.name === "img" || isImageContainer(domNode)) {
         const image = findImage(domNode);
-        if (image) return <ArticleImageLightbox {...image} />;
+        if (image)
+          return (
+            <ArticleImageLightbox
+              src={image.src}
+              alt={image.alt ?? ""}
+              aspectRatio={htmlImageAspectRatio(image.node)}
+            />
+          );
+        // An image without a source has nothing to show.
+        if (domNode.name === "img") return <></>;
       }
 
       if (domNode.name !== "iframe") return;
-
-      const src = domNode.attribs.src ?? "";
-      const videoId = extractYouTubeVideoId(src);
-      if (!videoId) return;
-
-      if (videoPlayer === "serial") {
-        return (
-          <div
-            data-article-video-embed
-            className={`${classes.videoEmbed} aspect-video w-full overflow-hidden rounded`}
-          >
-            <CustomVideoPlayer
-              videoID={videoId}
-              orientation="horizontal"
-              isInactive={false}
-              isEmbed
-            />
-          </div>
-        );
-      }
-
       return (
-        <div
-          data-article-video-embed
-          className="aspect-video w-full overflow-hidden rounded"
-        >
-          <iframe
-            width="1600"
-            height="900"
-            src={`https://www.youtube-nocookie.com/embed/${videoId}`}
-            title="YouTube video player"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="h-full w-full border-none"
-          />
-        </div>
+        <ExternalContent
+          source={{ kind: "src", src: domNode.attribs.src ?? "" }}
+          visibility={externalContent}
+          noticeHref={noticeHref}
+          originActionLabel={originActionLabel}
+          height={storedFrameHeight(domNode.attribs.height)}
+          aspectRatio={null}
+        />
       );
     },
   };
@@ -127,4 +134,11 @@ export function ArticleContent({
   const nodes = Array.isArray(parsed) ? parsed : [parsed];
 
   return <>{flattenReaderImages(nodes)}</>;
+}
+
+/** A stored `height` attribute, accepted within the same range as authored frames. */
+function storedFrameHeight(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const height = Number(value);
+  return height >= 16 && height <= 1600 ? height : null;
 }

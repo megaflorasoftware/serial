@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { db as Database } from "~/server/db";
-import type { DatabaseFeed } from "~/server/db/schema";
+import type { FetchableOrigin } from "~/server/rss/types";
 import type { RssPublishedChunk } from "~/lib/rss";
 import { emptyRefreshStats } from "~/server/rss/stats";
 import { fetchDueSources } from "~/server/rss/fetchDueSources";
@@ -29,6 +29,8 @@ describe("fetchDueSources", () => {
   it("does not claim or publish when the background task owns automatic RSS", async () => {
     const { input, chunks } = baseInput();
     const claimUser = vi.fn();
+    const scheduleSyncCheck = vi.fn(() => Promise.resolve());
+    const syncSubscriptions = vi.fn();
 
     await expect(
       fetchDueSources({
@@ -36,11 +38,32 @@ describe("fetchDueSources", () => {
         dependencies: {
           resolveOwner: () => Promise.resolve("background-task"),
           claimUser,
+          scheduleSyncCheck,
+          syncSubscriptions,
         },
       }),
     ).resolves.toEqual({ status: "background-managed" });
     expect(claimUser).not.toHaveBeenCalled();
     expect(chunks).toEqual([]);
+    // The background also owns the recurring sync check; sync never runs inline.
+    expect(scheduleSyncCheck).toHaveBeenCalledExactlyOnceWith(
+      database,
+      "user-1",
+    );
+    expect(syncSubscriptions).not.toHaveBeenCalled();
+  });
+
+  it("still answers when scheduling the sync check fails", async () => {
+    const { input } = baseInput();
+    await expect(
+      fetchDueSources({
+        ...input,
+        dependencies: {
+          resolveOwner: () => Promise.resolve("background-task"),
+          scheduleSyncCheck: () => Promise.reject(new Error("database down")),
+        },
+      }),
+    ).resolves.toEqual({ status: "background-managed" });
   });
 
   it("returns cooldown without emitting a losing lifecycle", async () => {
@@ -87,7 +110,11 @@ describe("fetchDueSources", () => {
         countDue: () => Promise.resolve(2),
         getDuePage: () =>
           Promise.resolve(
-            page < 2 ? ([{ id: 7 + page++ }] as DatabaseFeed[]) : [],
+            page < 2
+              ? ([
+                  { origin: { id: 70 + page }, feed: { id: 7 + page++ } },
+                ] as FetchableOrigin[])
+              : [],
           ),
         refreshFeedPage,
       },
@@ -120,7 +147,11 @@ describe("fetchDueSources", () => {
           countDue: () => Promise.resolve(1),
           getDuePage: () =>
             Promise.resolve(
-              page++ === 0 ? ([{ id: 7 }] as DatabaseFeed[]) : [],
+              page++ === 0
+                ? ([
+                    { origin: { id: 70 }, feed: { id: 7 } },
+                  ] as FetchableOrigin[])
+                : [],
             ),
           refreshFeedPage: () => Promise.reject(new Error("database failed")),
         },

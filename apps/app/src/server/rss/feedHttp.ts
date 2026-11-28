@@ -8,11 +8,14 @@ import {
   isAuthorizedTestRssUrl,
 } from "./testRssOrigin";
 import type { Agent } from "undici";
+import type { PinnedConnection, PinnedPool } from "~/server/http/publicHttp";
 import {
   createPinnedDispatcher,
   resolvePublicAddresses,
+  serialHeaders,
   validatePublicHttpUrl,
 } from "~/server/http/publicHttp";
+import { startSiteRequest } from "~/server/http/pacing";
 
 export type FeedHttpReadOptions = {
   headers?: HeadersInit;
@@ -21,6 +24,9 @@ export type FeedHttpReadOptions = {
   maxHeaderBytes?: number;
   maxRedirects?: number;
   totalDurationMs?: number;
+  signal?: AbortSignal;
+  /** Connections this read shares, such as with the rest of one discovery. */
+  pool?: PinnedPool;
 };
 
 export type FeedHttpResponse = {
@@ -72,14 +78,13 @@ const DEFAULT_FEED_HTTP_DEPENDENCIES: FeedHttpDependencies = {
   fetch,
 };
 
-function assertHeadersWithinBudget(headers: Headers, maxHeaderBytes: number) {
+function headersWithinBudget(headers: Headers, maxHeaderBytes: number) {
   let headerBytes = 0;
   for (const [name, value] of headers) {
     headerBytes += Buffer.byteLength(name) + Buffer.byteLength(value);
-    if (headerBytes > maxHeaderBytes) {
-      throw new Error(`Feed response headers exceed ${maxHeaderBytes} bytes`);
-    }
+    if (headerBytes > maxHeaderBytes) return false;
   }
+  return true;
 }
 
 export async function readFeedHttp(
@@ -98,34 +103,54 @@ export async function readFeedHttp(
     options.totalDurationMs ?? FEED_HTTP_REQUEST_TIMEOUT_MS;
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), totalDurationMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, abortController.signal])
+    : abortController.signal;
   let requestUrl = url;
+  /** The pool's connection to `hostname` when it lends one, else a new one. */
+  const connect = async (hostname: string): Promise<PinnedConnection> => {
+    const open = async () => {
+      const addresses = await dependencies.resolveAddresses(hostname);
+      const pinned = addresses[0]!;
+      return dependencies.createDispatcher({
+        address: pinned.address,
+        family: pinned.family === 6 ? 6 : 4,
+        hostname,
+      });
+    };
+    const lent = options.pool?.lend(hostname, open);
+    if (lent) return lent;
+    const dispatcher = await open();
+    return { dispatcher, release: () => dispatcher.close() };
+  };
 
   try {
     for (let redirectCount = 0; ; redirectCount += 1) {
+      signal.throwIfAborted();
       const target = dependencies.validateTarget(requestUrl);
-      const addresses = await dependencies.resolveAddresses(target.hostname);
-      const pinned = addresses[0]!;
-      const dispatcher = dependencies.createDispatcher({
-        address: pinned.address,
-        family: pinned.family === 6 ? 6 : 4,
-        hostname: target.hostname,
-      });
+      const paced = await startSiteRequest(target.hostname, signal);
+      let connection: PinnedConnection | undefined;
 
       try {
-        const requestHeaders = options.headers
-          ? Object.fromEntries(new Headers(options.headers))
-          : undefined;
+        connection = await connect(target.hostname);
+        signal.throwIfAborted();
         const response = await dependencies.fetch(target, {
-          dispatcher,
-          headers: requestHeaders,
+          dispatcher: connection.dispatcher,
+          headers: Object.fromEntries(serialHeaders(options.headers)),
           method: options.method ?? "GET",
           redirect: "manual",
-          signal: abortController.signal,
+          signal,
         });
+        paced.answered(response);
         const responseHeaders = new Headers(
           Array.from(response.headers.entries()),
         );
-        assertHeadersWithinBudget(responseHeaders, maxHeaderBytes);
+        if (!headersWithinBudget(responseHeaders, maxHeaderBytes)) {
+          await response.body?.cancel();
+          throw new Error(
+            `Feed response headers exceed ${maxHeaderBytes} bytes`,
+          );
+        }
 
         if (REDIRECT_STATUSES.has(response.status)) {
           if (redirectCount >= maxRedirects) {
@@ -194,7 +219,8 @@ export async function readFeedHttp(
           url: response.url || target.toString(),
         };
       } finally {
-        await dispatcher.close();
+        await connection?.release();
+        paced.release();
       }
     }
   } catch (error) {

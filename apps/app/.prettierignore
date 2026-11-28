@@ -8,3 +8,4 @@ routeTree.gen.ts
 dist/
 playwright-report/
 test-results/
+benchmarks/results/

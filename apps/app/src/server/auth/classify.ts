@@ -8,11 +8,12 @@ import { ATPROTO_ROUTES } from "~/server/auth/atproto/config";
  * paths; disallowed auto-signups are rolled back by the post-auth policy
  * instead.
  *
- * The atproto link paths are deliberately unclassified: a link attaches a
- * connection to an existing session, creates no user and issues no
- * session, so neither sign-in gating nor auto-signup rollback may apply.
- * Both matchers use exact equality so the link callback can never be
- * swept in by a prefix match.
+ * The atproto link and upgrade callbacks are deliberately unclassified: a
+ * link attaches a connection to an existing session and a Consent upgrade
+ * broadens one; neither creates a user or issues a session, so neither
+ * sign-in gating nor auto-signup rollback may apply. Both matchers use
+ * exact equality so those callbacks can never be swept in by a prefix
+ * match.
  */
 export function classifyAuthRequest(
   path: string,

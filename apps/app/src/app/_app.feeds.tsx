@@ -9,7 +9,6 @@ import { useDialogStore } from "~/components/feed/dialogStore";
 import { FeedListItem } from "~/components/feed/FeedListItem";
 import { FeedManagementTabs } from "~/components/feed/FeedManagementTabs";
 import { useFeedManagementShortcuts } from "~/components/feed/useManagementShortcuts";
-import { FeedEmptyState } from "~/components/feed/view-lists/EmptyStates";
 import { ActiveFeedLimitStatus } from "~/components/feed/manage/ActiveFeedLimitStatus";
 import {
   FeedActiveSwitch,
@@ -129,9 +128,11 @@ function ManageFeedsPageContent() {
     isDeletingFeeds,
     isSavingEdit,
     isClearing,
+    isRevalidating,
     handleDelete,
     openEditDialog,
     handleClear,
+    handleRevalidate,
     handleEditSave,
   } = useBulkFeedEditing({
     canMutate,
@@ -151,6 +152,7 @@ function ManageFeedsPageContent() {
     onEdit: openEditDialog,
     onClear: handleClear,
     onDelete: () => setShowDeleteDialog(true),
+    onRevalidate: handleRevalidate,
     isDialogOpen: showDeleteDialog || showEditDialog,
     hasSelection: selectedCount > 0,
   });
@@ -176,7 +178,6 @@ function ManageFeedsPageContent() {
             </Button>
           </div>
         </div>
-        <FeedEmptyState />
       </div>
     );
   }
@@ -333,22 +334,32 @@ function ManageFeedsPageContent() {
               </ButtonWithShortcut>
               <ButtonWithShortcut
                 variant="outline"
+                onClick={handleRevalidate}
+                disabled={isRevalidating}
+                shortcut="r"
+              >
+                Revalidate
+              </ButtonWithShortcut>
+            </div>
+            <div className="flex gap-2">
+              <ButtonWithShortcut
+                variant="outline"
                 onClick={handleClear}
                 disabled={isClearing}
                 shortcut="c"
               >
                 Clear
               </ButtonWithShortcut>
+              <ButtonWithShortcut
+                variant="destructive"
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={isDeletingFeeds}
+                shortcut="d"
+              >
+                <Trash2Icon size={16} className="mr-2" />
+                Delete ({selectedCount})
+              </ButtonWithShortcut>
             </div>
-            <ButtonWithShortcut
-              variant="destructive"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={isDeletingFeeds}
-              shortcut="d"
-            >
-              <Trash2Icon size={16} className="mr-2" />
-              Delete ({selectedCount})
-            </ButtonWithShortcut>
           </div>
         </div>
       )}

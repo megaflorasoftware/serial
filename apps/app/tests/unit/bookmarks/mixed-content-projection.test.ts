@@ -52,7 +52,6 @@ async function seedFeed(
     id,
     userId: "user-one",
     name: `Feed ${id}`,
-    url: `https://feeds.example/${id}.xml`,
     platform: "website",
     ...overrides,
   });

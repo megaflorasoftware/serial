@@ -1,0 +1,223 @@
+{
+  "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.document/3mkigbes6om23",
+  "cid": "bafyreignctmn5puqnrbhkdavnhuc6y6jztwrqvhqmahbc2f37z254s5mqe",
+  "value": {
+    "$type": "site.standard.document",
+    "content": {
+      "$type": "app.offprint.content",
+      "items": [
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:hheutzl4mxedshsz4yqek5tt",
+                  "handle": "newpublic.org"
+                }
+              ],
+              "index": {
+                "byteEnd": 26,
+                "byteStart": 12
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:2wtlfpgkikwdxkmeqxt25e7p",
+                  "handle": "publicspaces.net"
+                }
+              ],
+              "index": {
+                "byteEnd": 59,
+                "byteStart": 42
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:dwasx7iawlm63zivignwu6jr",
+                  "handle": "waag.org"
+                }
+              ],
+              "index": {
+                "byteEnd": 90,
+                "byteStart": 81
+              }
+            }
+          ],
+          "plaintext": "New_ Public @newpublic.org , PublicSpaces @publicspaces.net , and Waag Futurelab @waag.org  are hosting the first Open Social Awards."
+        },
+        {
+          "$type": "app.offprint.block.blockquote",
+          "content": [
+            {
+              "$type": "app.offprint.block.text",
+              "plaintext": "The Open Social Awards celebrate technology that makes the social internet work for everyone. We believe the future of open social will be strongest when it’s shaped by people from a wide range of backgrounds, perspectives, and lived experiences. We especially encourage applications from individuals and teams who are from communities historically underrepresented in technology."
+            }
+          ]
+        },
+        {
+          "$type": "app.offprint.block.blueskyPost",
+          "post": {
+            "cid": "bafyreiesm2sootvmagw764h6zdhmum33xp3kjkji4fyqvc5frf4atto3wi",
+            "uri": "at://did:plc:hheutzl4mxedshsz4yqek5tt/app.bsky.feed.post/3mk3up2q3ac2s"
+          }
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "plaintext": "This is the first year of the awards, with a €10,000 grand prize and two €5,000 excellence awards. There are two broad areas to apply under. The first is social apps for end users, the second is shared, community infrastructure, that is used by developers making open social apps."
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "plaintext": "We know there are many people building amazing apps and infrastructure, and many of you don't think your app is good enough, you're too early, or some other silly goose thoughts in your head."
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#highlight",
+                  "color": "rgb(34 197 94 / 0.5)"
+                }
+              ],
+              "index": {
+                "byteEnd": 283,
+                "byteStart": 249
+              }
+            }
+          ],
+          "plaintext": "We really encourage everyone to apply: even those that don't win a cash prize will be part of a list of all those that applied, and we get to see many great apps and infra that people are building, and get some publicity for what's being worked on! Always Be Launching! And Applying! "
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://discord.atprotocol.dev"
+                }
+              ],
+              "index": {
+                "byteEnd": 122,
+                "byteStart": 118
+              }
+            }
+          ],
+          "plaintext": "Need some help reviewing your application or getting a pep talk about how awesome you and your app are? Drop into the chat and we'll help where we can!"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "plaintext": "Read the full details and eligibility rules here:"
+        },
+        {
+          "$type": "app.offprint.block.webBookmark",
+          "description": "The awards aim to recognize and celebrate the breakthrough products of developers building on open protocols such as ATProtocol and ActivityPub.",
+          "href": "https://newpublic.org/OSA",
+          "preview": {
+            "$type": "blob",
+            "mimeType": "image/png",
+            "ref": {
+              "$link": "bafkreihxltf7o24577u3ljbkrp73a7wfkhsds5ksidxqd2rnda2mw36vgi"
+            },
+            "size": 61801
+          },
+          "siteName": "New_ Public",
+          "title": "Open Social Awards | New_ Public"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "plaintext": "The application deadline is May 1st — this Friday! Click through to fill out the form and submit:"
+        },
+        {
+          "$type": "app.offprint.block.button",
+          "href": "https://app.formbricks.com/s/cmn3lqvw6b5lfv101shpmepis",
+          "text": "Apply for Open Social Awards"
+        },
+        {
+          "$type": "app.offprint.block.horizontalRule"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://conference.publicspaces.net/en"
+                }
+              ],
+              "index": {
+                "byteEnd": 27,
+                "byteStart": 4
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://tickets.publicspaces.net/publicspaces/pubconf2026/"
+                }
+              ],
+              "index": {
+                "byteEnd": 155,
+                "byteStart": 97
+              }
+            }
+          ],
+          "plaintext": "The PublicSpaces Conference takes place June 4th - 6th, 2026 in Amsterdam. Buy your tickets here https://tickets.publicspaces.net/publicspaces/pubconf2026/"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:oiespunf6wfpglx2z46jetgp",
+                  "handle": "dave.self.surf"
+                }
+              ],
+              "index": {
+                "byteEnd": 126,
+                "byteStart": 111
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://discourse.atprotocol.community/t/atproto-side-event-public-spaces/785"
+                }
+              ],
+              "index": {
+                "byteEnd": 277,
+                "byteStart": 200
+              }
+            }
+          ],
+          "plaintext": "There is also the beginning of a thread for atproto community focused activities during the conference. Thanks @dave.self.surf  for getting that kicked off. Join the discussion in the community forum https://discourse.atprotocol.community/t/atproto-side-event-public-spaces/785"
+        }
+      ]
+    },
+    "coverImage": {
+      "$type": "blob",
+      "mimeType": "image/jpeg",
+      "ref": {
+        "$link": "bafkreih6or545gdnlj4gkt3qbnxzsp656jutykpk7ki4gvuwujy7l6ouly"
+      },
+      "size": 88647
+    },
+    "description": "Part of The Next Socials program track at the PublicSpaces 2026 Conference with a €10,000 grand prize",
+    "path": "/a/3mkigbes6om23-reminder-open-social-awards-deadline-this-friday-may-1st",
+    "publishedAt": "2026-04-27T17:48:46+00:00",
+    "site": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3mjnpilwnrp2v",
+    "textContent": "New_ Public @newpublic.org , PublicSpaces @publicspaces.net , and Waag Futurelab @waag.org  are hosting the first Open Social Awards.\n> The Open Social Awards celebrate technology that makes the social internet work for everyone. We believe the future of open social will be strongest when it’s shaped by people from a wide range of backgrounds, perspectives, and lived experiences. We especially encourage applications from individuals and teams who are from communities historically underrepresented in technology.\nThis is the first year of the awards, with a €10,000 grand prize and two €5,000 excellence awards. There are two broad areas to apply under. The first is social apps for end users, the second is shared, community infrastructure, that is used by developers making open social apps.\nWe know there are many people building amazing apps and infrastructure, and many of you don't think your app is good enough, you're too early, or some other silly goose thoughts in your head.\nWe really encourage everyone to apply: even those that don't win a cash prize will be part of a list of all those that applied, and we get to see many great apps and infra that people are building, and get some publicity for what's being worked on! Always Be Launching! And Applying! \nNeed some help reviewing your application or getting a pep talk about how awesome you and your app are? Drop into the chat and we'll help where we can!\nRead the full details and eligibility rules here:\nThe application deadline is May 1st — this Friday! Click through to fill out the form and submit:\n\n---\nThe PublicSpaces Conference takes place June 4th - 6th, 2026 in Amsterdam. Buy your tickets here https://tickets.publicspaces.net/publicspaces/pubconf2026/\nThere is also the beginning of a thread for atproto community focused activities during the conference. Thanks @dave.self.surf  for getting that kicked off. Join the discussion in the community forum https://discourse.atprotocol.community/t/atproto-side-event-public-spaces/785",
+    "title": "Reminder: Open Social Awards Deadline this Friday, May 1st"
+  }
+}

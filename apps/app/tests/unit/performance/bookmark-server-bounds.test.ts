@@ -88,7 +88,6 @@ describe("Bookmark server performance bounds", () => {
       id: 30,
       userId: "bounds-user",
       name: "Feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
     });
     await session.database.insert(viewFeeds).values({ viewId: 10, feedId: 30 });
@@ -149,7 +148,9 @@ describe("Bookmark server performance bounds", () => {
     expect(
       events.filter(({ chunk }) => chunk.type === "active-first-page"),
     ).toHaveLength(8);
-    expect(evidence.statementCount).toBeLessThanOrEqual(30);
+    // The Feed list is two statements: Feeds by user and origins by user read
+    // half the rows their join does.
+    expect(evidence.statementCount).toBeLessThanOrEqual(31);
     expect(evidence.materializedRows).toBeLessThanOrEqual(180);
     expect(Buffer.byteLength(JSON.stringify(events))).toBeLessThanOrEqual(
       256 * 1_024,
@@ -266,7 +267,6 @@ describe("Bookmark server performance bounds", () => {
       id: 30,
       userId: "bounds-user",
       name: "Feed",
-      url: "https://example.com/feed.xml",
       platform: "website",
     });
     await session.database.insert(viewSections).values({

@@ -18,11 +18,20 @@ export type PublishedChunk =
       chunk: ReconciliationInvalidationSummary;
     };
 
+/** Tells open clients to read the subscription sync status again. */
+export type PublicationSyncNotice = {
+  source: "publication-sync";
+  chunk: { type: "status-changed" };
+};
+
+/** Everything a user channel carries: data chunks and status notices. */
+export type ChannelMessage = PublishedChunk | PublicationSyncNotice;
+
 const RESUME_RETENTION_SECONDS = 60 * 2;
 const REDIS_KEY_PREFIX = "serial:pub:";
 const REDIS_CONNECT_TIMEOUT_MS = 5_000;
 
-type PublisherChannelMap = Record<string, PublishedChunk>;
+type PublisherChannelMap = Record<string, ChannelMessage>;
 
 async function createPublisher() {
   const kvStore = env.KV_STORE;

@@ -1,3 +1,5 @@
+import type { DiscoveredFeed } from "@serial/feed-discovery";
+export type { DiscoveredFeed } from "@serial/feed-discovery";
 import { CONTENT_CAPABILITIES } from "./capabilities";
 import { BOOKMARK_CAPTURE_LIMITS } from "./policy";
 import type {
@@ -60,11 +62,6 @@ export type BookmarkEditorFeedback = Pick<
   BookmarkSaveResult<unknown>,
   "capture" | "disposition"
 >;
-
-export type DiscoveredFeed = {
-  url: string;
-  title?: string;
-};
 
 export function parseExtensionDiscoveredFeeds(
   value: unknown,

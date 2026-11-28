@@ -1,0 +1,569 @@
+[
+  {
+    "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mpnjkuyimjd4",
+    "cid": "bafyreifcbj35d3ccwkk24df47izqah3qhk2zfej7bdtdux4wnfkd6oa6tq",
+    "value": {
+      "text": "Oh wow ! This is cool :)",
+      "$type": "blog.pckt.mini.post",
+      "createdAt": "2026-07-02T07:37:34.913Z",
+      "publication": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/site.standard.publication/3m57zfsq3a2fo"
+    }
+  },
+  {
+    "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mppyplylm5ib",
+    "cid": "bafyreiebfpcxek5p57j436n7e7jbdqcd3afouh2ezstj7vmissu6bneq7i",
+    "value": {
+      "text": "did i just reinvent microblogging ? \n\nyes, i think so, but i think it’s good :)",
+      "$type": "blog.pckt.mini.post",
+      "createdAt": "2026-07-03T07:13:58.855Z",
+      "publication": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/site.standard.publication/3m57zfsq3a2fo"
+    }
+  },
+  {
+    "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mprc2enuhhf3",
+    "cid": "bafyreich2vbxkex42jv6csgyqcpw3nof7dyf4f6zzevnylcbcmvltthy5e",
+    "value": {
+      "text": "omg i love seeing other peoples pckt stickers",
+      "$type": "blog.pckt.mini.post",
+      "embed": {
+        "$type": "blog.pckt.mini.post#record",
+        "record": {
+          "cid": "bafyreibeohnt2sfmux6cf55izgfrd7wiprerhtfsxltcnayub5k5o2xekq",
+          "uri": "at://did:plc:xtuer24wmkwitvr2ajjeewra/site.standard.document/3mk6kki3i2skf"
+        }
+      },
+      "createdAt": "2026-07-03T19:33:43.677Z"
+    }
+  },
+  {
+    "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpzujjs4s2q",
+    "cid": "bafyreigxywnf3dpnypnvr7zcgtlli7sw3rkvnxp5sr5lmx2ry6nwyzatdq",
+    "value": {
+      "text": "notes enables a lot of things.\n\na pckt note can:\n\n-be a short thought\n-be a comment on a blog\n-reblog an article\n-quote post an article\n-reblog or quote another note\n-be posted as you or your blog\n\nthe idea is to have a social layer to help distribute blog posts and open up discussion on pckt :)",
+      "$type": "app.bsky.feed.post",
+      "langs": [
+        "en"
+      ],
+      "reply": {
+        "root": {
+          "cid": "bafyreidi3jq3iiqujye2l4oqaa73sgxcl3xjypi3rguo4ifeg6rotpqwqa",
+          "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpqq4g7j225"
+        },
+        "parent": {
+          "cid": "bafyreigc5mimzjrfb3psra6563jpll5bgjsxcd7l7ls37bmqmxnbtwttz4",
+          "uri": "at://did:plc:z6sonfx6nicq2ndrixghcolb/app.bsky.feed.post/3mqpzcb7fik2d"
+        }
+      },
+      "createdAt": "2026-07-16T00:59:49.415Z"
+    }
+  },
+  {
+    "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpqcba5dk25",
+    "cid": "bafyreihi4prxealmxzeslx3qkxhyxqa6m22oq5f3f3qj2ljvnntaj6xyby",
+    "value": {
+      "text": "bugs we’ve rehabilitated \n🏥🐞🩺🐛👩‍⚕️🐜🪲🩻😇\n\n- fixed broken profile links\n- improved video embed aspect ratios\n- fixed dropdown layering issues\n- fresher profile pictures\n- fresher username info\n- fixed toolbar transparency issue 🔥🦊\n- fixed empty draft preview\n\n+ more stuff 💞",
+      "$type": "app.bsky.feed.post",
+      "langs": [
+        "en"
+      ],
+      "createdAt": "2026-07-15T22:08:33.054Z"
+    }
+  },
+  {
+    "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/app.bsky.feed.post/3mrq6mg6ruk2s",
+    "cid": "bafyreihcy4pn2sz5duckom7kaajzaqjw7yvv6hjpcgnmllgtbpjz6fqdou",
+    "value": {
+      "text": "Bluesky and Leaflet are in the Atmosphere!!!\n...wtf does does that mean?\n\nHere's a little explainer, written for everyone. \nNo tech experience or prior knowledge required. All you need is 4 minutes or less :D",
+      "$type": "app.bsky.feed.post",
+      "embed": {
+        "$type": "app.bsky.embed.external",
+        "external": {
+          "uri": "https://lab.leaflet.pub/3mrq6ma5dgs2x?utm_source=bluesky&utm_medium=social&utm_campaign=publish&utm_content=did%3Aplc%3Abtxrwcaeyodrap5mnjw2fvmz%2F3mrq6mg6ruk2s",
+          "thumb": {
+            "ref": {
+              "$link": "bafkreicfuj2hbowr6dcth2fy7oxdya6k45c4bljf3gasjt2xdzsx7pjika"
+            },
+            "size": 70798,
+            "$type": "blob",
+            "mimeType": "image/webp"
+          },
+          "title": "What is the Atmosphere?",
+          "description": "An explainer for everyone in 4 minutes or less.",
+          "associatedRefs": [
+            {
+              "cid": "bafyreig2qvv3jocdqa7dwpkcyw6fjvhzwxomsndeiglybutdy5nwaafkny",
+              "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.document/3mrq6ma5dgs2x",
+              "$type": "com.atproto.repo.strongRef"
+            },
+            {
+              "cid": "bafyreiescb6gulrmgkvcbguljatnjsxde3lsl3ibd5kyyzlver75cff6jq",
+              "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/site.standard.publication/3lppk75kw7k26",
+              "$type": "com.atproto.repo.strongRef"
+            }
+          ]
+        }
+      },
+      "langs": [
+        "en-US"
+      ],
+      "facets": [],
+      "createdAt": "2026-07-28T19:49:57.914Z"
+    }
+  },
+  {
+    "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mgh4crd7ws2d",
+    "cid": "bafyreiaz3s4coqkbab2a55dahm7i6bithupsuba7rpg5yd6rur6yqop3m4",
+    "value": {
+      "text": "one account wherever you go ☺️\n\nyour handle isn’t just for one app anymore ! \n\nwe took @hello.pckt.cafe for a walk across the atmosphere",
+      "$type": "app.bsky.feed.post",
+      "embed": {
+        "$type": "app.bsky.embed.video",
+        "video": {
+          "ref": {
+            "$link": "bafkreie5tb3zi5kumkwpwyi7k23pglnpjry4wxa2mudgn5th7ypa5p7p3y"
+          },
+          "size": 3499021,
+          "$type": "blob",
+          "mimeType": "video/mp4"
+        },
+        "aspectRatio": {
+          "width": 1660,
+          "height": 1080
+        },
+        "presentation": "default"
+      },
+      "langs": [
+        "en"
+      ],
+      "facets": [
+        {
+          "$type": "app.bsky.richtext.facet",
+          "index": {
+            "byteEnd": 109,
+            "byteStart": 93
+          },
+          "features": [
+            {
+              "did": "did:plc:t4lse5m2vaxvsuexa3kmfvzx",
+              "$type": "app.bsky.richtext.facet#mention"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-03-07T05:37:40.911Z"
+    }
+  },
+  {
+    "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/app.bsky.actor.profile/self",
+    "cid": "bafyreiew6yefn7n3eca5ixh6rzekcc6op7ioh7bn3ath4gy5gz27tgbtai",
+    "value": {
+      "$type": "app.bsky.actor.profile",
+      "avatar": {
+        "ref": {
+          "$link": "bafkreig7covijemejvj2fz5v4hxrpzhevyq2srq2gqohxqfzi2ljzyllfq"
+        },
+        "size": 50754,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "banner": {
+        "ref": {
+          "$link": "bafkreiepxcw6kmngykeosfghh6yfk3xc6qqr4qj6p7j7zfdcviynpd7kj4"
+        },
+        "size": 238020,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "description": "I like fixing things, making things, and taking pictures :) \n\n🎨 write on @pckt.blog \n\n❤️ @standard.site\n\n📓 brookie.pckt.blog\n\nshe/her - 18+ ⭐️ Click ——> https://OnlyBrookie.com 🔞\n\n$abcbrookie cash app ❣️🧿",
+      "displayName": "Brookie"
+    }
+  },
+  {
+    "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.actor.profile/self",
+    "cid": "bafyreiamgu3ae3gor5ohc53vvqdvdqqteprn6pcwxludvuofl6i5vz23g4",
+    "value": {
+      "$type": "app.bsky.actor.profile",
+      "avatar": {
+        "ref": {
+          "$link": "bafkreic22tl2yrbl5ts3uar3j6zsvfbjpodlf27kybyzdo2js5zqzynz7m"
+        },
+        "size": 142263,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "banner": {
+        "ref": {
+          "$link": "bafkreifqtsict4xsdlxlftytex7qq5vtpsu3gni6pqt5tfns2lvx7dlriu"
+        },
+        "size": 335805,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "website": "https://pckt.blog/",
+      "createdAt": "2025-08-29T18:53:09.977Z",
+      "pinnedPost": {
+        "cid": "bafyreighewedn6tzlatssvzceob6d6ta4h7faxt35anqo3q7m4dt6trozi",
+        "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mrfpadinas2a"
+      },
+      "description": "🌱🌈🌤️\n\nThe internet's cutest blogging site (probably). A home for your half-baked thoughts and bright ideas 🫟🎨😌🖍️🎳\n\npckt.blog - Write ✍️\n\nread.pckt.blog - Read 📖\n\nnotes.pckt.blog - Updates ⭐️\n\n🗣️🐾🐱",
+      "displayName": "pckt.blog"
+    }
+  },
+  {
+    "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/app.bsky.actor.profile/self",
+    "cid": "bafyreifi3oyen6hf7qfbhehejfduot7svu4oebn7ea7ri2txtc3bd4mm4q",
+    "value": {
+      "$type": "app.bsky.actor.profile",
+      "avatar": {
+        "ref": {
+          "$link": "bafkreibtqvoiyw5iqic3hocno5chkgzuqlflapclxzedslfdottcoud27a"
+        },
+        "size": 89859,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "banner": {
+        "ref": {
+          "$link": "bafkreie3sfhhvra2ussry5zllzxeufpcne62tqtxamkpbtho3tl22cx7dq"
+        },
+        "size": 978399,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "createdAt": "2024-10-21T20:21:01.890Z",
+      "pinnedPost": {
+        "cid": "bafyreiae6k6ws763ztiqqe6iogna674ausykurs23alenwgntidto5joaa",
+        "uri": "at://did:plc:btxrwcaeyodrap5mnjw2fvmz/app.bsky.feed.post/3msbcfdk3fc2d"
+      },
+      "description": "The easiest way to make a blog, newsletter, or website on the open social web!\n\n📝 powerful publishing tools 🛠️\n🌱 for new writers & pros 🌿\n🗣️ to connect & grow 👯\n\n📖 + ✍️ @ leaflet.pub\n\nLab Notes: lab.leaflet.pub\nCode: tangled.org/leaflet.pub/leaflet",
+      "displayName": "Leaflet"
+    }
+  },
+  {
+    "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/site.standard.publication/3m57zfsq3a2fo",
+    "cid": "bafyreiajcn545whs2zpwcj635ajeh54mfal3yrnqugmdf6vkjpicdrlvf4",
+    "value": {
+      "url": "https://brookie.blog",
+      "icon": {
+        "ref": {
+          "$link": "bafkreif2zmdettmdbcyiborvikvzr645szqwt5b3dgo4xvsuem6oskqziy"
+        },
+        "size": 56510,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "name": "Brookie’s Blog",
+      "$type": "site.standard.publication",
+      "theme": {
+        "dark": {
+          "link": "#a3a3a3",
+          "text": "#ffffff",
+          "accent": "#ffffff",
+          "background": "#000000",
+          "surfaceHover": "#1a1a1a"
+        },
+        "font": "newsreader",
+        "$type": "blog.pckt.theme",
+        "light": {
+          "link": "#525252",
+          "text": "#000000",
+          "accent": "#000000",
+          "background": "#ffffff",
+          "surfaceHover": "#efefef"
+        },
+        "corners": "square",
+        "transparency": 83,
+        "highlightColor": "theme",
+        "highlightShape": "scratchy",
+        "tileBackground": false,
+        "backgroundTileSize": 53
+      },
+      "basicTheme": {
+        "$type": "site.standard.theme.basic",
+        "accent": {
+          "b": 0,
+          "g": 0,
+          "r": 0,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "background": {
+          "b": 255,
+          "g": 255,
+          "r": 255,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "foreground": {
+          "b": 0,
+          "g": 0,
+          "r": 0,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "accentForeground": {
+          "b": 239,
+          "g": 239,
+          "r": 239,
+          "$type": "site.standard.theme.color#rgb"
+        }
+      },
+      "description": "hi i'm brookie and this is my blog :)",
+      "preferences": {
+        "showInDiscover": true
+      }
+    }
+  },
+  {
+    "uri": "at://did:plc:xtuer24wmkwitvr2ajjeewra/site.standard.document/3mk6kki3i2skf",
+    "cid": "bafyreibeohnt2sfmux6cf55izgfrd7wiprerhtfsxltcnayub5k5o2xekq",
+    "value": {
+      "path": "/being-online-is-worth-it-sometimes-hs9jt4e",
+      "site": "at://did:plc:xtuer24wmkwitvr2ajjeewra/site.standard.publication/3m5kfo2mq624d",
+      "tags": [
+        "Rant",
+        "social media"
+      ],
+      "$type": "site.standard.document",
+      "title": "Being Online is Worth It Sometimes",
+      "labels": {
+        "$type": "com.atproto.label.defs#selfLabels",
+        "values": [
+          {
+            "val": "sexual"
+          }
+        ]
+      },
+      "content": {
+        "$type": "blog.pckt.content",
+        "items": [
+          {
+            "$type": "blog.pckt.block.image",
+            "attrs": {
+              "alt": "1000046081.jpg",
+              "src": "blob:bafkreihdpokroytj4h2vjoxyuthk2clqjbcaslmgrjfcypjbmmnovvvp3i",
+              "blob": {
+                "ref": {
+                  "$link": "bafkreihdpokroytj4h2vjoxyuthk2clqjbcaslmgrjfcypjbmmnovvvp3i"
+                },
+                "size": 145174,
+                "$type": "blob",
+                "mimeType": "image/jpeg"
+              },
+              "align": "center",
+              "placeholder": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD//gA7Q1JFQVRPUjogZ2QtanBlZyB2MS4wICh1c2luZyBJSkcgSlBFRyB2ODApLCBxdWFsaXR5ID0gNDAK/9sAQwAUDg8SDw0UEhASFxUUGB4yIR4cHB49LC4kMklATEtHQEZFUFpzYlBVbVZFRmSIZW13e4GCgU5gjZeMfZZzfoF8/9sAQwEVFxceGh47ISE7fFNGU3x8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8/8AAEQgABwAMAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8ApWd5DboVdASTnJ//AFVWvpI5rgvHgAjsKKKyvodXLaVz/9k=",
+              "naturalWidth": 1920,
+              "naturalHeight": 1080
+            }
+          },
+          {
+            "$type": "blog.pckt.block.text",
+            "plaintext": ""
+          },
+          {
+            "$type": "blog.pckt.block.text",
+            "facets": [
+              {
+                "index": {
+                  "byteEnd": 83,
+                  "byteStart": 70
+                },
+                "features": [
+                  {
+                    "did": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+                    "$type": "blog.pckt.richtext.facet#didMention"
+                  }
+                ]
+              }
+            ],
+            "plaintext": "A couples of months, I got some stickers from this platform thanks to @brookie.blog. As of now, they're both plastered on my laptop and water bottle. This isn't the first that I got sent something from anyone online, but this definitely got me thinking about my presence all over the place, digitally."
+          },
+          {
+            "$type": "blog.pckt.block.text",
+            "plaintext": "A good chunk of my time online has just been me expanding that digital footprint by feeding it the growth I had throughout my upbringing. All the lessons learned, all the changes in different parts of my identity, the whole experience of becoming my own person. Or at least the ways that I could be when I used to live with my family, which I believe what made being online a more crucial part of my life than the average user. As one of the many results of that, reaching out has been a skill that I constantly flex without even thinking about it. It might have made me more of a social person as a whole now that I'm able to express that out in the world. When I had that realization, I couldn't think of what I would be without those circumstances."
+          },
+          {
+            "$type": "blog.pckt.block.text",
+            "plaintext": "It's just one of those moments where the \"what ifs\" of it all can only really consume you when you let it (and with the way that I overthink, that happens more that I would like to admit here). With that said, there have been moment where I wanted to be less close to my antics. Sometimes out of fear of \"being too much\", but mostly because I really wanna focus on the things I could become if I let the whereabouts of my city take me to where that path can take me. As someone still going down that path, I like the stops I got to look at."
+          },
+          {
+            "$type": "blog.pckt.block.text",
+            "plaintext": "It got me to blend the parts of me I always wanted to express irl with the parts of me I wouldn't have really focused in on otherwise. It got me to meet folks I've messaged with for years, as well as just being known in ways I never thought I was able to. It's why having these stickers sent to me is really cool. It's proof of how far I gotten."
+          },
+          {
+            "$type": "blog.pckt.block.text",
+            "plaintext": "And I'm really excited to see where I go next!"
+          }
+        ]
+      },
+      "updatedAt": "2026-07-03T19:01:48.000Z",
+      "coverImage": {
+        "ref": {
+          "$link": "bafkreihdpokroytj4h2vjoxyuthk2clqjbcaslmgrjfcypjbmmnovvvp3i"
+        },
+        "size": 145174,
+        "$type": "blob",
+        "mimeType": "image/jpeg"
+      },
+      "description": "A couples of months, I got some stickers from this platform thanks to . As of now, they're both plastered on my laptop and water bottle. This isn't the first that I got sent something from anyone online, but this definitely got me thinking about my presence all over the place, digitally. A good chunk of my time online has just been me expanding that digital footprint by feeding it the growth I had throughout my upbringing. All the lessons learned, all the changes in different parts of my identit...",
+      "publishedAt": "2026-07-03T19:01:48.000Z",
+      "textContent": "A couples of months, I got some stickers from this platform thanks to . As of now, they're both plastered on my laptop and water bottle. This isn't the first that I got sent something from anyone online, but this definitely got me thinking about my presence all over the place, digitally.\nA good chunk of my time online has just been me expanding that digital footprint by feeding it the growth I had throughout my upbringing. All the lessons learned, all the changes in different parts of my identity, the whole experience of becoming my own person. Or at least the ways that I could be when I used to live with my family, which I believe what made being online a more crucial part of my life than the average user. As one of the many results of that, reaching out has been a skill that I constantly flex without even thinking about it. It might have made me more of a social person as a whole now that I'm able to express that out in the world. When I had that realization, I couldn't think of what I would be without those circumstances.\nIt's just one of those moments where the \"what ifs\" of it all can only really consume you when you let it (and with the way that I overthink, that happens more that I would like to admit here). With that said, there have been moment where I wanted to be less close to my antics. Sometimes out of fear of \"being too much\", but mostly because I really wanna focus on the things I could become if I let the whereabouts of my city take me to where that path can take me. As someone still going down that path, I like the stops I got to look at.\nIt got me to blend the parts of me I always wanted to express irl with the parts of me I wouldn't have really focused in on otherwise. It got me to meet folks I've messaged with for years, as well as just being known in ways I never thought I was able to. It's why having these stickers sent to me is really cool. It's proof of how far I gotten.\nAnd I'm really excited to see where I go next!"
+    }
+  },
+  {
+    "uri": "at://did:plc:xtuer24wmkwitvr2ajjeewra/site.standard.publication/3m5kfo2mq624d",
+    "cid": "bafyreieamxfg7xw73ebnprvhvqk5r7ubota7dqhiwoptjmmpxdbwjqcon4",
+    "value": {
+      "url": "https://kandyelmo.pckt.blog",
+      "icon": {
+        "ref": {
+          "$link": "bafkreiaxxfi5bcocnqi3qf3zeog6pp5xgfkuh3jmetari2x2ot7yz2dsoq"
+        },
+        "size": 50884,
+        "$type": "blob",
+        "mimeType": "image/webp"
+      },
+      "name": "KandyElmo: The Blog",
+      "$type": "site.standard.publication",
+      "theme": {
+        "dark": {
+          "link": "#ef4444",
+          "text": "#fecaca",
+          "accent": "#7f1d1d",
+          "background": "#1f0404",
+          "surfaceHover": "#0c0101"
+        },
+        "font": "legible",
+        "$type": "blog.pckt.theme",
+        "light": {
+          "link": "#dc2626",
+          "text": "#7f1d1d",
+          "accent": "#991b1b",
+          "background": "#fef2f3",
+          "surfaceHover": "#fee2e2"
+        },
+        "transparency": 100,
+        "tileBackground": false,
+        "backgroundTileSize": 30
+      },
+      "basicTheme": {
+        "$type": "site.standard.theme.basic",
+        "accent": {
+          "b": 27,
+          "g": 27,
+          "r": 153,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "background": {
+          "b": 243,
+          "g": 242,
+          "r": 254,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "foreground": {
+          "b": 29,
+          "g": 29,
+          "r": 127,
+          "$type": "site.standard.theme.color#rgb"
+        },
+        "accentForeground": {
+          "b": 226,
+          "g": 226,
+          "r": 254,
+          "$type": "site.standard.theme.color#rgb"
+        }
+      },
+      "description": "Finally, a place to yap but more",
+      "preferences": {
+        "showInDiscover": true
+      }
+    }
+  },
+  {
+    "uri": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+    "cid": null,
+    "value": {
+      "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "id": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+      "alsoKnownAs": [
+        "at://brookie.blog"
+      ],
+      "verificationMethod": [
+        {
+          "id": "did:plc:v46ojbiop5ebs5h7gaomixcc#atproto",
+          "type": "Multikey",
+          "controller": "did:plc:v46ojbiop5ebs5h7gaomixcc",
+          "publicKeyMultibase": "zQ3shqUUckVNmsdMBERiSKJ16h1MbjnfvfvbpGbMts8NwW8GP"
+        }
+      ],
+      "service": [
+        {
+          "id": "#atproto_pds",
+          "type": "AtprotoPersonalDataServer",
+          "serviceEndpoint": "https://pds.pckt.cafe"
+        }
+      ]
+    }
+  },
+  {
+    "uri": "did:plc:revjuqmkvrw6fnkxppqtszpv",
+    "cid": null,
+    "value": {
+      "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "id": "did:plc:revjuqmkvrw6fnkxppqtszpv",
+      "alsoKnownAs": [
+        "at://pckt.blog"
+      ],
+      "verificationMethod": [
+        {
+          "id": "did:plc:revjuqmkvrw6fnkxppqtszpv#atproto",
+          "type": "Multikey",
+          "controller": "did:plc:revjuqmkvrw6fnkxppqtszpv",
+          "publicKeyMultibase": "zQ3shinArFNKnwGA4J7dubp8zixLPvQ5RwJSfZZG4h6W9d2J5"
+        }
+      ],
+      "service": [
+        {
+          "id": "#atproto_pds",
+          "type": "AtprotoPersonalDataServer",
+          "serviceEndpoint": "https://pds.pckt.cafe"
+        }
+      ]
+    }
+  },
+  {
+    "uri": "did:plc:btxrwcaeyodrap5mnjw2fvmz",
+    "cid": null,
+    "value": {
+      "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "id": "did:plc:btxrwcaeyodrap5mnjw2fvmz",
+      "alsoKnownAs": [
+        "at://leaflet.pub"
+      ],
+      "verificationMethod": [
+        {
+          "id": "did:plc:btxrwcaeyodrap5mnjw2fvmz#atproto",
+          "type": "Multikey",
+          "controller": "did:plc:btxrwcaeyodrap5mnjw2fvmz",
+          "publicKeyMultibase": "zQ3shRcJ85cZscCQEKVMJDC9VZEQ9ccHuLkCPQfqR2aGLHNLu"
+        }
+      ],
+      "service": [
+        {
+          "id": "#atproto_pds",
+          "type": "AtprotoPersonalDataServer",
+          "serviceEndpoint": "https://chanterelle.us-west.host.bsky.network"
+        }
+      ]
+    }
+  }
+]

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
-import { ShowArticleStyleToggle } from "./ShowArticleStyleToggle";
+import { ShowExternalContentToggle } from "./ShowExternalContentToggle";
 import type { ArticleFontFamily } from "~/lib/constants/article-fonts";
 import { orpc } from "~/lib/orpc";
 import {
@@ -180,7 +180,7 @@ function ReaderSidebarControls() {
 export function ArticlesTab() {
   return (
     <>
-      <ShowArticleStyleToggle />
+      <ShowExternalContentToggle />
       <ReaderSidebarControls />
       <FontFamilyControl />
       <FontSizeControl />

@@ -48,7 +48,7 @@ describe("Page capture preparation", () => {
       capture: {
         captureSource: "extension-live-dom",
         extractorVersion: "mozilla-readability-0.6",
-        sanitizerPolicyVersion: 1,
+        sanitizerPolicyVersion: 2,
       },
       preview: {
         title: "Current live title",
@@ -65,7 +65,7 @@ describe("Page capture preparation", () => {
     );
   });
 
-  it("degrades unknown extractor and sanitizer versions", () => {
+  it("degrades unknown extractor and sanitizer versions but accepts policy versions 1 and 2", () => {
     expect(
       prepareExtensionCapture({
         sourceUrl: "https://example.com/article",
@@ -75,9 +75,42 @@ describe("Page capture preparation", () => {
     expect(
       prepareExtensionCapture({
         sourceUrl: "https://example.com/article",
-        candidate: extensionCandidate({ sanitizerPolicyVersion: 2 }),
+        candidate: extensionCandidate({ sanitizerPolicyVersion: 3 }),
       }),
     ).toEqual({ ok: false, reason: "unsupported_capture_version" });
+    for (const sanitizerPolicyVersion of [1, 2]) {
+      const result = prepareExtensionCapture({
+        sourceUrl: "https://example.com/article",
+        candidate: extensionCandidate({ sanitizerPolicyVersion }),
+      });
+      expect(result.ok).toBe(true);
+      // The server re-sanitizes and stamps its own version whatever the extension sent.
+      if (result.ok)
+        expect(result.result.observation.capture?.sanitizerPolicyVersion).toBe(
+          2,
+        );
+    }
+  });
+
+  it("keeps a version 1 YouTube placeholder and a version 2 frame through re-sanitization", () => {
+    const result = prepareExtensionCapture({
+      sourceUrl: "https://example.com/article",
+      candidate: extensionCandidate({
+        contentHtml:
+          '<article><p>Body</p><div data-serial-embed="youtube" data-video-id="dQw4w9WgXcQ" data-start="42"></div>' +
+          '<iframe src="https://open.spotify.com/embed/track/1" height="152" allow="autoplay"></iframe></article>',
+      }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const html = result.result.observation.capture!.contentHtml;
+    expect(html).toContain(
+      '<div data-serial-embed="youtube" data-video-id="dQw4w9WgXcQ" data-start="42"></div>',
+    );
+    expect(html).toContain(
+      '<iframe src="https://open.spotify.com/embed/track/1" height="152"></iframe>',
+    );
+    expect(html).not.toContain("allow=");
   });
 
   it.each([

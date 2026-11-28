@@ -10,6 +10,7 @@ import { AtSignIcon, Loader2, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, RefObject } from "react";
 import type { AtprotoActorSuggestion } from "~/server/auth/atproto/typeahead";
+import { TYPEAHEAD_DEBOUNCE_MS } from "~/lib/constants/search";
 import { AtmosphereHelpButton } from "~/components/auth/AtmosphereHelpButton";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/button";
@@ -42,7 +43,6 @@ import { identifierSchema } from "~/server/auth/atproto/schemas";
 
 const TYPEAHEAD_PATH = "/atproto/typeahead";
 const TYPEAHEAD_MIN_CHARS = 2;
-const TYPEAHEAD_DEBOUNCE_MS = 300;
 
 export interface AtprotoHandleSubmission {
   identifier: string;

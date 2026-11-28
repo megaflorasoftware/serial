@@ -253,3 +253,34 @@ It runs `tests/e2e/self-hosted/client-performance-audit.spec.ts`, which is
 skipped unless `SERIAL_RUN_CLIENT_PERFORMANCE=1`, and evaluates each scenario
 against the budgets in `scripts/performance/client-browser-budgets.ts`. Its
 generated JSON is written under the ignored `benchmarks/results/` directory.
+
+## Reader bodies
+
+`pnpm benchmark:reader-body` loads the real standard.site fixture documents
+through the body endpoint path and reports, per document, the serialized
+Reader body size against the 128 KiB reader transfer budget and the 4 MiB
+offline budget, the derived Reader document size and block count, plus body
+load, browser derivation and static React render timings. It exits nonzero
+when any fixture exceeds a budget. Import cost for the same documents
+is covered by `pnpm benchmark:ingest`, which stages and processes them through
+the Jetstream workload.
+
+## Text feed ingest
+
+`pnpm benchmark:ingest` also ingests one text feed document of 200 items
+again, once unchanged and once with three items edited. The unchanged ingest
+must cost the two narrow statements and nothing else: no item body or
+observation value read, no column stored behind an observed item's body read
+from its row, no page fetch and no write. The runner exits nonzero when either
+case exceeds the structural budget in
+`scripts/performance/text-ingest-budgets.ts`, whose checks
+`tests/unit/performance/text-ingest-bounds.test.ts` shares.
+
+A fetch reaches that ingest only when the feed parses differently from the
+last time it was ingested in full. Each RSS origin keeps a digest of that
+parsed feed, and a fetch that parses to the same digest runs no item statement
+on a text or a video Feed. `tests/unit/performance/feed-fetch-bounds.test.ts`
+holds that fetch at the pipeline level to one origin row written, and holds a
+feed that restates the same items to the two narrow statements with no
+transaction. The runner reports the digest's own cost for the 200 item
+document as `feed-digest-text` and `feed-digest-video`.

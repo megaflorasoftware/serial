@@ -51,10 +51,11 @@ export default defineConfig(({ mode }) => {
       rollupConfig: { external: ["jsdom"] },
       rolldownConfig: { external: ["jsdom"] },
       scheduledTasks: {
-        ...scheduleTask(
-          { "* * * * *": ["feeds:background-refresh"] },
-          BACKGROUND_REFRESH_ENABLED,
-        ),
+        "* * * * *": [
+          "publications:sync",
+          "feeds:origin-checks",
+          ...(BACKGROUND_REFRESH_ENABLED ? ["feeds:background-refresh"] : []),
+        ],
         ...scheduleTask({ "0 0 * * *": ["demo:midnight-wipe"] }, isDemoBuild),
       },
     }),
@@ -94,6 +95,7 @@ export default defineConfig(({ mode }) => {
         : undefined,
       tsconfigPaths: true,
     },
+    build: { sourcemap: isClientPerformanceBuild ? "hidden" : false },
     plugins,
   };
 });

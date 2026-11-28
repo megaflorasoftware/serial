@@ -1,0 +1,445 @@
+"use client";
+
+import clsx from "clsx";
+import {
+  FullscreenIcon,
+  Loader2Icon,
+  PlayIcon,
+  Volume2Icon,
+  VolumeXIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { ReaderSocialVideo } from "@serial/standard-site";
+import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
+import { YOUTUBE_PLAYBACK_SPEEDS } from "~/components/CustomVideoPlayer/constants";
+import { Slider } from "~/components/ui/slider";
+import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
+import { useFlagState } from "~/lib/hooks/useFlagState";
+import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
+import { transformSecondsToFormattedTime } from "~/lib/transformSecondsToFormattedTime";
+
+type HlsInstance = { destroy: () => void };
+
+/**
+ * Attaches an HLS stream the way Bluesky's own web client does: through
+ * hls.js wherever media source extensions exist, and only otherwise as a
+ * plain source for the browser to play itself. Browsers that claim native
+ * HLS support are not trusted for it; Chrome reports "maybe" and then fails
+ * on the first segment. hls.js loads only on first play so readers who
+ * never press play never pay for it.
+ */
+async function attachStream(
+  video: HTMLVideoElement,
+  playlistUrl: string,
+): Promise<HlsInstance | null> {
+  const { default: Hls } = await import("hls.js/light");
+  if (Hls.isSupported()) {
+    const hls = new Hls({ enableWorker: true });
+    hls.loadSource(playlistUrl);
+    hls.attachMedia(video);
+    return hls;
+  }
+  video.src = playlistUrl;
+  await video.play();
+  return null;
+}
+
+/** Calls back as the element crosses half-visible, without re-rendering the player. */
+function useInView(
+  ref: React.RefObject<HTMLElement | null>,
+  onChange: (inView: boolean) => void,
+  enabled: boolean,
+) {
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(() => {
+    const element = ref.current;
+    if (!enabled || !element || typeof IntersectionObserver === "undefined")
+      return;
+    const observer = new IntersectionObserver(
+      (entries) =>
+        onChangeRef.current(entries.some((entry) => entry.isIntersecting)),
+      { threshold: 0.5 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [enabled, ref]);
+}
+
+/** One shortcut button of the control bar, named by its tooltip. */
+function ControlButton({
+  shortcut,
+  label,
+  onClick,
+  children,
+}: {
+  shortcut: string;
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const [hasInlineShortcutsVisible] = useFlagState("INLINE_SHORTCUTS");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <ButtonWithShortcut
+          shortcut={shortcut}
+          size="icon"
+          variant={
+            hasInlineShortcutsVisible === "show-shortcuts" ? "outline" : "ghost"
+          }
+          aria-label={label}
+          onClick={onClick}
+        >
+          {children}
+        </ButtonWithShortcut>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** The chrome over a started video: speed rail, timestamps, mute, fullscreen and scrubber. */
+function VideoControls({
+  speed,
+  progress,
+  duration,
+  muted,
+  onSpeedChange,
+  onSeek,
+  onToggleMute,
+  onToggleFullscreen,
+}: {
+  speed: number;
+  progress: number;
+  duration: number;
+  muted: boolean;
+  onSpeedChange: (speed: number) => void;
+  onSeek: (seconds: number) => void;
+  onToggleMute: () => void;
+  onToggleFullscreen: () => void;
+}) {
+  return (
+    <>
+      <div className="dark absolute inset-y-0 right-0 z-30 flex flex-col items-end justify-center bg-gradient-to-l from-black/50 from-70% to-transparent p-3 pl-8 text-white opacity-0 transition-opacity group-hover:opacity-100">
+        <ToggleGroup
+          type="single"
+          value={speed.toString()}
+          onValueChange={(value) => {
+            if (value) onSpeedChange(parseFloat(value));
+          }}
+          size="xs"
+          className="flex flex-col items-center justify-center font-mono"
+        >
+          {YOUTUBE_PLAYBACK_SPEEDS.map((entry) => (
+            <ToggleGroupItem key={entry.value} value={entry.value.toString()}>
+              {entry.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <div className="dark absolute inset-x-0 bottom-0 z-30 flex flex-col justify-end bg-gradient-to-t from-black/50 from-70% to-transparent p-3 pt-8 text-white opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center justify-between">
+          <div className="w-max font-mono text-sm font-bold">
+            {transformSecondsToFormattedTime(progress)} /{" "}
+            {transformSecondsToFormattedTime(duration)}
+          </div>
+          <div className="flex items-center gap-2">
+            <ControlButton
+              shortcut="m"
+              label="Toggle mute"
+              onClick={onToggleMute}
+            >
+              {muted ? <VolumeXIcon size={16} /> : <Volume2Icon size={16} />}
+            </ControlButton>
+            <ControlButton
+              shortcut="f"
+              label="Toggle fullscreen"
+              onClick={onToggleFullscreen}
+            >
+              <FullscreenIcon size={16} />
+            </ControlButton>
+          </div>
+        </div>
+        <Slider
+          value={[progress]}
+          min={0}
+          max={duration || 1}
+          step={0.1}
+          onValueChange={(value) => onSeek(value[0]!)}
+          className="mt-2 mr-4"
+        />
+      </div>
+    </>
+  );
+}
+
+/** The player's state as its `data-social-post-video-state` reports it. */
+function playerState(failed: boolean, playing: boolean, started: boolean) {
+  if (failed) return "failed";
+  if (playing) return "playing";
+  return started ? "paused" : "poster";
+}
+
+/** The button over the whole video: play, pause, or the spinner while it loads. */
+function PlayToggle({
+  platform,
+  failed,
+  loading,
+  playing,
+  onClick,
+}: {
+  platform: string;
+  failed: boolean;
+  loading: boolean;
+  playing: boolean;
+  onClick: () => void;
+}) {
+  const label = failed
+    ? `Video from the post on ${platform} could not be played`
+    : loading
+      ? "Video loading"
+      : playing
+        ? "Pause video"
+        : "Play video";
+  return (
+    <button
+      type="button"
+      data-social-post-video-toggle
+      aria-label={label}
+      aria-disabled={failed}
+      onClick={onClick}
+      className={clsx(
+        "absolute inset-0 z-20 grid place-items-center",
+        failed ? "cursor-default" : "cursor-pointer",
+      )}
+    >
+      <span
+        className={clsx(
+          "bg-background grid size-16 place-items-center rounded-2xl shadow-2xl transition-all group-hover:scale-105",
+          { "opacity-0": playing && !loading },
+        )}
+      >
+        {loading ? (
+          <Loader2Icon aria-hidden="true" className="animate-spin" size={28} />
+        ) : (
+          <PlayIcon aria-hidden="true" size={28} />
+        )}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * A Bluesky video inside a social card, drawn with the custom player's
+ * chrome: poster and play button until first play, then the speed rail,
+ * mute, fullscreen, timestamps and scrubber over the stream. A gif-style
+ * video instead loops silently while it is on screen, like Bluesky.
+ */
+export function SocialVideoPlayer({
+  video,
+  platform,
+  style,
+}: {
+  video: ReaderSocialVideo;
+  platform: string;
+  style?: CSSProperties;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<HlsInstance | null>(null);
+  const [started, setStarted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(video.gif);
+  const [speed, setSpeed] = useState(1);
+  const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const startedRef = useRef(false);
+
+  const fail = useCallback((error: unknown) => {
+    // Attaching a source aborts the sourceless first request; playback continues.
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    // Activation lapsed before the stream attached: the poster stays and the
+    // next press plays directly.
+    if (error instanceof DOMException && error.name === "NotAllowedError") {
+      setLoading(false);
+      return;
+    }
+    setFailed(true);
+    setLoading(false);
+  }, []);
+
+  // Play is requested inside the gesture so browsers that gate playback on
+  // user activation honour it; hls.js loads and attaches the stream
+  // underneath the pending request.
+  const start = useCallback(() => {
+    const element = videoRef.current;
+    if (!element || startedRef.current) return;
+    startedRef.current = true;
+    setStarted(true);
+    setLoading(true);
+    element.play().catch(fail);
+    void attachStream(element, video.playlistUrl)
+      .then((hls) => {
+        hlsRef.current = hls;
+      })
+      .catch(fail);
+  }, [fail, video.playlistUrl]);
+
+  // A gif plays itself while on screen and pauses off screen.
+  useInView(
+    containerRef,
+    (inView) => {
+      const element = videoRef.current;
+      if (!element) return;
+      if (inView) {
+        if (!startedRef.current) start();
+        else void element.play().catch(() => {});
+      } else if (startedRef.current) {
+        element.pause();
+      }
+    },
+    video.gif,
+  );
+
+  useEffect(() => {
+    return () => {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
+  }, []);
+
+  const toggle = () => {
+    const element = videoRef.current;
+    if (!element) return;
+    if (!started) {
+      start();
+      return;
+    }
+    if (element.paused) void element.play().catch(() => {});
+    else element.pause();
+  };
+
+  const toggleMute = () => {
+    const element = videoRef.current;
+    if (!element) return;
+    element.muted = !element.muted;
+    setMuted(element.muted);
+  };
+
+  const changeSpeed = (value: number) => {
+    setSpeed(value);
+    if (videoRef.current) videoRef.current.playbackRate = value;
+  };
+
+  const seek = (seconds: number) => {
+    const element = videoRef.current;
+    if (!element) return;
+    element.currentTime = seconds;
+    setProgress(seconds);
+  };
+
+  const toggleFullscreen = () => {
+    const element = containerRef.current;
+    if (!element) return;
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void element.requestFullscreen?.();
+  };
+
+  const showPoster = !started || (!playing && !loading && progress === 0);
+
+  return (
+    <div
+      ref={containerRef}
+      data-social-post-video-player={video.gif ? "gif" : "video"}
+      data-social-post-video-state={playerState(failed, playing, started)}
+      className="group relative w-full overflow-hidden rounded bg-black"
+      style={style}
+    >
+      <video
+        ref={videoRef}
+        className="h-full w-full object-contain"
+        playsInline
+        loop={video.gif}
+        muted={muted}
+        preload="none"
+        aria-label={video.alt || `Video from the post on ${platform}`}
+        onPlaying={() => {
+          setPlaying(true);
+          setLoading(false);
+        }}
+        onWaiting={() => setLoading(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+        onDurationChange={(event) =>
+          setDuration(event.currentTarget.duration || 0)
+        }
+        onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
+        onError={() => fail(null)}
+      >
+        {/* The first, sourceless track satisfies the caption rule the way the
+            app's other players do; the record's own captions follow it. */}
+        <track kind="captions" />
+        {video.captions.map((caption) => (
+          <track
+            key={caption.url}
+            kind="captions"
+            srcLang={caption.lang}
+            src={caption.url}
+          />
+        ))}
+      </video>
+      <div
+        className={clsx("absolute inset-0 transition-opacity", {
+          "pointer-events-none opacity-0": !showPoster,
+        })}
+      >
+        <img
+          {...REMOTE_IMAGE_PROPS}
+          className="h-full w-full object-contain"
+          alt=""
+          src={video.thumbnailUrl}
+        />
+      </div>
+      {!video.gif && (
+        <PlayToggle
+          platform={platform}
+          failed={failed}
+          loading={loading}
+          playing={playing}
+          onClick={toggle}
+        />
+      )}
+      {failed && (
+        <p
+          data-social-post-video-error
+          className="absolute inset-x-0 bottom-0 z-30 bg-black/60 p-2 text-center text-xs text-white"
+        >
+          This video could not be played.
+        </p>
+      )}
+      {started && !failed && !video.gif && (
+        <VideoControls
+          speed={speed}
+          progress={progress}
+          duration={duration}
+          muted={muted}
+          onSpeedChange={changeSpeed}
+          onSeek={seek}
+          onToggleMute={toggleMute}
+          onToggleFullscreen={toggleFullscreen}
+        />
+      )}
+    </div>
+  );
+}

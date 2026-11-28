@@ -70,3 +70,17 @@ export const SELF_HOSTED_RSS_SERVER_PORT = getPort(
 );
 export const MAIN_RSS_SERVER_PORT = getPort("SERIAL_TEST_MAIN_RSS_PORT", 3004);
 export const DEMO_RSS_SERVER_PORT = getPort("SERIAL_TEST_DEMO_RSS_PORT", 3006);
+
+/** Local OAuth/PDS release-validation instance. */
+export const PUBLICATIONS_APP_PORT = getPort(
+  "SERIAL_TEST_PUBLICATIONS_APP_PORT",
+  3013,
+);
+export const PUBLICATIONS_TURSO_PORT = getPort(
+  "SERIAL_TEST_PUBLICATIONS_TURSO_PORT",
+  8087,
+);
+export const PUBLICATIONS_PDS_PORT = getPort(
+  "SERIAL_TEST_PUBLICATIONS_PDS_PORT",
+  3014,
+);

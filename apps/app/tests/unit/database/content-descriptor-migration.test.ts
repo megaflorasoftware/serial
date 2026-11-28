@@ -132,6 +132,8 @@ describe("content descriptor migration", () => {
           args: [id, `View ${id}`, contentType, now, now],
         });
       }
+      // The 0047 backfill predates the Atmosphere platforms; every non-website
+      // Feed of that era was video, so the historical rule stays as written.
       for (const [id, platform] of [
         [1, "website"],
         [2, "youtube"],

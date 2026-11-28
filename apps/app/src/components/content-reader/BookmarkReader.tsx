@@ -1,15 +1,19 @@
 "use client";
 
-import clsx from "clsx";
 import { BookmarkIcon } from "lucide-react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DatabasePageCapture } from "~/server/db/schema";
 import { BookmarkArticleContent } from "~/components/bookmarks/BookmarkArticleContent";
 import { BookmarkReaderActions } from "~/components/bookmarks/BookmarkReaderActions";
-import { getArticleWidthLayout } from "~/components/content-reader/articleWidth";
+import { ReaderLayout } from "~/components/content-reader/ReaderLayout";
+import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
+import {
+  ReaderHeader,
+  ReaderSkeleton,
+  ReaderSource,
+} from "~/components/content-reader/ReaderSkeleton";
 import { ArticleSidebars } from "~/components/feed/read/ArticleSidebars";
-import { useZoom } from "~/components/feed/watch/[id]/useZoom";
 import classes from "~/components/feed/read/article.module.css";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -32,9 +36,9 @@ import { useOpenOriginalShortcut } from "~/lib/hooks/useOpenOriginalShortcut";
 import { useScrollDirection } from "~/lib/hooks/useScrollDirection";
 import { useRefreshBookmark } from "~/lib/hooks/useRefreshBookmark";
 import { useRestoreArticleProgress } from "~/lib/hooks/useRestoreArticleProgress";
+import { useExternalContentVisibility } from "~/lib/hooks/useExternalContentVisibility";
 import { orpcRouterClient } from "~/lib/orpc";
 import { getOriginActionLabel } from "~/lib/content/capabilities";
-import { REMOTE_IMAGE_PROPS } from "~/lib/remoteMedia";
 
 export function BookmarkReader({ id }: { id: string }) {
   const bookmark = useBookmarkValue(id);
@@ -57,10 +61,9 @@ export function BookmarkReader({ id }: { id: string }) {
   );
   const setBarsHidden = useSetAtom(barsHiddenAtom);
   const barsHidden = useAtomValue(barsHiddenAtom);
-  const { zoom } = useZoom();
-  const articleWidthLayout = getArticleWidthLayout(zoom);
   useRetentionPin("bookmark", id);
   useOpenOriginalShortcut(bookmark?.sourceUrl);
+  const externalContent = useExternalContentVisibility(id);
 
   useEffect(() => {
     let active = true;
@@ -142,16 +145,33 @@ export function BookmarkReader({ id }: { id: string }) {
     setArticleElement(element);
   }, []);
 
+  const source = bookmark
+    ? {
+        name: bookmark.siteName ?? new URL(bookmark.sourceUrl).hostname,
+        icon: bookmark.iconUrl ? (
+          <img
+            {...REMOTE_IMAGE_PROPS}
+            src={bookmark.iconUrl}
+            alt=""
+            className="size-6 rounded object-contain"
+          />
+        ) : (
+          <div className="bg-muted text-muted-foreground grid size-6 place-items-center rounded">
+            <BookmarkIcon size={14} />
+          </div>
+        ),
+      }
+    : null;
+  const header = bookmark
+    ? { title: bookmark.title, author: bookmark.author || "" }
+    : null;
+
   if (!bookmark || capture === undefined) {
-    return (
-      <p className="p-6 text-center" role="status">
-        Loading Bookmark…
-      </p>
-    );
+    return <ReaderSkeleton source={source} header={header} />;
   }
 
+  const originActionLabel = getOriginActionLabel(bookmark);
   if (!capture) {
-    const originActionLabel = getOriginActionLabel(bookmark);
     return (
       <div className="mx-auto max-w-xl p-6">
         <Alert>
@@ -174,53 +194,30 @@ export function BookmarkReader({ id }: { id: string }) {
   }
 
   return (
-    <div
-      className={clsx(
-        "mx-auto grid h-full w-full grid-cols-1 place-items-center",
-        articleWidthLayout.className,
-      )}
-      style={articleWidthLayout.style}
+    <ReaderLayout
+      source={<ReaderSource source={source} />}
+      actions={<BookmarkReaderActions bookmarkId={id} />}
+      barsHidden={barsHidden}
     >
-      <div className="mb-4 flex w-full items-center gap-3 px-6 sm:pt-6">
-        {bookmark.iconUrl ? (
-          <img
-            {...REMOTE_IMAGE_PROPS}
-            src={bookmark.iconUrl}
-            alt=""
-            className="size-6 rounded object-contain"
-          />
-        ) : (
-          <div className="bg-muted text-muted-foreground grid size-6 place-items-center rounded">
-            <BookmarkIcon size={14} />
-          </div>
-        )}
-        <span className="line-clamp-1 font-sans text-sm">
-          {bookmark.siteName ?? new URL(bookmark.sourceUrl).hostname}
-        </span>
-      </div>
       <div className="relative w-full">
         <ArticleSidebars
           article={articleElement}
-          contentKey={`${id}:${capture.contentHash}`}
+          contentKey={`${id}:${externalContent}:${capture.contentHash}`}
           scrollToElement={scrollToElement}
         />
         <article
           ref={updateArticleRef}
           className={`h-full w-full px-6 sm:pb-6 ${classes.article}`}
         >
-          <h1 data-serial-header>{bookmark.title}</h1>
-          <h6 data-serial-header>{bookmark.author || ""}</h6>
-          <BookmarkArticleContent content={capture.contentHtml} />
+          <ReaderHeader header={header} />
+          <BookmarkArticleContent
+            content={capture.contentHtml}
+            externalContent={externalContent}
+            noticeHref={bookmark.sourceUrl}
+            originActionLabel={originActionLabel}
+          />
         </article>
       </div>
-      <div
-        className={clsx(
-          "sticky inset-x-0 bottom-0 left-0 grid place-items-center transition-transform duration-300",
-          barsHidden && "translate-y-full",
-        )}
-      >
-        <BookmarkReaderActions bookmarkId={id} />
-      </div>
-    </div>
+    </ReaderLayout>
   );
 }

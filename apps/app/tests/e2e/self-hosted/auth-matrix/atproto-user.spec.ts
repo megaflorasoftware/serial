@@ -287,7 +287,7 @@ test.describe("DID-only session", () => {
     // The open menu anchors the absence check — without it the count-0
     // assertion would pass vacuously before the dropdown rendered.
     await expect(
-      page.getByRole("menuitem", { name: "Connections" }),
+      page.getByRole("menuitem", { name: "Settings" }),
     ).toBeVisible();
     await expect(page.getByText("atproto.invalid")).toHaveCount(0);
   });

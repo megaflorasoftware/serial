@@ -1,3 +1,4 @@
+import { XMLParser } from "fast-xml-parser";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -18,17 +19,30 @@ function makeFeed(id: number, name: string, url: string): ApplicationFeed {
     id,
     userId: "user-1",
     name,
-    url,
     imageUrl: "",
     platform: "website",
     openLocation: "serial",
     isActive: true,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    etag: null,
-    lastModifiedHeader: null,
+    siteUrl: null,
+    nameEditedAt: null,
+    origins: [
+      {
+        id: id * 100,
+        feedId: id,
+        userId: "user-1",
+        kind: "rss",
+        locator: url,
+        lastFetchedAt: null,
+        nextFetchAt: null,
+        sourceName: null,
+        sourceImageUrl: null,
+        sourceDescription: null,
+        createdAt: new Date("2026-01-01"),
+        updatedAt: new Date("2026-01-01"),
+      },
+    ],
   };
 }
 
@@ -88,6 +102,49 @@ function makeView(
 }
 
 describe("OPML import/export", () => {
+  it("exports Atmosphere-only and combined Feeds with website URLs, tags, and groups", () => {
+    const publication = makeFeed(1, 'My "Publication"', "");
+    publication.siteUrl = "https://example.com/publication?a=1&b=2";
+    publication.origins[0]!.kind = "atproto";
+    publication.origins[0]!.locator =
+      "at://did:plc:alice/site.standard.publication/blog";
+    const combined = makeFeed(2, "Combined", "https://example.com/feed.xml");
+    combined.siteUrl = "https://example.com/blog";
+    combined.origins.push({ ...publication.origins[0]!, id: 201, feedId: 2 });
+    const opml = buildViewOPML({
+      feeds: [publication, combined],
+      views: [
+        makeView(1, "Reading", {
+          categoryIds: [],
+          feedIds: [1],
+          viewSections: [],
+        }),
+      ],
+      contentCategories: [makeCategory(1, "Writing & ideas")],
+      feedCategories: [{ feedId: 1, categoryId: 1 }],
+      viewFeeds: [{ viewId: 1, feedId: 1 }],
+    });
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(opml);
+    const outlines = parsed.opml.body.outline;
+    expect(outlines[0]).toMatchObject({
+      "@_title": "Combined",
+      "@_type": "rss",
+      "@_xmlUrl": "https://example.com/feed.xml",
+      "@_htmlUrl": combined.siteUrl,
+    });
+    expect(outlines[1].outline).toMatchObject({
+      "@_title": publication.name,
+      "@_htmlUrl": publication.siteUrl,
+      "@_category": "Writing & ideas",
+    });
+    expect(outlines[1].outline).not.toHaveProperty("@_xmlUrl");
+    expect(outlines[1].outline).not.toHaveProperty("@_type");
+    expect(opml).not.toContain("at://");
+    const imported = getInitialFeedDataFromOPMLInput(opml, "feeds.opml");
+    expect(imported.success).toBe(true);
+    if (imported.success) expect(imported.data).toHaveLength(1);
+  });
+
   it("exports nested groups", () => {
     const opml = buildOPML({
       ungroupedFeeds: [],
@@ -131,7 +188,8 @@ describe("OPML import/export", () => {
   });
 
   it("imports nested outlines as category paths", () => {
-    const result = getInitialFeedDataFromOPMLInput(`
+    const result = getInitialFeedDataFromOPMLInput(
+      `
       <?xml version="1.0" encoding="UTF-8"?>
       <opml version="2.0">
         <body>
@@ -142,7 +200,9 @@ describe("OPML import/export", () => {
           </outline>
         </body>
       </opml>
-    `);
+    `,
+      "feeds.opml",
+    );
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -155,7 +215,8 @@ describe("OPML import/export", () => {
   });
 
   it("keeps feed-named sections when they are nested inside a view and preserves subsection type", () => {
-    const result = getInitialFeedDataFromOPMLInput(`
+    const result = getInitialFeedDataFromOPMLInput(
+      `
       <?xml version="1.0" encoding="UTF-8"?>
       <opml version="2.0" xmlns:serial="https://serial.tube/opml">
         <body>
@@ -169,7 +230,9 @@ describe("OPML import/export", () => {
           </outline>
         </body>
       </opml>
-    `);
+    `,
+      "feeds.opml",
+    );
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -193,7 +256,8 @@ describe("OPML import/export", () => {
   });
 
   it("differentiates feed and tag subsections with the same name", () => {
-    const result = getInitialFeedDataFromOPMLInput(`
+    const result = getInitialFeedDataFromOPMLInput(
+      `
       <?xml version="1.0" encoding="UTF-8"?>
       <opml version="2.0" xmlns:serial="https://serial.tube/opml">
         <body>
@@ -207,7 +271,9 @@ describe("OPML import/export", () => {
           </outline>
         </body>
       </opml>
-    `);
+    `,
+      "feeds.opml",
+    );
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -272,7 +338,7 @@ describe("OPML import/export", () => {
       feedCategories,
       viewFeeds,
     });
-    const result = getInitialFeedDataFromOPMLInput(opml);
+    const result = getInitialFeedDataFromOPMLInput(opml, "feeds.opml");
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -335,7 +401,7 @@ describe("OPML import/export", () => {
       feedCategories: [],
       viewFeeds: [],
     });
-    const result = getInitialFeedDataFromOPMLInput(opml);
+    const result = getInitialFeedDataFromOPMLInput(opml, "feeds.opml");
 
     expect(result.success).toBe(true);
     if (!result.success) return;

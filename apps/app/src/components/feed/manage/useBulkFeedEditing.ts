@@ -9,6 +9,7 @@ import {
 } from "~/lib/data/feed-categories/mutations";
 import {
   useBulkDeleteFeedsMutation,
+  useBulkRevalidateFeedsMutation,
   useBulkSetActiveMutation,
 } from "~/lib/data/feeds/mutations";
 import {
@@ -109,6 +110,8 @@ export function useBulkFeedEditing({
     useBulkAssignViewFeedMutation();
   const { mutateAsync: bulkRemoveView, isPending: isRemovingView } =
     useBulkRemoveViewFeedMutation();
+  const { mutateAsync: bulkRevalidateFeeds, isPending: isRevalidating } =
+    useBulkRevalidateFeedsMutation();
 
   const handleDelete = () => {
     if (!canMutate) return;
@@ -121,6 +124,18 @@ export function useBulkFeedEditing({
       loading: `Deleting ${feedCountLabel(count)}...`,
       success: `Deleted ${feedCountLabel(count)}!`,
       error: "Failed to delete feeds",
+    });
+  };
+
+  const handleRevalidate = () => {
+    // The button and its shortcut queue one selection at a time.
+    if (!canMutate || isRevalidating) return;
+    const feedIds = Array.from(selectedFeedIds);
+    const count = feedIds.length;
+
+    toast.promise(bulkRevalidateFeeds({ feedIds }), {
+      success: `Revalidating ${feedCountLabel(count)} in the background`,
+      error: "Failed to revalidate feeds",
     });
   };
 
@@ -268,9 +283,11 @@ export function useBulkFeedEditing({
     isDeletingFeeds,
     isSavingEdit,
     isClearing,
+    isRevalidating,
     handleDelete,
     openEditDialog,
     handleClear,
+    handleRevalidate,
     handleEditSave,
   };
 }

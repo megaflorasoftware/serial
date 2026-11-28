@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PersistStorage, StorageValue } from "zustand/middleware";
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type { ApplicationBookmark } from "~/server/mixed-content/projection";
 import { bookmarkCapturesStore } from "~/lib/data/bookmarks/capture-store";
@@ -7,6 +8,7 @@ import {
   hydrateOfflineBodiesForPage,
   invalidateOfflineHydration,
   planPageBodyHydration,
+  waitForOfflineHydrationIdle,
 } from "~/lib/data/offline-hydration";
 import { feedItemsStore } from "~/lib/data/store";
 
@@ -24,10 +26,19 @@ vi.mock("~/lib/orpc", () => ({
 
 const now = new Date("2026-08-31T12:00:00.000Z");
 
+function htmlBody(html: string, revision = "content-hash") {
+  return { form: "html", html, revision } as const;
+}
+
 function feedItem(
   overrides: Partial<ApplicationFeedItem> = {},
 ): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    sourceCid: null,
+    bodySource: "rss",
+    tags: [],
     id: "feed-item-one",
     feedId: 1,
     contentId: "content-one",
@@ -35,7 +46,7 @@ function feedItem(
     author: "Author",
     url: "https://example.com/article",
     thumbnail: "",
-    content: "",
+    body: null,
     contentSnippet: "preview",
     contentType: "text",
     isWatched: false,
@@ -137,7 +148,7 @@ describe("planPageBodyHydration", () => {
   });
 
   it("retains a loaded body only while it is unmarked", () => {
-    const loaded = feedItem({ content: "<p>Body</p>" });
+    const loaded = feedItem({ body: htmlBody("<p>Body</p>") });
     expect(planWith({ feedItems: [loaded] }).retainLoadedFeedItemIds).toEqual([
       "feed-item-one",
     ]);
@@ -173,6 +184,132 @@ describe("planPageBodyHydration", () => {
 });
 
 describe("hydrateOfflineBodiesForPage", () => {
+  it("batches streamed captures for a fixed 100 ms without delaying Feed bodies", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const first = bookmark({ id: "stream-a" });
+    const second = bookmark({ id: "stream-b" });
+    const third = bookmark({ id: "stream-c" });
+    const item = feedItem();
+    bookmarksStore.getState().upsertMany([first, second, third]);
+    feedItemsStore.getState().setFeedItems([item]);
+    let feedRequested!: () => void;
+    const feedStarted = new Promise<void>((resolve) => {
+      feedRequested = resolve;
+    });
+    mocks.requestFullTextForItems.mockImplementation(() => {
+      feedRequested();
+      return Promise.resolve({ items: [], omitted: [] });
+    });
+    mocks.getCaptures.mockResolvedValue([]);
+    try {
+      const hydration = hydrateOfflineBodiesForPage({
+        feedItems: [item],
+        bookmarks: [first],
+      });
+      await feedStarted;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.requestFullTextForItems).toHaveBeenCalledOnce();
+      expect(mocks.getCaptures).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(40);
+      void hydrateOfflineBodiesForPage({ feedItems: [], bookmarks: [second] });
+      await vi.advanceTimersByTimeAsync(40);
+      void hydrateOfflineBodiesForPage({ feedItems: [], bookmarks: [third] });
+      await vi.advanceTimersByTimeAsync(19);
+      expect(mocks.getCaptures).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mocks.getCaptures).toHaveBeenCalledOnce();
+      expect(mocks.getCaptures.mock.calls[0]?.[0]).toEqual({
+        bookmarkIds: [first.id, second.id, third.id],
+      });
+      await hydration;
+    } finally {
+      invalidateOfflineHydration();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports idle only after the active hydration finishes", async () => {
+    const entity = bookmark();
+    bookmarksStore.getState().upsert(entity);
+    let resolveCaptures!: (captures: unknown[]) => void;
+    mocks.getCaptures.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCaptures = resolve;
+      }),
+    );
+    void hydrateOfflineBodiesForPage({ feedItems: [], bookmarks: [entity] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    let idle = false;
+    const readiness = waitForOfflineHydrationIdle().then(() => {
+      idle = true;
+    });
+    await Promise.resolve();
+    expect(idle).toBe(false);
+
+    resolveCaptures([]);
+    await readiness;
+    expect(idle).toBe(true);
+  });
+
+  it("uses persisted captures before deciding to fetch them again", async () => {
+    const entity = bookmark();
+    bookmarksStore.getState().upsert(entity);
+    type Cache = Pick<
+      ReturnType<typeof bookmarkCapturesStore.getState>,
+      "capturesDict"
+    >;
+    const { persist: persistence } =
+      bookmarkCapturesStore as typeof bookmarkCapturesStore & {
+        persist: {
+          getOptions: () => { storage?: PersistStorage<Cache> };
+          setOptions: (options: { storage?: PersistStorage<Cache> }) => void;
+          rehydrate: () => Promise<void>;
+        };
+      };
+    const previousStorage = persistence.getOptions().storage;
+    let finishRead!: (value: StorageValue<Cache>) => void;
+    const read = new Promise<StorageValue<Cache>>((resolve) => {
+      finishRead = resolve;
+    });
+    persistence.setOptions({
+      storage: { getItem: () => read, setItem: () => {}, removeItem: () => {} },
+    });
+    const diskHydration = persistence.rehydrate();
+    mocks.getCaptures.mockResolvedValue([]);
+    const pageHydration = hydrateOfflineBodiesForPage({
+      feedItems: [],
+      bookmarks: [entity],
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(mocks.getCaptures).not.toHaveBeenCalled();
+    } finally {
+      finishRead({
+        state: {
+          capturesDict: {
+            [entity.id]: {
+              bookmarkId: entity.id,
+              contentHtml: "<p>Cached capture</p>",
+              contentHash: "capture-hash",
+              captureSource: "server-static-fetch",
+              extractorVersion: "test",
+              sanitizerPolicyVersion: 1,
+              capturedAt: now,
+            },
+          },
+        },
+      });
+      await diskHydration;
+      await pageHydration;
+      persistence.setOptions({ storage: previousStorage });
+    }
+    expect(mocks.getCaptures).not.toHaveBeenCalled();
+    expect(
+      bookmarkCapturesStore.getState().capturesDict[entity.id]?.contentHtml,
+    ).toBe("<p>Cached capture</p>");
+  });
+
   it("retries a failed capture fetch on a page that no longer carries it", async () => {
     const entity = bookmark();
     bookmarksStore.getState().upsert(entity);
@@ -213,20 +350,46 @@ describe("hydrateOfflineBodiesForPage", () => {
   it("never re-requests a body the server already returned empty", async () => {
     const item = feedItem();
     feedItemsStore.getState().setFeedItems([item]);
-    mocks.requestFullTextForItems.mockResolvedValue([
-      { id: item.id, content: "", contentSnippet: "" },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [{ id: item.id, body: null, contentSnippet: "" }],
+      omitted: [],
+    });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     expect(mocks.requestFullTextForItems).toHaveBeenCalledTimes(1);
   });
 
+  it("re-requests an omitted body instead of negative caching it", async () => {
+    const item = feedItem();
+    feedItemsStore.getState().setFeedItems([item]);
+    mocks.requestFullTextForItems
+      .mockResolvedValueOnce({ items: [], omitted: [item.id] })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: item.id,
+            body: htmlBody("<p>Body</p>"),
+            contentSnippet: "body",
+          },
+        ],
+        omitted: [],
+      });
+
+    await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
+
+    expect(mocks.requestFullTextForItems).toHaveBeenCalledTimes(2);
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toEqual(
+      htmlBody("<p>Body</p>"),
+    );
+  });
+
   it("re-requests an empty body once its content hash changes", async () => {
     const item = feedItem();
     feedItemsStore.getState().setFeedItems([item]);
-    mocks.requestFullTextForItems.mockResolvedValue([
-      { id: item.id, content: "", contentSnippet: "" },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [{ id: item.id, body: null, contentSnippet: "" }],
+      omitted: [],
+    });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     await hydrateOfflineBodiesForPage({ feedItems: [item], bookmarks: [] });
     expect(mocks.requestFullTextForItems).toHaveBeenCalledTimes(1);
@@ -269,6 +432,10 @@ describe("hydrateOfflineBodiesForPage", () => {
     });
     expect(secondRun).toBe(firstRun);
     await firstRun;
+    expect(mocks.getCaptures).toHaveBeenCalledTimes(1);
+    expect(mocks.getCaptures.mock.calls[0]?.[0]).toEqual({
+      bookmarkIds: [first.id, second.id],
+    });
     expect(
       bookmarkCapturesStore.getState().capturesDict[first.id],
     ).toBeDefined();
@@ -280,7 +447,7 @@ describe("hydrateOfflineBodiesForPage", () => {
   it("discards an in-flight fulltext response after invalidation", async () => {
     const item = feedItem();
     feedItemsStore.getState().setFeedItems([item]);
-    let resolveFulltext: (items: unknown[]) => void = () => {};
+    let resolveFulltext: (response: unknown) => void = () => {};
     mocks.requestFullTextForItems.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveFulltext = resolve;
@@ -292,11 +459,18 @@ describe("hydrateOfflineBodiesForPage", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
     invalidateOfflineHydration();
-    resolveFulltext([
-      { id: item.id, content: "<p>Late body</p>", contentSnippet: "late" },
-    ]);
+    resolveFulltext({
+      items: [
+        {
+          id: item.id,
+          body: htmlBody("<p>Late body</p>"),
+          contentSnippet: "late",
+        },
+      ],
+      omitted: [],
+    });
     await hydration;
-    expect(feedItemsStore.getState().feedItemsDict[item.id]?.content).toBe("");
+    expect(feedItemsStore.getState().feedItemsDict[item.id]?.body).toBeNull();
   });
 
   it("does not resurrect a severed run alongside the newly admitted one", async () => {
@@ -315,7 +489,7 @@ describe("hydrateOfflineBodiesForPage", () => {
       feedItems: [],
       bookmarks: [gated],
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(deferred).toHaveLength(1));
     invalidateOfflineHydration();
 
     bookmarksStore.getState().upsert(fresh);
@@ -325,7 +499,7 @@ describe("hydrateOfflineBodiesForPage", () => {
       bookmarks: [fresh],
     });
     expect(admittedRun).not.toBe(severedRun);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(deferred).toHaveLength(2));
     // A third application queues a sweep while the admitted run is gated;
     // only the admitted run may pick it up once its fetch resolves.
     void hydrateOfflineBodiesForPage({ feedItems: [], bookmarks: [queued] });
@@ -360,7 +534,7 @@ describe("hydrateOfflineBodiesForPage", () => {
       feedItems: [],
       bookmarks: [entity],
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(mocks.getCaptures).toHaveBeenCalledOnce());
     bookmarksStore.getState().upsert({ ...entity, isRead: true });
     resolveCaptures([
       {
@@ -390,7 +564,7 @@ describe("hydrateOfflineBodiesForPage", () => {
       feedItems: [],
       bookmarks: [entity],
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(mocks.getCaptures).toHaveBeenCalledOnce());
     invalidateOfflineHydration();
     bookmarkCapturesStore.getState().reset();
     resolveCaptures([

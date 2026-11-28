@@ -23,11 +23,13 @@ import { setMixedReadValue } from "~/lib/data/mixed-content/mutations";
 import { useLoadMoreItems } from "~/lib/hooks/useLoadMoreItems";
 import { isInboxUnread } from "~/lib/content-status";
 import { useCanMutate } from "~/lib/data/offline-mutations";
+import { useIsMobile } from "~/hooks/use-mobile";
 
 let nextUndoRetentionOwnerId = 0;
 
 export function MarkVisibleAsReadButton() {
   const canMutate = useCanMutate();
+  const isMobile = useIsMobile();
   const [isLoading, setIsLoading] = useState(false);
   const setSelectedItemId = useSetAtom(selectedItemIdAtom);
   const scrollToItem = useScrollToFeedItem();
@@ -41,10 +43,10 @@ export function MarkVisibleAsReadButton() {
       requestAnimationFrame(() => {
         const nextItemId = getFirstRenderedFeedItemId();
         setSelectedItemId(nextItemId);
-        scrollToItem(nextItemId);
+        if (!isMobile) scrollToItem(nextItemId);
       });
     });
-  }, [scrollToItem, setSelectedItemId]);
+  }, [isMobile, scrollToItem, setSelectedItemId]);
 
   const handleMarkAsRead = async () => {
     if (!canMutate) return;

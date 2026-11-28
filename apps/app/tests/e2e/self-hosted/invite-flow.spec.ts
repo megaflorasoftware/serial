@@ -1,15 +1,20 @@
 import { expect, test } from "@playwright/test";
 import { clearQueryCache } from "../fixtures/query-cache";
-import { signIn, signOut, signUpAsAdmin } from "../fixtures/auth";
+import {
+  completeTestOnboarding,
+  signIn,
+  signOut,
+  signUpAsAdmin,
+} from "../fixtures/auth";
 import { SELF_HOSTED_TURSO_PORT } from "../fixtures/ports";
 import { cleanupUser, generateTestEmail } from "../fixtures/seed-db";
 import type { Page } from "@playwright/test";
 
 /** Wait until the signed-in home screen has rendered its first section. */
 async function waitForHomeData(page: Page) {
-  await expect(page.getByRole("heading", { name: "Serial" })).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(
+    page.getByRole("heading", { name: "Serial", exact: true }),
+  ).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("main main h2").first()).toBeVisible({
     timeout: 30_000,
   });
@@ -124,6 +129,7 @@ test.describe("invite flow", () => {
     expect(signUpBody.invitationToken).toBeTruthy();
 
     await expect(page).toHaveURL("/", { timeout: 30000 });
+    await completeTestOnboarding(page);
 
     // ── 9. Sign out first invited user, sign in as admin ────────────
     await signOut(page);
@@ -162,6 +168,7 @@ test.describe("invite flow", () => {
 
     await page.getByRole("button", { name: /create an account/i }).click();
     await expect(page).toHaveURL("/", { timeout: 30000 });
+    await completeTestOnboarding(page);
 
     // ── 13. Sign out second user, sign in as admin ──────────────────
     await signOut(page);
@@ -266,6 +273,7 @@ test.describe("invite flow", () => {
 
     await page.getByRole("button", { name: /create an account/i }).click();
     await expect(page).toHaveURL("/", { timeout: 30000 });
+    await completeTestOnboarding(page);
 
     // ── 9. Sign out first user, sign in as admin ────────────────────
     await signOut(page);

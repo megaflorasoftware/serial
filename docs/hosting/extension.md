@@ -122,7 +122,9 @@ DOM size, duration, candidate count, and worker concurrency are bounded.
 simultaneous server-side Bookmark capture and discovery fetches. It defaults to
 `8` and must be a positive integer. Lower it on a resource-constrained instance;
 requests above the available capacity fail fast while the Bookmark write itself
-remains independent of optional Feed discovery.
+remains independent of optional Feed discovery. Background discovery, such as
+subscription sync, waits for capacity instead. It leaves two fetches for
+requests people make themselves, but always keeps one for itself.
 
 Reverse proxies should preserve streaming request bodies instead of buffering
 unbounded uploads, and should not rewrite rejected destinations through an

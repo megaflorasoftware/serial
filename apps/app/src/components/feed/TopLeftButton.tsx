@@ -7,6 +7,7 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
 } from "lucide-react";
+import { RefetchItemsButton } from "./RefetchItemsButton";
 import { ButtonWithShortcut } from "~/components/ButtonWithShortcut";
 import { useSidebar } from "~/components/ui/sidebar";
 
@@ -18,6 +19,7 @@ export function TopLeftButton() {
     return (
       <div className="flex gap-2">
         <ButtonWithShortcut
+          data-onboarding="open-menu"
           data-serial-reader-left-boundary
           shortcut="\"
           onClick={() => toggleSidebar("left")}
@@ -42,6 +44,7 @@ export function TopLeftButton() {
   return (
     <div className="flex gap-2">
       <ButtonWithShortcut
+        data-onboarding="open-menu"
         data-serial-reader-left-boundary
         shortcut="\"
         onClick={() => toggleSidebar("left")}
@@ -53,6 +56,7 @@ export function TopLeftButton() {
         {!isMobile && <MenuIcon size={16} />}
         <span className="hidden pl-1 md:block">Menu</span>
       </ButtonWithShortcut>
+      <RefetchItemsButton />
     </div>
   );
 }

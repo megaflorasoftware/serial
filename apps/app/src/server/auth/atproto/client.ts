@@ -8,6 +8,7 @@ import { getAtprotoClientMode } from "./mode";
 import { ALLOW_INSECURE_PDS, createHardenedFetch } from "./hardened-fetch";
 import { createAtprotoRequestLock } from "./lock";
 import { createAtprotoSessionStore, createAtprotoStateStore } from "./stores";
+import { getAtprotoIdentityResolver } from "./identity";
 import { env } from "~/env";
 import { db } from "~/server/db";
 import { getKV } from "~/server/kv";
@@ -49,6 +50,7 @@ async function buildClient(): Promise<NodeOAuthClient> {
     sessionStore: createAtprotoSessionStore(db, encryptionKey),
     requestLock: createAtprotoRequestLock(getKV),
     fetch,
+    identityResolver: getAtprotoIdentityResolver(),
     allowHttp: ALLOW_INSECURE_PDS,
     ...(env.ATPROTO_PLC_DIRECTORY_URL
       ? { plcDirectoryUrl: env.ATPROTO_PLC_DIRECTORY_URL }

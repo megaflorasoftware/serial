@@ -26,6 +26,7 @@ import {
   hasRetainedFeedBody,
 } from "~/lib/data/offline-content";
 import { canMutateNow } from "~/lib/data/offline-mutations";
+import { itemDestinationOf } from "~/lib/content/descriptor";
 
 export function useFeedItemActions(itemId: string) {
   const router = useRouter();
@@ -106,7 +107,7 @@ export function useFeedItemActions(itemId: string) {
     }
 
     const feed = feeds.find((f) => f.id === item.feedId);
-    const itemDestination = item.platform === "website" ? "read" : "watch";
+    const itemDestination = itemDestinationOf(item.platform);
     const shouldOpenInSerial =
       feed?.openLocation === "serial" || !feed?.openLocation;
 

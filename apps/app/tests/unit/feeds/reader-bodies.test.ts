@@ -1,0 +1,551 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { bytesToBase64, stringifyLosslessJson } from "@serial/standard-site";
+import { createBookmarkTestDatabase } from "../bookmarks/database";
+import type { InStatement } from "@libsql/client";
+import type { ReaderBody } from "@serial/standard-site";
+import type { PublicationClient } from "~/server/rss/atprotoClient";
+import {
+  atprotoReferenceSnapshots,
+  feedItems,
+  feedOriginAtprotoDocuments,
+  user,
+} from "~/server/db/schema";
+import { insertFeedWithOrigins } from "~/server/feeds/origins";
+import {
+  bodyHeadColumns,
+  capReaderBodies,
+  loadCappedReaderBodies,
+  loadReaderBodies,
+  loadRequestedReaderBodies,
+  ownedBodyRow,
+  refreshDocumentReferences,
+  toApplicationFeedItem,
+} from "~/server/feeds/reader-bodies";
+import { sweepReferenceSnapshots } from "~/server/jetstream/reference-snapshots";
+import {
+  stageDocumentSource,
+  storeDocumentBlobs,
+} from "~/server/jetstream/document-source";
+
+vi.mock("~/server/logger", () => ({
+  logWarning: vi.fn(),
+  captureException: vi.fn(),
+}));
+vi.mock("~/lib/semaphore", () => ({
+  dbSemaphore: { run: <T>(fn: () => T) => fn() },
+}));
+
+const DID = "did:plc:alice";
+const PUB = `at://${DID}/site.standard.publication/site`;
+const OTHER_PUB = `at://did:plc:bob/site.standard.publication/site`;
+const DOC = `at://${DID}/site.standard.document/post`;
+const REF = `at://did:plc:bob/site.standard.document/other`;
+const NOW = new Date("2026-09-19T12:00:00Z");
+const CID = "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const CID_B = `${CID.slice(0, 10)}b${CID.slice(11)}`;
+
+let fixture: Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
+let feedId: number;
+let originId: number;
+
+function record(views: bigint | number = 1) {
+  return stringifyLosslessJson({
+    $type: "site.standard.document",
+    site: PUB,
+    title: "Post",
+    path: "/post",
+    publishedAt: NOW.toISOString(),
+    views,
+    content: {
+      $type: "pub.leaflet.content",
+      pages: [
+        {
+          $type: "pub.leaflet.pages.linearDocument",
+          blocks: [
+            {
+              block: { $type: "pub.leaflet.blocks.text", plaintext: "Hello" },
+            },
+            {
+              block: { $type: "pub.leaflet.blocks.standardSitePost", uri: REF },
+            },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+async function insertItem(input: {
+  id: string;
+  content?: string;
+  atprotoUri?: string | null;
+  sourceCid?: string | null;
+}) {
+  await fixture.database.insert(feedItems).values({
+    id: input.id,
+    feedId,
+    contentId: input.id,
+    title: input.id,
+    author: "",
+    url: `https://example.com/${input.id}`,
+    content: input.content ?? "",
+    contentHash: `hash-${input.id}`,
+    postedAt: NOW,
+    atprotoUri: input.atprotoUri ?? null,
+    sourceCid: input.sourceCid ?? null,
+    bodySource: input.content ? "rss" : "none",
+  });
+}
+
+/** Every stored item's body head in id order, as the full-text request reads them. */
+function bodyHeads() {
+  return fixture.database
+    .select(bodyHeadColumns)
+    .from(feedItems)
+    .orderBy(feedItems.id);
+}
+
+/** Ordered inserts of same-sized HTML items, ids `rss-00` onwards. */
+async function insertHtmlItems(count: number, html: string) {
+  for (let index = 0; index < count; index++)
+    // Sequential inserts keep ids ordered for the requests below.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    await insertItem({
+      id: `rss-${String(index).padStart(2, "0")}`,
+      content: html,
+    });
+}
+
+/** The ids of each statement that read stored HTML through the client. */
+function storedHtmlReads(execute: { mock: { calls: unknown[][] } }) {
+  return execute.mock.calls.flatMap((call) => {
+    const statement = call[0] as InStatement;
+    return typeof statement !== "string" && /"content"/.test(statement.sql)
+      ? [statement.args]
+      : [];
+  });
+}
+
+async function retainSource(cid: string, text: string, withBlob = false) {
+  await fixture.database
+    .insert(feedOriginAtprotoDocuments)
+    .values({ originId, uri: DOC, cid, status: "ready", bodyCid: cid })
+    .onConflictDoUpdate({
+      target: [
+        feedOriginAtprotoDocuments.originId,
+        feedOriginAtprotoDocuments.uri,
+      ],
+      set: { cid, bodyCid: cid },
+    });
+  await stageDocumentSource(
+    fixture.database,
+    { originId, uri: DOC, cid },
+    text,
+    NOW,
+  );
+  if (withBlob)
+    await storeDocumentBlobs(fixture.database, { originId, uri: DOC, cid }, [
+      {
+        cid: "bafyblob",
+        mimeType: "application/json",
+        bytes: new Uint8Array([1, 2, 3]),
+      },
+    ]);
+}
+
+async function snapshot(uri: string, value: unknown, resolvedAt = NOW) {
+  await fixture.database.insert(atprotoReferenceSnapshots).values({
+    uri,
+    cid: CID_B,
+    outcome: "resolved",
+    record: stringifyLosslessJson(value),
+    resolvedAt,
+    readAt: null,
+  });
+}
+
+const referenced = {
+  $type: "site.standard.document",
+  site: OTHER_PUB,
+  title: "Other",
+  path: "/other",
+  publishedAt: NOW.toISOString(),
+};
+const otherPublication = { name: "Bob", url: "https://bob.example.com" };
+
+beforeEach(async () => {
+  fixture = await createBookmarkTestDatabase();
+  await fixture.database.insert(user).values({
+    id: "reader",
+    name: "Reader",
+    email: "reader@example.com",
+    emailVerified: true,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  const created = await insertFeedWithOrigins(fixture.database, {
+    userId: "reader",
+    isActive: true,
+    details: {
+      name: "Feed",
+      platform: "website",
+      imageUrl: "",
+      origins: [{ kind: "atproto", locator: PUB }],
+    },
+  });
+  feedId = created.id;
+  originId = created.origins[0]!.id;
+});
+afterEach(() => fixture.cleanup());
+
+describe("reader bodies", () => {
+  it("serves html bodies for RSS items and nothing for body-less items", async () => {
+    await insertItem({ id: "rss", content: "<p>Body</p>" });
+    await insertItem({ id: "empty" });
+    const rows = await fixture.database.select().from(feedItems);
+    const bodies = await loadReaderBodies(fixture.database, rows, NOW);
+    expect(bodies.get("rss")).toEqual({
+      form: "html",
+      html: "<p>Body</p>",
+      revision: "hash-rss",
+    });
+    expect(bodies.get("empty")).toBeNull();
+    const item = toApplicationFeedItem(rows[0]!, "website", bodies.get("rss"));
+    expect(item).not.toHaveProperty("content");
+    expect(item.body?.form).toBe("html");
+  });
+
+  it("serves the retained source, its blobs and ordered snapshots with digits intact", async () => {
+    await retainSource(CID, record(9007199254740993n), true);
+    await insertItem({ id: "doc", atprotoUri: DOC, sourceCid: CID });
+    await snapshot(REF, referenced);
+    await snapshot(OTHER_PUB, otherPublication);
+    const rows = await fixture.database.select().from(feedItems);
+    const body = (await loadReaderBodies(fixture.database, rows, NOW)).get(
+      "doc",
+    );
+    expect(body?.form).toBe("source");
+    if (body?.form !== "source") throw new Error();
+    expect(body.revision).toBe(CID);
+    expect(body.source.record).toContain('"views":9007199254740993');
+    expect(body.source.blobs).toEqual([
+      {
+        cid: "bafyblob",
+        mimeType: "application/json",
+        bytes: bytesToBase64(new Uint8Array([1, 2, 3])),
+      },
+    ]);
+    expect(body.references.map((reference) => reference.uri)).toEqual([
+      REF,
+      OTHER_PUB,
+    ]);
+    expect(body.references[0]).toMatchObject({
+      outcome: "resolved",
+      cid: CID_B,
+    });
+    const read = await fixture.database
+      .select()
+      .from(atprotoReferenceSnapshots);
+    expect(read.every((row) => row.readAt?.getTime() === NOW.getTime())).toBe(
+      true,
+    );
+  });
+
+  it("falls back to the html body when the item names a source that is gone", async () => {
+    await insertItem({
+      id: "doc",
+      content: "<p>RSS</p>",
+      atprotoUri: DOC,
+      sourceCid: CID,
+    });
+    const rows = await fixture.database.select().from(feedItems);
+    const body = (await loadReaderBodies(fixture.database, rows, NOW)).get(
+      "doc",
+    );
+    expect(body).toEqual({
+      form: "html",
+      html: "<p>RSS</p>",
+      revision: "hash-doc",
+    });
+  });
+
+  it("caps responses in request order and names the omitted ids", () => {
+    const body = (size: number): ReaderBody => ({
+      form: "html",
+      html: "x".repeat(size),
+      revision: "r",
+    });
+    const entries = [
+      { id: "a", body: body(60) },
+      { id: "b", body: null },
+      { id: "c", body: body(50) },
+      { id: "d", body: body(10) },
+    ];
+    const { items, omitted } = capReaderBodies(entries, 100);
+    expect(items.map((entry) => entry.id)).toEqual(["a", "b"]);
+    expect(omitted.map((entry) => entry.id)).toEqual(["c", "d"]);
+    // A single oversized body still ships rather than starving the request.
+    expect(
+      capReaderBodies([{ id: "big", body: body(500) }], 100).items,
+    ).toHaveLength(1);
+    // Only the body that leads the response is spared the budget.
+    expect(
+      capReaderBodies([{ id: "big", body: body(500) }], 100, false).items,
+    ).toHaveLength(0);
+  });
+
+  it("refreshes stale snapshots at their latest version and keeps young ones", async () => {
+    await retainSource(CID, record());
+    await insertItem({ id: "doc", atprotoUri: DOC, sourceCid: CID });
+    const old = new Date(NOW.getTime() - 16 * 60_000);
+    await snapshot(REF, { ...referenced, title: "Stale" }, old);
+    const getRecord = vi.fn(async (uri: string) => ({
+      uri,
+      cid: uri === REF ? CID_B : CID,
+      value: uri === REF ? referenced : otherPublication,
+    }));
+    const client = { getRecord } as unknown as PublicationClient;
+    const row = (await ownedBodyRow(fixture.database, "reader", "doc"))!;
+    const result = await refreshDocumentReferences(fixture.database, row, {
+      now: NOW,
+      client,
+    });
+    expect(result?.revision).toBe(CID);
+    expect(result?.references.map((reference) => reference.uri)).toEqual([
+      REF,
+      OTHER_PUB,
+    ]);
+    // Same CID: the stored record is kept, only the time moves forward.
+    expect(result?.references[0]?.record).toContain("Stale");
+    expect(result?.references[0]?.resolvedAt).toBe(NOW.toISOString());
+    expect(getRecord).toHaveBeenCalledTimes(2);
+    getRecord.mockClear();
+    const again = await refreshDocumentReferences(fixture.database, row, {
+      now: new Date(NOW.getTime() + 60_000),
+      client,
+    });
+    expect(getRecord).not.toHaveBeenCalled();
+    expect(again?.references).toHaveLength(2);
+  });
+
+  it("records unavailable lookups without discarding the saved snapshot", async () => {
+    await retainSource(CID, record());
+    await insertItem({ id: "doc", atprotoUri: DOC, sourceCid: CID });
+    await snapshot(REF, referenced, new Date(NOW.getTime() - 60 * 60_000));
+    const client = {
+      getRecord: vi.fn(async () => {
+        throw new Error("503");
+      }),
+    } as unknown as PublicationClient;
+    const row = (await ownedBodyRow(fixture.database, "reader", "doc"))!;
+    const result = await refreshDocumentReferences(fixture.database, row, {
+      now: NOW,
+      client,
+    });
+    expect(result?.references).toEqual([
+      expect.objectContaining({
+        uri: REF,
+        outcome: "unavailable",
+        record: null,
+      }),
+    ]);
+    expect(
+      await fixture.database
+        .select()
+        .from(atprotoReferenceSnapshots)
+        .where(eq(atprotoReferenceSnapshots.uri, REF))
+        .get(),
+    ).toMatchObject({ outcome: "unavailable" });
+  });
+
+  it("sweeps snapshots unread for the retention window, however fresh", async () => {
+    const day = 24 * 60 * 60_000;
+    await snapshot(REF, referenced, NOW);
+    await snapshot(OTHER_PUB, otherPublication, NOW);
+    await fixture.database
+      .update(atprotoReferenceSnapshots)
+      .set({ readAt: new Date(NOW.getTime() - 91 * day) })
+      .where(eq(atprotoReferenceSnapshots.uri, REF));
+    await fixture.database
+      .update(atprotoReferenceSnapshots)
+      .set({ readAt: new Date(NOW.getTime() - 89 * day) })
+      .where(eq(atprotoReferenceSnapshots.uri, OTHER_PUB));
+    await sweepReferenceSnapshots(fixture.database, NOW);
+    expect(
+      (await fixture.database.select().from(atprotoReferenceSnapshots)).map(
+        (row) => row.uri,
+      ),
+    ).toEqual([OTHER_PUB]);
+  });
+
+  it("loads bodies slice by slice and stops at the first slice over budget", async () => {
+    await insertHtmlItems(60, `<p>${"x".repeat(1000)}</p>`);
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      await bodyHeads(),
+      NOW,
+    );
+    expect(items).toHaveLength(60);
+    expect(omitted).toEqual([]);
+    expect(items[0]?.body).toEqual({
+      form: "html",
+      html: `<p>${"x".repeat(1000)}</p>`,
+      revision: "hash-rss-00",
+    });
+  });
+
+  it("reads the stored HTML only of bodies that fit the response", async () => {
+    // 200 KiB bodies: twenty fit the 4 MiB response, the twenty-first does not.
+    await insertHtmlItems(30, `<p>${"x".repeat(200 * 1024 - 7)}</p>`);
+    const heads = await bodyHeads();
+    expect(heads[0]?.contentBytes).toBe(200 * 1024);
+    const execute = vi.spyOn(fixture.client, "execute");
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      heads,
+      NOW,
+    );
+    expect(items.map((entry) => entry.row.id)).toEqual(
+      heads.slice(0, 20).map((row) => row.id),
+    );
+    expect(omitted.map((row) => row.id)).toEqual(
+      heads.slice(20).map((row) => row.id),
+    );
+    // One statement, for the twenty bodies that ship.
+    expect(storedHtmlReads(execute)).toEqual([
+      heads.slice(0, 20).map((row) => row.id),
+    ]);
+  });
+
+  it("cuts an oversized body that starts a later slice, without reading it", async () => {
+    await insertHtmlItems(25, "<p>small</p>");
+    await insertItem({
+      id: "rss-25",
+      content: `<p>${"x".repeat(5 * 1024 * 1024)}</p>`,
+    });
+    await insertItem({ id: "rss-26", content: "<p>small</p>" });
+    const heads = await bodyHeads();
+    const execute = vi.spyOn(fixture.client, "execute");
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      heads,
+      NOW,
+    );
+    // The oversized body leads its slice, not the response, so it waits.
+    expect(items.map((entry) => entry.row.id)).toEqual(
+      heads.slice(0, 25).map((row) => row.id),
+    );
+    expect(omitted.map((row) => row.id)).toEqual(["rss-25", "rss-26"]);
+    expect(storedHtmlReads(execute)).toEqual([
+      heads.slice(0, 25).map((row) => row.id),
+    ]);
+  });
+
+  it("leaves a sourced row's stored HTML unread until its source is gone", async () => {
+    await retainSource(CID, record());
+    await insertItem({
+      id: "doc",
+      content: "<p>RSS copy</p>",
+      atprotoUri: DOC,
+      sourceCid: CID,
+    });
+    await insertItem({
+      id: "gone",
+      content: "<p>Fallback</p>",
+      atprotoUri: `${DOC}-gone`,
+      sourceCid: CID,
+    });
+    await insertItem({ id: "rss", content: "<p>Body</p>" });
+    const heads = await bodyHeads();
+    const execute = vi.spyOn(fixture.client, "execute");
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      heads,
+      NOW,
+    );
+    expect(omitted).toEqual([]);
+    expect(
+      items.map((entry) => [
+        entry.row.id,
+        entry.body?.form === "html" ? entry.body.html : entry.body?.form,
+      ]),
+    ).toEqual([
+      ["doc", "source"],
+      ["gone", "<p>Fallback</p>"],
+      ["rss", "<p>Body</p>"],
+    ]);
+    // The HTML body first, then the one whose source turned out to be missing.
+    expect(storedHtmlReads(execute)).toEqual([["rss"], ["gone"]]);
+  });
+
+  it("reads a one-slice request in one statement and a larger one sizes first", async () => {
+    await insertHtmlItems(26, "<p>small</p>");
+    const ids = (await bodyHeads()).map((row) => row.id);
+    const execute = vi.spyOn(fixture.client, "execute");
+    const small = await loadRequestedReaderBodies(
+      fixture.database,
+      "reader",
+      [ids[2]!, ids[0]!, ids[1]!],
+      NOW,
+    );
+    expect(small.items.map((entry) => entry.row.id)).toEqual([
+      ids[2],
+      ids[0],
+      ids[1],
+    ]);
+    expect(small.items[0]?.body).toMatchObject({ html: "<p>small</p>" });
+    expect(small.omitted).toEqual([]);
+    // The bodies came with the rows.
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    execute.mockClear();
+    const large = await loadRequestedReaderBodies(
+      fixture.database,
+      "reader",
+      ids,
+      NOW,
+    );
+    expect(large.items.map((entry) => entry.row.id)).toEqual(ids);
+    // Sizes, then the stored HTML of each of the two slices.
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(storedHtmlReads(execute).slice(1)).toEqual([
+      ids.slice(0, 25),
+      ids.slice(25),
+    ]);
+
+    const foreign = await loadRequestedReaderBodies(
+      fixture.database,
+      "someone-else",
+      ids.slice(0, 3),
+      NOW,
+    );
+    expect(foreign).toEqual({ items: [], omitted: [] });
+  });
+
+  it("ships the first body even when it alone exceeds the response", async () => {
+    await insertItem({
+      id: "rss-00",
+      content: `<p>${"x".repeat(5 * 1024 * 1024)}</p>`,
+    });
+    await insertItem({ id: "rss-01", content: "<p>small</p>" });
+    const { items, omitted } = await loadCappedReaderBodies(
+      fixture.database,
+      await bodyHeads(),
+      NOW,
+    );
+    expect(items.map((entry) => entry.row.id)).toEqual(["rss-00"]);
+    expect(omitted.map((row) => row.id)).toEqual(["rss-01"]);
+  });
+
+  it("returns null for items without a source and for other users' items", async () => {
+    await insertItem({ id: "rss", content: "<p>Body</p>" });
+    const row = (await ownedBodyRow(fixture.database, "reader", "rss"))!;
+    expect(
+      await refreshDocumentReferences(fixture.database, row, { now: NOW }),
+    ).toBeNull();
+    expect(
+      await ownedBodyRow(fixture.database, "someone-else", "rss"),
+    ).toBeUndefined();
+  });
+});

@@ -2,7 +2,7 @@
 
 import { useAtomValue } from "jotai";
 import { FlipItem } from "./FlipItem";
-import { GridItemDisplay } from "./ItemDisplay";
+import { SelectableItemDisplay } from "./SelectableItemDisplay";
 import { ViewListContainer } from "./ViewListContainer";
 import { selectedItemIdAtom } from "~/lib/data/atoms";
 import { useFlipItems } from "~/lib/hooks/useFlipItems";
@@ -29,15 +29,12 @@ export function ViewItemGrid({
       >
         {renderedItems.map((contentId) => (
           <FlipItem key={contentId} id={contentId}>
-            <GridItemDisplay
+            <SelectableItemDisplay
+              grid
               contentId={contentId}
               size="standard"
               isSelected={contentId === selectedItemId}
-              onSelect={
-                handleMouseSelect
-                  ? () => handleMouseSelect(contentId)
-                  : undefined
-              }
+              onSelectItem={handleMouseSelect}
               sectionItemType={sectionItemType}
             />
           </FlipItem>

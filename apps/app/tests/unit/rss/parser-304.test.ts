@@ -2,9 +2,10 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { makeFetchableOrigin } from "./fetchable-origin";
+import type { FetchableOriginOverrides } from "./fetchable-origin";
 import type { Server } from "node:http";
 import type * as FeedHttpModule from "~/server/rss/feedHttp";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type {
   NotModifiedResult,
   RSSFeedWithMetadata,
@@ -87,24 +88,11 @@ afterAll(() => {
   server?.close();
 });
 
-function makeFeed(overrides?: Partial<DatabaseFeed>): DatabaseFeed {
-  return {
-    id: 1,
-    userId: "user-1",
-    name: "Fireship",
-    url: `${baseUrl}/feed`,
-    imageUrl: "",
-    platform: "youtube",
-    openLocation: "serial",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastFetchedAt: null,
-    nextFetchAt: null,
-    isActive: true,
-    etag: null,
-    lastModifiedHeader: null,
-    ...overrides,
-  };
+function makeFeed(overrides: FetchableOriginOverrides = {}) {
+  return makeFetchableOrigin(
+    { name: "Fireship", platform: "youtube", url: `${baseUrl}/feed` },
+    overrides,
+  );
 }
 
 function setServerContent(version: "v1" | "v2") {

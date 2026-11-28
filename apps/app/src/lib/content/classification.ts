@@ -111,6 +111,10 @@ export function isValidNativeContentId(
     case CONTENT_PLATFORM.NEBULA:
       return contentId.length > 0;
     case CONTENT_PLATFORM.WEBSITE:
+    case CONTENT_PLATFORM.LEAFLET:
+    case CONTENT_PLATFORM.PCKT:
+    case CONTENT_PLATFORM.OFFPRINT:
+      // Text platforms have no native content id; Atmosphere identity is the document URI.
       return false;
   }
 }

@@ -4,12 +4,7 @@ import {
   SELF_HOSTED_APP_PORT,
   SELF_HOSTED_TURSO_PORT,
 } from "../fixtures/ports";
-import {
-  cleanupUser,
-  seedArticleData,
-  seedBookmarkProjectionData,
-  setFeedItemContent,
-} from "../fixtures/seed-db";
+import { cleanupUser, seedReaderArticle } from "../fixtures/seed-db";
 
 const longLine = `const message = "${"A long line of code. ".repeat(18)}";`;
 const articleHtml = `<p>Code examples retain their formatting in the reader.</p>
@@ -25,45 +20,22 @@ test.describe("article code and image layout", () => {
     if (email) await cleanupUser(SELF_HOSTED_TURSO_PORT, email);
   });
 
-  for (const kind of ["full", "simplified", "bookmark"] as const) {
+  for (const kind of ["full", "bookmark"] as const) {
     test(`${kind} code fills the reader and scrolls within its block`, async ({
       page,
     }) => {
-      const fixture = await seedArticleData(
+      const fixture = await seedReaderArticle(
         SELF_HOSTED_TURSO_PORT,
         SELF_HOSTED_APP_PORT,
-      );
-      email = fixture.email;
-      await setFeedItemContent(
-        SELF_HOSTED_TURSO_PORT,
-        fixture.feedItemId,
+        kind,
         articleHtml,
       );
-      const contentId =
-        kind === "bookmark"
-          ? (
-              await seedBookmarkProjectionData(
-                SELF_HOSTED_TURSO_PORT,
-                email,
-                fixture.feedItemId,
-                articleHtml,
-              )
-            ).bookmarkId
-          : fixture.feedItemId;
-      await page.addInitScript(
-        (style) => {
-          localStorage.setItem(
-            "serial-flag-article-style",
-            JSON.stringify(style),
-          );
-        },
-        kind === "simplified" ? "simplified" : "full",
-      );
+      email = fixture.email;
       await page.route("https://images.example.com/**", (route) =>
         route.abort(),
       );
       await signIn({ page, email, password: fixture.password });
-      await page.goto(`/read/${contentId}`);
+      await page.goto(`/read/${fixture.contentId}`);
       const blocks = page.locator("pre");
       await expect(blocks).toHaveCount(2);
       await expect(blocks.first().locator(".hljs-keyword")).toBeVisible();
@@ -101,36 +73,16 @@ test.describe("article code and image layout", () => {
         expect(geometry.pageOverflow).toBeLessThanOrEqual(1);
         expect(geometry.whiteSpace).toBe("pre");
 
-        if (kind !== "simplified") {
-          const placeholder = page.locator("[data-image-fallback]");
-          await placeholder.scrollIntoViewIfNeeded();
-          await expect(placeholder).toBeVisible();
-          await expect(placeholder).toHaveText("Unavailable illustration");
-          const label = placeholder.locator("span").first();
-          expect(
-            await label.evaluate((node) =>
-              parseFloat(getComputedStyle(node).paddingLeft),
-            ),
-          ).toBe(width < 640 ? 32 : 64);
-          const textBox = await label.locator("span").boundingBox();
-          const box = await placeholder.boundingBox();
-          expect(box).not.toBeNull();
-          expect(textBox).not.toBeNull();
-          expect(
-            Math.abs(textBox!.x + textBox!.width / 2 - box!.x - box!.width / 2),
-          ).toBeLessThanOrEqual(1);
-          expect(
-            Math.abs(
-              textBox!.y + textBox!.height / 2 - box!.y - box!.height / 2,
-            ),
-          ).toBeLessThanOrEqual(1);
-          expect(Math.abs(box!.width - geometry.available)).toBeLessThanOrEqual(
-            1,
-          );
-          expect(Math.abs(box!.width / box!.height - 16 / 9)).toBeLessThan(
-            0.02,
-          );
-        }
+        const placeholder = page.locator("[data-image-frame='failed']");
+        await placeholder.scrollIntoViewIfNeeded();
+        await expect(placeholder).toBeVisible();
+        await expect(placeholder).toHaveText("Unavailable illustration");
+        const box = await placeholder.boundingBox();
+        expect(box).not.toBeNull();
+        expect(Math.abs(box!.width - geometry.available)).toBeLessThanOrEqual(
+          1,
+        );
+        expect(Math.abs(box!.width / box!.height - 4 / 3)).toBeLessThan(0.02);
       }
       const token = blocks.first().locator(".hljs-keyword");
       await page.evaluate(() =>

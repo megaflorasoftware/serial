@@ -115,12 +115,14 @@ function Home() {
         <div className="flex w-max gap-1 pt-1">
           <ContentStatusControls />
         </div>
-        <div className="w-max pt-3">
+        <div data-onboarding="view-chips" className="w-max pt-3">
           <ViewFilterChips />
         </div>
       </div>
 
-      <RenderViewItems />
+      <div data-onboarding="feed-content" className="w-full">
+        <RenderViewItems />
+      </div>
       <MarkVisibleAsReadButton />
     </div>
   );

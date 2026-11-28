@@ -1,28 +1,34 @@
+import { discoveredFeedSchema } from "@serial/feed-discovery/schema";
+import { DISCOVERY_QUERY_LIMIT } from "@serial/feed-discovery";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  findExistingFeedThatMatches,
+  insertFeedWithCategories,
   verifyContentCategoriesOwnedByUser,
   verifyViewsOwnedByUser,
 } from "./utils";
+import { revalidateFeed } from "~/server/feeds/revalidate";
+import { queueFeedRevalidation } from "~/server/origin-checks/queue";
+import { wakeFeedOriginChecks } from "~/server/origin-checks/worker";
+import { captureLimiter } from "~/server/bookmarks/limits";
+import { deleteFeedsAtUserRequest } from "~/server/feeds/delete";
+import { setFeedsActive } from "~/server/feeds/activation";
+import { loadUserFeedsWithOrigins, withOrigins } from "~/server/feeds/origins";
 import { captureException } from "~/server/logger";
 import { parseArrayOfSchema } from "~/lib/schemas/utils";
 
 import { prepareArrayChunks } from "~/lib/iterators";
 import { dbSemaphore } from "~/lib/semaphore";
 import {
-  contentCategories,
   feedCategories,
   feeds,
   feedsSchema,
   openLocationSchema,
-  PLATFORM_DEFAULT_OPEN_LOCATION,
   viewFeeds,
-  views,
-  viewSections,
 } from "~/server/db/schema";
 import { protectedProcedure } from "~/server/orpc/base";
-import { fetchNewFeedDetails } from "~/server/rss/fetchFeeds";
+import { prepareRssFeedImport } from "~/server/feeds/imports";
+import { runDatabaseWrite } from "~/server/db/retry-write";
 import {
   canActivateFeed,
   getFeedsActivationBudget,
@@ -30,9 +36,11 @@ import {
   isAdminUser,
 } from "~/server/subscriptions/helpers";
 import { getEffectivePlanConfig } from "~/server/subscriptions/plans";
-import { VIEW_LAYOUT_ITEM_TYPE } from "~/server/db/constants";
 import { createFeedsForUser } from "~/server/feeds/create";
-import { discoverFeeds as discoverFeedsForUrl } from "~/server/feeds/discovery";
+import {
+  discoverFeeds as discoverFeedsForUrl,
+  streamDiscoverFeeds,
+} from "~/server/feeds/discovery";
 import {
   boundedNumberIdsSchema,
   boundedStringsSchema,
@@ -57,6 +65,7 @@ export type BulkImportFromFileResult =
   BulkImportFromFileError | BulkImportFromFileSuccess;
 
 const createFeedInputSchema = z.object({
+  selection: discoveredFeedSchema.optional(),
   url: z.string().min(5),
   categoryIds: boundedNumberIdsSchema,
   viewIds: boundedNumberIdsSchema.optional(),
@@ -95,135 +104,51 @@ export const createFromSubscriptionImport = protectedProcedure
     }
 
     // Check activation budget upfront and pre-calculate which feeds should be active
-    const { remainingSlots } = await getFeedsActivationBudget(
+    const { maxActiveFeeds } = await getFeedsActivationBudget(
       context.db,
       context.user.id,
     );
 
-    // Pre-calculate which feeds should be active BEFORE any parallel processing
-    const feedsWithActivation = input.feeds.map((feed, index) => ({
-      ...feed,
-      shouldBeActive: index < remainingSlots,
-    }));
-
     // Process feeds in small batches to avoid overwhelming the database
     const BATCH_SIZE = 4;
-    const feedChunks = prepareArrayChunks(feedsWithActivation, BATCH_SIZE);
+    const feedChunks = prepareArrayChunks(input.feeds, BATCH_SIZE);
     const allResults: BulkImportFromFileResult[] = [];
     const userId = context.user.id;
 
     for (const chunk of feedChunks) {
       const promiseResults = await Promise.allSettled(
         chunk.map(async (feed) => {
-          return await dbSemaphore.run(() =>
-            context.db.transaction(async (tx) => {
-              const newFeedDetails = await fetchNewFeedDetails(feed.feedUrl);
-              const newFeed = newFeedDetails[0];
-
-              if (!newFeed?.url) {
-                return {
-                  feedUrl: feed.feedUrl,
-                  success: false as const,
-                  error: "Unsupported feed URL",
-                };
-              }
-              const newFeedUrl = newFeed.url;
-
-              const existingFeed = await findExistingFeedThatMatches(tx, {
-                feedUrl: newFeedUrl,
-                userId,
-              });
-
-              if (existingFeed) {
-                return {
-                  feedUrl: newFeedUrl,
-                  success: false as const,
-                  error: "Feed already exists",
-                };
-              }
-
-              const newFeeds = await tx
-                .insert(feeds)
-                .values({
-                  userId,
-                  ...newFeed,
-                  isActive: feed.shouldBeActive,
-                  openLocation:
-                    PLATFORM_DEFAULT_OPEN_LOCATION[newFeed.platform],
-                })
-                .returning();
-              const newFeedRow = newFeeds[0];
-
-              if (!newFeedRow) {
-                return {
-                  feedUrl: newFeed.url,
-                  success: false as const,
-                  error: "Couldn't find new feed",
-                };
-              }
-
-              const matchingCategories = await tx
-                .select()
-                .from(contentCategories)
-                .where(
-                  and(
-                    inArray(contentCategories.name, feed.categories),
-                    eq(contentCategories.userId, userId),
-                  ),
-                )
-                .all();
-              const matchingCategoryNames = matchingCategories.map(
-                (category) => category.name,
-              );
-              const matchingCategoryNameSet = new Set(matchingCategoryNames);
-
-              const nonMatchingCategories = feed.categories.filter(
-                (category) => !matchingCategoryNameSet.has(category),
-              );
-
-              const matchingCategoryPromises = matchingCategories.map(
-                async (matchingCategory) => {
-                  const categoryId = matchingCategory.id;
-
-                  return await tx.insert(feedCategories).values({
-                    feedId: newFeedRow.id,
-                    categoryId: categoryId,
-                  });
-                },
-              );
-
-              const nonMatchingCategoryPromises = nonMatchingCategories.map(
-                async (nonMatchingCategory) => {
-                  const newContentCategoryList = await tx
-                    .insert(contentCategories)
-                    .values({
-                      name: nonMatchingCategory,
-                      userId,
-                    })
-                    .returning();
-                  const newContentCategory = newContentCategoryList[0];
-
-                  if (!newContentCategory?.id) return;
-
-                  await tx.insert(feedCategories).values({
-                    feedId: newFeedRow.id,
-                    categoryId: newContentCategory.id,
-                  });
-                },
-              );
-
-              await Promise.allSettled([
-                ...matchingCategoryPromises,
-                ...nonMatchingCategoryPromises,
-              ]);
-
-              return {
-                feedUrl: newFeed.url,
-                feedId: newFeedRow.id,
-                success: true as const,
-              };
-            }),
+          const prepared = await prepareRssFeedImport(
+            context.db,
+            userId,
+            feed.feedUrl,
           );
+          const result = await runDatabaseWrite(context.db, () =>
+            dbSemaphore.run(() =>
+              context.db.transaction(
+                (tx) =>
+                  insertFeedWithCategories(
+                    tx,
+                    userId,
+                    feed,
+                    prepared,
+                    maxActiveFeeds,
+                  ),
+                { behavior: "immediate" },
+              ),
+            ),
+          );
+          return result.success
+            ? {
+                feedUrl: feed.feedUrl,
+                feedId: result.feedId,
+                success: true as const,
+              }
+            : {
+                feedUrl: feed.feedUrl,
+                success: false as const,
+                error: result.error,
+              };
         }),
       );
 
@@ -255,6 +180,7 @@ export const createFromSubscriptionImport = protectedProcedure
         context.user.id,
         organizationInvalidationSummary(),
       );
+      wakeFeedOriginChecks(context.db);
     }
     return allResults;
   });
@@ -262,32 +188,7 @@ export const createFromSubscriptionImport = protectedProcedure
 const deleteFeed = protectedProcedure
   .input(z.number())
   .handler(async ({ context, input }) => {
-    await context.db.transaction(async (tx) => {
-      const deletedFeeds = await tx
-        .delete(feeds)
-        .where(and(eq(feeds.id, input), eq(feeds.userId, context.user.id)))
-        .returning({ id: feeds.id });
-
-      if (deletedFeeds.length === 0) return;
-
-      const userViews = await tx
-        .select({ id: views.id })
-        .from(views)
-        .where(eq(views.userId, context.user.id));
-
-      if (userViews.length > 0) {
-        await tx.delete(viewSections).where(
-          and(
-            eq(viewSections.itemType, VIEW_LAYOUT_ITEM_TYPE.FEED),
-            eq(viewSections.itemId, input),
-            inArray(
-              viewSections.viewId,
-              userViews.map((view) => view.id),
-            ),
-          ),
-        );
-      }
-    });
+    await deleteFeedsAtUserRequest(context.db, context.user.id, [input]);
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),
@@ -296,9 +197,7 @@ const deleteFeed = protectedProcedure
 export { deleteFeed as delete };
 
 export const getAll = protectedProcedure.handler(async function* ({ context }) {
-  const feedsList = await context.db.query.feeds.findMany({
-    where: sql`user_id = ${context.user.id}`,
-  });
+  const feedsList = await loadUserFeedsWithOrigins(context.db, context.user.id);
 
   const parsed = parseArrayOfSchema(feedsList, feedsSchema);
 
@@ -350,6 +249,7 @@ export const update = protectedProcedure
         .set({
           openLocation: input.openLocation,
           name: input.name,
+          nameEditedAt: sql`case when ${feeds.name} <> ${input.name} then ${Math.floor(Date.now() / 1000)} else ${feeds.nameEditedAt} end`,
         })
         .where(
           and(eq(feeds.userId, context.user.id), eq(feeds.id, input.feedId)),
@@ -407,7 +307,8 @@ export const update = protectedProcedure
         }
       }
 
-      return feedsSchema.parse(updatedFeed);
+      const [updatedFeedWithOrigins] = await withOrigins(tx, [updatedFeed]);
+      return feedsSchema.parse(updatedFeedWithOrigins);
     });
     if (result) {
       await publishReconciliationInvalidation(
@@ -423,40 +324,7 @@ export const bulkDelete = protectedProcedure
   .handler(async ({ context, input }) => {
     if (input.feedIds.length === 0) return;
 
-    await context.db.transaction(async (tx) => {
-      const deletedFeeds = await tx
-        .delete(feeds)
-        .where(
-          and(
-            inArray(feeds.id, input.feedIds),
-            eq(feeds.userId, context.user.id),
-          ),
-        )
-        .returning({ id: feeds.id });
-
-      if (deletedFeeds.length === 0) return;
-
-      const userViews = await tx
-        .select({ id: views.id })
-        .from(views)
-        .where(eq(views.userId, context.user.id));
-
-      if (userViews.length > 0) {
-        await tx.delete(viewSections).where(
-          and(
-            eq(viewSections.itemType, VIEW_LAYOUT_ITEM_TYPE.FEED),
-            inArray(
-              viewSections.itemId,
-              deletedFeeds.map((feed) => feed.id),
-            ),
-            inArray(
-              viewSections.viewId,
-              userViews.map((view) => view.id),
-            ),
-          ),
-        );
-      }
-    });
+    await deleteFeedsAtUserRequest(context.db, context.user.id, input.feedIds);
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),
@@ -485,16 +353,17 @@ export const setActive = protectedProcedure
       }
     }
 
-    const updatedFeeds = await context.db
-      .update(feeds)
-      .set({ isActive: input.isActive })
-      .where(and(eq(feeds.id, input.feedId), eq(feeds.userId, context.user.id)))
-      .returning();
+    const changed = await setFeedsActive(context.db, {
+      userId: context.user.id,
+      feedIds: [input.feedId],
+      isActive: input.isActive,
+    });
+    if (!changed) return null;
 
-    const updatedFeed = updatedFeeds[0];
-    if (!updatedFeed) return null;
-
-    const parsed = feedsSchema.parse(updatedFeed);
+    const [updatedFeedWithOrigins] = await withOrigins(context.db, [
+      { ...feed, isActive: input.isActive },
+    ]);
+    const parsed = feedsSchema.parse(updatedFeedWithOrigins);
     await publishReconciliationInvalidation(
       context.user.id,
       organizationInvalidationSummary(),
@@ -548,15 +417,11 @@ export const bulkSetActive = protectedProcedure
         }
       }
 
-      await tx
-        .update(feeds)
-        .set({ isActive: input.isActive })
-        .where(
-          and(
-            inArray(feeds.id, input.feedIds),
-            eq(feeds.userId, context.user.id),
-          ),
-        );
+      await setFeedsActive(tx, {
+        userId: context.user.id,
+        feedIds: input.feedIds,
+        isActive: input.isActive,
+      });
     });
     await publishReconciliationInvalidation(
       context.user.id,
@@ -565,7 +430,45 @@ export const bulkSetActive = protectedProcedure
   });
 
 export const discoverFeeds = protectedProcedure
-  .input(z.object({ url: z.url() }))
+  .input(z.object({ url: z.string().trim().min(1).max(DISCOVERY_QUERY_LIMIT) }))
   .handler(({ input, context }) =>
     discoverFeedsForUrl(context.user.id, input.url),
   );
+
+export const discoverFeedsStream = protectedProcedure
+  .input(z.object({ url: z.string().trim().min(1).max(DISCOVERY_QUERY_LIMIT) }))
+  .handler(async function* ({ input, context, signal }) {
+    yield* streamDiscoverFeeds(context.user.id, input.url, signal);
+  });
+
+/** Queues revalidation for the selected Feeds and returns before it runs. */
+export const bulkRevalidate = protectedProcedure
+  .input(z.object({ feedIds: boundedNumberIdsSchema }))
+  .handler(async ({ context, input }) => {
+    if (input.feedIds.length === 0) return;
+
+    await queueFeedRevalidation(context.db, context.user.id, input.feedIds);
+    wakeFeedOriginChecks(context.db);
+  });
+
+export const revalidate = protectedProcedure
+  .input(z.object({ feedId: z.number().int().positive() }))
+  .handler(async ({ context, input }) => {
+    const lease = captureLimiter.acquire(context.user.id, "revalidation");
+    if (!lease.ok)
+      throw new Error("Please wait before revalidating a Feed again");
+    try {
+      const { feed } = await revalidateFeed(
+        context.db,
+        context.user.id,
+        input.feedId,
+      );
+      await publishReconciliationInvalidation(
+        context.user.id,
+        organizationInvalidationSummary(),
+      );
+      return feed;
+    } finally {
+      lease.release();
+    }
+  });

@@ -8,14 +8,15 @@ import {
   BASE_FEED_CUSTOM_FIELDS,
   baseFeedSchema,
   extractRssMetadata,
+  newRssFeedDetails,
 } from "../types";
 import { readFeedHttp } from "../feedHttp";
 import { boundFeedItems } from "../feedBounds";
-import type { feeds } from "~/server/db/schema";
 import type {
   ConditionalHeaders,
   FeedFetchMetadata,
   FeedFetchResult,
+  FetchableOrigin,
   NewFeedDetails,
   RSSContent,
 } from "../types";
@@ -66,19 +67,20 @@ export async function fetchYouTubeFeedDetails(
   const rssData = await parser.parseString(response.text);
   const data = youtubeSchema.parse(rssData);
 
-  return {
+  return newRssFeedDetails({
     name: data.title,
-    url: url,
+    url,
     platform: "youtube",
-  };
+    siteUrl: data.link,
+  });
 }
 
 export async function fetchYouTubeFeedData(
-  feed: typeof feeds.$inferSelect,
+  { origin, feed }: FetchableOrigin,
   cached?: ConditionalHeaders,
 ): Promise<FeedFetchResult | null> {
   try {
-    const feedResponse = await readFeedHttp(feed.url, {
+    const feedResponse = await readFeedHttp(origin.locator, {
       headers: cached ? buildConditionalHeaders(cached) : undefined,
     });
 
@@ -130,7 +132,7 @@ export async function fetchYouTubeFeedData(
     captureException(e, {
       context: "youtube-feed-fetch",
       feedId: feed.id,
-      url: feed.url,
+      url: origin.locator,
     });
     return null;
   }

@@ -1,0 +1,412 @@
+{
+  "uri": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.document/3mro2i2twxq23",
+  "cid": "bafyreiaq256v5bzybpw6wnvzpzwzr3dm4jkbuu6vknl7p7lue77ofqrgzu",
+  "value": {
+    "$type": "site.standard.document",
+    "content": {
+      "$type": "app.offprint.content",
+      "items": [
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://protocolsforpublishers.com"
+                }
+              ],
+              "index": {
+                "byteEnd": 60,
+                "byteStart": 36
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://bsky.app/search?q=%23ATproto_NYC"
+                }
+              ],
+              "index": {
+                "byteEnd": 115,
+                "byteStart": 103
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#link",
+                  "uri": "https://hexhouse.studio/"
+                }
+              ],
+              "index": {
+                "byteEnd": 195,
+                "byteStart": 186
+              }
+            }
+          ],
+          "plaintext": "Last year we had an atproto aligned Protocols for Publishers event at Betaworks, followed up by a full #Atproto_NYC community day and evening event that spilled out onto the sidewalk at Hex House."
+        },
+        {
+          "$type": "app.offprint.block.imageGrid",
+          "aspectRatio": "mosaic",
+          "gridRows": 2,
+          "images": [
+            {
+              "aspectRatio": {
+                "height": 1425,
+                "width": 1900
+              },
+              "image": {
+                "$type": "blob",
+                "mimeType": "image/jpeg",
+                "ref": {
+                  "$link": "bafkreig3qmi6eerg2qbs2xwyrpihzjbewafn4skfli456s26pdzgl6exrq"
+                },
+                "size": 574020
+              }
+            },
+            {
+              "aspectRatio": {
+                "height": 1425,
+                "width": 1900
+              },
+              "image": {
+                "$type": "blob",
+                "mimeType": "image/jpeg",
+                "ref": {
+                  "$link": "bafkreihuxbbq4bdh5st52r2u7vtvr4vser24k6jx7p2r37d33t2wpjr6hm"
+                },
+                "size": 492130
+              }
+            },
+            {
+              "aspectRatio": {
+                "height": 1425,
+                "width": 1900
+              },
+              "image": {
+                "$type": "blob",
+                "mimeType": "image/jpeg",
+                "ref": {
+                  "$link": "bafkreibyzealorf43fab6slxxdqalswhwuws7qbprndwwkbtnkt6yp3j2m"
+                },
+                "size": 537876
+              }
+            },
+            {
+              "aspectRatio": {
+                "height": 1900,
+                "width": 1425
+              },
+              "image": {
+                "$type": "blob",
+                "mimeType": "image/jpeg",
+                "ref": {
+                  "$link": "bafkreigkxv6idpf6t3aitiib2ivx5h67yv7qnparur5pcfwhs75hf733fu"
+                },
+                "size": 461543
+              }
+            },
+            {
+              "aspectRatio": {
+                "height": 1500,
+                "width": 2000
+              },
+              "image": {
+                "$type": "blob",
+                "mimeType": "image/jpeg",
+                "ref": {
+                  "$link": "bafkreie4citkywjuonkedukvmjuonvxvuszwguilxkiultmfpxdunlokb4"
+                },
+                "size": 607628
+              }
+            },
+            {
+              "aspectRatio": {
+                "height": 1900,
+                "width": 1425
+              },
+              "image": {
+                "$type": "blob",
+                "mimeType": "image/jpeg",
+                "ref": {
+                  "$link": "bafkreih4j3vc2pvpixfhj65vjg7r7aclgu62cntypsnmgahm7sjy2sz4wu"
+                },
+                "size": 521290
+              }
+            }
+          ]
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 58,
+                "byteStart": 0
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:stznz7qsokto2345qtdzogjb",
+                  "handle": "psingletary.com"
+                }
+              ],
+              "index": {
+                "byteEnd": 74,
+                "byteStart": 58
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 94,
+                "byteStart": 74
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:2cxgdrgtsmrbqnjkwyplmp43",
+                  "handle": "bmann.ca"
+                }
+              ],
+              "index": {
+                "byteEnd": 103,
+                "byteStart": 94
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 113,
+                "byteStart": 103
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:76iqtegcbbr4pbcxomka5pat",
+                  "handle": "buildwithtori.com"
+                }
+              ],
+              "index": {
+                "byteEnd": 131,
+                "byteStart": 113
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 163,
+                "byteStart": 131
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:l5yz32nydpebjlcdfgycmf3x",
+                  "handle": "knowtheory.net"
+                }
+              ],
+              "index": {
+                "byteEnd": 178,
+                "byteStart": 163
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 182,
+                "byteStart": 178
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:cbkjy5n7bk3ax2wplmtjofq2",
+                  "handle": "ngerakines.me"
+                }
+              ],
+              "index": {
+                "byteEnd": 196,
+                "byteStart": 182
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 214,
+                "byteStart": 196
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:3wng2qnttvtg23546ar6bawo",
+                  "handle": "henryzoo.com"
+                }
+              ],
+              "index": {
+                "byteEnd": 227,
+                "byteStart": 214
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 259,
+                "byteStart": 227
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:mmftdzyl74ymn2hhzoahtjcw",
+                  "handle": "syntacrobat.xyz"
+                }
+              ],
+              "index": {
+                "byteEnd": 275,
+                "byteStart": 259
+              }
+            },
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#italic"
+                }
+              ],
+              "index": {
+                "byteEnd": 317,
+                "byteStart": 275
+              }
+            }
+          ],
+          "plaintext": "So many good memories! From top left, clockwise - there's @psingletary.com overseeing things, @bmann.ca  meeting @buildwithtori.com  & Tori mom, inside Hex House, @knowtheory.net  & @ngerakines.me  are all smiles, @henryzoo.com  and his atproto printer while @syntacrobat.xyz  looks on, the sidewalk crew in the heat."
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:retm6aeqattyxp7bhmyyv7gk",
+                  "handle": "atproto.nyc"
+                }
+              ],
+              "index": {
+                "byteEnd": 76,
+                "byteStart": 64
+              }
+            }
+          ],
+          "plaintext": "This year, on the exact same August 22nd date a year later, the @atproto.nyc  team is hosting the next NYC Community Day after many other excellent events that the community has been organizing in the past year."
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "plaintext": "Full details on the event on the atproto.nyc blog:"
+        },
+        {
+          "$type": "app.offprint.block.webBookmark",
+          "description": "Join us on Saturday, Aug 22nd at the Recurse Center in Brooklyn to learn, hack, and build with the AT Protocol!",
+          "href": "https://blog.atproto.nyc/3mrionom6ck2k",
+          "preview": {
+            "$type": "blob",
+            "mimeType": "image/png",
+            "ref": {
+              "$link": "bafkreidiii3x65lzgcplu3iq4ht43dp6bxubwempobc3hhractr5p7anc4"
+            },
+            "size": 118987
+          },
+          "siteName": "Leaflet",
+          "title": "atproto.nyc community day 2026 - atproto.nyc"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "facets": [
+            {
+              "features": [
+                {
+                  "$type": "app.offprint.richtext.facet#mention",
+                  "did": "did:plc:aoc4arnhc264grkgeddzp47y",
+                  "handle": "atmosphere.tickets"
+                }
+              ],
+              "index": {
+                "byteEnd": 61,
+                "byteStart": 42
+              }
+            }
+          ],
+          "plaintext": "Tickets are available using the brand new @atmosphere.tickets  platform:"
+        },
+        {
+          "$type": "app.offprint.block.button",
+          "alignment": "center",
+          "href": "https://events.atmosphere.tickets/p/did:plc:retm6aeqattyxp7bhmyyv7gk/e/3mrdbziccpcah",
+          "text": "Buy atproto.nyc community day tickets"
+        },
+        {
+          "$type": "app.offprint.block.text",
+          "plaintext": ""
+        }
+      ]
+    },
+    "coverImage": {
+      "$type": "blob",
+      "mimeType": "image/jpeg",
+      "ref": {
+        "$link": "bafkreibwpxspsptyaonbb4thepsvkdyhpe6ssqhpzpxz7l5rnvpyxvzibi"
+      },
+      "size": 140259
+    },
+    "description": "Buy your tickets to attend in New York on August 22nd",
+    "path": "/a/3mro2i2twxq23-atproto-nyc-community-day-2026-happening-next-month",
+    "publishedAt": "2026-07-29T15:00:00+00:00",
+    "site": "at://did:plc:lehcqqkwzcwvjvw66uthu5oq/site.standard.publication/3mjnpilwnrp2v",
+    "tags": ["atproto-nyc", "event", "new-york"],
+    "textContent": "Last year we had an atproto aligned Protocols for Publishers event at Betaworks, followed up by a full #Atproto_NYC community day and evening event that spilled out onto the sidewalk at Hex House.\nSo many good memories! From top left, clockwise - there's @psingletary.com overseeing things, @bmann.ca  meeting @buildwithtori.com  & Tori mom, inside Hex House, @knowtheory.net  & @ngerakines.me  are all smiles, @henryzoo.com  and his atproto printer while @syntacrobat.xyz  looks on, the sidewalk crew in the heat.\nThis year, on the exact same August 22nd date a year later, the @atproto.nyc  team is hosting the next NYC Community Day after many other excellent events that the community has been organizing in the past year.\nFull details on the event on the atproto.nyc blog:\nTickets are available using the brand new @atmosphere.tickets  platform:",
+    "title": "Atproto NYC Community Day 2026 Happening Next Month"
+  }
+}

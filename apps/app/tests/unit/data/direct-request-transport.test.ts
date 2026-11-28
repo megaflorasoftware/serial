@@ -50,6 +50,10 @@ const now = new Date("2026-08-18T12:00:00.000Z");
 
 function feedItem(): ApplicationFeedItem {
   return {
+    sourceKind: "rss",
+    atprotoUri: null,
+    bodySource: "rss",
+    tags: [],
     id: "feed-item-one",
     feedId: 1,
     contentId: "content-one",
@@ -57,7 +61,8 @@ function feedItem(): ApplicationFeedItem {
     author: "Author",
     url: "https://example.com/article",
     thumbnail: "",
-    content: "",
+    sourceCid: null,
+    body: null,
     contentSnippet: "preview",
     contentType: "text",
     isWatched: false,
@@ -207,13 +212,20 @@ describe("direct request transport", () => {
     try {
       feedItemsStore.getState().setFeedItems([feedItem()]);
       feedItemsStore.setState({ pendingFulltextItems: ["feed-item-one"] });
-      mocks.requestFullTextForItems.mockResolvedValue([
-        {
-          id: "feed-item-one",
-          content: "Complete article body",
-          contentSnippet: "Complete preview",
-        },
-      ]);
+      mocks.requestFullTextForItems.mockResolvedValue({
+        items: [
+          {
+            id: "feed-item-one",
+            body: {
+              form: "html",
+              html: "Complete article body",
+              revision: "content-hash",
+            },
+            contentSnippet: "Complete preview",
+          },
+        ],
+        omitted: [],
+      });
 
       feedItemsStore.getState().scheduleFulltextFetch();
       await vi.advanceTimersByTimeAsync(300);
@@ -221,7 +233,11 @@ describe("direct request transport", () => {
       expect(
         feedItemsStore.getState().feedItemsDict["feed-item-one"],
       ).toMatchObject({
-        content: "Complete article body",
+        body: {
+          form: "html",
+          html: "Complete article body",
+          revision: "content-hash",
+        },
         contentSnippet: "Complete preview",
       });
     } finally {
@@ -252,13 +268,20 @@ describe("direct request transport", () => {
       cursor: null,
       hasMore: false,
     });
-    mocks.requestFullTextForItems.mockResolvedValue([
-      {
-        id: savedFeedItem.id,
-        content: "Saved Feed body",
-        contentSnippet: "Saved Feed preview",
-      },
-    ]);
+    mocks.requestFullTextForItems.mockResolvedValue({
+      items: [
+        {
+          id: savedFeedItem.id,
+          body: {
+            form: "html",
+            html: "Saved Feed body",
+            revision: "content-hash",
+          },
+          contentSnippet: "Saved Feed preview",
+        },
+      ],
+      omitted: [],
+    });
     mocks.getCaptures.mockResolvedValue([capture]);
 
     await dataRequestActions.requestMixedContentPage(scope, {
@@ -276,8 +299,8 @@ describe("direct request transport", () => {
         expect.anything(),
       );
       expect(
-        feedItemsStore.getState().feedItemsDict[savedFeedItem.id]?.content,
-      ).toBe("Saved Feed body");
+        feedItemsStore.getState().feedItemsDict[savedFeedItem.id]?.body,
+      ).toMatchObject({ form: "html", html: "Saved Feed body" });
       expect(
         bookmarkCapturesStore.getState().capturesDict[savedBookmark.id],
       ).toEqual(capture);
@@ -342,6 +365,17 @@ describe("direct request transport", () => {
       };
     }
 
+    function progress(
+      stage: "finding" | "fetching",
+      completed: number,
+      total: number,
+    ) {
+      return {
+        type: "import-progress" as const,
+        progress: { stage, completed, total },
+      };
+    }
+
     function countNotifications() {
       const counts = { feeds: 0, feedStatus: 0 };
       const unsubscribeFeeds = feedsStore.subscribe((next, previous) => {
@@ -372,20 +406,22 @@ describe("direct request transport", () => {
       mocks.streamingImport.mockResolvedValue(
         (async function* () {
           yield { type: "import-start" as const, totalFeeds: feeds.length };
-          for (const feed of feeds) {
+          for (const [index, feed] of feeds.entries()) {
             yield {
               type: "import-feed-inserted" as const,
               feedUrl: feed.url,
               feedId: feed.id,
               feed,
             };
+            yield progress("finding", index + 1, feeds.length);
           }
-          for (const feed of feeds) {
+          for (const [index, feed] of feeds.entries()) {
             yield {
               type: "feed-status" as const,
               feedId: feed.id,
               status: "success" as const,
             };
+            yield progress("fetching", index + 1, feeds.length);
           }
         })(),
       );
@@ -405,8 +441,11 @@ describe("direct request transport", () => {
       ).toHaveLength(feeds.length);
       const snapshot = loadingActor.getSnapshot();
       expect(snapshot.value).toBe("idle");
-      expect(snapshot.context.completedFeeds).toBe(feeds.length);
-      expect(snapshot.context.totalFeeds).toBe(feeds.length);
+      expect(snapshot.context.importProgress).toEqual({
+        stage: "fetching",
+        completed: feeds.length,
+        total: feeds.length,
+      });
     });
 
     it("flushes buffered chunks before completing when the stream fails", async () => {
@@ -498,16 +537,19 @@ describe("direct request transport", () => {
             feedId: 1,
             status: "success" as const,
           };
+          yield progress("finding", 1, 4);
           yield {
             type: "import-feed-error" as const,
             feedUrl: feeds[1]!.url,
             error: "unreachable",
           };
+          yield progress("finding", 2, 4);
           yield {
             type: "feed-status" as const,
             feedId: 3,
             status: "empty" as const,
           };
+          yield progress("finding", 3, 4);
           yield {
             type: "import-limit-warning" as const,
             deactivatedCount: 1,
@@ -518,6 +560,7 @@ describe("direct request transport", () => {
             feedId: 4,
             status: "success" as const,
           };
+          yield progress("fetching", 1, 1);
         })(),
       );
       vi.spyOn(console, "error").mockImplementation(() => {});
@@ -536,21 +579,25 @@ describe("direct request transport", () => {
       );
       inspection.unsubscribe();
 
-      // Every control chunk flushes the statuses buffered before it, so the
+      // Every control chunk flushes the progress buffered before it, so the
       // machine sees the server's order even though the whole stream landed
-      // in one frame.
+      // in one frame. Each flush reports only its latest count.
       expect(machineEvents).toEqual([
         "IMPORT_START",
-        "FEED_STATUS_BATCH",
+        "IMPORT_PROGRESS",
         "IMPORT_FEED_ERROR",
-        "FEED_STATUS_BATCH",
+        "IMPORT_PROGRESS",
         "IMPORT_LIMIT_WARNING",
-        "FEED_STATUS_BATCH",
+        "IMPORT_PROGRESS",
         "IMPORT_COMPLETE",
       ]);
       const snapshot = loadingActor.getSnapshot();
       expect(snapshot.value).toBe("idle");
-      expect(snapshot.context.completedFeeds).toBe(3);
+      expect(snapshot.context.importProgress).toEqual({
+        stage: "fetching",
+        completed: 1,
+        total: 1,
+      });
       expect(snapshot.context.importErrors).toBe(1);
       expect([...snapshot.context.failedImportUrls]).toEqual([feeds[1]!.url]);
       expect(snapshot.context.importDeactivatedCount).toBe(1);

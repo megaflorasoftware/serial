@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as FeedOrigins from "~/server/feeds/origins";
 import { addExtensionFeed } from "~/app/api.extension.feeds";
 import { authenticatedExtensionUser } from "~/server/auth/extensionRequest";
+import { withOrigins } from "~/server/feeds/origins";
 import { createFeedsForUser } from "~/server/feeds/create";
 import { fetchAndInsertFeedData } from "~/server/rss/fetchFeeds";
 
@@ -8,11 +10,21 @@ vi.mock("~/server/auth/extensionRequest", () => ({
   authenticatedExtensionUser: vi.fn(),
 }));
 vi.mock("~/server/feeds/create", () => ({ createFeedsForUser: vi.fn() }));
+vi.mock("~/server/feeds/origins", async (original) => ({
+  ...(await original<typeof FeedOrigins>()),
+  withOrigins: vi.fn((_database: unknown, feeds: unknown[]) =>
+    Promise.resolve(feeds),
+  ),
+}));
 vi.mock("~/server/rss/fetchFeeds", () => ({
   fetchAndInsertFeedData: vi.fn(),
 }));
 vi.mock("~/server/logger", () => ({ captureException: vi.fn() }));
 vi.mock("~/server/db", () => ({ db: {} }));
+vi.mock("~/server/reconciliation/invalidation", () => ({
+  organizationInvalidationSummary: vi.fn(),
+  publishReconciliationInvalidation: vi.fn(),
+}));
 
 function request(body: unknown, contentType = "application/json") {
   return new Request("https://serial.example/api/extension/feeds", {
@@ -29,10 +41,11 @@ describe("extension Feed HTTP contract", () => {
   beforeEach(() => {
     vi.mocked(authenticatedExtensionUser).mockReset();
     vi.mocked(createFeedsForUser).mockReset();
+    vi.mocked(withOrigins).mockClear();
     vi.mocked(fetchAndInsertFeedData).mockReset();
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
-      yield { status: "success", id: 1, feedItems: [] };
+      yield { status: "success", id: 1, originId: 10, feedItems: [] };
     });
   });
 
@@ -51,13 +64,13 @@ describe("extension Feed HTTP contract", () => {
       id: "user-one",
     } as never);
     vi.mocked(createFeedsForUser).mockResolvedValue({
-      feeds: [{ id: 1 }],
+      feeds: [{ id: 1, origins: [{ id: 10, feedId: 1 }] }],
       deactivatedCount: 0,
       maxActiveFeeds: 100,
     } as never);
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
-      yield { status: "success", id: 1, feedItems: [] };
+      yield { status: "success", id: 1, originId: 10, feedItems: [] };
       ingestionCompleted = true;
     });
     const response = await addExtensionFeed(
@@ -76,7 +89,16 @@ describe("extension Feed HTTP contract", () => {
     );
     expect(fetchAndInsertFeedData).toHaveBeenCalledWith(
       expect.objectContaining({ db: expect.anything() }),
-      [expect.objectContaining({ id: 1 })],
+      [
+        expect.objectContaining({
+          feed: expect.objectContaining({ id: 1 }),
+          origin: expect.objectContaining({ id: 10 }),
+        }),
+      ],
+    );
+    expect(withOrigins).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ id: 1 })]),
     );
     expect(ingestionCompleted).toBe(true);
   });
@@ -86,7 +108,7 @@ describe("extension Feed HTTP contract", () => {
       id: "user-one",
     } as never);
     vi.mocked(createFeedsForUser).mockResolvedValue({
-      feeds: [{ id: 1 }],
+      feeds: [{ id: 1, origins: [{ id: 10, feedId: 1 }] }],
       createdCount: 0,
       deactivatedCount: 0,
       maxActiveFeeds: 100,
@@ -98,7 +120,10 @@ describe("extension Feed HTTP contract", () => {
 
     expect(response.status).toBe(200);
     expect(fetchAndInsertFeedData).toHaveBeenCalledWith(expect.anything(), [
-      expect.objectContaining({ id: 1 }),
+      expect.objectContaining({
+        feed: expect.objectContaining({ id: 1 }),
+        origin: expect.objectContaining({ id: 10 }),
+      }),
     ]);
   });
 
@@ -108,14 +133,14 @@ describe("extension Feed HTTP contract", () => {
       id: "user-one",
     } as never);
     vi.mocked(createFeedsForUser).mockResolvedValue({
-      feeds: [{ id: 1 }],
+      feeds: [{ id: 1, origins: [{ id: 10, feedId: 1 }] }],
       deactivatedCount: 0,
       maxActiveFeeds: 100,
     } as never);
     vi.mocked(fetchAndInsertFeedData).mockImplementation(async function* () {
       await Promise.resolve();
       if (ingestionError) throw ingestionError;
-      yield { status: "success", id: 1, feedItems: [] };
+      yield { status: "success", id: 1, originId: 10, feedItems: [] };
     });
 
     const response = await addExtensionFeed(

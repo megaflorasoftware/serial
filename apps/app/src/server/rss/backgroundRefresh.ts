@@ -4,9 +4,9 @@ import { addRefreshStats, emptyRefreshStats, rssAttemptSummary } from "./stats";
 import { countDueFeeds, getDueFeedPage, RSS_FEED_PAGE_SIZE } from "./dueFeeds";
 import { automaticRssOwnerForPlan } from "./automaticOwnership";
 import type { PlanId } from "~/server/subscriptions/plans";
-import type { DatabaseFeed } from "~/server/db/schema";
 import type { db as Database } from "~/server/db";
 import type { RefreshStats } from "./stats";
+import type { FetchableOrigin } from "./types";
 import type { RssAttemptOutcome, RssPublishedChunk } from "~/lib/rss";
 import {
   checkUserRefreshEligibilityForPlan,
@@ -42,7 +42,7 @@ type BackgroundRefreshDependencies = {
   publish: (channel: string, chunk: RssPublishedChunk) => Promise<void>;
   refreshFeedPage?: (input: {
     db: typeof Database;
-    feedsList: DatabaseFeed[];
+    feedsList: FetchableOrigin[];
     channel: string;
   }) => Promise<RefreshStats>;
   onUserError?: (error: unknown, userId: string) => void;
@@ -170,7 +170,7 @@ export async function runBackgroundFeedRefresh(
           dependencies.now,
         );
         // Nothing due: do not consume the user's refresh window or emit an
-        // empty lifecycle for a no-op.
+        // empty lifecycle for a no-op. Subscription sync has its own schedule.
         if (dueFeedCount === 0) continue;
 
         const eligibility = await claimUser({
@@ -204,7 +204,7 @@ export async function runBackgroundFeedRefresh(
             metrics.maximumFeedPageSize,
             feedPage.length,
           );
-          afterFeedId = feedPage.at(-1)?.id;
+          afterFeedId = feedPage.at(-1)?.feed.id;
           const pageStats = await refreshFeedPage({
             db: dependencies.db,
             feedsList: feedPage,

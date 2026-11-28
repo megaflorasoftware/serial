@@ -1,5 +1,7 @@
 import { safeFetchWrap } from "@atproto-labs/fetch-node";
 import { getAtprotoClientMode } from "./mode";
+import { sendServiceRequest } from "~/server/http/pacing";
+import { serialHeaders } from "~/server/http/publicHttp";
 
 /**
  * SSRF-hardened outbound fetch shared by the AT Protocol OAuth client and
@@ -42,15 +44,22 @@ export type HardenedFetch = (
  * `allowInsecure` widens only the transport checks (http, private and IP
  * hosts) — the size cap and redirect ban always hold. The e2e stub-AppView
  * escape hatch forces it on for an authorized loopback origin.
+ *
+ * Every request names Serial as its User-Agent. Discovery-side work sends
+ * none to a service host that answered it 429 or 503 until the host's pause
+ * ends.
  */
 export function createHardenedFetch(
   fetch: HardenedFetch = globalThis.fetch,
-  { allowInsecure = ALLOW_INSECURE_PDS }: { allowInsecure?: boolean } = {},
+  {
+    allowInsecure = ALLOW_INSECURE_PDS,
+    responseMaxSize = RESPONSE_MAX_SIZE_BYTES,
+  }: { allowInsecure?: boolean; responseMaxSize?: number } = {},
 ): HardenedFetch {
   const safeFetch = safeFetchWrap({
     fetch,
     timeout: FETCH_TIMEOUT_MS,
-    responseMaxSize: RESPONSE_MAX_SIZE_BYTES,
+    responseMaxSize,
     // Real-world PDS hosts may run on non-standard ports; private and
     // non-unicast addresses stay blocked in production.
     allowCustomPort: true,
@@ -62,9 +71,13 @@ export function createHardenedFetch(
   return (input, init) => {
     const requested =
       init?.redirect ?? (input instanceof Request ? input.redirect : undefined);
-    return safeFetch(input, {
-      ...init,
-      redirect: requested === "manual" ? "manual" : "error",
-    });
+    const send = () =>
+      safeFetch(input, {
+        ...init,
+        headers: serialHeaders(init?.headers, input),
+        redirect: requested === "manual" ? "manual" : "error",
+      });
+    const service = URL.parse(input instanceof Request ? input.url : input);
+    return service ? sendServiceRequest(service.hostname, send) : send();
   };
 }

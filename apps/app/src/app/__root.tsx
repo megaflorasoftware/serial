@@ -159,7 +159,7 @@ export function RootLayout() {
           content="black-translucent"
         />
       </head>
-      <body className="min-h-screen font-sans antialiased">
+      <body className="min-h-svh font-sans antialiased">
         <QueryProvider>
           <ThemeProvider
             attribute="class"

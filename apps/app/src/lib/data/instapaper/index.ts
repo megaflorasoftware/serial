@@ -9,9 +9,13 @@ import { applyPendingFeedItemOverrides } from "../feed-items/pendingMutations";
 import { feedsStore } from "../feeds/store";
 import { refreshNavigationSnapshotSafely } from "../navigation/store";
 import { orpc } from "~/lib/orpc";
+import { isTextPlatform } from "~/lib/content/descriptor";
+
+const connectionStatusOptions =
+  orpc.instapaper.getConnectionStatus.queryOptions();
 
 export function useInstapaperConnectionStatus() {
-  return useQuery(orpc.instapaper.getConnectionStatus.queryOptions());
+  return useQuery(connectionStatusOptions);
 }
 
 export function useShowInstapaperAction(itemId: string) {
@@ -25,7 +29,8 @@ export function useShowInstapaperAction(itemId: string) {
   return (
     !!instapaperStatus?.isConfigured &&
     !!instapaperStatus.isConnected &&
-    item?.platform === "website" &&
+    item !== undefined &&
+    isTextPlatform(item.platform) &&
     shouldOpenInSerial
   );
 }

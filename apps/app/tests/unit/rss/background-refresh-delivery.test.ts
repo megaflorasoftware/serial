@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createBookmarkTestDatabase } from "../bookmarks/database";
-import type { PublishedChunk } from "~/server/api/publisher";
+import type { ChannelMessage } from "~/server/api/publisher";
+import { feedOriginRss, feedOrigins, feeds, user } from "~/server/db/schema";
 import { publisher } from "~/server/api/publisher";
 import { runBackgroundFeedRefresh } from "~/server/rss/backgroundRefresh";
 import { emptyRefreshStats } from "~/server/rss/stats";
-import { feeds, user } from "~/server/db/schema";
 
 type TestDatabase = Awaited<ReturnType<typeof createBookmarkTestDatabase>>;
 
@@ -33,7 +33,6 @@ describe("background refresh delivery", () => {
       id: 7,
       userId: "watching-user",
       name: "Feed",
-      url: "https://example.com/watching.xml",
       imageUrl: "",
       platform: "website",
       openLocation: "serial",
@@ -41,9 +40,24 @@ describe("background refresh delivery", () => {
       updatedAt: now,
       isActive: true,
     });
+    const [origin] = await testDatabase.database
+      .insert(feedOrigins)
+      .values({
+        feedId: 7,
+        userId: "watching-user",
+        kind: "rss",
+        locator: "https://example.com/watching.xml",
+        nextFetchAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: feedOrigins.id });
+    await testDatabase.database
+      .insert(feedOriginRss)
+      .values({ originId: origin!.id });
 
     const controller = new AbortController();
-    const received: PublishedChunk[] = [];
+    const received: ChannelMessage[] = [];
     const subscription = publisher.subscribe("user:watching-user", {
       signal: controller.signal,
     });

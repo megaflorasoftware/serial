@@ -1,16 +1,20 @@
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { getEffectivePlanConfig } from "./plans";
 import { IS_BILLING_ENABLED } from "./polar";
 import { getSubscriptionFromKV, syncPolarDataToKV } from "./kv";
 import type { PlanId } from "./plans";
 import type { db as Database } from "~/server/db";
-import { feeds, user } from "~/server/db/schema";
+import { feedOrigins, feeds, user } from "~/server/db/schema";
+import { setFeedsActive } from "~/server/feeds/activation";
 import { IS_DEMO_INSTANCE } from "~/lib/demo";
 import { logError } from "~/server/logger";
 
 type DB = typeof Database;
 
-export async function getActiveFeedCount(db: DB, userId: string) {
+export async function getActiveFeedCount(
+  db: Pick<DB, "select">,
+  userId: string,
+) {
   const result = await db
     .select({ count: count() })
     .from(feeds)
@@ -169,11 +173,15 @@ export async function deactivateExcessFeeds(
   userId: string,
   maxActive: number,
 ) {
+  // Never-fetched Feeds go first, then the least recently fetched, judged by
+  // the earliest fetch across a Feed's origins.
   const activeFeeds = await db
     .select({ id: feeds.id })
     .from(feeds)
+    .leftJoin(feedOrigins, eq(feedOrigins.feedId, feeds.id))
     .where(and(eq(feeds.userId, userId), eq(feeds.isActive, true)))
-    .orderBy(asc(feeds.lastFetchedAt))
+    .groupBy(feeds.id)
+    .orderBy(sql`min(${feedOrigins.lastFetchedAt})`, asc(feeds.id))
     .all();
 
   if (activeFeeds.length <= maxActive) return;
@@ -182,16 +190,9 @@ export async function deactivateExcessFeeds(
 
   if (feedsToDeactivate.length === 0) return;
 
-  await db
-    .update(feeds)
-    .set({ isActive: false })
-    .where(
-      and(
-        eq(feeds.userId, userId),
-        inArray(
-          feeds.id,
-          feedsToDeactivate.map((f) => f.id),
-        ),
-      ),
-    );
+  await setFeedsActive(db, {
+    userId,
+    feedIds: feedsToDeactivate.map((f) => f.id),
+    isActive: false,
+  });
 }

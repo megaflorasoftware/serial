@@ -1,16 +1,12 @@
 import type { ApplicationFeedItem } from "~/server/db/schema";
 import type {
   RssAffectedFeed,
-  RssAttemptCounts,
   RssAttemptOutcome,
   RssAttemptSummary,
 } from "~/lib/rss";
 import { buildContentStatusKey } from "~/lib/content-status";
 
-export type RefreshStats = RssAttemptCounts & {
-  affectedFeeds: RssAffectedFeed[];
-  originFailureFeedIds: number[];
-};
+export type RefreshStats = Omit<RssAttemptSummary, "outcome">;
 
 export function emptyRefreshStats(): RefreshStats {
   return {
@@ -45,6 +41,7 @@ export function affectedFeedFromItems(
 }
 
 export function addRefreshStats(target: RefreshStats, source: RefreshStats) {
+  if (source.metadataChanged) target.metadataChanged = true;
   target.refreshedCount += source.refreshedCount;
   target.skippedCount += source.skippedCount;
   target.emptyCount += source.emptyCount;

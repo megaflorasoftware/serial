@@ -1,0 +1,446 @@
+{
+  "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/site.standard.document/3mp3nrm5leyim",
+  "cid": "bafyreifc65fdgpkg5oqic4bga5hu6pystwy5gd6aw6grbfv2bqjwisjt4a",
+  "value": {
+    "path": "/blogging-its-more-social-than-ever-p9q1fky",
+    "site": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/site.standard.publication/3lwafzkjqm25s",
+    "tags": [
+      "👩‍💻 Updates"
+    ],
+    "$type": "site.standard.document",
+    "langs": [
+      "en"
+    ],
+    "title": "Blogging: It's more social than ever !",
+    "content": {
+      "$type": "blog.pckt.content",
+      "items": [
+        {
+          "$type": "blog.pckt.block.heading",
+          "level": 3,
+          "plaintext": "We want blogging to feel less like posting to the void, and more like sharing with a community. From pckt notes to better discovery, everything we've built over the last few weeks is designed to help bloggers connect."
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "Hey Bloggers! "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 113,
+                "byteStart": 109
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "Since our last post, we've shipped a ton of new features and bug fixes. We've been so busy working on making pckt better that we almost forgot to tell you about everything that's new. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 53,
+                "byteStart": 43
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "Let's start with the biggest new feature—pckt notes. "
+        },
+        {
+          "$type": "blog.pckt.block.noteEmbed",
+          "noteRef": {
+            "cid": "bafyreifcbj35d3ccwkk24df47izqah3qhk2zfej7bdtdux4wnfkd6oa6tq",
+            "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mpnjkuyimjd4"
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "Sometimes there's something you want to say that doesn't need a full blog post. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 10,
+                "byteStart": 0
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "pckt notes are a brand new way to share bite-sized information. Think quick thoughts, or live blogging, or small updates throughout your day. Notes can be shared, quoted, or re-blogged, and they can either stand on their own or become part of the conversation around a longer blog post. "
+        },
+        {
+          "$type": "blog.pckt.block.blueskyEmbed",
+          "postRef": {
+            "cid": "bafyreigxywnf3dpnypnvr7zcgtlli7sw3rkvnxp5sr5lmx2ry6nwyzatdq",
+            "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpzujjs4s2q"
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "You can publish notes as either yourself, or as one of your blogs. "
+        },
+        {
+          "$type": "blog.pckt.block.noteEmbed",
+          "noteRef": {
+            "cid": "bafyreiebfpcxek5p57j436n7e7jbdqcd3afouh2ezstj7vmissu6bneq7i",
+            "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mppyplylm5ib"
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "When posting as your blog, your most recent note will display at the top of your blog's home page, and a notes page will be available to show all of the notes for your blog. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "Personal notes skip the blog and go straight to the community feed, making it easy to start conversations. "
+        },
+        {
+          "$type": "blog.pckt.block.noteEmbed",
+          "noteRef": {
+            "cid": "bafyreich2vbxkex42jv6csgyqcpw3nof7dyf4f6zzevnylcbcmvltthy5e",
+            "uri": "at://did:plc:v46ojbiop5ebs5h7gaomixcc/blog.pckt.mini.post/3mprc2enuhhf3"
+          }
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 221,
+                "byteStart": 217
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "The best way to get familiar with how notes work is to start using them for yourself. You will find the note composer underneath the \"New Post\" button on your dashboard, as well as in a few other locations throughout pckt. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 56,
+                "byteStart": 46
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "A huge thank you to everyone that helped test pckt notes in the few weeks leading up to their release. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 129,
+                "byteStart": 119
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "This is just the beginning for notes. We already have plenty of ideas for what's next and your feedback will help make pckt notes even better. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "What else is new:"
+        },
+        {
+          "$type": "blog.pckt.block.bulletList",
+          "content": [
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "facets": [
+                    {
+                      "index": {
+                        "byteEnd": 21,
+                        "byteStart": 7
+                      },
+                      "features": [
+                        {
+                          "uri": "https://read.pckt.blog",
+                          "$type": "blog.pckt.richtext.facet#link"
+                        }
+                      ]
+                    }
+                  ],
+                  "plaintext": "Browse read.pckt.blog in Dark Mode."
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "plaintext": "Improved feed rankings for the read page. "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "plaintext": "Get notified when someone subscribes to your blog or interacts with your notes. "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "plaintext": "Add subheadings to customize your post previews. "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "plaintext": "Share posts and notes directly to bluesky. "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "plaintext": "Profile pages showcase your blogs and notes. "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "facets": [
+                    {
+                      "index": {
+                        "byteEnd": 35,
+                        "byteStart": 31
+                      },
+                      "features": [
+                        {
+                          "$type": "blog.pckt.richtext.facet#bold"
+                        }
+                      ]
+                    },
+                    {
+                      "index": {
+                        "byteEnd": 51,
+                        "byteStart": 41
+                      },
+                      "features": [
+                        {
+                          "did": "did:plc:nckosudltxrtrjkt4zz4jy5y",
+                          "$type": "blog.pckt.richtext.facet#didMention"
+                        }
+                      ]
+                    }
+                  ],
+                  "plaintext": "Buy a custom domain right from pckt with @marque.at."
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "facets": [
+                    {
+                      "index": {
+                        "byteEnd": 42,
+                        "byteStart": 38
+                      },
+                      "features": [
+                        {
+                          "$type": "blog.pckt.richtext.facet#bold"
+                        }
+                      ]
+                    }
+                  ],
+                  "plaintext": "Improvements to the layout throughout pckt. "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "facets": [
+                    {
+                      "index": {
+                        "byteEnd": 4,
+                        "byteStart": 0
+                      },
+                      "features": [
+                        {
+                          "$type": "blog.pckt.richtext.facet#bold"
+                        }
+                      ]
+                    }
+                  ],
+                  "plaintext": "pckt is now available in English, Spanish, French, and Japanese. (More on this soon.) "
+                }
+              ]
+            },
+            {
+              "$type": "blog.pckt.block.listItem",
+              "content": [
+                {
+                  "$type": "blog.pckt.block.text",
+                  "plaintext": "Choose which languages of posts and notes you'd like to see. "
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": "Bug fixes: "
+        },
+        {
+          "$type": "blog.pckt.block.blueskyEmbed",
+          "postRef": {
+            "cid": "bafyreihi4prxealmxzeslx3qkxhyxqa6m22oq5f3f3qj2ljvnntaj6xyby",
+            "uri": "at://did:plc:revjuqmkvrw6fnkxppqtszpv/app.bsky.feed.post/3mqpqcba5dk25"
+          }
+        },
+        {
+          "$type": "blog.pckt.block.blockquote",
+          "content": [
+            {
+              "$type": "blog.pckt.block.text",
+              "plaintext": "we have a lot more bug fixes but we don't want to bore you ! "
+            }
+          ]
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 144,
+                "byteStart": 134
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "Thanks for reading, and thank you to everyone who continues to build this community with us. We can't wait to see what you share with pckt notes. "
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 18,
+                "byteStart": 0
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            },
+            {
+              "index": {
+                "byteEnd": 99,
+                "byteStart": 95
+              },
+              "features": [
+                {
+                  "$type": "blog.pckt.richtext.facet#bold"
+                }
+              ]
+            }
+          ],
+          "plaintext": "One last reminder: our Summer Pass Sale will be coming to an end soon. If you've been enjoying pckt, now is the perfect time to upgrade to an annual plan and save 25%."
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "facets": [
+            {
+              "index": {
+                "byteEnd": 22,
+                "byteStart": 13
+              },
+              "features": [
+                {
+                  "did": "did:plc:z72i7hdynmk6r22z27h6tvur",
+                  "$type": "blog.pckt.richtext.facet#didMention"
+                }
+              ]
+            }
+          ],
+          "plaintext": "Sponsored by @bsky.app and valid through July 31st. "
+        },
+        {
+          "src": "https://pckt.blog/plans",
+          "$type": "blog.pckt.block.website",
+          "title": "Plans",
+          "description": "Simple pricing. Start free, upgrade when you're ready.",
+          "previewImage": "https://pckt-blog-media.s3.us-east-2.amazonaws.com/images/a9111196-6022-4e2d-b3b4-b470bc2654f9/og-image.png"
+        },
+        {
+          "$type": "blog.pckt.block.text",
+          "plaintext": ""
+        }
+      ]
+    },
+    "updatedAt": "2026-07-17T20:56:01.000Z",
+    "coverImage": {
+      "ref": {
+        "$link": "bafkreid5kumxakgijcgpb3hkz4upsvlnvcffuqbscz5vt4lrv5jlrnz34q"
+      },
+      "size": 87270,
+      "$type": "blob",
+      "mimeType": "image/png"
+    },
+    "description": "We want blogging to feel less like posting to the void, and more like sharing with a community. From pckt notes to better discovery, everything we've built over the last few weeks is designed to help bloggers connect.",
+    "publishedAt": "2026-07-17T19:44:04.000Z",
+    "textContent": "We want blogging to feel less like posting to the void, and more like sharing with a community. From pckt notes to better discovery, everything we've built over the last few weeks is designed to help bloggers connect.\nHey Bloggers! \nSince our last post, we've shipped a ton of new features and bug fixes. We've been so busy working on making pckt better that we almost forgot to tell you about everything that's new. \nLet's start with the biggest new feature—pckt notes. \nSometimes there's something you want to say that doesn't need a full blog post. \npckt notes are a brand new way to share bite-sized information. Think quick thoughts, or live blogging, or small updates throughout your day. Notes can be shared, quoted, or re-blogged, and they can either stand on their own or become part of the conversation around a longer blog post. \nYou can publish notes as either yourself, or as one of your blogs. \nWhen posting as your blog, your most recent note will display at the top of your blog's home page, and a notes page will be available to show all of the notes for your blog. \nPersonal notes skip the blog and go straight to the community feed, making it easy to start conversations. \nThe best way to get familiar with how notes work is to start using them for yourself. You will find the note composer underneath the \"New Post\" button on your dashboard, as well as in a few other locations throughout pckt. \nA huge thank you to everyone that helped test pckt notes in the few weeks leading up to their release. \nThis is just the beginning for notes. We already have plenty of ideas for what's next and your feedback will help make pckt notes even better. \nWhat else is new:\nBrowse read.pckt.blog in Dark Mode.\nImproved feed rankings for the read page. \nGet notified when someone subscribes to your blog or interacts with your notes. \nAdd subheadings to customize your post previews. \nShare posts and notes directly to bluesky. \nProfile pages showcase your blogs and notes. \nBuy a custom domain right from pckt with .\nImprovements to the layout throughout pckt. \npckt is now available in English, Spanish, French, and Japanese. (More on this soon.) \nChoose which languages of posts and notes you'd like to see. \nBug fixes: \nwe have a lot more bug fixes but we don't want to bore you ! \nThanks for reading, and thank you to everyone who continues to build this community with us. We can't wait to see what you share with pckt notes. \nOne last reminder: our Summer Pass Sale will be coming to an end soon. If you've been enjoying pckt, now is the perfect time to upgrade to an annual plan and save 25%.\nSponsored by  and valid through July 31st."
+  }
+}
